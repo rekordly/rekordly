@@ -1,40 +1,108 @@
 import React from 'react';
-import { SelfEmployedForm } from '@/components/onboarding/work-types/SelfEmployedForm';
-import { FreelancerForm } from '@/components/onboarding/work-types/FreelancerForm';
-import { RemoteWorkerForm } from '@/components/onboarding/work-types/RemoteWorkerForm';
-import { BusinessOwnerForm } from '@/components/onboarding/work-types/BusinessOwnerForm';
-import { DigitalTraderForm } from '@/components/onboarding/work-types/DigitalTraderForm';
-import { FinalConfirmation } from '@/components/onboarding/FinalConfirmation';
+import { useFormContext, Controller } from 'react-hook-form';
+import { Checkbox } from '@heroui/react';
+import { CustomInput } from '../ui/CustomInput';
+import { CustomSelect } from '../ui/CustomSelect';
+import { registrationTypes } from '../constant';
 
-interface Step3DetailsProps {
-  formData: any;
-  setFormData: (data: any) => void;
-  errors: any;
-}
-
-export const Step3Details = ({ formData, setFormData, errors }: Step3DetailsProps) => {
-  const renderWorkTypeForm = () => {
-    switch(formData.workType) {
-      case 'self-employed':
-        return <SelfEmployedForm formData={formData} setFormData={setFormData} errors={errors} />;
-      case 'freelancer':
-        return <FreelancerForm formData={formData} setFormData={setFormData} errors={errors} />;
-      case 'remote-worker':
-        return <RemoteWorkerForm formData={formData} setFormData={setFormData} errors={errors} />;
-      case 'business-owner':
-        return <BusinessOwnerForm formData={formData} setFormData={setFormData} errors={errors} />;
-      case 'digital-trader':
-        return <DigitalTraderForm formData={formData} setFormData={setFormData} errors={errors} />;
-      default:
-        return null;
-    }
-  };
+export const Step3Details: React.FC = () => {
+  const { watch, register, control, formState: { errors } } = useFormContext();
+  const workType = watch('workType');
+  
+  // Remote workers don't need registration type or business name
+  const showRegistrationFields = workType !== 'remote-worker';
 
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold mb-6">Tell us more</h2>
-      {renderWorkTypeForm()}
-      <FinalConfirmation formData={formData} setFormData={setFormData} errors={errors} />
+      
+      {/* Registration Type - Hidden for remote workers */}
+      {showRegistrationFields && (
+        <CustomSelect
+          label="Business Registration Type"
+          name="registrationType"
+          options={registrationTypes.basic}
+          error={errors.registrationType?.message as string}
+          isRequired={workType !== 'remote-worker'}
+        />
+      )}
+
+      {/* Business Name - Hidden for remote workers */}
+      {showRegistrationFields && (
+        <CustomInput
+          label="Business/Company Name (Optional)"
+          {...register('businessName')}
+          error={errors.businessName?.message as string}
+        />
+      )}
+
+      {/* Start Date - For everyone */}
+      <CustomInput
+        label="When did you start?"
+        type="date"
+        {...register('startDate', { 
+          required: 'Please select a start date',
+          valueAsDate: false 
+        })}
+        error={errors.startDate?.message as string}
+        isRequired
+      />
+
+      {/* Final Confirmation */}
+      <div className="space-y-4 mt-6 pt-6 border-t border-default-200">
+        <h3 className="font-semibold text-lg mb-4">Final Confirmation</h3>
+        
+        {/* Newsletter - Optional, can be changed */}
+        <Controller
+          name="confirmNotifications"
+          control={control}
+          render={({ field }) => (
+            <Checkbox
+              isSelected={field.value}
+              onValueChange={field.onChange}
+              classNames={{
+                base: "max-w-full",
+              }}
+            >
+              <span className="text-sm">
+                I want to receive notifications about tax deadlines and financial tips
+              </span>
+            </Checkbox>
+          )}
+        />
+
+        {/* Terms - Required, checked by default, cannot be unchecked */}
+        <Controller
+          name="confirmTerms"
+          control={control}
+          rules={{ required: 'You must accept the terms and conditions' }}
+          render={({ field }) => (
+            <Checkbox
+              isSelected={field.value}
+              onValueChange={field.onChange}
+              classNames={{
+                base: "max-w-full",
+              }}
+            >
+              <span className="text-sm">
+                I agree to the{' '}
+                <a href="/terms" target="_blank" className="text-primary underline">
+                  Terms of Service
+                </a>{' '}
+                and{' '}
+                <a href="/privacy" target="_blank" className="text-primary underline">
+                  Privacy Policy
+                </a>
+              </span>
+            </Checkbox>
+          )}
+        />
+        {errors.confirmTerms && (
+          <p className="text-danger text-xs ml-7">
+            {errors.confirmTerms.message as string}
+          </p>
+        )}
+      </div>
     </div>
   );
 };

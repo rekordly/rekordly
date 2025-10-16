@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { forwardRef } from 'react';
 import { Input } from '@heroui/react';
 
 interface CustomInputProps {
@@ -7,19 +7,24 @@ interface CustomInputProps {
   [key: string]: any;
 }
 
-export const CustomInput = ({ label, error, ...props }: CustomInputProps) => (
-  <div className="mb-4">
-    <Input
-      label={label}
-      variant="bordered"
-      color='primary'
-      classNames={{
-        inputWrapper: "border-1 h-14 border-default-300 rounded-2xl",
-        label: "font-light text-default-400"
-      }}
-      isInvalid={!!error}
-      errorMessage={error}
-      {...props}
-    />
-  </div>
+export const CustomInput = forwardRef<HTMLInputElement, CustomInputProps>(
+  ({ label, error, ...props }, ref) => (
+    <div className="mb-4">
+      <Input
+        ref={ref}
+        label={label}
+        variant="bordered"
+        color='primary'
+        classNames={{
+          inputWrapper: "border-1 h-14 border-default-300 rounded-2xl",
+          label: "font-light text-default-400"
+        }}
+        isInvalid={!!error}
+        errorMessage={error}
+        {...props}
+      />
+    </div>
+  )
 );
+
+CustomInput.displayName = 'CustomInput';

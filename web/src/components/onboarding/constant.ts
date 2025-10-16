@@ -1,3 +1,4 @@
+
 export const heardFromOptions = [
   'Social Media',
   'Friend/Colleague',
@@ -47,3 +48,25 @@ export const registrationTypes = {
   extended: ['Business Name', 'Limited Liability Company (Ltd)', 'Limited Liability Partnership (LLP)', 'Not yet registered'],
   full: ['Business Name', 'Limited Liability Company (Ltd)', 'Public Limited Company (PLC)', 'Limited by Guarantee', 'Unlimited Company', 'Limited Liability Partnership (LLP)']
 };
+
+export const industries = [
+  'Technology & IT',
+  'Finance & Banking',
+  'Healthcare',
+  'Education',
+  'Marketing & Advertising',
+  'E-commerce',
+  'Customer Service',
+  'Design & Creative',
+  'Consulting',
+  'Other'
+];
+
+export const assetTypes = [
+  'Cryptocurrency',
+  'NFTs',
+  'Forex',
+  'Stocks',
+  'Mixed Portfolio',
+  'Other Digital Assets'
+];

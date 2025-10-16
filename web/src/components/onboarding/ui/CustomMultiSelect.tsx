@@ -1,23 +1,19 @@
 import React from 'react';
-import { Select, SelectItem } from '@heroui/react';
 import { useFormContext, Controller } from 'react-hook-form';
+import { Select, SelectItem } from '@heroui/react';
 
-interface CustomSelectProps {
+interface CustomMultiSelectProps {
   label: string;
-  options: string[];
-  error?: string;
   name: string;
-  isRequired?: boolean;
-  [key: string]: any;
+  options: Array<{ key: string; label: string }>;
+  error?: string;
 }
 
-export const CustomSelect: React.FC<CustomSelectProps> = ({ 
-  label, 
-  options, 
-  error, 
+export const CustomMultiSelect: React.FC<CustomMultiSelectProps> = ({
+  label,
   name,
-  isRequired,
-  ...props 
+  options,
+  error,
 }) => {
   const { control } = useFormContext();
 
@@ -26,27 +22,23 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
       <Controller
         name={name}
         control={control}
-        rules={{ required: isRequired ? `${label} is required` : false }}
         render={({ field }) => (
           <Select
             label={label}
+            selectionMode="multiple"
             variant="bordered"
-            selectedKeys={field.value ? [field.value] : []}
-            onSelectionChange={(keys) => {
-              const value = Array.from(keys)[0] as string;
-              field.onChange(value);
-            }}
+            selectedKeys={field.value || []}
+            onSelectionChange={(keys) => field.onChange(Array.from(keys))}
             classNames={{
               trigger: "border-1 h-14 border-default-300 rounded-2xl",
               label: "font-light text-default-400"
             }}
             isInvalid={!!error}
             errorMessage={error}
-            {...props}
           >
             {options.map((option) => (
-              <SelectItem key={option} value={option}>
-                {option}
+              <SelectItem key={option.key} value={option.key}>
+                {option.label}
               </SelectItem>
             ))}
           </Select>

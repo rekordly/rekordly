@@ -1,45 +1,84 @@
 import React from 'react';
+import { useFormContext, Controller } from 'react-hook-form';
 import { Checkbox } from '@heroui/react';
 
-interface FinalConfirmationProps {
-  formData: any;
-  setFormData: (data: any) => void;
-  errors: any;
-}
+export const FinalConfirmation: React.FC = () => {
+  const { control, formState: { errors } } = useFormContext();
 
-export const FinalConfirmation = ({ formData, setFormData, errors }: FinalConfirmationProps) => (
-  <div className="space-y-4 mt-8 pt-6 border-t border-default-200">
-    <h3 className="text-lg font-semibold mb-4">Final Confirmation</h3>
-    
-    <Checkbox
-      isSelected={formData.confirmAccuracy}
-      onValueChange={(checked) => setFormData({ ...formData, confirmAccuracy: checked })}
-      classNames={{ label: "text-sm" }}
-      isInvalid={!!errors.confirmAccuracy}
-    >
-      I confirm that all information provided is accurate
-    </Checkbox>
+  return (
+    <div className="space-y-4 mt-6 pt-6 border-t border-default-200">
+      <h3 className="font-semibold text-lg mb-4">Final Confirmation</h3>
+      
+      <Controller
+        name="confirmAccuracy"
+        control={control}
+        render={({ field }) => (
+          <Checkbox
+            isSelected={field.value}
+            onValueChange={field.onChange}
+            classNames={{
+              base: "max-w-full gap-2 mb-1.5",
+            }}
+          >
+            <span className="text-sm">
+              I confirm that all the information provided is accurate and up-to-date
+            </span>
+          </Checkbox>
+        )}
+      />
+      {errors.confirmAccuracy && (
+        <p className="text-danger text-xs ml-7">
+          {errors.confirmAccuracy.message as string}
+        </p>
+      )}
 
-    <Checkbox
-      isSelected={formData.confirmNotifications}
-      onValueChange={(checked) => setFormData({ ...formData, confirmNotifications: checked })}
-      classNames={{ label: "text-sm" }}
-    >
-      I agree to receive notifications about my income and tax calculations
-    </Checkbox>
+      <Controller
+        name="confirmNotifications"
+        control={control}
+        render={({ field }) => (
+          <Checkbox
+            isSelected={field.value}
+            onValueChange={field.onChange}
+            classNames={{
+              base: "max-w-full gap-2 mb-1.5",
+            }}
+          >
+            <span className="text-sm">
+              I want to receive notifications about tax deadlines and financial tips (Optional)
+            </span>
+          </Checkbox>
+        )}
+      />
 
-    <Checkbox
-      isSelected={formData.confirmTerms}
-      onValueChange={(checked) => setFormData({ ...formData, confirmTerms: checked })}
-      classNames={{ label: "text-sm" }}
-      isInvalid={!!errors.confirmTerms}
-    >
-      I have read and agree to the{' '}
-      <a href="/terms" className="text-primary hover:underline">Terms of Service</a>
-      {' '}and{' '}
-      <a href="/privacy" className="text-primary hover:underline">Privacy Policy</a>
-    </Checkbox>
-
-    {errors.confirmations && <p className="text-danger text-sm">{errors.confirmations}</p>}
-  </div>
-);
+      <Controller
+        name="confirmTerms"
+        control={control}
+        render={({ field }) => (
+          <Checkbox
+            isSelected={field.value}
+            onValueChange={field.onChange}
+            classNames={{
+              base: "max-w-full gap-2",
+            }}
+          >
+            <span className="text-sm">
+              I agree to the{' '}
+              <a href="/terms" target="_blank" className="text-primary underline">
+                Terms of Service
+              </a>{' '}
+              and{' '}
+              <a href="/privacy" target="_blank" className="text-primary underline">
+                Privacy Policy
+              </a>
+            </span>
+          </Checkbox>
+        )}
+      />
+      {errors.confirmTerms && (
+        <p className="text-danger text-xs ml-7">
+          {errors.confirmTerms.message as string}
+        </p>
+      )}
+    </div>
+  );
+};
