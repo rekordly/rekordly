@@ -56,6 +56,7 @@ export const OTPProvider: Provider = {
         name: user.name ?? undefined,
         image: user.image ?? undefined,
         emailVerified: user.emailVerified ?? undefined,
+        hasPassword: !!user.password,
       };
     } catch (error) {
       // Handle database connection errors gracefully

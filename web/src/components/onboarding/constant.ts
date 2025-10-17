@@ -46,7 +46,7 @@ export const businessCategories = {
 export const registrationTypes = {
   basic: ['Business Name', 'Limited Liability Company (Ltd)', 'Not yet registered'],
   extended: ['Business Name', 'Limited Liability Company (Ltd)', 'Limited Liability Partnership (LLP)', 'Not yet registered'],
-  full: ['Business Name', 'Limited Liability Company (Ltd)', 'Public Limited Company (PLC)', 'Limited by Guarantee', 'Unlimited Company', 'Limited Liability Partnership (LLP)']
+  full: ['Not yet registered', 'Business Name', 'Limited Liability Company (Ltd)', 'Public Limited Company (PLC)', 'Limited by Guarantee', 'Unlimited Company', 'Limited Liability Partnership (LLP)']
 };
 
 export const industries = [

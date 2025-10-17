@@ -11,10 +11,10 @@ import { FcGoogle } from "react-icons/fc";
 import { FaXTwitter, FaApple, FaLock } from "react-icons/fa6";
 import { useForm, Controller, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { loginSchema, signupSchema } from "@/lib/schemas/auth.schema";
+import { loginSchema, signupSchema } from "@/lib/validations/auth.schema";
 import type { LoginFormData, SignupFormData } from "@/types/auth.types";
 import { getAlertColor } from '@/lib/fn';
-import { signIn } from "next-auth/react";
+import { signIn, useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
 
@@ -43,6 +43,7 @@ const getErrorMessage = (error: string | null): string | null => {
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { update } = useSession();
   const [screenState, setScreenState] = useState<ScreenState>("email");
   const [userEmail, setUserEmail] = useState<string>("");
   const [otpValue, setOtpValue] = useState<string>("");
@@ -157,7 +158,7 @@ export default function LoginPage() {
       });
 
       if (result?.ok) {
-        router.push("/dashboard");
+        
         router.refresh();
       } else if (result?.error) {
         if (
@@ -407,7 +408,7 @@ export default function LoginPage() {
               className="text-default-600"
               startContent={<div>←</div>}
             >
-              Back to login
+              Back to account
             </Button>
           </div>
         </div>
@@ -505,7 +506,7 @@ export default function LoginPage() {
               size="md"
               isLoading={passwordForm.formState.isSubmitting}
             >
-              Login
+              Continue
             </Button>
           </div>
 
@@ -649,12 +650,7 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <div className="text-center text-sm text-default-600 mt-6">
-          Don't have an account?{' '}
-          <Link href="/register" className="text-brand hover:text-brand/80 font-medium">
-            Sign up
-          </Link>
-        </div>
+       
       </div>
     </div>
   );

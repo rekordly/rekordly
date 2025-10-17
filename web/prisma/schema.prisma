@@ -1,7 +1,7 @@
-// prisma/schema.prisma
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 generator client {
@@ -20,7 +20,7 @@ model User {
   updatedAt     DateTime        @updatedAt
   accounts      Account[]
   sessions      Session[]
-  profile       UserProfile?
+  onboarding    OnboardingData?
 }
 
 model Account {
@@ -67,98 +67,20 @@ model OtpCode {
   createdAt DateTime @default(now())
 }
 
-// New models for onboarding data
-model UserProfile {
-  id                     String    @id @default(cuid())
-  userId                 String    @unique
-  phoneNumber            String
-  heardFrom              String
-  referralCode           String?
-  workType               WorkType
-  notificationsEnabled   Boolean   @default(true)
-  termsAcceptedAt        DateTime  @default(now())
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @updatedAt
-  user                   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  selfEmployedProfile    SelfEmployedProfile?
-  freelancerProfile      FreelancerProfile?
-  remoteWorkerProfile    RemoteWorkerProfile?
-  businessOwnerProfile   BusinessOwnerProfile?
-  digitalTraderProfile   DigitalTraderProfile?
-}
-
-enum WorkType {
-  SELF_EMPLOYED
-  FREELANCER
-  REMOTE_WORKER
-  BUSINESS_OWNER
-  DIGITAL_TRADER
-}
-
-model SelfEmployedProfile {
-  id                 String      @id @default(cuid())
-  profileId          String      @unique
-  businessType       String
-  businessTypeOther  String?
-  registrationType   String
-  businessName       String?
-  description        String?
-  startDate          DateTime?
-  earningMethods     String[]    // Array of earning methods
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
-  profile            UserProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
-}
-
-model FreelancerProfile {
-  id                 String      @id @default(cuid())
-  profileId          String      @unique
-  freelanceType      String
-  registrationType   String
-  description        String?
-  startDate          DateTime?
-  earningMethods     String[]
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
-  profile            UserProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
-}
-
-model RemoteWorkerProfile {
-  id                 String      @id @default(cuid())
-  profileId          String      @unique
-  industry           String
-  employmentType     String
-  startDate          DateTime?
-  paymentMethods     String[]
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
-  profile            UserProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
-}
-
-model BusinessOwnerProfile {
-  id                 String      @id @default(cuid())
-  profileId          String      @unique
-  industry           String
-  registrationType   String
-  companyName        String
-  description        String?
-  startDate          DateTime?
-  employeeCount      String
-  earningMethods     String[]
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
-  profile            UserProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
-}
-
-model DigitalTraderProfile {
-  id                 String      @id @default(cuid())
-  profileId          String      @unique
-  assetType          String
-  registrationType   String
-  platforms          String?
-  startDate          DateTime?
-  earningMethods     String[]
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
-  profile            UserProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+model OnboardingData {
+  id                   String   @id @default(cuid())
+  userId               String   @unique
+  fullName             String
+  phoneNumber          String
+  heardFrom            String
+  referralCode         String?
+  workType             String // 'self-employed', 'freelancer', etc.
+  registrationType     String
+  businessName         String?
+  startDate            DateTime
+  notificationsEnabled Boolean  @default(false)
+  termsAccepted        Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

@@ -33,7 +33,7 @@ export const Step1PersonalInfo: React.FC<Step1PersonalInfoProps> = ({
       <CustomInput
         label="Phone Number"
         type="tel"
-        placeholder="+234 800 000 0000"
+        placeholder="08000000000"
         {...register('phoneNumber')}
         error={errors.phoneNumber?.message as string}
         isRequired

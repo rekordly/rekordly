@@ -45,7 +45,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
             {...props}
           >
             {options.map((option) => (
-              <SelectItem key={option} value={option}>
+              <SelectItem key={option}>
                 {option}
               </SelectItem>
             ))}

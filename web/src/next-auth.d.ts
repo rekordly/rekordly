@@ -20,6 +20,7 @@ declare module "next-auth" {
     password?: string;
     onboarded?: boolean;
     emailVerified?: Date | null;    
+    hasPassword: boolean;
   }
 }
 

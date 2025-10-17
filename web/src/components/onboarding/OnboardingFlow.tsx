@@ -1,22 +1,17 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useForm, FormProvider } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Button } from '@heroui/react';
-import { signOut } from 'next-auth/react';
+import { Button, addToast } from '@heroui/react';
+import { signOut, useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
+import axios from 'axios';
 import { ProgressBar } from '@/components/onboarding/ui/ProgressBar';
 import { SignOutButton } from '@/components/onboarding/ui/SignOutButton';
 import { Step1PersonalInfo } from '@/components/onboarding/steps/Step1PersonalInfo';
 import { Step2WorkType } from '@/components/onboarding/steps/Step2WorkType';
 import { Step3Details } from '@/components/onboarding/steps/Step3Details';
-import { 
-  personalInfoSchema,
-  personalInfoSchemaWithPassword, 
-  workTypeSchema, 
-  getWorkTypeSchema
-} from '@/lib/validations/onboarding';
-import { z } from 'zod';
+import {personalInfoSchema, personalInfoSchemaWithPassword, workTypeSchema, finalSchema} from '@/lib/validations/onboarding';
 
 interface OnboardingFlowProps {
   user: {
@@ -37,7 +32,7 @@ type FormData = {
   heardFrom: string;
   referralCode?: string;
   workType: string;
-  registrationType?: string;
+  registrationType: string;
   businessName?: string;
   startDate: string;
   confirmNotifications?: boolean;
@@ -46,38 +41,18 @@ type FormData = {
 
 export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ user }) => {
   const router = useRouter();
+  const { update } = useSession();
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Function to get the appropriate schema for the current step
-  const getSchemaForStep = (step: number, workType?: string) => {
-    if (step === 1) {
-      return user.hasPassword ? personalInfoSchema : personalInfoSchemaWithPassword;
-    } else if (step === 2) {
-      return workTypeSchema;
-    } else if (step === 3) {
-      // Base schema for step 3
-      const baseSchema = z.object({
-        startDate: z.string().min(1, { message: 'Please select a start date' }),
-        confirmTerms: z.boolean().refine(val => val === true, { 
-          message: 'Please accept the terms and conditions' 
-        }),
-      });
-      
-      // Add work type specific fields
-      if (workType && workType !== 'remote-worker') {
-        return baseSchema.merge(z.object({
-          registrationType: z.string().min(1, { message: 'Please select a registration type' }),
-        }));
-      }
-      
-      return baseSchema;
-    }
-    return z.object({});
+  // Create a combined schema for form validation
+  const getCompleteSchema = () => {
+    const step1Schema = user.hasPassword ? personalInfoSchema : personalInfoSchemaWithPassword;
+    return step1Schema.merge(workTypeSchema).merge(finalSchema);
   };
 
   const methods = useForm<FormData>({
-    resolver: zodResolver(getSchemaForStep(currentStep)) as any,
+    resolver: zodResolver(getCompleteSchema()),
     mode: 'onBlur',
     defaultValues: {
       fullName: user.name || '',
@@ -96,36 +71,47 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ user }) => {
     },
   });
 
-  // Update form resolver when step changes
-  useEffect(() => {
-    const workType = methods.getValues('workType');
-    methods.reset(
-      methods.getValues(),
-      {
-        keepErrors: false,
-        keepDirty: true,
-        keepValues: true,
-        resolver: zodResolver(getSchemaForStep(currentStep, workType)) as any,
-      }
-    );
-  }, [currentStep, methods]);
-
   const handleNext = async () => {
     console.log('Current Step:', currentStep);
-    const workType = methods.getValues('workType');
     
-    // Validate all fields for the current step
-    const isValid = await methods.trigger();
+    // Define which fields to validate for each step
+    let fieldsToValidate: (keyof FormData)[] = [];
     
-    if (isValid) {
-      if (currentStep === 2 && workType === 'remote-worker') {
-        // Set defaults for remote workers
-        methods.setValue('registrationType', 'N/A');
-        methods.setValue('businessName', 'N/A');
+    if (currentStep === 1) {
+      fieldsToValidate = user.hasPassword 
+        ? ['fullName', 'phoneNumber', 'email', 'heardFrom']
+        : ['fullName', 'phoneNumber', 'email', 'password', 'confirmPassword', 'heardFrom'];
+      
+      // Trigger field validation first
+      const isValid = await methods.trigger(fieldsToValidate);
+      
+      if (!isValid) {
+        return;
       }
       
-      setCurrentStep(currentStep + 1);
+      // If user doesn't have password, manually check if passwords match
+      if (!user.hasPassword) {
+        const password = methods.getValues('password');
+        const confirmPassword = methods.getValues('confirmPassword');
+        
+        if (password !== confirmPassword) {
+          methods.setError('confirmPassword', {
+            type: 'manual',
+            message: "Passwords don't match"
+          });
+          return;
+        }
+      }
+    } else if (currentStep === 2) {
+      fieldsToValidate = ['workType'];
+      const isValid = await methods.trigger(fieldsToValidate);
+      
+      if (!isValid) {
+        return;
+      }
     }
+    
+    setCurrentStep(currentStep + 1);
   };
 
   const handleBack = () => {
@@ -136,25 +122,40 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ user }) => {
   const onSubmit = async (data: FormData) => {
     console.log('Submitting Data:', data);
     setIsSubmitting(true);
+    
     try {
-      // Get all form values to ensure all fields are included
-      const formData = methods.getValues();
-      const response = await fetch('/api/onboarding1', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      });
+      const response = await axios.post('/api/onboarding', data);
 
-      if (response.ok) {
-        router.push('/dashboard');
-      } else {
-        const error = await response.json();
-        alert(error.message || 'Something went wrong');
-      }
+      
+      await update();
+      
+      // Success toast
+      addToast({
+        title: 'Success!',
+        description: response.data.message || 'Onboarding completed successfully!',
+        color: 'success',
+      });
+      
+      
+      router.push('/dashboard');
+      router.refresh();
+      
     } catch (error) {
-      alert('Network error. Please try again.');
+      if (axios.isAxiosError(error)) {
+        // Handle axios error with response
+        addToast({
+          title: 'Error',
+          description: error.response?.data?.message || 'Something went wrong',
+          color: 'danger',
+        });
+      } else {
+        // Handle network or other errors
+        addToast({
+          title: 'Network Error',
+          description: 'Unable to connect. Please try again.',
+          color: 'danger',
+        });
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -212,7 +213,7 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ user }) => {
                     type="button"
                     color="primary"
                     onPress={handleNext}
-                    className="flex-1 h-12 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600"
+                    className="flex-1 h-12 rounded-xl bg-gradient-to-r from-primary-800 to-primary-600"
                   >
                     Next
                   </Button>
@@ -221,7 +222,7 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ user }) => {
                     type="submit"
                     color="primary"
                     isLoading={isSubmitting}
-                    className="flex-1 h-12 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600"
+                    className="flex-1 h-12 rounded-xl bg-gradient-to-r from-primary-800 to-primary-600"
                   >
                     Complete Onboarding
                   </Button>

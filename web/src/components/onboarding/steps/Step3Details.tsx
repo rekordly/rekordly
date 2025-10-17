@@ -6,47 +6,38 @@ import { CustomSelect } from '../ui/CustomSelect';
 import { registrationTypes } from '../constant';
 
 export const Step3Details: React.FC = () => {
-  const { watch, register, control, formState: { errors } } = useFormContext();
-  const workType = watch('workType');
-  
-  // Remote workers don't need registration type or business name
-  const showRegistrationFields = workType !== 'remote-worker';
+  const { watch, register, control, formState: { errors } } = useFormContext();  
 
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold mb-6">Tell us more</h2>
+
+        <CustomInput
+          label="When did you start?"
+          type="date"
+          {...register('startDate', { 
+            required: 'Please select a start date',
+            valueAsDate: false 
+          })}
+          error={errors.startDate?.message as string}
+          isRequired
+        />
       
-      {/* Registration Type - Hidden for remote workers */}
-      {showRegistrationFields && (
         <CustomSelect
           label="Business Registration Type"
           name="registrationType"
-          options={registrationTypes.basic}
+          options={registrationTypes.full}
           error={errors.registrationType?.message as string}
-          isRequired={workType !== 'remote-worker'}
+          isRequired
         />
-      )}
+      
 
-      {/* Business Name - Hidden for remote workers */}
-      {showRegistrationFields && (
         <CustomInput
           label="Business/Company Name (Optional)"
           {...register('businessName')}
           error={errors.businessName?.message as string}
         />
-      )}
-
-      {/* Start Date - For everyone */}
-      <CustomInput
-        label="When did you start?"
-        type="date"
-        {...register('startDate', { 
-          required: 'Please select a start date',
-          valueAsDate: false 
-        })}
-        error={errors.startDate?.message as string}
-        isRequired
-      />
+      
 
       {/* Final Confirmation */}
       <div className="space-y-4 mt-6 pt-6 border-t border-default-200">
