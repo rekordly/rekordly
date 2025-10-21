@@ -11,7 +11,7 @@ const config = {
     extend: {
       fontFamily: {
         sans: ["var(--font-sans)"],
-        heading: ["var(--font-halenoir)"],
+        heading: ["var(--font-heading)"],
         mono: ["var(--font-mono)"],
       },
       animation: {

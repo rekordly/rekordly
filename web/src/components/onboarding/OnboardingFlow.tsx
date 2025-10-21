@@ -12,6 +12,7 @@ import { Step1PersonalInfo } from '@/components/onboarding/steps/Step1PersonalIn
 import { Step2WorkType } from '@/components/onboarding/steps/Step2WorkType';
 import { Step3Details } from '@/components/onboarding/steps/Step3Details';
 import {personalInfoSchema, personalInfoSchemaWithPassword, workTypeSchema, finalSchema} from '@/lib/validations/onboarding';
+import {SessionUser} from '@/types/index';
 
 interface OnboardingFlowProps {
   user: {
@@ -39,7 +40,7 @@ type FormData = {
   confirmTerms: boolean;
 };
 
-export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ user }) => {
+export const OnboardingFlow: React.FC<SessionUser> = ({ user }) => {
   const router = useRouter();
   const { update } = useSession();
   const [currentStep, setCurrentStep] = useState(1);

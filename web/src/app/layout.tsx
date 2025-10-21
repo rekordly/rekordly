@@ -6,7 +6,7 @@ import { Providers } from "./providers";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 import { siteConfig } from "@/config/site";
-import { fontSans, fontMono, fontHalenoir } from "@/config/fonts"; // ← UPDATED
+import { fontSans, fontMono, fontHeading } from "@/config/fonts"; // ← UPDATED
 
 export const metadata: Metadata = {
   title: {
@@ -39,7 +39,7 @@ export default function RootLayout({
           "min-h-screen text-foreground bg-background font-sans antialiased",
           fontSans.variable,
           fontMono.variable,      // ← ADDED
-          fontHalenoir.variable,   // ← ADDED
+          fontHeading.variable,   // ← ADDED
         )}
       >
         <Providers themeProps={{ attribute: "class", defaultTheme: "dark" }}>

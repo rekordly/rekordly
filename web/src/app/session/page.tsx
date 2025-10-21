@@ -14,7 +14,7 @@ export default function OnboardingPage() {
   if (!session) {
     return <div>No session found. Please sign in.</div>;
   }
-  console.log(session)
+  // console.log(session)
 
   // Now we can safely access session properties
   return (

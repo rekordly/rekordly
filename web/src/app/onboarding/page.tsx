@@ -9,8 +9,7 @@ import { Suspense } from 'react';
 
 export default async function OnboardingPage() {
   const session = await getServerSession(authOptions);
-  console.log('Session:', session);
-
+  
   // Redirect if not authenticated
   if (!session?.user) {
     redirect('/account');

@@ -291,8 +291,6 @@ export const authOptions: AuthOptions = {
     },
 
     async session({ session, token }) {
-      console.log("Session callback - token:", token);
-      console.log("Session callback - session before:", session);
       if (token?.id && session.user) {
         session.user.id = token.id ;
         session.user.onboarded = token.onboarded ;
