@@ -1,29 +1,29 @@
-import NextAuth, { AuthOptions } from "next-auth";
-import GoogleProvider from "next-auth/providers/google";
-import TwitterProvider from "next-auth/providers/twitter";
-import AppleProvider from "next-auth/providers/apple";
-import EmailProvider from "next-auth/providers/email";
-import CredentialsProvider from "next-auth/providers/credentials";
-import { PrismaAdapter } from "@next-auth/prisma-adapter";
-import { prisma } from "@/lib/prisma";
-import bcrypt from "bcryptjs";
-import { sendOtpCode } from "@/lib/auth/otp";
-import { OTPProvider } from "@/lib/auth/otpAuth";
+import NextAuth, { AuthOptions } from 'next-auth';
+import GoogleProvider from 'next-auth/providers/google';
+import TwitterProvider from 'next-auth/providers/twitter';
+import AppleProvider from 'next-auth/providers/apple';
+import EmailProvider from 'next-auth/providers/email';
+import CredentialsProvider from 'next-auth/providers/credentials';
+import { PrismaAdapter } from '@next-auth/prisma-adapter';
+import { prisma } from '@/lib/prisma';
+import bcrypt from 'bcryptjs';
+import { sendOtpCode } from '@/lib/auth/otp';
+import { OTPProvider } from '@/lib/auth/otpAuth';
 
 export const authOptions: AuthOptions = {
   adapter: PrismaAdapter(prisma),
   secret: process.env.NEXTAUTH_SECRET,
   session: {
-    strategy: "jwt",
+    strategy: 'jwt',
   },
-  
+
   // Add custom pages to prevent default error redirects
   pages: {
     signIn: '/account',
     signOut: '/account',
     error: '/account', // Error code passed in query string as ?error=
     verifyRequest: '/account', // Used for check email page
-    newUser: '/onboarding' // New users will be directed here on first sign in
+    newUser: '/onboarding', // New users will be directed here on first sign in
   },
 
   providers: [
@@ -40,16 +40,16 @@ export const authOptions: AuthOptions = {
     }),
 
     CredentialsProvider({
-      id: "credentials",
-      name: "Credentials",
-      type: "credentials" as const, // Use 'as const' to ensure literal type
+      id: 'credentials',
+      name: 'Credentials',
+      type: 'credentials' as const, // Use 'as const' to ensure literal type
       credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" },
+        email: { label: 'Email', type: 'email' },
+        password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          throw new Error("Missing credentials");
+          throw new Error('Missing credentials');
         }
 
         try {
@@ -62,14 +62,26 @@ export const authOptions: AuthOptions = {
               image: true,
               emailVerified: true,
               onboarded: true,
-              password: true, // This line was missing
+              password: true,
+              onboarding: {
+                select: {
+                  businessName: true,
+                  phoneNumber: true,
+                  registrationType: true,
+                  workType: true,
+                  startDate: true,
+                },
+              },
             },
           });
 
           // User not found
           if (!user) {
             try {
-              const hashedPassword = await bcrypt.hash(credentials.password, 10);
+              const hashedPassword = await bcrypt.hash(
+                credentials.password,
+                10
+              );
 
               await prisma.user.create({
                 data: {
@@ -78,33 +90,47 @@ export const authOptions: AuthOptions = {
                   onboarded: false,
                 },
               });
-              await sendOtpCode(credentials.email, "login_recovery");
-              throw new Error("Account Created Successfully!. Check your email for the confirmation code.");
+              await sendOtpCode(credentials.email, 'login_recovery');
+              throw new Error(
+                'Account Created Successfully!. Check your email for the confirmation code.'
+              );
             } catch (error) {
               // Handle database connection errors
-              console.error("User creation error:", error);
-              if (error instanceof Error && error.message.includes("Can't reach database server")) {
-                throw new Error("Database connection error. Please try again later.");
+              console.error('User creation error:', error);
+              if (
+                error instanceof Error &&
+                error.message.includes("Can't reach database server")
+              ) {
+                throw new Error(
+                  'Database connection error. Please try again later.'
+                );
               }
-              throw new Error("Failed to create account. Please try again.");
+              throw new Error('Failed to create account. Please try again.');
             }
           }
 
           // If user has no password (social login only), send OTP
           if (!user.password) {
-            await sendOtpCode(credentials.email, "login_recovery");
-            throw new Error("No password set. Check your email for the login code.");
+            await sendOtpCode(credentials.email, 'login_recovery');
+            throw new Error(
+              'No password set. Check your email for the login code.'
+            );
           }
 
           // If email not verified, send OTP
           if (!user.emailVerified) {
-            await sendOtpCode(credentials.email, "login_recovery");
-            throw new Error("Email not verified. Check your email for the login code.");
+            await sendOtpCode(credentials.email, 'login_recovery');
+            throw new Error(
+              'Email not verified. Check your email for the login code.'
+            );
           }
 
-          const isValid = await bcrypt.compare(credentials.password, user.password);
+          const isValid = await bcrypt.compare(
+            credentials.password,
+            user.password
+          );
           if (!isValid) {
-            throw new Error("Invalid credentials");
+            throw new Error('Invalid credentials');
           }
 
           // Transform null to undefined for NextAuth compatibility
@@ -116,17 +142,31 @@ export const authOptions: AuthOptions = {
             emailVerified: user.emailVerified ?? undefined,
             onboarded: user.onboarded,
             password: user.password,
+            onboarding: user.onboarding
+              ? {
+                  businessName: user.onboarding.businessName,
+                  phoneNumber: user.onboarding.phoneNumber,
+                  registrationType: user.onboarding.registrationType,
+                  workType: user.onboarding.workType,
+                  startDate: user.onboarding.startDate,
+                }
+              : undefined,
           };
         } catch (error) {
           // Handle database connection errors
-          console.error("Credentials authorization error:", error);
-          if (error instanceof Error && error.message.includes("Can't reach database server")) {
-            throw new Error("Database connection error. Please try again later.");
+          console.error('Credentials authorization error:', error);
+          if (
+            error instanceof Error &&
+            error.message.includes("Can't reach database server")
+          ) {
+            throw new Error(
+              'Database connection error. Please try again later.'
+            );
           }
           if (error instanceof Error) {
             throw new Error(error.message);
           }
-          throw new Error("An error occurred during authentication");
+          throw new Error('An error occurred during authentication');
         }
       },
     }),
@@ -137,29 +177,12 @@ export const authOptions: AuthOptions = {
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-      profile(profile) {
-        return {
-          id: profile.sub,
-          name: profile.name,
-          email: profile.email,
-          image: profile.picture,
-          emailVerified: profile.email_verified ? new Date() : null,
-        };
-      },
     }),
 
     TwitterProvider({
       clientId: process.env.TWITTER_CLIENT_ID!,
       clientSecret: process.env.TWITTER_CLIENT_SECRET!,
-      version: "2.0",
-      profile(profile) {
-        return {
-          id: profile.data.id,
-          name: profile.data.name,
-          email: profile.data.email,
-          image: profile.data.profile_image_url,
-        };
-      },
+      version: '2.0',
     }),
 
     AppleProvider({
@@ -177,11 +200,11 @@ export const authOptions: AuthOptions = {
         });
 
         // Social login (Google, Facebook, Apple, etc.)
-        if (account && account.type === "oauth") {
+        if (account && account.type === 'oauth') {
           // User exists
           if (existingUser) {
             const hasProvider = existingUser.accounts.some(
-              (acc) => acc.provider === account.provider
+              acc => acc.provider === account.provider
             );
 
             // Provider already linked - allow sign in
@@ -220,7 +243,7 @@ export const authOptions: AuthOptions = {
           await prisma.user.create({
             data: {
               email: user.email!,
-              name: user.name ?? "",
+              name: user.name ?? '',
               image: user.image,
               emailVerified: new Date() || null,
               onboarded: false,
@@ -231,13 +254,13 @@ export const authOptions: AuthOptions = {
         }
 
         // Email provider
-        if (account && account.type === "email") {
+        if (account && account.type === 'email') {
           // New user
           if (!existingUser) {
             await prisma.user.create({
               data: {
                 email: user.email!,
-                name: user.name ?? "",
+                name: user.name ?? '',
                 onboarded: false,
               },
             });
@@ -248,13 +271,16 @@ export const authOptions: AuthOptions = {
         // Credentials provider - handled in authorize
         return true;
       } catch (error) {
-        console.error("SignIn callback error:", error);
+        console.error('SignIn callback error:', error);
         // Handle database connection errors
-        if (error instanceof Error && error.message.includes("Can't reach database server")) {
-          return `/account?error=${encodeURIComponent("Database connection error. Please try again later.")}`;
+        if (
+          error instanceof Error &&
+          error.message.includes("Can't reach database server")
+        ) {
+          return `/account?error=${encodeURIComponent('Database connection error. Please try again later.')}`;
         }
         // Return error string to be passed in query params
-        return `/account?error=${encodeURIComponent("An error occurred during sign in")}`;
+        return `/account?error=${encodeURIComponent('An error occurred during sign in')}`;
       }
     },
 
@@ -267,23 +293,79 @@ export const authOptions: AuthOptions = {
         token.name = user.name;
         token.email = user.email;
         token.image = user.image;
+
+        if (user.onboarding) {
+          token.onboarding = user.onboarding;
+        } else {
+          try {
+            const onboardingData = await prisma.onboardingData.findUnique({
+              where: { userId: user.id },
+              select: {
+                businessName: true,
+                phoneNumber: true,
+                registrationType: true,
+                workType: true,
+                startDate: true,
+              },
+            });
+
+            token.onboarding = onboardingData || {
+              businessName: null,
+              phoneNumber: null,
+              registrationType: null,
+              workType: null,
+              startDate: null,
+            };
+          } catch (error) {
+            console.error('Error fetching onboarding data in JWT:', error);
+            token.onboarding = {
+              businessName: null,
+              phoneNumber: null,
+              registrationType: null,
+              workType: null,
+              startDate: null,
+            };
+          }
+        }
       }
 
       // Update token if user data changes
-      if (trigger === "update") {
+      if (trigger === 'update') {
         try {
           const updatedUser = await prisma.user.findUnique({
             where: { id: token.id as string },
-            select: { onboarded: true, password: true, emailVerified: true, name: true },
+            select: {
+              onboarded: true,
+              password: true,
+              emailVerified: true,
+              name: true,
+              onboarding: {
+                select: {
+                  businessName: true,
+                  phoneNumber: true,
+                  registrationType: true,
+                  workType: true,
+                  startDate: true,
+                },
+              },
+            },
           });
           if (updatedUser) {
             token.onboarded = updatedUser.onboarded;
             token.hasPassword = !!updatedUser.password;
             token.emailVerified = !!updatedUser.emailVerified;
             token.name = updatedUser.name;
+            token.onboarding = {
+              businessName: updatedUser.onboarding?.businessName || null,
+              phoneNumber: updatedUser.onboarding?.phoneNumber || null,
+              registrationType:
+                updatedUser.onboarding?.registrationType || null,
+              workType: updatedUser.onboarding?.workType || null,
+              startDate: updatedUser.onboarding?.startDate || null,
+            };
           }
         } catch (error) {
-          console.error("JWT callback error:", error);
+          console.error('JWT callback error:', error);
         }
       }
 
@@ -292,20 +374,21 @@ export const authOptions: AuthOptions = {
 
     async session({ session, token }) {
       if (token?.id && session.user) {
-        session.user.id = token.id ;
-        session.user.onboarded = token.onboarded ;
+        session.user.id = token.id;
+        session.user.onboarded = token.onboarded;
         session.user.hasPassword = token.hasPassword;
         session.user.emailVerified = !!token.emailVerified;
-    
+        session.user.onboarding = token.onboarding;
         if (token.name) session.user.name = token.name;
         if (token.email) session.user.email = token.email;
+        // if (token.image) session.user.image = token.image;
       }
       return session;
     },
 
     async redirect({ url, baseUrl }) {
       // Allows relative callback URLs
-      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      if (url.startsWith('/')) return `${baseUrl}${url}`;
       // Allows callback URLs on the same origin
       else if (new URL(url).origin === baseUrl) return url;
       return baseUrl;

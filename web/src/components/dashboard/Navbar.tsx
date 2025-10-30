@@ -14,11 +14,12 @@ import {
   DrawerFooter,
   useDisclosure,
 } from "@heroui/react";
-import { LogOut, Menu, Receipt } from 'lucide-react';
+import { ChartNoAxesGantt, LogOut, Receipt } from 'lucide-react';
 import { SessionUser, MenuItem, SessionFlowProps } from '@/types';
 import { MenuItemLink } from './MenuItemLinkProps ';
 import { menuItems } from '@/config/menu';
 import { signOut } from 'next-auth/react';
+import { ThemeToggle } from '../theme-toggle';
 
 
 
@@ -42,13 +43,13 @@ return (
       onMenuOpenChange={setIsMenuOpen}
       isMenuOpen={isMenuOpen}
       maxWidth="full"
-      className="bg-white dark:bg-background border-primary-200/40 border-b"
+      className="py-1"
       height="64px"
     >
       <NavbarContent>
         <NavbarBrand>
-          <div className="w-8 h-8 bg-gradient-to-br from-primary-400 to-primary-600 rounded-lg flex items-center justify-center">
-            <Receipt className="w-5 h-5 text-white" />
+          <div className="size-6 md:size-8 bg-gradient-to-br from-primary-400 to-primary-600 rounded-lg flex items-center justify-center">
+            <Receipt className="size-4 text-white" />
           </div>
           <p className="font-heading font-bold md:text-xl text-foreground ms-2">
             Rekordly<span className="text-xs align-super">™</span>
@@ -56,7 +57,8 @@ return (
         </NavbarBrand>
 
         {/* Mobile Toggle with user */}
-        <NavbarContent className="sm:hidden gap-2" justify="end">
+        <NavbarContent className="sm:hidden gap-0" justify="end">
+          <ThemeToggle />
           <User
             avatarProps={{
               src: userImage,
@@ -71,8 +73,9 @@ return (
             isIconOnly
             variant="light"
             size="sm"
+            className='size-6 min-w-auto'
           >
-            <Menu className="w-5 h-5" />
+            <ChartNoAxesGantt className="size-5" />
           </Button>
         </NavbarContent>
 

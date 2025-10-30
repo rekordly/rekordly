@@ -121,7 +121,7 @@ export const OnboardingFlow: React.FC<SessionUser> = ({ user }) => {
   };
 
   const onSubmit = async (data: FormData) => {
-    console.log('Submitting Data:', data);
+    // console.log('Submitting Data:', data);
     setIsSubmitting(true);
     
     try {

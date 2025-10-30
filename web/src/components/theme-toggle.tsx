@@ -21,10 +21,10 @@ export function ThemeToggle() {
       <Button
         isIconOnly
         variant="light"
-        className="fixed bottom-6 right-6 z-50"
+        className=""
         aria-label="Toggle theme"
       >
-        <Sun className="h-5 w-5" />
+        <Sun className="size-4" />
       </Button>
     );
   }
@@ -34,16 +34,17 @@ export function ThemeToggle() {
       isIconOnly
       variant="flat"
       className={clsx(
-        "fixed bottom-6 right-6 z-50 transition-colors border-brand border",
+        "border-0 transition-colors bg-background",
       )}
       onPress={() => setTheme(theme === "dark" ? "light" : "dark")}
       aria-label="Toggle theme"
     >
       {theme === "dark" ? (
-        <Sun className="h-5 w-5 text-brand" />
+        <Sun className="size-4 text-brand" />
       ) : (
-        <Moon className="h-5 w-5 text-brand" />
+        <Moon className="size-4 text-brand" />
       )}
     </Button>
   );
 }
+// className="fixed bottom-6 right-6 z-50"

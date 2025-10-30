@@ -1,14 +1,15 @@
 import * as z from "zod";
-import { 
-  loginSchema, 
-  signupSchema, 
+
+import {
+  withPasswordSchema, 
+  withEmailSchema,
   forgotPasswordSchema, 
   resetPasswordSchema 
-} from "@/lib/schemas/auth.schema";
+} from '@/lib/validations/auth.schema';
 
-// Infer types from schemas
-export type LoginFormData = z.infer<typeof loginSchema>;
-export type SignupFormData = z.infer<typeof signupSchema>;
+
+export type withPasswordType = z.infer<typeof withPasswordSchema>;
+export type withEmailType = z.infer<typeof withEmailSchema>;
 export type ForgotPasswordFormData = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordFormData = z.infer<typeof resetPasswordSchema>;
 

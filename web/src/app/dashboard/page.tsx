@@ -1,131 +1,297 @@
 "use client"
-import { Suspense } from 'react';
-import { Card, CardBody, CardHeader } from '@heroui/react';
-import { TrendingUp, FileText, CheckCircle, Users, Icon } from 'lucide-react';
+import React, { useState } from 'react';
+import { Card, CardBody, CardHeader } from '@heroui/card';
+import { Button } from '@heroui/button';
+import { Chip } from '@heroui/chip';
+import { Select, SelectItem } from '@heroui/select';
+import { 
+  TrendingUp, 
+  TrendingDown, 
+  DollarSign, 
+  ShoppingCart, 
+  CreditCard,
+  Receipt,
+  Plus,
+  ArrowUpRight,
+  ArrowDownRight,
+  Calendar
+} from 'lucide-react';
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  AreaChart,
+  Area,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend
+} from 'recharts';
 
-export default async function DashboardPage() {
+// Mock data for demonstration
+const revenueData = [
+  { month: 'Jan', Income: 45000, Expenses: 28000 },
+  { month: 'Feb', Income: 52000, Expenses: 31000 },
+  { month: 'Mar', Income: 48000, Expenses: 29000 },
+  { month: 'Apr', Income: 61000, Expenses: 35000 },
+  { month: 'May', Income: 55000, Expenses: 32000 },
+  { month: 'Jun', Income: 67000, Expenses: 38000 },
+  { month: 'Jul', Income: 72000, Expenses: 40000 },
+  { month: 'Aug', Income: 69000, Expenses: 37000 },
+  { month: 'Sep', Income: 75000, Expenses: 42000 },
+  { month: 'Oct', Income: 80000, Expenses: 45000 },
+  { month: 'Nov', Income: 85000, Expenses: 47000 },
+  { month: 'Dec', Income: 90000, Expenses: 50000 },
+];
 
-  const dashboardData = [
-    {
-      icon: TrendingUp,
-      value: 40,
-      description: 'Engagement Score'
-    },
-    {
-      icon: TrendingUp,
-      value: 40,
-      description: 'Engagement Score'
-    },
-    {
-      icon: TrendingUp,
-      value: 40,
-      description: 'Engagement Score'
-    },
-    {
-      icon: TrendingUp,
-      value: 40,
-      description: 'Engagement Score'
-    },
-  ]
+const categoryData = [
+  { name: 'Sales', value: 45, color: '#8B5CF6' },
+  { name: 'Services', value: 30, color: '#3B82F6' },
+  { name: 'Products', value: 15, color: '#10B981' },
+  { name: 'Other', value: 10, color: '#F59E0B' },
+];
+
+const recentTransactions = [
+  { id: 1, type: 'income', description: 'Client Payment - Project X', amount: 5000, date: '2 hours ago', category: 'Sales' },
+  { id: 2, type: 'expense', description: 'Office Supplies', amount: 250, date: '5 hours ago', category: 'Expenses' },
+  { id: 3, type: 'income', description: 'Consulting Fee', amount: 3500, date: '1 day ago', category: 'Services' },
+  { id: 4, type: 'expense', description: 'Software Subscription', amount: 99, date: '1 day ago', category: 'Expenses' },
+  { id: 5, type: 'income', description: 'Product Sale', amount: 1200, date: '2 days ago', category: 'Sales' },
+];
+
+// Reusable Chart Components
+const RevenueChart = ({ data }) => (
+  <ResponsiveContainer width="100%" height={350}>
+    <LineChart data={data}>
+      <defs>
+        <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.3}/>
+          <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0}/>
+        </linearGradient>
+        <linearGradient id="colorExpenses" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="5%" stopColor="#EF4444" stopOpacity={0.3}/>
+          <stop offset="95%" stopColor="#EF4444" stopOpacity={0}/>
+        </linearGradient>
+      </defs>
+      {/* <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" /> */}
+      <XAxis dataKey="month" stroke="#6B7280" fontSize={10} />
+      <YAxis stroke="#6B7280" fontSize={10} />
+      <Tooltip 
+        contentStyle={{ 
+          backgroundColor: '#FFF', 
+          border: '1px solid #E5E7EB',
+          borderRadius: '8px',
+          fontSize: '12px'
+        }}
+      />
+      <Line 
+        type="monotone" 
+        dataKey="Income" 
+        stroke="#8B5CF6" 
+        strokeWidth={2}
+        fillOpacity={1} 
+        fill="url(#colorIncome)" 
+      />
+      <Line 
+        type="monotone" 
+        dataKey="Expenses" 
+        stroke="#EF4444" 
+        strokeWidth={2}
+        fillOpacity={1} 
+        fill="url(#colorExpenses)" 
+      />
+    </LineChart>
+  </ResponsiveContainer>
+);
+
+const CategoryPieChart = ({ data }) => (
+  <ResponsiveContainer width="100%" height={250}>
+    <PieChart>
+      <Pie
+        data={data}
+        cx="50%"
+        cy="50%"
+        innerRadius={60}
+        outerRadius={80}
+        paddingAngle={2}
+        dataKey="value"
+      >
+        {data.map((entry, index) => (
+          <Cell key={`cell-${index}`} fill={entry.color} />
+        ))}
+      </Pie>
+      <Tooltip />
+    </PieChart>
+  </ResponsiveContainer>
+);
+
+
+// Main Dashboard Component
+export default function Dashboard() {
+
   return (
-    <Suspense fallback={<DashboardSkeleton />}>
+    <div className="min-h-screen px-0 ">
+      
       <div className="space-y-6">
-        {/* Header Section */}
-        {/* <div>
-          <p className='font-heading text-2xl font-bold text-foreground'>
-            Quickly Arrange Every Meeting
-          </p>
-          <p className="text-default-500 flex items-center gap-2 mt-1">
-            <span className="w-2 h-2 bg-warning rounded-full"></span>
-            You have <span className="font-semibold text-warning">2 pending</span> schedule today
-          </p>
-        </div> */}
 
-        {/* Cards Grid */}
-        <div className="grid grid-cols-1 px-0">
-          {/* Performance Metrics Card */}
-          <Card className="bg-transparent" shadow='none'>
-
-            <CardHeader className="pb-0">
-              {/* <h3 className="text-sm md:text-base font-mono">Performance Metrics</h3> */}
+        <div className='grid grid-cols-1 md:grid-cols-3 gap-3'>
+          <Card className="bg-gradient-to-b p-3 dark:from-primary-800/40 from-0% via-50% dark:to-[#131219] from-primary-100/25 to-white to-90% relative rounded-3xl" shadow='none'>
+            <CardHeader>
+              <Chip className='p-3 uppercase' size='sm' variant='flat' color='primary'>Total Income</Chip>
             </CardHeader>
-
-            <CardBody className='px-0'>
-              <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-2">
-                {dashboardData.map((item, idx) => (
-                  <div key={idx} className="relative p-5 rounded-2xl border border-primary-50 dark:border-divider bg-white dark:bg-background">
-                    <div className="absolute end-6 w-7 h-7 rounded-lg bg-primary-100 flex items-center justify-center">
-                      <item.icon className="w-4 h-4 text-primary-600" />
-                    </div>
-                    <div className='pt-4 lg:pt-16'>
-                      <p className="text-3xl font-bold text-foreground pb-1">{item.value}</p>
-                      <p className="text-sm text-default-900">{item.description}</p>
-                    </div>
-                  </div>
-                ))}
+            <CardBody className='py-6 md:pt-8'>
+              <div className='flex md:justify-between flex-row-reverse gap-4'>
+                
+                <div className='flex-3/12 mb-2 md:mb-0'>
+                  <Chip 
+                    variant='shadow' 
+                    color='primary' 
+                    size='lg' 
+                    className='item-center size-16 rounded-2xl'
+                  ><DollarSign size={'24'} /></Chip>
+                </div>
+                
+                <div>
+                  <h2 className='font-heading tracking-tight font-bold text-2xl'>₦703,492.29</h2>
+                  <p className='text-xs font-light'>Lorem ipsum dolor sit amet consectetur, adipisicing elit. Error, temporibus in ex accusantium asperiores eius</p>
+                </div>
               </div>
             </CardBody>
           </Card>
 
-          {/* Activity Card */}
-          <Card className="bg-background">
-            <CardHeader className="pb-2 flex-col items-start">
-              <h3 className="text-lg font-semibold">Activity</h3>
-              <div className="flex items-center gap-2 mt-1">
-                <p className="text-4xl font-bold text-foreground">85%</p>
-                <div className="flex items-center gap-1 text-success text-sm">
-                  <TrendingUp className="w-4 h-4" />
-                  <span>3.5% vs last week</span>
+          <Card className="bg-gradient-to-b p-3 dark:from-secondary-800/40 from-0% via-50% dark:to-[#131219] from-secondary-100/25 to-white to-90% relative rounded-3xl" shadow='none'>
+            <CardHeader>
+              <Chip className='p-3 uppercase' size='sm' variant='flat' color='secondary'>Total Income</Chip>
+            </CardHeader>
+            <CardBody className='py-6 md:pt-8'>
+              <div className='flex md:justify-between flex-row-reverse gap-4'>
+                
+                <div className='flex-3/12 mb-2 md:mb-0'>
+                  <Chip 
+                    variant='shadow' 
+                    color='secondary' 
+                    size='lg' 
+                    className='item-center size-16 rounded-2xl'
+                  ><DollarSign size={'24'} /></Chip>
                 </div>
+                
+                <div>
+                  <h2 className='font-heading tracking-tight font-bold text-2xl'>₦703,492.29</h2>
+                  <p className='text-xs font-light'>Lorem ipsum dolor sit amet consectetur, adipisicing elit. Error, temporibus in ex accusantium asperiores eius</p>
+                </div>
+              </div>
+            </CardBody>
+          </Card>
+
+        
+        </div>
+
+
+        <div className='flex flex-col md:flex-row-reverse gap-4'>
+          <Card className='flex-1 rounded-3xl' shadow='none'>
+             <CardHeader className="flex items-center justify-between py-6 px-6">
+              <div>
+                <h3 className="text-base font-semibold text-foreground font-heading tracking-tight leading-tight">Income by Category</h3>
+                <p className="text-xs text-default-500">Revenue Distribtuion</p>
               </div>
             </CardHeader>
             <CardBody>
-              <div className="h-48 flex items-end justify-between gap-2">
-                {/* Bar Chart */}
-                <div className="flex-1 flex flex-col items-center gap-1">
-                  <div className="w-full bg-gradient-to-t from-primary-200 to-primary-100 rounded-t-lg h-[87%]"></div>
-                  <p className="text-xs text-default-500">MON</p>
-                  <p className="text-xs font-semibold">87%</p>
-                </div>
-                <div className="flex-1 flex flex-col items-center gap-1">
-                  <div className="w-full bg-gradient-to-t from-primary-200 to-primary-100 rounded-t-lg h-[81%]"></div>
-                  <p className="text-xs text-default-500">TUE</p>
-                  <p className="text-xs font-semibold">81%</p>
-                </div>
-                <div className="flex-1 flex flex-col items-center gap-1">
-                  <div className="w-full bg-gradient-to-t from-primary-500 to-primary-400 rounded-t-lg h-[92%] shadow-lg shadow-primary-500/50"></div>
-                  <p className="text-xs text-default-500">WED</p>
-                  <p className="text-xs font-semibold text-primary-600">92%</p>
-                </div>
-                <div className="flex-1 flex flex-col items-center gap-1">
-                  <div className="w-full bg-gradient-to-t from-primary-200 to-primary-100 rounded-t-lg h-[85%]"></div>
-                  <p className="text-xs text-default-500">THU</p>
-                  <p className="text-xs font-semibold">85%</p>
-                </div>
-                <div className="flex-1 flex flex-col items-center gap-1">
-                  <div className="w-full bg-gradient-to-t from-primary-200 to-primary-100 rounded-t-lg h-[76%]"></div>
-                  <p className="text-xs text-default-500">FRI</p>
-                  <p className="text-xs font-semibold">76%</p>
-                </div>
+              <CategoryPieChart data={categoryData} />
+            </CardBody>
+          </Card>
+
+           <Card className='w-full rounded-3xl md:w-8/12' shadow='none'>
+             <CardHeader className="flex items-center justify-between py-6 px-6">
+              <div>
+                <h3 className="text-base font-semibold text-foreground font-heading tracking-tight leading-tight">Revenue Overview</h3>
+                <p className="text-xs text-default-500">Income vs Expenses</p>
               </div>
+              {/* <Select
+                size="sm"
+                selectedKeys={[timePeriod]}
+                variant='bordered'
+                color='primary'
+                className="w-32"
+                classNames={{
+                  trigger: "h-10 rounded-lg"
+                }}
+              >
+                <SelectItem key="7days">7 Days</SelectItem>
+                <SelectItem key="30days">30 Days</SelectItem>
+                <SelectItem key="90days">90 Days</SelectItem>
+              </Select> */}
+            </CardHeader>
+            <CardBody>
+              <RevenueChart data={revenueData} />
             </CardBody>
           </Card>
         </div>
-      </div>
-    </Suspense>
-  );
-}
 
-function DashboardSkeleton() {
-  return (
-    <div className="space-y-6 animate-pulse">
-      <div>
-        <div className="h-8 bg-default-200 rounded w-64 mb-2"></div>
-        <div className="h-4 bg-default-200 rounded w-48"></div>
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="h-64 bg-default-200 rounded-lg"></div>
-        <div className="h-64 bg-default-200 rounded-lg"></div>
+
+
+        {/* Recent Transactions */}
+        <Card className="rounded-3xl" shadow='none'>
+          <CardHeader className="flex flex-col md:flex-row md:items-center md:justify-between pb-0 pt-6 px-6">
+            <div>
+              <h3 className="text-base font-semibold text-foreground font-heading tracking-tight leading-tight">Recent Transactions</h3>
+              <p className="text-xs text-default-500">Your latest business activties</p>
+            </div>
+            <Button 
+              variant="light" 
+              color="primary"
+              size="sm"
+            >
+              View All
+            </Button>
+          </CardHeader>
+          <CardBody className="pt-4">
+            <div className="space-y-3">
+              {recentTransactions.map((transaction) => (
+                <div 
+                  key={transaction.id}
+                  className="flex items-center justify-between p-4 rounded-lg hover:bg-default-100 transition-colors"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className={`p-2 rounded-lg ${
+                      transaction.type === 'income' 
+                        ? 'bg-success-100 dark:bg-success-950' 
+                        : 'bg-danger-100 dark:bg-danger-950'
+                    }`}>
+                      <Receipt className={`w-5 h-5 ${
+                        transaction.type === 'income'
+                          ? 'text-success-600 dark:text-success-400'
+                          : 'text-danger-600 dark:text-danger-400'
+                      }`} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-foreground">
+                        {transaction.description}
+                      </p>
+                      <p className="text-xs text-default-500">
+                        {transaction.category} • {transaction.date}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className={`text-sm font-bold ${
+                      transaction.type === 'income' 
+                        ? 'text-success-600' 
+                        : 'text-danger-600'
+                    }`}>
+                      {transaction.type === 'income' ? '+' : '-'}₦{transaction.amount.toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardBody>
+        </Card>
       </div>
     </div>
   );

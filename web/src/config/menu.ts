@@ -1,5 +1,5 @@
 // src/config/menu.ts
-import { LucideIcon } from 'lucide-react';
+import { LucideIcon, Receipt } from 'lucide-react';
 import { Home, Users, DollarSign, HelpCircle, Mail } from 'lucide-react';
 
 export interface MenuItem {
@@ -10,8 +10,8 @@ export interface MenuItem {
 
 export const menuItems: MenuItem[] = [
   { name: "Dashboard", href: "/dashboard", icon: Home },
-  { name: "Community", href: "#community", icon: Users },
-  { name: "Pricing", href: "#pricing", icon: DollarSign },
-  { name: "FAQs", href: "#faqs", icon: HelpCircle },
-  { name: "Contact", href: "#contact", icon: Mail },
+  { name: "Invoice", href: "/dashboard/invoice", icon: Receipt },
+  { name: "Income", href: "/dashboard/income", icon: Mail },
+  { name: "Expenses", href: "/dashboard/expenses", icon: HelpCircle },
+  { name: "Sales", href: "/dashboard/sales", icon: DollarSign },
 ];

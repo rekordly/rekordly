@@ -1,20 +1,20 @@
 // lib/auth/otpAuth.ts
-import { Provider } from "next-auth/providers";
-import { prisma } from "@/lib/prisma";
-import { verifyOtpCode } from "@/lib/auth/otp";
-import { User } from "next-auth";
+import { Provider } from 'next-auth/providers';
+import { prisma } from '@/lib/prisma';
+import { verifyOtpCode } from '@/lib/auth/otp';
+import { User } from 'next-auth';
 
 export const OTPProvider: Provider = {
-  id: "otp",
-  name: "OTP",
-  type: "credentials" as const, // Use 'as const' to ensure literal type
+  id: 'otp',
+  name: 'OTP',
+  type: 'credentials' as const, // Use 'as const' to ensure literal type
   credentials: {
-    email: { label: "Email", type: "email" },
-    otp: { label: "OTP", type: "text" },
+    email: { label: 'Email', type: 'email' },
+    otp: { label: 'OTP', type: 'text' },
   },
   async authorize(credentials): Promise<User | null> {
     if (!credentials?.email || !credentials?.otp) {
-      throw new Error("Missing credentials");
+      throw new Error('Missing credentials');
     }
 
     try {
@@ -27,18 +27,31 @@ export const OTPProvider: Provider = {
           image: true,
           emailVerified: true,
           onboarded: true,
-          password: true, // This line was missing
+          password: true,
+          onboarding: {
+            select: {
+              businessName: true,
+              phoneNumber: true,
+              registrationType: true,
+              workType: true,
+              startDate: true,
+            },
+          },
         },
       });
 
       if (!user) {
-        throw new Error("No user found");
+        throw new Error('No user found');
       }
 
-      const verification = await verifyOtpCode(credentials.email, credentials.otp, "login_recovery");
+      const verification = await verifyOtpCode(
+        credentials.email,
+        credentials.otp,
+        'login_recovery'
+      );
 
       if (!verification.valid) {
-        throw new Error("Invalid or expired code");
+        throw new Error('Invalid or expired code');
       }
 
       // Mark email as verified if not already
@@ -57,13 +70,22 @@ export const OTPProvider: Provider = {
         image: user.image ?? undefined,
         emailVerified: user.emailVerified ?? undefined,
         hasPassword: !!user.password,
+        onboarding: user.onboarding
+          ? {
+              businessName: user.onboarding.businessName,
+              phoneNumber: user.onboarding.phoneNumber,
+              registrationType: user.onboarding.registrationType,
+              workType: user.onboarding.workType,
+              startDate: user.onboarding.startDate,
+            }
+          : undefined,
       };
     } catch (error) {
       // Handle database connection errors gracefully
       if (error instanceof Error) {
         throw new Error(error.message);
       }
-      throw new Error("An error occurred during OTP verification");
+      throw new Error('An error occurred during OTP verification');
     }
   },
 };

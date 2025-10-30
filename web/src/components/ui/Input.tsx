@@ -1,0 +1,243 @@
+'use client';
+
+import React from 'react';
+import { Controller, Control, FieldValues, Path } from 'react-hook-form';
+import {
+  Input,
+  Autocomplete,
+  AutocompleteItem,
+  Select,
+  SelectItem,
+} from '@heroui/react';
+
+// ✅ Shared base props
+interface BaseInputProps<T extends FieldValues> {
+  name: Path<T>;
+  control: Control<T>;
+  label: string;
+  placeholder?: string;
+  description?: string;
+  isRequired?: boolean;
+}
+
+// ✅ Text input
+interface TextInputProps<T extends FieldValues> extends BaseInputProps<T> {
+  type?: 'text' | 'email' | 'tel' | 'url' | 'date';
+  startContent?: React.ReactNode;
+  endContent?: React.ReactNode;
+  isDisabled?: boolean;
+}
+
+export function TextInput<T extends FieldValues>({
+  name,
+  control,
+  label,
+  placeholder,
+  description,
+  type = 'text',
+  startContent,
+  endContent,
+  isRequired = false,
+  isDisabled = false,
+}: TextInputProps<T>) {
+  return (
+    <Controller
+      name={name}
+      control={control}
+      render={({ field, fieldState: { error } }) => (
+        <Input
+          {...field}
+          type={type}
+          label={label}
+          placeholder={placeholder}
+          description={description}
+          isRequired={isRequired}
+          isDisabled={isDisabled}
+          variant="bordered"
+          color="primary"
+          startContent={startContent}
+          endContent={endContent}
+          classNames={{
+            inputWrapper: 'border-1 h-14 border-default-300 rounded-2xl',
+            label: 'font-light text-default-400',
+          }}
+          isInvalid={!!error}
+          errorMessage={error?.message}
+        />
+      )}
+    />
+  );
+}
+
+// ✅ Number input
+export function NumberInput<T extends FieldValues>({
+  name,
+  control,
+  label,
+  placeholder,
+  description,
+  min,
+  max,
+  step = 1,
+  startContent,
+  endContent,
+  isRequired = false,
+}: TextInputProps<T> & { min?: number; max?: number; step?: number }) {
+  return (
+    <Controller
+      name={name}
+      control={control}
+      render={({ field, fieldState: { error } }) => (
+        <Input
+          {...field}
+          type="number"
+          label={label}
+          placeholder={placeholder}
+          description={description}
+          isRequired={isRequired}
+          variant="bordered"
+          color="primary"
+          min={min}
+          max={max}
+          step={step}
+          startContent={startContent}
+          endContent={endContent}
+          classNames={{
+            inputWrapper: 'border-1 h-14 border-default-300 rounded-2xl',
+            label: 'font-light text-default-400',
+          }}
+          isInvalid={!!error}
+          errorMessage={error?.message}
+          onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
+        />
+      )}
+    />
+  );
+}
+
+// ✅ Simplified Autocomplete input - just handles display and selection
+interface AutocompleteInputProps<T extends FieldValues, I = any>
+  extends BaseInputProps<T> {
+  items: I[];
+  getOptionLabel?: (item: I) => string;
+  getOptionValue?: (item: I) => string;
+  onSelectionChange?: (value: string) => void;
+  onInputChange?: (value: string) => void;
+  isDisabled?: boolean;
+  disallowTyping?: boolean;
+}
+
+export function AutocompleteInput<T extends FieldValues, I = any>({
+  name,
+  control,
+  label,
+  placeholder,
+  description,
+  items,
+  getOptionLabel,
+  getOptionValue,
+  onSelectionChange,
+  onInputChange,
+  isRequired = false,
+  isDisabled = false,
+  disallowTyping = false,
+}: AutocompleteInputProps<T, I>) {
+  return (
+    <Controller
+      name={name}
+      control={control}
+      render={({ field, fieldState: { error } }) => (
+        <Autocomplete
+          label={label}
+          placeholder={placeholder}
+          description={description}
+          isRequired={isRequired}
+          isDisabled={isDisabled}
+          variant="bordered"
+          color="primary"
+          selectedKey={field.value || null}
+          onSelectionChange={key => {
+            const stringKey = key as string;
+            field.onChange(stringKey || '');
+            if (onSelectionChange && stringKey) {
+              onSelectionChange(stringKey);
+            }
+          }}
+          onInputChange={value => {
+            // If typing is disallowed and value changes, ignore it
+            if (disallowTyping && value && field.value) {
+              return;
+            }
+            if (onInputChange) {
+              onInputChange(value);
+            }
+          }}
+          allowsCustomValue={!disallowTyping}
+          classNames={{
+            base: 'border-1 border-default-300 rounded-2xl',
+          }}
+          isInvalid={!!error}
+          errorMessage={error?.message}
+        >
+          {items.map(item => {
+            const value = getOptionValue
+              ? getOptionValue(item)
+              : (item as any).id;
+            const labelText = getOptionLabel
+              ? getOptionLabel(item)
+              : (item as any).name;
+            return (
+              <AutocompleteItem key={value} textValue={labelText}>
+                {labelText}
+              </AutocompleteItem>
+            );
+          })}
+        </Autocomplete>
+      )}
+    />
+  );
+}
+
+// ✅ Dropdown input
+export function DropdownInput<T extends FieldValues>({
+  name,
+  control,
+  label,
+  placeholder,
+  description,
+  items,
+  isRequired = false,
+}: BaseInputProps<T> & { items: { value: string; label: string }[] }) {
+  return (
+    <Controller
+      name={name}
+      control={control}
+      render={({ field, fieldState: { error } }) => (
+        <Select
+          {...field}
+          label={label}
+          placeholder={placeholder}
+          description={description}
+          isRequired={isRequired}
+          variant="bordered"
+          color="primary"
+          selectedKeys={field.value ? [field.value] : []}
+          onSelectionChange={keys => {
+            const value = Array.from(keys)[0] as string;
+            field.onChange(value);
+          }}
+          classNames={{
+            trigger: 'border-1 h-14 border-default-300 rounded-2xl',
+            label: 'font-light text-default-400',
+          }}
+          isInvalid={!!error}
+          errorMessage={error?.message}
+        >
+          {items.map(item => (
+            <SelectItem key={item.value}>{item.label}</SelectItem>
+          ))}
+        </Select>
+      )}
+    />
+  );
+}

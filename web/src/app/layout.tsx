@@ -1,12 +1,12 @@
-import "@/styles/globals.css";
-import { Metadata, Viewport } from "next";
-import clsx from "clsx";
+import '@/styles/globals.css';
+import { Metadata, Viewport } from 'next';
+import clsx from 'clsx';
 
-import { Providers } from "./providers";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { Providers } from './providers';
+import { ThemeToggle } from '@/components/theme-toggle';
 
-import { siteConfig } from "@/config/site";
-import { fontSans, fontMono, fontHeading } from "@/config/fonts"; // ← UPDATED
+import { siteConfig } from '@/config/site';
+import { fontSans, fontMono, fontHeading } from '@/config/fonts'; // ← UPDATED
 
 export const metadata: Metadata = {
   title: {
@@ -15,14 +15,14 @@ export const metadata: Metadata = {
   },
   description: siteConfig.description,
   icons: {
-    icon: "/favicon.ico",
+    icon: '/favicon.ico',
   },
 };
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "white" },
-    { media: "(prefers-color-scheme: dark)", color: "black" },
+    { media: '(prefers-color-scheme: light)', color: 'white' },
+    { media: '(prefers-color-scheme: dark)', color: 'black' },
   ],
 };
 
@@ -36,15 +36,15 @@ export default function RootLayout({
       <head />
       <body
         className={clsx(
-          "min-h-screen text-foreground bg-background font-sans antialiased",
+          'min-h-screen text-foreground bg-background font-sans antialiased',
           fontSans.variable,
-          fontMono.variable,      // ← ADDED
-          fontHeading.variable,   // ← ADDED
+          fontMono.variable, // ← ADDED
+          fontHeading.variable // ← ADDED
         )}
       >
-        <Providers themeProps={{ attribute: "class", defaultTheme: "dark" }}>
+        <Providers themeProps={{ attribute: 'class', defaultTheme: 'dark' }}>
           {children}
-          <ThemeToggle />
+          {/* <ThemeToggle /> */}
         </Providers>
       </body>
     </html>

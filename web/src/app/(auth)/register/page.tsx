@@ -11,11 +11,11 @@ import { FcGoogle } from "react-icons/fc";
 import { FaXTwitter, FaApple } from "react-icons/fa6";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import {signupSchema} from '@/lib/schemas/auth.schema';
-import {SignupFormData} from '@/types/auth.types';
+import {withEmailType} from '@/types/auth.types';
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getAlertColor } from '@/lib/fn';
+import {withEmailSchema} from '@/lib/validations/auth.schema';
 
 // Map NextAuth error codes to user-friendly messages
 const getErrorMessage = (error: string | null): string | null => {
@@ -51,8 +51,8 @@ export default function RegisterPage() {
     control,
     handleSubmit,
     formState: { errors, isSubmitting }
-  } = useForm<SignupFormData>({
-    resolver: zodResolver(signupSchema),
+  } = useForm<withEmailType>({
+    resolver: zodResolver(withEmailSchema),
     defaultValues: {
       email: '',
     }
@@ -76,7 +76,7 @@ export default function RegisterPage() {
     }
   }, [searchParams]);
 
-  const onSubmit = async (data: SignupFormData) => {
+  const onSubmit = async (data: withEmailType) => {
     try {
       setUserEmail(data.email);
       setAlertMessage(null);

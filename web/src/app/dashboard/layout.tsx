@@ -3,6 +3,7 @@ import Navbar from "@/components/dashboard/Navbar";
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { getServerSession } from 'next-auth';
 import { Sidebar } from "@/components/dashboard/layout/Sidebar";
+import { QuickAction } from "@/components/quick-action";
 
 export default async function DashboardLayout({
   children,
@@ -12,7 +13,7 @@ export default async function DashboardLayout({
   const session = await getServerSession(authOptions);
   
   return (
-    <div className="h-screen flex flex-col overflow-hidden">
+    <div className="h-screen max-w-8xl mx-auto flex flex-col overflow-hidden">
       {/* Fixed Navbar at top */}
       {session?.user && (
         <div className="flex-none">
@@ -28,12 +29,13 @@ export default async function DashboardLayout({
         </div>
         
         {/* Scrollable content area */}
-        <main className="flex-1 overflow-y-auto bg-default-50">
-          <div className="container mx-auto p-6">
+        <main className="flex-1 overflow-y-auto">
+          <div className="container overflow-y-auto mx-auto p-6 pb-28">
             {children}
           </div>
         </main>
       </div>
+      <QuickAction />
     </div>
   );
 }

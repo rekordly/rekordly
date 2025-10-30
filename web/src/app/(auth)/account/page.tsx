@@ -11,14 +11,15 @@ import { FcGoogle } from "react-icons/fc";
 import { FaXTwitter, FaApple, FaLock } from "react-icons/fa6";
 import { useForm, Controller, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { loginSchema, signupSchema } from "@/lib/validations/auth.schema";
-import type { LoginFormData, SignupFormData } from "@/types/auth.types";
+import {withPasswordSchema, withEmailSchema} from '@/lib/validations/auth.schema';
+import type { withPasswordType, withEmailType } from "@/types/auth.types";
 import { getAlertColor } from '@/lib/fn';
 import { signIn, useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
 
 type ScreenState = "email" | "password" | "otp";
+type alertType = "success" | "error" | "warning" | "info";
 
 // Map NextAuth error codes to user-friendly messages
 const getErrorMessage = (error: string | null): string | null => {
@@ -43,7 +44,6 @@ const getErrorMessage = (error: string | null): string | null => {
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { update } = useSession();
   const [screenState, setScreenState] = useState<ScreenState>("email");
   const [userEmail, setUserEmail] = useState<string>("");
   const [otpValue, setOtpValue] = useState<string>("");
@@ -53,14 +53,14 @@ export default function LoginPage() {
   const [isResending, setIsResending] = useState<boolean>(false);
   const [showEmailSuccess, setShowEmailSuccess] = useState<boolean>(false);
   const [alertMessage, setAlertMessage] = useState<{
-    type: "success" | "error" | "warning" | "info";
+    type: alertType;
     message: string;
   } | null>(null);
   const [isPasswordVisible, setIsPasswordVisible] = useState<boolean>(false);
 
   // Form for email magic link
-  const emailForm = useForm<SignupFormData>({
-    resolver: zodResolver(signupSchema),
+  const emailForm = useForm<withEmailType>({
+    resolver: zodResolver(withEmailSchema),
     defaultValues: {
       email: '',
     }
@@ -73,8 +73,8 @@ export default function LoginPage() {
   });
 
   // Form for password login
-  const passwordForm = useForm<LoginFormData>({
-    resolver: zodResolver(loginSchema),
+  const passwordForm = useForm<withPasswordType>({
+    resolver: zodResolver(withPasswordSchema),
     defaultValues: {
       email: '',
       password: '',
@@ -115,7 +115,7 @@ export default function LoginPage() {
   }, [countdown]);
 
   // Handle email magic link submission
-  const onEmailSubmit = async (data: SignupFormData) => {
+  const onEmailSubmit = async (data: withEmailType) => {
     try {
       setUserEmail(data.email);
       setAlertMessage(null);
@@ -146,7 +146,7 @@ export default function LoginPage() {
   };
 
   // Handle password login submission
-  const onPasswordSubmit = async (data: LoginFormData) => {
+  const onPasswordSubmit = async (data: withPasswordType) => {
     try {
       setAlertMessage(null);
       setUserEmail(data.email);
