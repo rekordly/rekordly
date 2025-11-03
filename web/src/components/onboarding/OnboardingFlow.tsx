@@ -1,18 +1,25 @@
-"use client";
+'use client';
 import React, { useState } from 'react';
-import { useForm, FormProvider } from 'react-hook-form';
+import { useForm, FormProvider, Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Button, addToast } from '@heroui/react';
-import { signOut, useSession } from 'next-auth/react';
+import { addToast, Button } from '@heroui/react';
+import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import axios from 'axios';
+
+import { handleSignOut } from '@/lib/auth/logout';
 import { ProgressBar } from '@/components/onboarding/ui/ProgressBar';
 import { SignOutButton } from '@/components/onboarding/ui/SignOutButton';
 import { Step1PersonalInfo } from '@/components/onboarding/steps/Step1PersonalInfo';
 import { Step2WorkType } from '@/components/onboarding/steps/Step2WorkType';
 import { Step3Details } from '@/components/onboarding/steps/Step3Details';
-import {personalInfoSchema, personalInfoSchemaWithPassword, workTypeSchema, finalSchema} from '@/lib/validations/onboarding';
-import {SessionUser} from '@/types/index';
+import {
+  personalInfoSchema,
+  personalInfoSchemaWithPassword,
+  workTypeSchema,
+  finalSchema,
+} from '@/lib/validations/onboarding';
+import { SessionUser } from '@/types/index';
+import { useApi } from '@/hooks/useApi';
 
 interface OnboardingFlowProps {
   user: {
@@ -32,7 +39,7 @@ type FormData = {
   confirmPassword?: string;
   heardFrom: string;
   referralCode?: string;
-  workType: string;
+  workTypes: string[];
   registrationType: string;
   businessName?: string;
   startDate: string;
@@ -48,12 +55,14 @@ export const OnboardingFlow: React.FC<SessionUser> = ({ user }) => {
 
   // Create a combined schema for form validation
   const getCompleteSchema = () => {
-    const step1Schema = user.hasPassword ? personalInfoSchema : personalInfoSchemaWithPassword;
+    const step1Schema = user.hasPassword
+      ? personalInfoSchema
+      : personalInfoSchemaWithPassword;
     return step1Schema.merge(workTypeSchema).merge(finalSchema);
   };
 
   const methods = useForm<FormData>({
-    resolver: zodResolver(getCompleteSchema()),
+    resolver: zodResolver(getCompleteSchema()) as Resolver<FormData>,
     mode: 'onBlur',
     defaultValues: {
       fullName: user.name || '',
@@ -63,7 +72,7 @@ export const OnboardingFlow: React.FC<SessionUser> = ({ user }) => {
       confirmPassword: '',
       heardFrom: '',
       referralCode: '',
-      workType: '',
+      workTypes: [],
       registrationType: '',
       businessName: '',
       startDate: '',
@@ -74,44 +83,48 @@ export const OnboardingFlow: React.FC<SessionUser> = ({ user }) => {
 
   const handleNext = async () => {
     console.log('Current Step:', currentStep);
-    
-    // Define which fields to validate for each step
+
     let fieldsToValidate: (keyof FormData)[] = [];
-    
+
     if (currentStep === 1) {
-      fieldsToValidate = user.hasPassword 
+      fieldsToValidate = user.hasPassword
         ? ['fullName', 'phoneNumber', 'email', 'heardFrom']
-        : ['fullName', 'phoneNumber', 'email', 'password', 'confirmPassword', 'heardFrom'];
-      
-      // Trigger field validation first
+        : [
+            'fullName',
+            'phoneNumber',
+            'email',
+            'password',
+            'confirmPassword',
+            'heardFrom',
+          ];
+
       const isValid = await methods.trigger(fieldsToValidate);
-      
+
       if (!isValid) {
         return;
       }
-      
-      // If user doesn't have password, manually check if passwords match
+
       if (!user.hasPassword) {
         const password = methods.getValues('password');
         const confirmPassword = methods.getValues('confirmPassword');
-        
+
         if (password !== confirmPassword) {
           methods.setError('confirmPassword', {
             type: 'manual',
-            message: "Passwords don't match"
+            message: "Passwords don't match",
           });
           return;
         }
       }
     } else if (currentStep === 2) {
-      fieldsToValidate = ['workType'];
+      fieldsToValidate = ['workTypes'];
       const isValid = await methods.trigger(fieldsToValidate);
-      
+
       if (!isValid) {
         return;
       }
     }
-    
+
     setCurrentStep(currentStep + 1);
   };
 
@@ -120,49 +133,33 @@ export const OnboardingFlow: React.FC<SessionUser> = ({ user }) => {
     methods.clearErrors();
   };
 
+  const { post } = useApi({
+    addToast,
+    onSuccess: async data => {
+      await update();
+
+      addToast({
+        title: 'Success!',
+        description: data.message || 'Onboarding completed successfully!',
+        color: 'success',
+      });
+
+      router.push('/dashboard');
+      router.refresh();
+    },
+  });
+
   const onSubmit = async (data: FormData) => {
     // console.log('Submitting Data:', data);
     setIsSubmitting(true);
-    
     try {
-      const response = await axios.post('/api/onboarding', data);
-
-      
+      await post('/onboarding', data);
       await update();
-      
-      // Success toast
-      addToast({
-        title: 'Success!',
-        description: response.data.message || 'Onboarding completed successfully!',
-        color: 'success',
-      });
-      
-      
-      router.push('/dashboard');
-      router.refresh();
-      
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        // Handle axios error with response
-        addToast({
-          title: 'Error',
-          description: error.response?.data?.message || 'Something went wrong',
-          color: 'danger',
-        });
-      } else {
-        // Handle network or other errors
-        addToast({
-          title: 'Network Error',
-          description: 'Unable to connect. Please try again.',
-          color: 'danger',
-        });
-      }
     } finally {
       setIsSubmitting(false);
     }
   };
-
-  const handleSignOut = () => signOut({ callbackUrl: '/account' });
 
   return (
     <div className="flex flex-col h-full">
@@ -173,7 +170,7 @@ export const OnboardingFlow: React.FC<SessionUser> = ({ user }) => {
 
       <div className="flex-1 flex items-center justify-center p-6 lg:p-12 relative">
         <SignOutButton onSignOut={handleSignOut} />
-        
+
         <div className="w-full max-w-md">
           {/* Progress Bar - Normal on desktop */}
           <div className="hidden lg:block">
@@ -185,14 +182,13 @@ export const OnboardingFlow: React.FC<SessionUser> = ({ user }) => {
               {/* Step Content */}
               <div className="mb-8">
                 {currentStep === 1 && (
-                  <Step1PersonalInfo 
+                  <Step1PersonalInfo
                     hasPassword={user.hasPassword}
                     emailDisabled={!!user.email}
                   />
                 )}
-                
+
                 {currentStep === 2 && <Step2WorkType />}
-                
                 {currentStep === 3 && <Step3Details />}
               </div>
 
@@ -208,7 +204,7 @@ export const OnboardingFlow: React.FC<SessionUser> = ({ user }) => {
                     Back
                   </Button>
                 )}
-                
+
                 {currentStep < 3 ? (
                   <Button
                     type="button"

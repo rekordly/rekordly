@@ -82,7 +82,7 @@ export function AddItemSection() {
                 />
               </div>
 
-              <div className="md:col-span-2 grid grid-cols-3 gap-3">
+              <div className="md:col-span-2 grid grid-cols-2 gap-3">
                 <div className="col-span-1">
                   <NumberInput<AddItemFormType>
                     name="itemQuantity"
@@ -93,7 +93,7 @@ export function AddItemSection() {
                   />
                 </div>
 
-                <div className="col-span-2">
+                <div className="col-span-1">
                   <NumberInput<AddItemFormType>
                     name="itemRate"
                     control={itemControl}

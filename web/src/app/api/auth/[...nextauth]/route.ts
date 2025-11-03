@@ -68,7 +68,7 @@ export const authOptions: AuthOptions = {
                   businessName: true,
                   phoneNumber: true,
                   registrationType: true,
-                  workType: true,
+                  workTypes: true,
                   startDate: true,
                 },
               },
@@ -147,7 +147,7 @@ export const authOptions: AuthOptions = {
                   businessName: user.onboarding.businessName,
                   phoneNumber: user.onboarding.phoneNumber,
                   registrationType: user.onboarding.registrationType,
-                  workType: user.onboarding.workType,
+                  workTypes: user.onboarding.workTypes,
                   startDate: user.onboarding.startDate,
                 }
               : undefined,
@@ -304,7 +304,7 @@ export const authOptions: AuthOptions = {
                 businessName: true,
                 phoneNumber: true,
                 registrationType: true,
-                workType: true,
+                workTypes: true,
                 startDate: true,
               },
             });
@@ -313,7 +313,7 @@ export const authOptions: AuthOptions = {
               businessName: null,
               phoneNumber: null,
               registrationType: null,
-              workType: null,
+              workTypes: null,
               startDate: null,
             };
           } catch (error) {
@@ -322,7 +322,7 @@ export const authOptions: AuthOptions = {
               businessName: null,
               phoneNumber: null,
               registrationType: null,
-              workType: null,
+              workTypes: null,
               startDate: null,
             };
           }
@@ -344,7 +344,7 @@ export const authOptions: AuthOptions = {
                   businessName: true,
                   phoneNumber: true,
                   registrationType: true,
-                  workType: true,
+                  workTypes: true,
                   startDate: true,
                 },
               },
@@ -360,7 +360,7 @@ export const authOptions: AuthOptions = {
               phoneNumber: updatedUser.onboarding?.phoneNumber || null,
               registrationType:
                 updatedUser.onboarding?.registrationType || null,
-              workType: updatedUser.onboarding?.workType || null,
+              workTypes: updatedUser.onboarding?.workTypes || null,
               startDate: updatedUser.onboarding?.startDate || null,
             };
           }

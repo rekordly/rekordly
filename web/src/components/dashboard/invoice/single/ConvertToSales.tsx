@@ -14,13 +14,12 @@ import {
 import { Plus, CurrencyCircleDollar } from '@phosphor-icons/react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { FormProvider, useForm } from 'react-hook-form';
-import { z } from 'zod';
-import axios from 'axios';
 import { ConvertToSalesType, Invoice } from '@/types/invoice';
 import { NumberInput, TextInput, DropdownInput } from '@/components/ui/Input';
 import { formatCurrency } from '@/lib/fn';
 import { useInvoiceStore } from '@/store/invoiceStore';
 import { convertToSalesSchema } from '@/lib/validations/invoice';
+import { useApi } from '@/hooks/useApi';
 
 interface ConvertToSalesProps {
   invoice: Invoice;
@@ -28,6 +27,7 @@ interface ConvertToSalesProps {
 
 export default function ConvertToSales({ invoice }: ConvertToSalesProps) {
   const { isOpen, onOpen, onClose } = useDisclosure();
+  const { updateInvoice } = useInvoiceStore();
 
   const methods = useForm<ConvertToSalesType>({
     resolver: zodResolver(convertToSalesSchema),
@@ -43,88 +43,53 @@ export default function ConvertToSales({ invoice }: ConvertToSalesProps) {
 
   const {
     handleSubmit,
-    formState: { errors, isSubmitting },
+    formState: { isSubmitting },
     reset,
     watch,
   } = methods;
 
+  const { post, isLoading } = useApi({
+    addToast,
+    showSuccessToast: true,
+    onSuccess: data => {
+      const updatedInvoice = data.invoice;
+
+      if (updatedInvoice) {
+        updateInvoice(invoice.id, updatedInvoice);
+
+        const newBalance = updatedInvoice.sale?.balance || 0;
+        reset({
+          amountPaid: newBalance,
+          paymentMethod: 'BANK_TRANSFER',
+          reference: '',
+          notes: '',
+          paymentDate: new Date().toISOString().split('T')[0],
+        });
+      }
+
+      handleClose();
+    },
+  });
+
   const amountPaid = watch('amountPaid');
 
-  // ✅ Fixed: Calculate balance based on current outstanding amount minus amount being paid
   const outstandingBalance = !invoice.sale
     ? invoice.totalAmount
     : invoice.sale?.balance;
   const balance = outstandingBalance - (amountPaid || 0);
 
   const onSubmit = async (data: ConvertToSalesType) => {
+    console.log(data);
     try {
-      const response = await axios.post(
-        `/api/invoices/${invoice.id}/convert`,
-        data
-      );
-
-      if (response.data.success) {
-        // ✅ Fetch updated invoice data
-        await useInvoiceStore.getState().fetchInvoices();
-
-        // ✅ Get the updated invoice to reset form with latest balance
-        const updatedInvoice = useInvoiceStore
-          .getState()
-          .invoices.find(inv => inv.id === invoice.id);
-
-        // Reset form with updated values
-        reset({
-          amountPaid: updatedInvoice?.sale?.balance || 0,
-          paymentMethod: 'BANK_TRANSFER',
-          reference: '',
-          notes: '',
-          paymentDate: new Date().toISOString().split('T')[0],
-        });
-
-        addToast({
-          title: 'Success',
-          description:
-            response.data.message || 'Invoice converted to sales successfully!',
-          color: 'success',
-        });
-
-        handleClose();
-      }
-    } catch (error) {
-      console.error('Error converting invoice:', error);
-
-      if (axios.isAxiosError(error)) {
-        const errorMessage =
-          error.response?.data?.message ||
-          'Failed to convert invoice. Please try again.';
-
-        addToast({
-          title: 'Error',
-          description: errorMessage,
-          color: 'danger',
-        });
-
-        // Handle validation errors
-        if (error.response?.data?.errors) {
-          console.error('Validation errors:', error.response.data.errors);
-        }
-      } else {
-        addToast({
-          title: 'Error',
-          description: 'An unexpected error occurred',
-          color: 'danger',
-        });
-      }
-    }
+      await post(`/invoices/${invoice.id}/convert`, data);
+    } catch (error) {}
   };
 
-  // ✅ Handle modal close with form reset
   const handleClose = () => {
     reset();
     onClose();
   };
 
-  // ✅ Payment method options
   const paymentMethods = [
     { value: 'CASH', label: 'Cash' },
     { value: 'BANK_TRANSFER', label: 'Bank Transfer' },
@@ -134,11 +99,9 @@ export default function ConvertToSales({ invoice }: ConvertToSalesProps) {
     { value: 'OTHER', label: 'Other' },
   ];
 
-  // Check if invoice is fully paid
   const isFullyPaid = invoice.sale && invoice.sale.balance === 0;
   const isConverted = !!invoice.sale;
 
-  // Don't show button if fully paid
   if (isFullyPaid) return null;
 
   return (
@@ -180,7 +143,6 @@ export default function ConvertToSales({ invoice }: ConvertToSalesProps) {
                 </ModalHeader>
 
                 <ModalBody className="gap-4">
-                  {/* Amount Paid */}
                   <NumberInput<ConvertToSalesType>
                     name="amountPaid"
                     control={methods.control}
@@ -200,7 +162,6 @@ export default function ConvertToSales({ invoice }: ConvertToSalesProps) {
                     }
                   />
 
-                  {/* Payment Method */}
                   <DropdownInput<ConvertToSalesType>
                     name="paymentMethod"
                     control={methods.control}
@@ -210,16 +171,14 @@ export default function ConvertToSales({ invoice }: ConvertToSalesProps) {
                     isRequired
                   />
 
-                  {/* Payment Date */}
                   <TextInput<ConvertToSalesType>
                     name="paymentDate"
                     control={methods.control}
                     label="Payment Date"
                     placeholder="Select date"
-                    type="date"
+                    type="datetime-local"
                   />
 
-                  {/* Reference */}
                   <TextInput<ConvertToSalesType>
                     name="reference"
                     control={methods.control}
@@ -228,7 +187,6 @@ export default function ConvertToSales({ invoice }: ConvertToSalesProps) {
                     description="Optional: Add payment reference or transaction ID"
                   />
 
-                  {/* Notes - ✅ Removed description */}
                   <TextInput<ConvertToSalesType>
                     name="notes"
                     control={methods.control}
@@ -236,7 +194,6 @@ export default function ConvertToSales({ invoice }: ConvertToSalesProps) {
                     placeholder="Add any additional notes..."
                   />
 
-                  {/* Balance Warning */}
                   {balance > 0 && amountPaid && (
                     <Chip color="warning" variant="flat" className="w-full">
                       ⚠️ Partial payment: {formatCurrency(balance)} balance
@@ -255,14 +212,14 @@ export default function ConvertToSales({ invoice }: ConvertToSalesProps) {
                   <Button
                     variant="light"
                     onPress={handleClose}
-                    isDisabled={isSubmitting}
+                    isDisabled={isSubmitting || isLoading}
                   >
                     Cancel
                   </Button>
                   <Button
                     color={isConverted ? 'primary' : 'secondary'}
                     type="submit"
-                    isLoading={isSubmitting}
+                    isLoading={isSubmitting || isLoading}
                   >
                     {isConverted ? 'Add Payment' : 'Convert to Sales'}
                   </Button>

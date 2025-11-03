@@ -6,7 +6,7 @@ import {
   personalInfoSchema,
   personalInfoSchemaWithPassword,
   workTypeSchema,
-  finalSchema
+  finalSchema,
 } from '@/lib/validations/onboarding';
 import { z } from 'zod';
 
@@ -15,7 +15,10 @@ const prisma = new PrismaClient();
 export async function POST(request: NextRequest) {
   try {
     // Try to get token from next-auth
-    let token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
+    let token = await getToken({
+      req: request,
+      secret: process.env.NEXTAUTH_SECRET,
+    });
     let userId: string | undefined;
     let userEmail: string | undefined;
 
@@ -25,11 +28,11 @@ export async function POST(request: NextRequest) {
       if (authHeader?.startsWith('Bearer ')) {
         const jwtToken = authHeader.substring(7);
         // Verify and decode the JWT token
-        token = await getToken({ 
-          req: { 
-            headers: { authorization: `Bearer ${jwtToken}` } 
-          } as any, 
-          secret: process.env.NEXTAUTH_SECRET 
+        token = await getToken({
+          req: {
+            headers: { authorization: `Bearer ${jwtToken}` },
+          } as any,
+          secret: process.env.NEXTAUTH_SECRET,
         });
       }
     }
@@ -50,14 +53,11 @@ export async function POST(request: NextRequest) {
     // Check if user exists
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      include: { onboarding: true }
+      include: { onboarding: true },
     });
 
     if (!user) {
-      return NextResponse.json(
-        { message: 'User not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ message: 'User not found' }, { status: 404 });
     }
 
     // Check if user is already onboarded
@@ -70,19 +70,21 @@ export async function POST(request: NextRequest) {
 
     // Determine which schema to use based on user's password status
     const hasPassword = !!user.password;
-    const step1Schema = hasPassword ? personalInfoSchema : personalInfoSchemaWithPassword;
-    
+    const step1Schema = hasPassword
+      ? personalInfoSchema
+      : personalInfoSchemaWithPassword;
+
     // Create combined schema
     const completeSchema = step1Schema.merge(workTypeSchema).merge(finalSchema);
 
     // Validate data
     const validationResult = completeSchema.safeParse(body);
-    
+
     if (!validationResult.success) {
       return NextResponse.json(
-        { 
-          message: 'Validation failed', 
-          errors: validationResult.error.flatten().fieldErrors 
+        {
+          message: 'Validation failed',
+          errors: validationResult.error.flatten().fieldErrors,
         },
         { status: 400 }
       );
@@ -103,7 +105,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Use transaction to update user and create onboarding data
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async tx => {
       // Update user
       const updatedUser = await tx.user.update({
         where: { id: userId },
@@ -118,7 +120,7 @@ export async function POST(request: NextRequest) {
           phoneNumber: data.phoneNumber,
           heardFrom: data.heardFrom,
           referralCode: data.referralCode || null,
-          workType: data.workType,
+          workTypes: data.workTypes,
           registrationType: data.registrationType,
           businessName: data.businessName || null,
           startDate: new Date(data.startDate),
@@ -131,7 +133,7 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json(
-      { 
+      {
         message: 'Onboarding completed successfully',
         success: true,
         user: {
@@ -139,14 +141,13 @@ export async function POST(request: NextRequest) {
           name: result.updatedUser.name,
           email: result.updatedUser.email,
           onboarded: result.updatedUser.onboarded,
-        }
+        },
       },
       { status: 200 }
     );
-
   } catch (error) {
     console.error('Onboarding error:', error);
-    
+
     if (error instanceof z.ZodError) {
       return NextResponse.json(
         { message: 'Validation error', errors: error.flatten().fieldErrors },
@@ -167,27 +168,27 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     // Try to get token from next-auth
-    let token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
+    let token = await getToken({
+      req: request,
+      secret: process.env.NEXTAUTH_SECRET,
+    });
 
     // If no next-auth token, try Authorization header (for mobile)
     if (!token) {
       const authHeader = request.headers.get('authorization');
       if (authHeader?.startsWith('Bearer ')) {
         const jwtToken = authHeader.substring(7);
-        token = await getToken({ 
-          req: { 
-            headers: { authorization: `Bearer ${jwtToken}` } 
-          } as any, 
-          secret: process.env.NEXTAUTH_SECRET 
+        token = await getToken({
+          req: {
+            headers: { authorization: `Bearer ${jwtToken}` },
+          } as any,
+          secret: process.env.NEXTAUTH_SECRET,
         });
       }
     }
-    
+
     if (!token?.sub) {
-      return NextResponse.json(
-        { message: 'Unauthorized' },
-        { status: 401 }
-      );
+      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
 
     const user = await prisma.user.findUnique({
@@ -201,14 +202,10 @@ export async function GET(request: NextRequest) {
     });
 
     if (!user) {
-      return NextResponse.json(
-        { message: 'User not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ message: 'User not found' }, { status: 404 });
     }
 
     return NextResponse.json({ user }, { status: 200 });
-
   } catch (error) {
     console.error('Error checking onboarding status:', error);
     return NextResponse.json(

@@ -8,6 +8,7 @@ generator client {
   provider = "prisma-client-js"
 }
 
+
 model User {
   id            String          @id @default(cuid())
   name          String?
@@ -18,12 +19,29 @@ model User {
   onboarded     Boolean         @default(false)
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
+  
   accounts      Account[]
   sessions      Session[]
   onboarding    OnboardingData?
   customers     Customer[]
+  
+  // Financial documents
   invoices      Invoice[]
+  quotations    Quotation[]
   sales         Sale[]
+  purchases     Purchase[]
+  
+  // Transactions
+  incomeRecords IncomeRecord[]
+  expenses      Expense[]
+  payments      Payment[]
+  
+  // Assets
+  fixedAssets   FixedAsset[]
+  digitalAssets DigitalAsset[]
+  securities    Security[]
+  
+  @@index([email])
 }
 
 model Account {
@@ -77,7 +95,7 @@ model OnboardingData {
   phoneNumber          String
   heardFrom            String
   referralCode         String?
-  workType             String
+  workTypes            String[]
   registrationType     String
   businessName         String?
   startDate            DateTime
@@ -88,23 +106,89 @@ model OnboardingData {
   user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-// Customer model - minimal fields, unique per user
 model Customer {
   id        String   @id @default(cuid())
   userId    String
   name      String
   email     String?
   phone     String?
+  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  invoices Invoice[]
-  sales    Sale[]
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  invoices   Invoice[]
+  quotations Quotation[]
+  sales      Sale[]
 
   @@unique([userId, email])
   @@index([userId])
   @@index([userId, phone])
+}
+
+// ============================================
+// QUOTATIONS (with REFUNDED status)
+// ============================================
+
+model Quotation {
+  id              String @id @default(cuid())
+  quotationNumber String @unique
+  userId          String
+
+  customerId    String?
+  customerName  String?
+  customerEmail String?
+  customerPhone String?
+
+  title       String?
+  description String?
+  
+  materials        Json?
+  materialsTotal   Float @default(0)
+  workmanship      Json?
+  workmanshipTotal Float @default(0)
+  otherCosts       Json?
+  otherCostsTotal  Float @default(0)
+  
+  includeVAT  Boolean @default(false)
+  vatAmount   Float?
+  totalAmount Float
+
+  // Payment tracking
+  amountPaid Float @default(0)
+  balance    Float
+
+  status      QuotationStatus @default(DRAFT)
+  validUntil  DateTime?
+  issueDate   DateTime        @default(now())
+  
+  // Refund tracking
+  refundReason  String?
+  refundDate    DateTime?
+  refundAmount  Float?
+
+  payments Payment[]
+  
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([userId, status])
+  @@index([userId, issueDate])
+}
+
+enum QuotationStatus {
+  DRAFT
+  UNPAID
+  PARTIALLY_PAID
+  PAID
+  EXPIRED
+  CANCELLED
+  REFUNDED
+  PARTIALLY_REFUNDED
 }
 
 model Invoice {
@@ -119,9 +203,10 @@ model Invoice {
 
   title       String?
   description String?
-  includeVAT  Boolean @default(false)
   items       Json
   amount      Float
+  
+  includeVAT  Boolean @default(false)
   vatAmount   Float?
   totalAmount Float
 
@@ -130,15 +215,25 @@ model Invoice {
   dueDate   DateTime?
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
+  
+  saleId String? @unique
+  sale   Sale?   @relation(fields: [saleId], references: [id])
+  convertedAt       DateTime?
 
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
 
-  saleId String? @unique
-  sale   Sale?   @relation(fields: [saleId], references: [id])
-
   @@index([userId])
   @@index([userId, status])
+  @@index([userId, issueDate])
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  CONVERTED
+  OVERDUE
+  CANCELLED
 }
 
 model Sale {
@@ -146,22 +241,32 @@ model Sale {
   receiptNumber String @unique
   userId        String
 
-  // Optional links
-  invoiceId  String?  @unique
-  invoice    Invoice?
-  customerId String?
-
+  sourceType  SaleSourceType
+  invoiceId   String? @unique
+  invoice     Invoice?
+  
+  customerId    String?
   customerName  String?
   customerEmail String?
   customerPhone String?
 
   title       String?
   description String?
-  includeVAT  Boolean @default(false)
   items       Json
-  amount      Float
+  
+  
+  subtotal       Float  
+  discountType   DiscountType?
+  discountValue  Float? 
+  discountAmount Float @default(0)
+  
+  includeVAT  Boolean @default(false)
   vatAmount   Float?
-  totalAmount Float
+  totalAmount Float  
+  
+  deliveryCost       Float @default(0)
+  otherSaleExpenses  Json? 
+  totalSaleExpenses  Float @default(0) // Sum of delivery + other expenses
 
   // Payment tracking
   amountPaid Float @default(0)
@@ -169,40 +274,35 @@ model Sale {
 
   status    SaleStatus @default(UNPAID)
   saleDate  DateTime   @default(now())
+  
+  // Refund tracking
+  refundReason  String?
+  refundDate    DateTime?
+  refundAmount  Float?
+  
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  
   payments Payment[]
+  incomeRecords IncomeRecord[]
 
   @@index([userId])
   @@index([userId, status])
+  @@index([userId, saleDate])
 }
 
-model Payment {
-  id            String        @id @default(cuid())
-  saleId        String
-  amount        Float
-  paymentDate   DateTime      @default(now())
-  paymentMethod PaymentMethod
-  reference     String?
-  notes         String?
-  createdAt     DateTime      @default(now())
-
-  sale Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
-
-  @@index([saleId])
+enum DiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
 }
 
-// Enums
-enum InvoiceStatus {
-  DRAFT
-  SENT
-  PAID
-  OVERDUE
-  CANCELLED
-  CONVERTED
+
+enum SaleSourceType {
+  DIRECT
+  FROM_INVOICE
 }
 
 enum SaleStatus {
@@ -210,6 +310,101 @@ enum SaleStatus {
   PARTIALLY_PAID
   PAID
   REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+model Purchase {
+  id             String @id @default(cuid())
+  purchaseNumber String @unique
+  userId         String
+
+  vendorName  String
+  vendorEmail String?
+  vendorPhone String?
+
+  title       String?
+  description String?
+  items       Json
+  
+  otherCosts      Json?
+  otherCostsTotal Float @default(0)
+  
+  subtotal    Float
+  includeVAT  Boolean @default(false)
+  vatAmount   Float?
+  totalAmount Float
+
+  amountPaid Float @default(0)
+  balance    Float
+
+  status       PurchaseStatus @default(UNPAID)
+  purchaseDate DateTime       @default(now())
+  
+  refundReason  String?
+  refundDate    DateTime?
+  refundAmount  Float?
+  
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  
+  expense   Expense?
+  payments Payment[]
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, status])
+  @@index([userId, purchaseDate])
+}
+
+enum PurchaseStatus {
+  UNPAID
+  PARTIALLY_PAID
+  PAID
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+model Payment {
+  id            String   @id @default(cuid())
+  userId        String
+  
+  payableType   PayableType
+  
+  saleId        String?
+  quotationId   String?
+  purchaseId    String?
+  
+  amount        Float
+  paymentDate   DateTime      @default(now())
+  paymentMethod PaymentMethod
+  category      PaymentCategory
+  
+  reference     String?
+  notes         String?
+  createdAt     DateTime @default(now())
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sale      Sale?      @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  quotation Quotation? @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  purchase  Purchase?  @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  
+  @@index([userId, payableType])
+  @@index([userId, saleId])
+  @@index([userId, quotationId])
+  @@index([userId, purchaseId])
+  @@index([userId, paymentDate])
+}
+
+enum PayableType {
+  QUOTATION
+  SALE
+  PURCHASE
+}
+
+enum PaymentCategory {
+  INCOME
+  EXPENSE
 }
 
 enum PaymentMethod {
@@ -218,5 +413,308 @@ enum PaymentMethod {
   CARD
   MOBILE_MONEY
   CHEQUE
+  OTHER
+}
+
+model IncomeRecord {
+  id          String @id @default(cuid())
+  userId      String
+  
+  mainCategory IncomeMainCategory
+  subCategory  IncomeSubCategory
+  
+  // Can be negative for refunds
+  grossAmount   Float
+  taxableAmount Float
+  
+  description String?
+  date        DateTime @default(now())
+  
+  sourceType IncomeSourceType?
+  sourceId   String?
+  saleId     String?
+  sale       Sale? @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  
+  employer String?
+  assetId  String?
+  
+  withholdingTax Float? @default(0)
+  vatAmount      Float? @default(0)
+  
+  isRefund        Boolean @default(false)
+  refundReason    String?
+  originalRecordId String? // Link to original income being refunded
+  
+  attachments Json?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId, mainCategory])
+  @@index([userId, date])
+  @@index([userId, subCategory])
+  @@index([userId, mainCategory, date])
+  @@index([userId, isRefund])
+}
+
+enum IncomeMainCategory {
+  BUSINESS_PROFIT
+  EMPLOYMENT_INCOME
+  TRUST_ESTATE_INCOME
+}
+
+enum IncomeSubCategory {
+  // A. Business/Trade Income
+  TRADE_PROFIT
+  SERVICE_FEES
+  COMMISSION
+  ROYALTIES
+  RENTAL_INCOME
+  INTEREST_INCOME
+  DIVIDENDS
+  CAPITAL_GAINS
+  DIGITAL_ASSET_GAINS
+  SECURITIES_GAINS
+  PRIZES_AWARDS
+  REBATES_DISCOUNTS
+  OTHER_BUSINESS_INCOME
+  
+  // B. Employment Income
+  SALARY
+  BONUS
+  ALLOWANCES
+  BENEFITS_IN_KIND
+  PENSION
+  SEVERANCE
+  
+  // C. Trust/Estate Income
+  TRUST_DISTRIBUTION
+  ESTATE_DISTRIBUTION
+}
+
+enum IncomeSourceType {
+  SALE_PAYMENT
+  QUOTATION_PAYMENT
+  DIRECT_ENTRY
+  ASSET_DISPOSAL
+  SECURITY_TRADE
+  EMPLOYMENT
+  PASSIVE
+}
+
+
+model Expense {
+  id          String @id @default(cuid())
+  userId      String
+  
+  category    ExpenseCategory
+  subCategory String?
+  
+  // Can be negative for purchase returns
+  amount      Float
+  description String
+  date        DateTime @default(now())
+  
+  isDeductible        Boolean @default(true)
+  deductionPercentage Int     @default(100)
+  taxCategory         ExpenseTaxCategory?
+  
+  // Fixed relation
+  purchaseId String?   @unique
+  purchase   Purchase? @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
+  
+  // Return tracking
+  isReturn         Boolean @default(false)
+  returnReason     String?
+  originalExpenseId String?
+  
+  receipt     String?
+  attachments Json?
+  
+  vendor    String?
+  reference String?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId, category])
+  @@index([userId, date])
+  @@index([userId, isDeductible])
+  @@index([userId, category, date])
+  @@index([userId, isReturn])
+}
+
+enum ExpenseCategory {
+  COST_OF_GOODS
+  RENT_RATES
+  UTILITIES
+  SALARIES_WAGES
+  TRANSPORTATION
+  FUEL
+  REPAIRS_MAINTENANCE
+  OFFICE_SUPPLIES
+  SOFTWARE_SUBSCRIPTIONS
+  PROFESSIONAL_FEES
+  INSURANCE
+  LICENSES_PERMITS
+  ADVERTISING
+  MARKETING
+  BANK_CHARGES
+  INTEREST_PAID
+  DONATIONS
+  TRAINING
+  DEPRECIATION
+  PERSONAL_EXPENSE
+  OTHER
+}
+
+enum ExpenseTaxCategory {
+  RENT_AND_PREMISES
+  EMPLOYEE_COSTS
+  REPAIRS_MAINTENANCE
+  INTEREST_ON_DEBT
+  BAD_DEBTS
+  RESEARCH_DEVELOPMENT
+  DONATIONS_DEDUCTIBLE
+  CAPITAL_EXPENDITURE
+  PERSONAL_EXPENSE
+  FINES_PENALTIES
+  NON_APPROVED_PENSION
+  ENTERTAINMENT
+}
+
+model FixedAsset {
+  id          String @id @default(cuid())
+  userId      String
+  
+  name        String
+  category    FixedAssetCategory
+  
+  acquisitionCost  Float
+  acquisitionDate  DateTime
+  currentValue     Float
+  depreciationRate Float?
+  residualValue    Float  @default(0)
+  
+  valueHistory Json?
+  
+  disposalDate     DateTime?
+  disposalProceeds Float?
+  capitalGain      Float?
+  
+  description String?
+  status      AssetStatus @default(ACTIVE)
+  attachments Json?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId, status])
+  @@index([userId, category])
+  @@index([userId, acquisitionDate])
+}
+
+enum FixedAssetCategory {
+  LAND
+  BUILDING
+  VEHICLE
+  MACHINERY
+  EQUIPMENT
+  FURNITURE
+  COMPUTER
+  OTHER
+}
+
+enum AssetStatus {
+  ACTIVE
+  DISPOSED
+  WRITTEN_OFF
+}
+
+model DigitalAsset {
+  id          String @id @default(cuid())
+  userId      String
+  
+  type        DigitalAssetType
+  name        String
+  symbol      String?
+  
+  quantity     Float
+  averageCost  Float
+  currentValue Float
+  
+  transactions Json[]
+  
+  totalGains  Float @default(0)
+  totalLosses Float @default(0)
+  
+  description String?
+  status      AssetStatus @default(ACTIVE)
+  attachments Json?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId, type])
+  @@index([userId, status])
+}
+
+enum DigitalAssetType {
+  CRYPTOCURRENCY
+  NFT
+  DOMAIN_NAME
+  DIGITAL_ART
+  GAME_ASSET
+  OTHER
+}
+
+
+model Security {
+  id          String @id @default(cuid())
+  userId      String
+  
+  type        SecurityType
+  symbol      String
+  name        String
+  exchange    String?
+  
+  quantity     Float
+  averageCost  Float
+  currentValue Float
+  
+  transactions Json[]
+  
+  dividendsReceived Float @default(0)
+  interestReceived  Float @default(0)
+  totalGains        Float @default(0)
+  totalLosses       Float @default(0)
+  
+  status      AssetStatus @default(ACTIVE)
+  description String?
+  attachments Json?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId, type])
+  @@index([userId, status])
+}
+
+enum SecurityType {
+  STOCK
+  BOND
+  MUTUAL_FUND
+  ETF
+  TREASURY_BILL
   OTHER
 }

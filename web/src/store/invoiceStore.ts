@@ -1,99 +1,111 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import axios from 'axios';
-import { InvoiceStore, InvoiceStatus } from '@/types/invoice';
+import { api } from '@/lib/axios';
+import { InvoiceStore, InvoiceStatus, Invoice } from '@/types/invoice';
 
-const LIMIT = 20; // Items per page
+const RENDER_LIMIT = 20;
+const CACHE_DURATION = 5 * 60 * 1000;
 
 export const useInvoiceStore = create<InvoiceStore>()(
   persist(
     (set, get) => ({
-      invoices: [],
+      allInvoices: [],
+      displayedInvoices: [],
       filteredInvoices: [],
-      loading: false,
+      isInitialLoading: false,
+      isPaginating: false,
       error: null,
       searchQuery: '',
-      hasMore: true,
-      page: 1,
+      displayCount: RENDER_LIMIT,
       statusFilter: 'ALL',
+      lastFetchTime: null,
 
-      fetchInvoices: async () => {
-        set({ loading: true, error: null, page: 1 });
+      fetchInvoices: async (forceRefresh = false) => {
+        const { lastFetchTime, allInvoices } = get();
+        const now = Date.now();
+
+        // ✅ ALWAYS show cached data first if available
+        if (allInvoices.length > 0) {
+          // Display cached data immediately
+          get().applyFilters();
+        }
+
+        // Check if we need to fetch new data
+        const shouldFetch =
+          forceRefresh ||
+          allInvoices.length === 0 ||
+          !lastFetchTime ||
+          now - lastFetchTime > CACHE_DURATION;
+
+        if (!shouldFetch) {
+          // Data is fresh, no need to fetch
+          return;
+        }
+
+        // Only show skeleton if NO cached data exists
+        set({
+          isInitialLoading: allInvoices.length === 0,
+          error: null,
+        });
+
         try {
-          const response = await axios.get(
-            `/api/invoices?page=1&limit=${LIMIT}`
-          );
-          console.log(response.data.invoices);
+          // Fetch ALL invoices at once (no pagination)
+          const response = await api.get('/invoices?limit=10000');
           const invoices = response.data.invoices || [];
-          const hasMore =
-            response.data.pagination.page < response.data.pagination.totalPages;
 
           set({
-            invoices,
-            loading: false,
-            hasMore,
-            page: 1,
+            allInvoices: invoices,
+            isInitialLoading: false,
+            lastFetchTime: Date.now(),
           });
 
-          // Apply current filters after fetching
+          // Re-apply filters with fresh data
           get().applyFilters();
         } catch (error) {
           console.error('Error fetching invoices:', error);
           set({
             error: 'Failed to fetch invoices',
-            loading: false,
+            isInitialLoading: false,
           });
         }
       },
 
-      fetchMoreInvoices: async () => {
-        const { loading, hasMore, page } = get();
+      loadMoreDisplayed: () => {
+        const { displayCount, filteredInvoices } = get();
 
-        if (loading || !hasMore) return;
+        if (displayCount >= filteredInvoices.length) return;
 
-        set({ loading: true });
+        set({ isPaginating: true });
 
-        try {
-          const nextPage = page + 1;
-          const response = await axios.get(
-            `/api/invoices?page=${nextPage}&limit=${LIMIT}`
+        // Simulate loading delay for smooth UX
+        setTimeout(() => {
+          const newCount = Math.min(
+            displayCount + RENDER_LIMIT,
+            filteredInvoices.length
           );
-          const newInvoices = response.data.invoices || [];
-          const hasMorePages =
-            response.data.pagination.page < response.data.pagination.totalPages;
-
-          const { invoices } = get();
-          const updatedInvoices = [...invoices, ...newInvoices];
 
           set({
-            invoices: updatedInvoices,
-            loading: false,
-            hasMore: hasMorePages,
-            page: nextPage,
+            displayCount: newCount,
+            displayedInvoices: filteredInvoices.slice(0, newCount),
+            isPaginating: false,
           });
-
-          // Re-apply filters after loading more
-          get().applyFilters();
-        } catch (error) {
-          console.error('Error fetching more invoices:', error);
-          set({ loading: false });
-        }
+        }, 300);
       },
 
       searchInvoices: (query: string) => {
-        set({ searchQuery: query });
+        set({ searchQuery: query, displayCount: RENDER_LIMIT });
         get().applyFilters();
       },
 
       setStatusFilter: (status: InvoiceStatus | 'ALL') => {
-        set({ statusFilter: status });
+        set({ statusFilter: status, displayCount: RENDER_LIMIT });
         get().applyFilters();
       },
 
       applyFilters: () => {
-        const { invoices, searchQuery, statusFilter } = get();
+        const { allInvoices, searchQuery, statusFilter, displayCount } = get();
 
-        let filtered = [...invoices];
+        let filtered = [...allInvoices];
 
         // Apply status filter
         if (statusFilter !== 'ALL') {
@@ -102,7 +114,7 @@ export const useInvoiceStore = create<InvoiceStore>()(
           );
         }
 
-        // Apply search filter
+        // Apply search filter (local search)
         if (searchQuery.trim()) {
           const lowerQuery = searchQuery.toLowerCase();
           filtered = filtered.filter(invoice => {
@@ -121,16 +133,82 @@ export const useInvoiceStore = create<InvoiceStore>()(
           });
         }
 
-        set({ filteredInvoices: filtered });
+        // Sort by date (newest first)
+        filtered.sort(
+          (a, b) =>
+            new Date(b.issueDate).getTime() - new Date(a.issueDate).getTime()
+        );
+
+        set({
+          filteredInvoices: filtered,
+          displayedInvoices: filtered.slice(0, displayCount),
+        });
+      },
+
+      searchInvoicesInDB: async (query: string) => {
+        const { filteredInvoices } = get();
+
+        if (filteredInvoices.length > 0 || !query.trim()) {
+          return;
+        }
+
+        set({ isPaginating: true });
+
+        try {
+          const response = await api.get(
+            `/invoices/search?q=${encodeURIComponent(query)}`
+          );
+          const results = response.data.invoices || [];
+
+          const { allInvoices } = get();
+          const existingIds = new Set(allInvoices.map(inv => inv.id));
+          const newInvoices = results.filter(
+            (inv: any) => !existingIds.has(inv.id)
+          );
+
+          set({
+            allInvoices: [...allInvoices, ...newInvoices],
+            isPaginating: false,
+          });
+
+          get().applyFilters();
+        } catch (error) {
+          console.error('Error searching invoices:', error);
+          set({ isPaginating: false });
+        }
+      },
+
+      // ✅ Get single invoice by invoice number
+      getInvoiceByNumber: (invoiceNumber: string): Invoice | undefined => {
+        const { allInvoices } = get();
+        return allInvoices.find(inv => inv.invoiceNumber === invoiceNumber);
+      },
+
+      // ✅ Update single invoice in store (after conversion to sales)
+      updateInvoice: (invoiceId: string, updatedData: Partial<Invoice>) => {
+        const { allInvoices } = get();
+        const updatedInvoices = allInvoices.map(inv =>
+          inv.id === invoiceId ? { ...inv, ...updatedData } : inv
+        );
+
+        set({
+          allInvoices: updatedInvoices,
+          lastFetchTime: Date.now(),
+        });
+
+        get().applyFilters();
       },
 
       deleteInvoice: async (id: string) => {
         try {
-          await axios.delete(`/api/invoices/${id}`);
-          const { invoices } = get();
-          const updatedInvoices = invoices.filter(inv => inv.id !== id);
+          await api.delete(`/invoices/${id}`);
+          const { allInvoices } = get();
+          const updatedInvoices = allInvoices.filter(inv => inv.id !== id);
 
-          set({ invoices: updatedInvoices });
+          set({
+            allInvoices: updatedInvoices,
+            lastFetchTime: Date.now(),
+          });
           get().applyFilters();
         } catch (error) {
           throw error;
@@ -138,28 +216,34 @@ export const useInvoiceStore = create<InvoiceStore>()(
       },
 
       clearSearch: () => {
-        set({ searchQuery: '' });
+        set({ searchQuery: '', displayCount: RENDER_LIMIT });
         get().applyFilters();
+      },
+
+      refreshInvoices: async () => {
+        await get().fetchInvoices(true);
       },
 
       reset: () => {
         set({
-          invoices: [],
+          allInvoices: [],
+          displayedInvoices: [],
           filteredInvoices: [],
-          loading: false,
+          isInitialLoading: false,
+          isPaginating: false,
           error: null,
           searchQuery: '',
-          hasMore: true,
-          page: 1,
+          displayCount: RENDER_LIMIT,
           statusFilter: 'ALL',
+          lastFetchTime: null,
         });
       },
     }),
     {
       name: 'invoice-storage',
       partialize: state => ({
-        invoices: state.invoices,
-        // Only persist invoices, not loading states or filters
+        allInvoices: state.allInvoices,
+        lastFetchTime: state.lastFetchTime,
       }),
     }
   )

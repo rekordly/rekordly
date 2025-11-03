@@ -33,7 +33,7 @@ export const OTPProvider: Provider = {
               businessName: true,
               phoneNumber: true,
               registrationType: true,
-              workType: true,
+              workTypes: true,
               startDate: true,
             },
           },
@@ -75,7 +75,7 @@ export const OTPProvider: Provider = {
               businessName: user.onboarding.businessName,
               phoneNumber: user.onboarding.phoneNumber,
               registrationType: user.onboarding.registrationType,
-              workType: user.onboarding.workType,
+              workTypes: user.onboarding.workTypes,
               startDate: user.onboarding.startDate,
             }
           : undefined,

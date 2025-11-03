@@ -16,17 +16,10 @@ import InvoicePaymentSection from '@/components/dashboard/invoice/single/Invoice
 import ConvertToSales from '@/components/dashboard/invoice/single/ConvertToSales';
 import { useSession } from 'next-auth/react';
 
-// const watermark = {
-//   enabled: true,
-//   imageUrl: '/images/watermark.png',
-//   opacity: 0.08,
-// };
-
 export default function SingleInvoice() {
   const params = useParams();
   const router = useRouter();
   const { data } = useSession();
-  console.log(data);
 
   const businessInfo = {
     name: data?.user.onboarding?.businessName || data?.user.name || '',
@@ -36,45 +29,56 @@ export default function SingleInvoice() {
 
   const invoiceNumber = params.id as string;
 
-  const { invoices, fetchInvoices } = useInvoiceStore();
+  // ✅ Subscribe to store updates directly
+  const invoice = useInvoiceStore(state =>
+    state.allInvoices.find(inv => inv.invoiceNumber === invoiceNumber)
+  );
+  const { fetchInvoices, isInitialLoading } = useInvoiceStore();
   const { downloadAsPDF, downloadAsImage } = useInvoiceDownload();
 
-  const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
-
-  const invoice = invoices.find(inv => inv.invoiceNumber === invoiceNumber);
+  const [isFetching, setIsFetching] = useState(false);
 
   useEffect(() => {
     const loadInvoice = async () => {
-      setLoading(true);
-      setNotFound(false);
+      // Check if invoice exists in cache
+      const cachedInvoice = useInvoiceStore
+        .getState()
+        .allInvoices.find(inv => inv.invoiceNumber === invoiceNumber);
 
-      if (invoices.length > 0) {
-        const cachedInvoice = invoices.find(
-          inv => inv.invoiceNumber === invoiceNumber
-        );
-        if (!cachedInvoice) setNotFound(true);
-        setLoading(false);
+      if (cachedInvoice) {
+        setNotFound(false);
+
+        // Fetch fresh data in background
+        setIsFetching(true);
+        await fetchInvoices();
+        setIsFetching(false);
         return;
       }
 
+      // No cache, fetch from API
+      setIsFetching(true);
       try {
         await fetchInvoices();
+
         const fetchedInvoice = useInvoiceStore
           .getState()
-          .invoices.find(inv => inv.invoiceNumber === invoiceNumber);
-        if (!fetchedInvoice) setNotFound(true);
+          .allInvoices.find(inv => inv.invoiceNumber === invoiceNumber);
+
+        if (!fetchedInvoice) {
+          setNotFound(true);
+        }
       } catch (error) {
         console.error('Error fetching invoices:', error);
         setNotFound(true);
+      } finally {
+        setIsFetching(false);
       }
-
-      setLoading(false);
     };
 
     loadInvoice();
-  }, [invoiceNumber, invoices.length, fetchInvoices]);
+  }, [invoiceNumber, fetchInvoices]);
 
   const handleShare = async () => {
     if (!invoice) return;
@@ -102,8 +106,6 @@ export default function SingleInvoice() {
       await downloadAsPDF(invoice, businessInfo, {
         fileName: `invoice-${invoice.invoiceNumber}`,
         orientation: 'portrait',
-        // layoutStyle,
-        // watermark,
       });
       addToast({
         title: 'Success',
@@ -131,8 +133,6 @@ export default function SingleInvoice() {
     try {
       await downloadAsImage(invoice, businessInfo, {
         fileName: `invoice-${invoice.invoiceNumber}`,
-        // layoutStyle,
-        // watermark,
       });
       addToast({
         title: 'Success',
@@ -151,7 +151,10 @@ export default function SingleInvoice() {
     }
   };
 
-  if (loading) {
+  // ✅ Show skeleton only when NO cached data and fetching
+  const showSkeleton = !invoice && (isInitialLoading || isFetching);
+
+  if (showSkeleton) {
     return (
       <div className="max-w-7xl mx-auto">
         <div className="mb-6 -mt-2">

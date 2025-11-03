@@ -32,15 +32,18 @@ export const convertToSalesSchema = z.object({
 
 export const invoiceSchema = z.object({
   customer: customerSchema,
+  addAsNewCustomer: z.boolean().optional().default(false),
   includeVAT: z.boolean().default(false),
   vatAmount: z.number().default(0),
-  invoiceTitle: z.string().min(1, 'Please add at invoice Title').default(''),
+  invoiceTitle: z.string().min(1, 'Please add an invoice title').default(''),
   invoiceDescription: z.string().optional().default(''),
+  dueDate: z.string().optional(), // ISO date string
   items: z
     .array(invoiceItemSchema)
     .min(1, 'Please add at least one invoice item'),
   totalAmount: z.number().min(0).default(0),
   amount: z.number().min(0).default(0),
+  status: z.enum(['DRAFT', 'SENT']).default('DRAFT'),
 });
 
 export const addItemSchema = z.object({

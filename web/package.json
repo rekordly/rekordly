@@ -51,6 +51,7 @@
     "@heroui/tooltip": "2.2.24",
     "@heroui/user": "2.2.22",
     "@hookform/resolvers": "^5.2.2",
+    "@internationalized/date": "^3.10.0",
     "@next-auth/prisma-adapter": "^1.0.7",
     "@phosphor-icons/react": "^2.1.10",
     "@react-aria/ssr": "3.9.10",

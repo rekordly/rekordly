@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { getAuthUser } from '@/lib/auth/server';
 import { convertToSalesSchema } from '@/lib/validations/invoice';
 import { generateReceiptNumber, toTwoDecimals } from '@/lib/fn';
-
-const prisma = new PrismaClient();
+import { prisma } from '@/lib/prisma';
 
 const processItems = (items: any): Prisma.InputJsonValue => {
   if (!items) return items;
@@ -43,16 +42,28 @@ export async function POST(
     }
 
     const data = validationResult.data;
-
     const amountPaid = toTwoDecimals(data.amountPaid);
 
+    // ✅ Fetch invoice with minimal data first (outside transaction)
     const invoice = await prisma.invoice.findFirst({
       where: {
         id: params.id,
         userId,
       },
-      include: {
-        customer: true,
+      select: {
+        id: true,
+        userId: true,
+        customerId: true,
+        customerName: true,
+        customerEmail: true,
+        customerPhone: true,
+        title: true,
+        description: true,
+        includeVAT: true,
+        items: true,
+        amount: true,
+        vatAmount: true,
+        totalAmount: true,
         sale: {
           select: {
             id: true,
@@ -70,6 +81,7 @@ export async function POST(
       );
     }
 
+    // If invoice already has a sale, add payment to existing sale
     if (invoice.sale) {
       const existingBalance = toTwoDecimals(invoice.sale.balance);
       const existingAmountPaid = toTwoDecimals(invoice.sale.amountPaid);
@@ -88,56 +100,83 @@ export async function POST(
         );
       }
 
-      // ✅ Calculate new amounts with 2 decimal places
       const newBalance = toTwoDecimals(existingBalance - amountPaid);
       const newTotalPaid = toTwoDecimals(existingAmountPaid + amountPaid);
       const newStatus = newBalance === 0 ? 'PAID' : 'PARTIALLY_PAID';
+      const paymentDate = data.paymentDate
+        ? new Date(data.paymentDate)
+        : new Date();
 
-      const result = await prisma.$transaction(async tx => {
-        await tx.payment.create({
-          data: {
-            saleId: invoice.sale!.id,
-            amount: amountPaid,
-            paymentMethod: data.paymentMethod,
-            reference: data.reference,
-            notes: data.notes,
-            paymentDate: data.paymentDate
-              ? new Date(data.paymentDate)
-              : new Date(),
-          },
-        });
-
-        const updatedSale = await tx.sale.update({
-          where: { id: invoice.sale!.id },
-          data: {
-            amountPaid: newTotalPaid,
-            balance: newBalance,
-            status: newStatus,
-          },
-        });
-
-        if (newBalance === 0) {
-          await tx.invoice.update({
-            where: { id: invoice.id },
+      // ✅ Optimized transaction with increased timeout
+      await prisma.$transaction(
+        async tx => {
+          // Create payment record
+          await tx.payment.create({
             data: {
-              status: 'PAID',
+              userId,
+              payableType: 'SALE',
+              category: 'INCOME',
+              saleId: invoice.sale!.id,
+              amount: amountPaid,
+              paymentMethod: data.paymentMethod,
+              reference: data.reference || null,
+              notes: data.notes || null,
+              paymentDate,
             },
           });
-        }
 
-        return { sale: updatedSale };
+          // Update sale
+          await tx.sale.update({
+            where: { id: invoice.sale!.id },
+            data: {
+              amountPaid: newTotalPaid,
+              balance: newBalance,
+              status: newStatus,
+            },
+          });
+
+          // Update invoice status if fully paid (without includes)
+          if (newBalance === 0) {
+            await tx.invoice.update({
+              where: { id: invoice.id },
+              data: {
+                status: 'CONVERTED',
+              },
+            });
+          }
+        },
+        {
+          maxWait: 10000, // 10 seconds
+          timeout: 10000, // 10 seconds
+        }
+      );
+
+      // ✅ Fetch updated invoice OUTSIDE transaction
+      const updatedInvoice = await prisma.invoice.findUnique({
+        where: { id: invoice.id },
+        include: {
+          customer: true,
+          sale: {
+            select: {
+              id: true,
+              amountPaid: true,
+              balance: true,
+            },
+          },
+        },
       });
 
       return NextResponse.json(
         {
           message: 'Payment added successfully',
           success: true,
-          sale: result.sale,
+          invoice: updatedInvoice,
         },
         { status: 200 }
       );
     }
 
+    // Create new sale from invoice
     const invoiceTotalAmount = toTwoDecimals(invoice.totalAmount);
 
     if (amountPaid > invoiceTotalAmount) {
@@ -147,7 +186,7 @@ export async function POST(
       );
     }
 
-    // Generate unique receipt number
+    // ✅ Generate receipt number OUTSIDE transaction
     let receiptNumber = generateReceiptNumber(userId);
     let attempts = 0;
     while (attempts < 5) {
@@ -167,71 +206,94 @@ export async function POST(
           ? 'PARTIALLY_PAID'
           : 'UNPAID';
 
-    const invoiceStatus = balance === 0 ? 'PAID' : 'CONVERTED';
-
     const processedItems = processItems(invoice.items);
-
-    const invoiceAmount = toTwoDecimals(invoice.amount);
-    const invoiceVatAmount = toTwoDecimals(invoice.vatAmount);
+    const invoiceSubtotal = toTwoDecimals(invoice.amount);
+    const invoiceVatAmount = toTwoDecimals(invoice.vatAmount || 0);
     const invoiceTotal = toTwoDecimals(invoice.totalAmount);
+    const paymentDate = data.paymentDate
+      ? new Date(data.paymentDate)
+      : new Date();
 
-    const result = await prisma.$transaction(async tx => {
-      // Create sale
-      const sale = await tx.sale.create({
-        data: {
-          receiptNumber,
-          userId,
-          invoiceId: invoice.id,
-          customerId: invoice.customerId,
-          customerName: invoice.customerId ? null : invoice.customerName,
-          customerEmail: invoice.customerId ? null : invoice.customerEmail,
-          customerPhone: invoice.customerId ? null : invoice.customerPhone,
-          title: invoice.title,
-          description: invoice.description,
-          includeVAT: invoice.includeVAT,
-          items: processedItems,
-          amount: invoiceAmount,
-          vatAmount: invoiceVatAmount,
-          totalAmount: invoiceTotal,
-          amountPaid: amountPaid,
-          balance: balance,
-          status: saleStatus,
-          saleDate: data.paymentDate ? new Date(data.paymentDate) : new Date(),
+    // ✅ Optimized transaction with increased timeout
+    const saleId = await prisma.$transaction(
+      async tx => {
+        // Create sale
+        const sale = await tx.sale.create({
+          data: {
+            receiptNumber,
+            userId,
+            sourceType: 'FROM_INVOICE',
+            invoiceId: invoice.id,
+            customerId: invoice.customerId,
+            customerName: invoice.customerId ? null : invoice.customerName,
+            customerEmail: invoice.customerId ? null : invoice.customerEmail,
+            customerPhone: invoice.customerId ? null : invoice.customerPhone,
+            title: invoice.title,
+            description: invoice.description,
+            includeVAT: invoice.includeVAT,
+            items: processedItems,
+            subtotal: invoiceSubtotal,
+            vatAmount: invoiceVatAmount,
+            totalAmount: invoiceTotal,
+            amountPaid: amountPaid,
+            balance: balance,
+            status: saleStatus,
+            saleDate: paymentDate,
+          },
+        });
+
+        // Create payment record
+        await tx.payment.create({
+          data: {
+            userId,
+            payableType: 'SALE',
+            category: 'INCOME',
+            saleId: sale.id,
+            amount: amountPaid,
+            paymentMethod: data.paymentMethod,
+            reference: data.reference || null,
+            notes: data.notes || null,
+            paymentDate,
+          },
+        });
+
+        // Update invoice status (without includes)
+        await tx.invoice.update({
+          where: { id: invoice.id },
+          data: {
+            saleId: sale.id,
+            status: 'CONVERTED',
+          },
+        });
+
+        return sale.id;
+      },
+      {
+        maxWait: 10000, // 10 seconds
+        timeout: 10000, // 10 seconds
+      }
+    );
+
+    // ✅ Fetch complete invoice OUTSIDE transaction
+    const updatedInvoice = await prisma.invoice.findUnique({
+      where: { id: invoice.id },
+      include: {
+        customer: true,
+        sale: {
+          select: {
+            id: true,
+            amountPaid: true,
+            balance: true,
+          },
         },
-      });
-
-      // Create payment record
-      await tx.payment.create({
-        data: {
-          saleId: sale.id,
-          amount: amountPaid,
-          paymentMethod: data.paymentMethod,
-          reference: data.reference,
-          notes: data.notes,
-          paymentDate: data.paymentDate
-            ? new Date(data.paymentDate)
-            : new Date(),
-        },
-      });
-
-      // ✅ Update invoice status based on payment
-      const updatedInvoice = await tx.invoice.update({
-        where: { id: invoice.id },
-        data: {
-          saleId: sale.id,
-          status: invoiceStatus,
-        },
-      });
-
-      return { sale, updatedInvoice };
+      },
     });
 
     return NextResponse.json(
       {
         message: 'Invoice converted to sale successfully',
         success: true,
-        sale: result.sale,
-        invoice: result.updatedInvoice,
+        invoice: updatedInvoice,
       },
       { status: 201 }
     );
@@ -253,7 +315,5 @@ export async function POST(
       { message: 'Internal server error' },
       { status: 500 }
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }

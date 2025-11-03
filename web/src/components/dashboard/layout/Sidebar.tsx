@@ -1,16 +1,13 @@
-"use client";
+'use client';
 
 import { menuItems } from '@/config/menu';
 
 import { Button } from '@heroui/react';
 import { LogOut } from 'lucide-react';
 import { MenuItemLink } from '../MenuItemLinkProps ';
-import { signOut } from 'next-auth/react';
+import { handleSignOut } from '@/lib/auth/logout';
 
 export function Sidebar() {
-
-  const handleSignOut = () => signOut({ callbackUrl: '/account' });
-
   return (
     <aside className="w-64 h-[calc(100vh-64px)] flex flex-col">
       {/* Scrollable navigation area */}
@@ -21,11 +18,11 @@ export function Sidebar() {
           ))}
         </div>
       </nav>
-      
+
       {/* Fixed Sign Out button at bottom */}
       <div className="flex-none p-4 border-t border-primary-200/40">
-        <Button 
-          color="danger" 
+        <Button
+          color="danger"
           variant="flat"
           onPress={handleSignOut}
           className="w-full"

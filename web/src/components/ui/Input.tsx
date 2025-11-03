@@ -22,7 +22,7 @@ interface BaseInputProps<T extends FieldValues> {
 
 // ✅ Text input
 interface TextInputProps<T extends FieldValues> extends BaseInputProps<T> {
-  type?: 'text' | 'email' | 'tel' | 'url' | 'date';
+  type?: 'text' | 'email' | 'tel' | 'url' | 'date' | 'datetime-local' | 'time';
   startContent?: React.ReactNode;
   endContent?: React.ReactNode;
   isDisabled?: boolean;

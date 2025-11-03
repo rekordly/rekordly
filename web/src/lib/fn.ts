@@ -1,11 +1,11 @@
 import { InvoiceStatus } from '@/types/invoice';
 
 import {
-  FileEdit,
-  Send,
-  CheckCircle2,
-  AlertCircle,
-  XCircle,
+  FileText,
+  Mail,
+  BadgeCheck,
+  Clock,
+  Ban,
   ArrowRightLeft,
   LucideIcon,
 } from 'lucide-react';
@@ -24,24 +24,20 @@ interface StatusConfig {
 export function getStatusConfig(status: InvoiceStatus): StatusConfig {
   const configs: Record<InvoiceStatus, StatusConfig> = {
     DRAFT: {
-      chipColor: 'default',
-      icon: FileEdit,
+      chipColor: 'secondary',
+      icon: FileText,
     },
     SENT: {
-      chipColor: 'warning',
-      icon: Send,
-    },
-    PAID: {
       chipColor: 'success',
-      icon: CheckCircle2,
+      icon: Mail,
     },
     OVERDUE: {
       chipColor: 'danger',
-      icon: AlertCircle,
+      icon: Clock,
     },
     CANCELLED: {
       chipColor: 'danger',
-      icon: XCircle,
+      icon: Ban,
     },
     CONVERTED: {
       chipColor: 'primary',
@@ -77,7 +73,6 @@ export const STATUS_TAGS: {
   { label: 'All', value: 'ALL', color: 'default' },
   { label: 'Draft', value: 'DRAFT', color: 'default' },
   { label: 'Sent', value: 'SENT', color: 'primary' },
-  { label: 'Paid', value: 'PAID', color: 'success' },
   { label: 'Converted', value: 'CONVERTED', color: 'primary' },
   { label: 'Overdue', value: 'OVERDUE', color: 'danger' },
   { label: 'Cancelled', value: 'CANCELLED', color: 'danger' },

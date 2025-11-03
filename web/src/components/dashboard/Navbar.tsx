@@ -1,11 +1,11 @@
-"use client";
+'use client';
 
 import React from 'react';
 import {
   Navbar as HeroUINavbar,
   NavbarBrand,
   NavbarContent,
-  Button, 
+  Button,
   User,
   Drawer,
   DrawerContent,
@@ -13,16 +13,13 @@ import {
   DrawerBody,
   DrawerFooter,
   useDisclosure,
-} from "@heroui/react";
+} from '@heroui/react';
 import { ChartNoAxesGantt, LogOut, Receipt } from 'lucide-react';
 import { SessionUser, MenuItem, SessionFlowProps } from '@/types';
 import { MenuItemLink } from './MenuItemLinkProps ';
 import { menuItems } from '@/config/menu';
-import { signOut } from 'next-auth/react';
+import { handleSignOut } from '@/lib/auth/logout';
 import { ThemeToggle } from '../theme-toggle';
-
-
-
 
 interface DashboardNavbarProps {
   user?: SessionUser | null;
@@ -30,16 +27,14 @@ interface DashboardNavbarProps {
 
 export default function DashboardNavbar({ user }: SessionUser) {
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
-  const { isOpen, onOpen, onClose } = useDisclosure(); 
-  const handleSignOut = () => signOut({ callbackUrl: '/account' });
+  const { isOpen, onOpen, onClose } = useDisclosure();
 
+  const userName = user?.name || 'Rekordly User';
+  const userImage =
+    user?.image || 'https://i.pravatar.cc/150?u=a04258114e29026702d';
 
-  // Safe access to session data with fallbacks
-  const userName = user?.name || "Rekordly User";
-  const userImage = user?.image || "https://i.pravatar.cc/150?u=a04258114e29026702d";
-
-return (
-    <HeroUINavbar 
+  return (
+    <HeroUINavbar
       onMenuOpenChange={setIsMenuOpen}
       isMenuOpen={isMenuOpen}
       maxWidth="full"
@@ -62,18 +57,18 @@ return (
           <User
             avatarProps={{
               src: userImage,
-              size: "sm"
+              size: 'sm',
             }}
             description=""
             name=""
           />
 
-          <Button 
-            onPress={onOpen} 
+          <Button
+            onPress={onOpen}
             isIconOnly
             variant="light"
             size="sm"
-            className='size-6 min-w-auto'
+            className="size-6 min-w-auto"
           >
             <ChartNoAxesGantt className="size-5" />
           </Button>
@@ -86,15 +81,15 @@ return (
               src: userImage,
             }}
             name={userName}
-            description={user?.email || ""}
+            description={user?.email || ''}
           />
         </NavbarContent>
       </NavbarContent>
 
-      <Drawer 
-        isOpen={isOpen} 
+      <Drawer
+        isOpen={isOpen}
         size="xs"
-        onClose={onClose} 
+        onClose={onClose}
         placement="left"
         backdrop="blur"
         motionProps={{
@@ -117,23 +112,23 @@ return (
         }}
       >
         <DrawerContent>
-          {(onClose) => (
+          {onClose => (
             <div className="flex flex-col h-full">
               <DrawerHeader className="flex flex-col gap-1 border-b border-divider">
                 <User
                   avatarProps={{
                     src: userImage,
-                    size: "lg"
+                    size: 'lg',
                   }}
                   name={userName}
-                  description={user?.email || ""}
+                  description={user?.email || ''}
                   classNames={{
-                    name: "font-semibold",
-                    description: "text-default-500"
+                    name: 'font-semibold',
+                    description: 'text-default-500',
                   }}
                 />
               </DrawerHeader>
-              
+
               <DrawerBody className="flex-1 overflow-y-auto">
                 <nav className="flex flex-col gap-1 py-2">
                   {menuItems.map((item, index) => (
@@ -141,12 +136,12 @@ return (
                   ))}
                 </nav>
               </DrawerBody>
-              
+
               <DrawerFooter className="border-t border-divider">
-                <Button 
-                  color="danger" 
+                <Button
+                  color="danger"
                   variant="flat"
-                onPress={handleSignOut}
+                  onPress={handleSignOut}
                   className="w-full"
                   startContent={<LogOut className="w-4 h-4" />}
                 >

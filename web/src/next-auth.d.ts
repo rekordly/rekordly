@@ -12,7 +12,7 @@ declare module 'next-auth' {
         businessName: string | null;
         phoneNumber: string | null;
         registrationType: string | null;
-        workType: string | null;
+        workTypes: Array | null;
         startDate: string | Date | null;
       };
     } & DefaultSession['user'];
@@ -31,7 +31,7 @@ declare module 'next-auth' {
       businessName: string | null;
       phoneNumber: string | null;
       registrationType: string | null;
-      workType: string | null;
+      workTypes: Array | null;
       startDate: string | Date | null;
     };
   }
@@ -47,7 +47,7 @@ declare module 'next-auth/jwt' {
       businessName: string | null;
       phoneNumber: string | null;
       registrationType: string | null;
-      workType: string | null;
+      workTypes: Array | null;
       startDate: string | Date | null;
     };
   }

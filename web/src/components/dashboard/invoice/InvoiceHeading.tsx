@@ -29,6 +29,16 @@ export function InvoiceHeading() {
             />
 
             <TextInput
+              name="dueDate"
+              control={control}
+              label="Due Date (optional)"
+              placeholder="Select due date"
+              type="datetime-local"
+            />
+          </div>
+
+          <div className="grid grid-cols-1">
+            <TextInput
               name="invoiceDescription"
               control={control}
               label="Invoice Description (optional)"

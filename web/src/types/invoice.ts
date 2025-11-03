@@ -16,7 +16,6 @@ export type ConvertToSalesType = z.infer<typeof convertToSalesSchema>;
 export type InvoiceStatus =
   | 'DRAFT'
   | 'SENT'
-  | 'PAID'
   | 'OVERDUE'
   | 'CANCELLED'
   | 'CONVERTED';
@@ -58,23 +57,29 @@ export interface Invoice {
 }
 
 export interface InvoiceStore {
-  invoices: Invoice[];
-  filteredInvoices: Invoice[];
-  loading: boolean;
+  allInvoices: Invoice[]; // All fetched invoices
+  displayedInvoices: Invoice[]; // Currently rendered invoices
+  filteredInvoices: Invoice[]; // After applying filters
+  isInitialLoading: boolean; // Shows skeleton on first load only
+  isPaginating: boolean; // Shows spinner when loading more
   error: string | null;
   searchQuery: string;
-  hasMore: boolean;
-  page: number;
+  displayCount: number; // Number of invoices to display
   statusFilter: InvoiceStatus | 'ALL';
+  lastFetchTime: number | null; // Track cache freshness
 
   // Actions
-  fetchInvoices: () => Promise<void>;
-  fetchMoreInvoices: () => Promise<void>;
+  fetchInvoices: (forceRefresh?: boolean) => Promise<void>;
+  loadMoreDisplayed: () => void; // Load more to display
   searchInvoices: (query: string) => void;
-  deleteInvoice: (id: string) => Promise<void>;
-  clearSearch: () => void;
+  searchInvoicesInDB: (query: string) => Promise<void>; // Fallback DB search
   setStatusFilter: (status: InvoiceStatus | 'ALL') => void;
   applyFilters: () => void;
+  getInvoiceByNumber: (invoiceNumber: string) => Invoice | undefined; // Get single invoice
+  updateInvoice: (invoiceId: string, updatedData: Partial<Invoice>) => void; // Update invoice
+  deleteInvoice: (id: string) => Promise<void>;
+  clearSearch: () => void;
+  refreshInvoices: () => Promise<void>;
   reset: () => void;
 }
 

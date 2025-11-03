@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { getAuthUser } from '@/lib/auth/server';
 import { invoiceSchema } from '@/lib/validations/invoice';
 import { generateInvoiceNumber, toTwoDecimals } from '@/lib/fn';
+import { sendInvoiceEmail } from '@/lib/email/send-invoice';
 
 const prisma = new PrismaClient();
 
@@ -31,7 +32,9 @@ export async function POST(request: NextRequest) {
     let customerEmail: string | null = null;
     let customerPhone: string | null = null;
 
+    // Handle customer logic
     if (data.customer?.id) {
+      // Existing customer selected from autocomplete
       const customer = await prisma.customer.findFirst({
         where: {
           id: data.customer.id,
@@ -47,7 +50,11 @@ export async function POST(request: NextRequest) {
       }
 
       customerId = customer.id;
-    } else if (data.customer?.email || data.customer?.phone) {
+    } else if (
+      data.addAsNewCustomer &&
+      (data.customer?.name || data.customer?.email || data.customer?.phone)
+    ) {
+      // User opted to add as new customer
       const whereClause: any = { userId };
 
       if (data.customer.email) {
@@ -56,14 +63,12 @@ export async function POST(request: NextRequest) {
         whereClause.phone = data.customer.phone;
       }
 
+      // Check if customer already exists
       let customer = await prisma.customer.findFirst({
         where: whereClause,
       });
 
-      if (
-        !customer &&
-        (data.customer.name || data.customer.email || data.customer.phone)
-      ) {
+      if (!customer) {
         // Create new customer
         customer = await prisma.customer.create({
           data: {
@@ -75,17 +80,19 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      if (customer) {
-        customerId = customer.id;
-      }
-    } else if (data.customer?.name) {
-      // Only name provided - store as one-time customer
-      customerName = data.customer.name;
+      customerId = customer.id;
+    } else if (
+      data.customer?.name ||
+      data.customer?.email ||
+      data.customer?.phone
+    ) {
+      // Store as one-time customer info (not creating customer record)
+      customerName = data.customer.name || null;
       customerEmail = data.customer.email || null;
       customerPhone = data.customer.phone || null;
     }
 
-    // Generate unique invoice number with user ID
+    // Generate unique invoice number
     let invoiceNumber = generateInvoiceNumber(userId);
     let attempts = 0;
     while (attempts < 5) {
@@ -109,7 +116,8 @@ export async function POST(request: NextRequest) {
 
     const processedItems = data.items.map((item: any) => ({
       ...item,
-      price: toTwoDecimals(item.price),
+      price: toTwoDecimals(item.price || item.rate),
+      rate: toTwoDecimals(item.rate || item.price),
       amount: toTwoDecimals(item.amount),
     }));
 
@@ -129,22 +137,60 @@ export async function POST(request: NextRequest) {
         title: data.invoiceTitle,
         description: data.invoiceDescription,
         includeVAT: data.includeVAT,
+        dueDate: data.dueDate ? new Date(data.dueDate) : null,
         items: processedItems,
         amount,
         vatAmount,
         totalAmount,
-        status: 'SENT',
+        status: data.status || 'DRAFT',
       },
       include: {
         customer: true,
+        user: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            onboarding: true,
+          },
+        },
       },
     });
 
+    // Send email if status is SENT and customer has email
+    if (
+      invoice.status === 'SENT' &&
+      (invoice.customerEmail || invoice.customer?.email)
+    ) {
+      const recipientEmail = invoice.customerEmail || invoice.customer?.email;
+
+      if (recipientEmail) {
+        try {
+          const businessInfo = {
+            name:
+              invoice.user.onboarding?.businessName ||
+              invoice.user.name ||
+              'Rekordly',
+            email: invoice.user.email || '',
+            phone: invoice.user.onboarding?.phoneNumber || '',
+          };
+
+          await sendInvoiceEmail(invoice, recipientEmail, businessInfo);
+        } catch (emailError) {
+          console.error('Failed to send invoice email:', emailError);
+          // Don't fail the entire request if email fails
+        }
+      }
+    }
+
     return NextResponse.json(
       {
-        message: 'Invoice created successfully',
+        message:
+          invoice.status === 'SENT'
+            ? 'Invoice created and sent successfully'
+            : 'Invoice saved as draft',
         success: true,
-        invoice,
+        // invoice,
       },
       { status: 201 }
     );
@@ -174,10 +220,8 @@ export async function POST(request: NextRequest) {
 // GET All Invoices - GET /api/invoices
 export async function GET(request: NextRequest) {
   try {
-    // Authenticate user
     const { userId } = await getAuthUser(request);
 
-    // Get query parameters
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
     const customerId = searchParams.get('customerId');
@@ -185,12 +229,10 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '10');
     const skip = (page - 1) * limit;
 
-    // Build where clause
     const where: any = { userId };
     if (status) where.status = status;
     if (customerId) where.customerId = customerId;
 
-    // Get invoices with pagination
     const [invoices, total] = await Promise.all([
       prisma.invoice.findMany({
         where,
