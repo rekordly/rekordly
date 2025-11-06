@@ -2,7 +2,7 @@
 
 import type { withPasswordType, withEmailType } from '@/types/auth.types';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { Button } from '@heroui/button';
 import { Input } from '@heroui/input';
 import { Divider } from '@heroui/divider';
@@ -47,7 +47,8 @@ const getErrorMessage = (error: string | null): string | null => {
   return errorMessages[error] || errorMessages['Default'];
 };
 
-export default function LoginPage() {
+// Separate component that uses useSearchParams
+function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [screenState, setScreenState] = useState<ScreenState>('email');
@@ -698,5 +699,20 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// Main component with Suspense wrapper
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-center">Loading...</div>
+        </div>
+      }
+    >
+      <LoginPageContent />
+    </Suspense>
   );
 }
