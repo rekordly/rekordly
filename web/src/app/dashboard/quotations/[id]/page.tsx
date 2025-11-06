@@ -142,8 +142,8 @@ export default function SingleQuotation() {
         <h3 className="text-xl font-semibold">Quotation Not Found</h3>
         <p className="text-default-500 text-center max-w-md">
           The quotation{' '}
-          <span className="font-mono text-sm">{quotationNumber}</span> doesn't
-          exist or may have been deleted.
+          <span className="font-mono text-sm">{quotationNumber}</span>
+          {`doesn't exist or may have been deleted.`}
         </p>
         <Button
           color="primary"

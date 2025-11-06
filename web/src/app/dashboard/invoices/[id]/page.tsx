@@ -183,7 +183,7 @@ export default function SingleInvoice() {
         <h3 className="text-xl font-semibold">Invoice Not Found</h3>
         <p className="text-default-500 text-center max-w-md">
           The invoice <span className="font-mono text-sm">{invoiceNumber}</span>{' '}
-          doesn't exist or may have been deleted.
+          {`doesn't exist or may have been deleted.`}
         </p>
         <Button
           color="primary"
