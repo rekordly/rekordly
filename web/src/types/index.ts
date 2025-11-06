@@ -1,6 +1,11 @@
-
-import { DefaultSession } from "next-auth";
-
+import { DefaultSession } from 'next-auth';
+import { z } from 'zod';
+import {
+  addPaymentSchema,
+  customerSchema,
+  QuotationStatusSchema,
+  InvoiceStatusSchema,
+} from '@/lib/validations/general';
 
 export interface SessionUser {
   user: {
@@ -11,7 +16,7 @@ export interface SessionUser {
     onboarded: boolean;
     hasPassword: boolean;
     emailVerified: boolean;
-  }
+  };
 }
 
 export interface MenuItem {
@@ -19,7 +24,8 @@ export interface MenuItem {
   href: string;
 }
 
-
 export type SessionFlowProps = SessionUser;
-
-
+export type AddPaymentType = z.infer<typeof addPaymentSchema>;
+export type CustomerType = z.infer<typeof customerSchema>;
+export type QuotationStatusType = z.infer<typeof QuotationStatusSchema>;
+export type InvoiceStatusType = z.infer<typeof InvoiceStatusSchema>;

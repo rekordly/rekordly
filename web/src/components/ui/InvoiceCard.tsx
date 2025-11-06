@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Edit } from 'lucide-react';
 import {
   Button,
   Modal,
@@ -15,7 +15,7 @@ import {
   Chip,
 } from '@heroui/react';
 import { getStatusConfig } from '@/lib/fn';
-import { InvoiceCardProps } from '@/types/invoice';
+import { InvoiceCardProps } from '@/types/invoices';
 import { useApi } from '@/hooks/useApi';
 
 export function InvoiceCard({
@@ -27,6 +27,7 @@ export function InvoiceCard({
   date,
   status,
   onDelete,
+  onEdit,
 }: InvoiceCardProps) {
   const router = useRouter();
   const { isOpen, onOpen, onClose } = useDisclosure();
@@ -48,10 +49,18 @@ export function InvoiceCard({
     await deleteInvoice(`/api/invoices/${id}`);
   };
 
+  const handleEdit = () => {
+    if (onEdit) {
+      onEdit(id);
+    }
+  };
+
+  const isConverted = status === 'CONVERTED';
+
   return (
     <>
       <div
-        onClick={() => router.push(`/dashboard/invoice/${invoiceNumber}`)}
+        onClick={() => router.push(`/dashboard/invoices/${invoiceNumber}`)}
         className="group relative bg-white dark:bg-background rounded-2xl p-4 mb-3 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer border border-transparent hover:border-primary/20"
       >
         {/* Top Row: Icon, Invoice Number & Title */}
@@ -87,7 +96,7 @@ export function InvoiceCard({
           </Chip>
         </div>
 
-        {/* Footer Row: Customer & Date & Delete */}
+        {/* Footer Row: Customer & Date & Actions */}
         <div className="flex items-center justify-between pt-3 border-t border-divider">
           <div className="flex items-center gap-4 min-w-0 flex-1">
             <div className="flex flex-col gap-0.5 min-w-0">
@@ -109,11 +118,29 @@ export function InvoiceCard({
             </div>
           </div>
 
-          {/* Delete Button */}
+          {/* Action Buttons */}
           <div
-            className="flex-shrink-0 ml-2"
+            className="flex gap-1 flex-shrink-0 ml-2"
             onClick={e => e.stopPropagation()}
           >
+            {/* Edit Button */}
+            <Button
+              isIconOnly
+              size="sm"
+              variant="light"
+              color="primary"
+              className="min-w-unit-7 w-unit-7 h-unit-7"
+              onPress={handleEdit}
+              isDisabled={isConverted}
+              aria-label="Edit invoice"
+              title={
+                isConverted ? 'Cannot edit converted invoice' : 'Edit invoice'
+              }
+            >
+              <Edit size={16} />
+            </Button>
+
+            {/* Delete Button */}
             <Button
               isIconOnly
               size="sm"
@@ -121,7 +148,13 @@ export function InvoiceCard({
               color="danger"
               className="min-w-unit-7 w-unit-7 h-unit-7"
               onPress={onOpen}
+              isDisabled={isConverted}
               aria-label="Delete invoice"
+              title={
+                isConverted
+                  ? 'Cannot delete converted invoice'
+                  : 'Delete invoice'
+              }
             >
               <Trash2 size={16} />
             </Button>

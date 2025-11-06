@@ -145,8 +145,8 @@ model Quotation {
   
   materials        Json?
   materialsTotal   Float @default(0)
-  workmanship      Json?
-  workmanshipTotal Float @default(0)
+  workmanship      Float @default(0)
+  
   otherCosts       Json?
   otherCostsTotal  Float @default(0)
   
@@ -182,6 +182,7 @@ model Quotation {
 
 enum QuotationStatus {
   DRAFT
+  SENT
   UNPAID
   PARTIALLY_PAID
   PAID

@@ -1,30 +1,24 @@
 // src/components/theme-toggle.tsx
-"use client";
+'use client';
 
-import { Button } from "@heroui/button";
-import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
-import { Moon, Sun } from "lucide-react";
-import clsx from "clsx";
+import { Button } from '@heroui/button';
+import { useTheme } from 'next-themes';
+import { useEffect, useState } from 'react';
+import { Moon, Sun } from 'lucide-react';
+import clsx from 'clsx';
 
 export function ThemeToggle() {
   const [mounted, setMounted] = useState(false);
   const { theme, setTheme } = useTheme();
 
-  
   useEffect(() => {
     setMounted(true);
   }, []);
 
   if (!mounted) {
     return (
-      <Button
-        isIconOnly
-        variant="light"
-        className=""
-        aria-label="Toggle theme"
-      >
-        <Sun className="size-4" />
+      <Button isIconOnly variant="light" className="" aria-label="Toggle theme">
+        <Sun className="size-5" />
       </Button>
     );
   }
@@ -33,16 +27,14 @@ export function ThemeToggle() {
     <Button
       isIconOnly
       variant="flat"
-      className={clsx(
-        "border-0 transition-colors bg-background",
-      )}
-      onPress={() => setTheme(theme === "dark" ? "light" : "dark")}
+      className={clsx('border-0 transition-colors bg-background')}
+      onPress={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
       aria-label="Toggle theme"
     >
-      {theme === "dark" ? (
-        <Sun className="size-4 text-brand" />
+      {theme === 'dark' ? (
+        <Sun className="size-5 text-brand" />
       ) : (
-        <Moon className="size-4 text-brand" />
+        <Moon className="size-5 text-brand" />
       )}
     </Button>
   );

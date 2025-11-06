@@ -1,43 +1,48 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Modal, ModalContent, ModalHeader, ModalBody } from '@heroui/modal';
+import { Drawer, DrawerBody, DrawerContent, DrawerHeader } from '@heroui/react';
 import { Button } from '@heroui/button';
-import { Skeleton } from '@heroui/skeleton';
 import { addToast } from '@heroui/react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { FormProvider, useForm, Resolver } from 'react-hook-form';
 
-import { CustomerType, InvoiceFormType } from '@/types/invoice';
-import { invoiceSchema } from '@/lib/validations/invoice';
-import { CustomerDetails } from '@/components/dashboard/invoice/CustomerDetails';
-import { InvoiceHeading } from '@/components/dashboard/invoice/InvoiceHeading';
-import { AddItemSection } from '@/components/dashboard/invoice/AddItemSection';
-import { InvoiceSummary } from '@/components/dashboard/invoice/InvoiceSummary';
+import { InvoiceFormType } from '@/types/invoices';
+import { invoiceSchema } from '@/lib/validations/invoices';
+import { CustomerDetails } from '@/components/dashboard/layout/CustomerDetails';
+import { InvoiceHeading } from '@/components/dashboard/invoices/InvoiceHeading';
+import { AddItemSection } from '@/components/dashboard/invoices/AddItemSection';
+import { InvoiceSummary } from '@/components/dashboard/invoices/InvoiceSummary';
 import { useCustomerStore } from '@/store/customerStore';
+import { useInvoiceStore } from '@/store/invoiceStore';
 import { api } from '@/lib/axios';
-import { InvoiceLoadingSkeleton } from '../dashboard/invoice/InvoiceLoadingSkeleton';
+import { FormSkeleton } from '@/components/skeleton/FormSkeleton';
 
 interface CreateInvoiceModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: () => void | Promise<void>; // ✅ Support both sync and async
+  onSuccess?: () => void | Promise<void>;
+  invoiceId?: string | null;
 }
 
 export function CreateInvoiceModal({
   isOpen,
   onClose,
   onSuccess,
+  invoiceId,
 }: CreateInvoiceModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
 
-  // Get customers from store
   const {
     customers,
     loading: loadingCustomers,
     fetchCustomers,
+    addCustomer,
   } = useCustomerStore();
+  const { allInvoices, updateInvoice, addInvoice } = useInvoiceStore();
+
+  const isEditMode = !!invoiceId;
 
   const methods = useForm<InvoiceFormType>({
     resolver: zodResolver(invoiceSchema) as Resolver<InvoiceFormType>,
@@ -60,15 +65,60 @@ export function CreateInvoiceModal({
   const { handleSubmit, watch, reset } = methods;
   const customerEmail = watch('customer.email');
 
-  // ✅ Fetch customers when modal opens (will use cache if available)
   useEffect(() => {
     if (isOpen) {
       fetchCustomers();
+
+      if (isEditMode && invoiceId) {
+        const invoice = allInvoices.find(inv => inv.id === invoiceId);
+
+        if (invoice) {
+          reset({
+            customer: invoice.customerId
+              ? {
+                  id: invoice.customerId,
+                  name: invoice.customer?.name || '',
+                  phone: invoice.customer?.phone || '',
+                  email: invoice.customer?.email || '',
+                }
+              : {
+                  id: '',
+                  name: invoice.customerName || '',
+                  phone: invoice.customerPhone || '',
+                  email: invoice.customerEmail || '',
+                },
+            addAsNewCustomer: false,
+            includeVAT: invoice.includeVAT,
+            invoiceTitle: invoice.title || '',
+            invoiceDescription: invoice.description || undefined,
+            dueDate: invoice.dueDate ? new Date(invoice.dueDate) : undefined,
+            items: invoice.items || [],
+            amount: invoice.amount,
+            vatAmount: invoice.vatAmount || 0,
+            totalAmount: invoice.totalAmount,
+            status: invoice.status,
+          });
+        }
+      } else {
+        reset({
+          customer: { id: '', name: '', phone: '', email: '' },
+          addAsNewCustomer: false,
+          includeVAT: false,
+          invoiceTitle: '',
+          invoiceDescription: '',
+          dueDate: undefined,
+          items: [],
+          amount: 0,
+          vatAmount: 0,
+          totalAmount: 0,
+          status: 'DRAFT',
+        });
+      }
     }
-  }, [isOpen, fetchCustomers]);
+  }, [isOpen]);
 
   const handleClose = () => {
-    reset();
+    // reset();
     onClose();
   };
 
@@ -80,15 +130,15 @@ export function CreateInvoiceModal({
 
       const response = await api.post('/invoices', draftData);
 
-      if (draftData.addAsNewCustomer && response.data.customer) {
-        await fetchCustomers(true);
-      }
-
       addToast({
         title: 'Success!',
         description: 'Draft saved successfully',
         color: 'success',
       });
+
+      if (draftData.addAsNewCustomer && response.data.customer) {
+        addCustomer(response.data.customer);
+      }
 
       handleClose();
 
@@ -96,12 +146,6 @@ export function CreateInvoiceModal({
         await onSuccess();
       }
     } catch (error) {
-      console.error('Error saving draft:', error);
-      addToast({
-        title: 'Error',
-        description: 'Failed to save draft',
-        color: 'danger',
-      });
     } finally {
       setIsSavingDraft(false);
     }
@@ -109,27 +153,48 @@ export function CreateInvoiceModal({
 
   const onSubmit = async (data: InvoiceFormType) => {
     setIsSubmitting(true);
+
     try {
-      const hasEmail =
-        data.customer?.email && data.customer.email.trim() !== '';
-      const invoiceData = {
-        ...data,
-        status: hasEmail ? ('SENT' as const) : ('DRAFT' as const),
-      };
+      if (isEditMode && invoiceId) {
+        const response = await api.patch(`/invoices/${invoiceId}`, data);
 
-      const response = await api.post('/invoices', invoiceData);
+        updateInvoice(invoiceId, response.data.invoice);
 
-      if (data.addAsNewCustomer && response.data.customer) {
-        await fetchCustomers(true);
+        addToast({
+          title: 'Success!',
+          description: 'Invoice updated successfully',
+          color: 'success',
+        });
+
+        if (data.addAsNewCustomer && response.data.customer) {
+          addCustomer(response.data.customer);
+        }
+      } else {
+        const hasEmail =
+          data.customer?.email && data.customer.email.trim() !== '';
+        const invoiceData = {
+          ...data,
+          status: hasEmail ? ('SENT' as const) : ('DRAFT' as const),
+        };
+
+        const response = await api.post('/invoices', invoiceData);
+
+        if (response.data.invoice) {
+          addInvoice(response.data.invoice);
+        }
+
+        if (data.addAsNewCustomer && response.data.customer) {
+          addCustomer(response.data.customer);
+        }
+
+        addToast({
+          title: 'Success!',
+          description: hasEmail
+            ? 'Invoice created and sent successfully'
+            : 'Invoice created successfully',
+          color: 'success',
+        });
       }
-
-      addToast({
-        title: 'Success!',
-        description: hasEmail
-          ? 'Invoice created and sent successfully'
-          : 'Invoice created successfully',
-        color: 'success',
-      });
 
       handleClose();
 
@@ -142,36 +207,38 @@ export function CreateInvoiceModal({
     }
   };
 
+  const invoice =
+    isEditMode && invoiceId
+      ? allInvoices.find(inv => inv.id === invoiceId)
+      : null;
+  const isConverted = invoice?.status === 'CONVERTED';
+
   return (
-    <Modal
+    <Drawer
       isOpen={isOpen}
       onClose={handleClose}
-      placement="auto"
       size="lg"
+      placement="right"
       backdrop="blur"
-      scrollBehavior="inside"
       className="bg-background"
-      classNames={{
-        // base: 'max-h-auto',
-        body: 'pb-8 p-4',
-        header: 'border-none',
-      }}
     >
-      <ModalContent>
-        <ModalHeader>
+      <DrawerContent>
+        <DrawerHeader>
           <div>
-            {/* <h3 className="text-base font-semibold text-foreground font-heading tracking-tight leading-tight">
-              Create New Invoice
+            <h3 className="text-base font-semibold text-foreground font-heading tracking-tight leading-tight">
+              {isEditMode ? 'Edit Invoice' : 'Create New Invoice'}
             </h3>
             <p className="text-xs text-default-500">
-              Generate a professional invoice for your customer
-            </p> */}
+              {isEditMode
+                ? 'Update invoice details'
+                : 'Generate a professional invoice for your customer'}
+            </p>
           </div>
-        </ModalHeader>
-        <ModalBody>
+        </DrawerHeader>
+        <DrawerBody>
           {loadingCustomers ? (
             <div className="flex items-center justify-center py-12">
-              <InvoiceLoadingSkeleton />
+              <FormSkeleton />
             </div>
           ) : (
             <FormProvider {...methods}>
@@ -182,38 +249,48 @@ export function CreateInvoiceModal({
                 <InvoiceSummary />
 
                 <div className="flex gap-3 justify-end pt-4 border-t border-divider">
-                  <Button
-                    type="button"
-                    color="default"
-                    variant="bordered"
-                    radius="lg"
-                    size="lg"
-                    onPress={handleSaveDraft}
-                    isLoading={isSavingDraft}
-                    isDisabled={isSubmitting}
-                    className="px-6"
-                  >
-                    Save as Draft
-                  </Button>
+                  {!isEditMode && (
+                    <Button
+                      type="button"
+                      color="default"
+                      variant="bordered"
+                      radius="lg"
+                      size="lg"
+                      onPress={handleSaveDraft}
+                      isLoading={isSavingDraft}
+                      isDisabled={isSubmitting}
+                      className="px-6"
+                    >
+                      Save as Draft
+                    </Button>
+                  )}
                   <Button
                     type="submit"
                     color="primary"
                     radius="lg"
                     size="lg"
                     isLoading={isSubmitting}
-                    isDisabled={isSavingDraft}
+                    isDisabled={isSavingDraft || isConverted}
                     className="px-6"
                   >
-                    {customerEmail && customerEmail.trim() !== ''
-                      ? 'Create & Send Invoice'
-                      : 'Create Invoice'}
+                    {isEditMode
+                      ? 'Update Invoice'
+                      : customerEmail && customerEmail.trim() !== ''
+                        ? 'Create & Send Invoice'
+                        : 'Create Invoice'}
                   </Button>
                 </div>
+
+                {isConverted && (
+                  <p className="text-xs text-danger text-center">
+                    Cannot edit converted invoice
+                  </p>
+                )}
               </form>
             </FormProvider>
           )}
-        </ModalBody>
-      </ModalContent>
-    </Modal>
+        </DrawerBody>
+      </DrawerContent>
+    </Drawer>
   );
 }

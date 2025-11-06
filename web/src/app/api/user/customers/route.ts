@@ -1,26 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
-import { getAuthUser } from '@/lib/auth/server';
+import { getAuthUser } from '@/lib/utils/server';
 
 const prisma = new PrismaClient();
 
 // GET All Customers - GET /api/customers
 export async function GET(request: NextRequest) {
   try {
-    
     const { userId } = await getAuthUser(request);
 
-    
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search');
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '50');
     const skip = (page - 1) * limit;
 
-    
     const where: any = { userId };
-    
-    
+
     if (search) {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
@@ -71,10 +67,7 @@ export async function GET(request: NextRequest) {
     console.error('Get customers error:', error);
 
     if (error instanceof Error && error.message.includes('Unauthorized')) {
-      return NextResponse.json(
-        { message: error.message },
-        { status: 401 }
-      );
+      return NextResponse.json({ message: error.message }, { status: 401 });
     }
 
     return NextResponse.json(

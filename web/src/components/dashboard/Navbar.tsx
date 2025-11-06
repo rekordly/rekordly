@@ -20,12 +20,14 @@ import { MenuItemLink } from './MenuItemLinkProps ';
 import { menuItems } from '@/config/menu';
 import { handleSignOut } from '@/lib/auth/logout';
 import { ThemeToggle } from '../theme-toggle';
-
-interface DashboardNavbarProps {
-  user?: SessionUser | null;
-}
+import { useState } from 'react';
 
 export default function DashboardNavbar({ user }: SessionUser) {
+  const [expandedItem, setExpandedItem] = useState<string | null>(null);
+  const handleToggle = (itemName: string) => {
+    setExpandedItem(prev => (prev === itemName ? null : itemName));
+  };
+
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
   const { isOpen, onOpen, onClose } = useDisclosure();
 
@@ -76,6 +78,7 @@ export default function DashboardNavbar({ user }: SessionUser) {
 
         {/* Desktop */}
         <NavbarContent className="hidden sm:flex gap-2" justify="end">
+          <ThemeToggle />
           <User
             avatarProps={{
               src: userImage,
@@ -132,7 +135,13 @@ export default function DashboardNavbar({ user }: SessionUser) {
               <DrawerBody className="flex-1 overflow-y-auto">
                 <nav className="flex flex-col gap-1 py-2">
                   {menuItems.map((item, index) => (
-                    <MenuItemLink key={index} item={item} onClose={onClose} />
+                    <MenuItemLink
+                      key={index}
+                      item={item}
+                      onClose={onClose}
+                      expandedItem={expandedItem}
+                      onToggle={handleToggle}
+                    />
                   ))}
                 </nav>
               </DrawerBody>

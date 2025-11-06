@@ -4,22 +4,34 @@ import { menuItems } from '@/config/menu';
 
 import { Button } from '@heroui/react';
 import { LogOut } from 'lucide-react';
-import { MenuItemLink } from '../MenuItemLinkProps ';
+// import { MenuItemLink } from '../MenuItemLinkProps';
 import { handleSignOut } from '@/lib/auth/logout';
+import { useState } from 'react';
+import { MenuItemLink } from '../MenuItemLinkProps ';
 
 export function Sidebar() {
+  const [expandedItem, setExpandedItem] = useState<string | null>(null);
+  const handleToggle = (itemName: string) => {
+    setExpandedItem(prev => (prev === itemName ? null : itemName));
+  };
+
   return (
     <aside className="w-64 h-[calc(100vh-64px)] flex flex-col">
       {/* Scrollable navigation area */}
       <nav className="flex-1 overflow-y-auto p-4 pt-8">
         <div className="flex flex-col gap-1">
-          {menuItems.map((item, index) => (
-            <MenuItemLink key={index} item={item} />
+          {menuItems.map(item => (
+            <MenuItemLink
+              key={item.name}
+              item={item}
+              // onClose={onClose}
+              expandedItem={expandedItem}
+              onToggle={handleToggle}
+            />
           ))}
         </div>
       </nav>
 
-      {/* Fixed Sign Out button at bottom */}
       <div className="flex-none p-4 border-t border-primary-200/40">
         <Button
           color="danger"

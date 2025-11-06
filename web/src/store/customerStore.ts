@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { api } from '@/lib/axios';
-import { CustomerType } from '@/types/invoice';
+import { CustomerType } from '@/types';
 
 interface CustomerStore {
   customers: CustomerType[];
@@ -28,7 +28,6 @@ export const useCustomerStore = create<CustomerStore>()(
         const { lastFetchTime, customers } = get();
         const now = Date.now();
 
-        // Use cached data if available and not forcing refresh
         if (
           !forceRefresh &&
           customers.length > 0 &&
@@ -60,7 +59,7 @@ export const useCustomerStore = create<CustomerStore>()(
 
       addCustomer: (customer: CustomerType) => {
         const { customers } = get();
-        set({ customers: [...customers, customer] });
+        set({ customers: [customer, ...customers] });
       },
 
       reset: () => {

@@ -1,18 +1,36 @@
 import { z } from 'zod';
 
+export const addPaymentSchema = z.object({
+  amountPaid: z.number().nonnegative('Amount cannot be negative'),
+  paymentMethod: z.enum([
+    'CASH',
+    'BANK_TRANSFER',
+    'CARD',
+    'MOBILE_MONEY',
+    'CHEQUE',
+    'OTHER',
+  ]),
+  reference: z.string().optional(),
+  notes: z.string().optional(),
+  paymentDate: z.union([z.string(), z.date()]),
+});
+
+export const customerSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().optional(),
+  phone: z
+    .string()
+    .optional()
+    .refine(val => !val || /^\+?[0-9]{8,15}$/.test(val), {
+      message:
+        'Phone number must contain only digits (optionally starting with +) and be 8–15 digits long',
+    }),
+  email: z.string().email('Invalid email address').optional().or(z.literal('')),
+});
+
 // ============================================
 // ENUMS
 // ============================================
-
-export const QuotationStatusSchema = z.enum([
-  'DRAFT',
-  'UNPAID',
-  'PARTIALLY_PAID',
-  'PAID',
-  'EXPIRED',
-  'CANCELLED',
-  'REFUNDED', // Added
-]);
 
 export const InvoiceStatusSchema = z.enum([
   'DRAFT',
@@ -20,6 +38,17 @@ export const InvoiceStatusSchema = z.enum([
   'CONVERTED',
   'OVERDUE',
   'CANCELLED',
+]);
+
+export const QuotationStatusSchema = z.enum([
+  'DRAFT',
+  'SENT',
+  'UNPAID',
+  'PARTIALLY_PAID',
+  'PAID',
+  'EXPIRED',
+  'CANCELLED',
+  'REFUNDED',
 ]);
 
 export const SaleSourceTypeSchema = z.enum(['DIRECT', 'FROM_INVOICE']);
@@ -202,20 +231,6 @@ export const AttachmentSchema = z.object({
   uploadedAt: z.date().optional(),
 });
 
-export const WorkmanshipItemSchema = z.object({
-  description: z.string().min(1, 'Description is required'),
-  hours: z.number().positive().optional(),
-  rate: z.number().positive().optional(),
-  total: z.number().positive('Total must be positive'),
-});
-
-export const MaterialItemSchema = z.object({
-  name: z.string().min(1, 'Name is required'),
-  qty: z.number().positive('Quantity must be positive'),
-  unitPrice: z.number().positive('Unit price must be positive'),
-  total: z.number().positive('Total must be positive'),
-});
-
 export const OtherCostSchema = z.object({
   description: z.string().min(1, 'Description is required'),
   amount: z.number().positive('Amount must be positive'),
@@ -288,54 +303,54 @@ export const SecurityTransactionSchema = z.object({
 // QUOTATION SCHEMAS
 // ============================================
 
-export const CreateQuotationSchema = z
-  .object({
-    customerId: z.string().cuid().optional(),
-    customerName: z.string().min(1, 'Customer name is required').optional(),
-    customerEmail: z.string().email().optional(),
-    customerPhone: z.string().optional(),
+// export const CreateQuotationSchema = z
+//   .object({
+//     customerId: z.string().cuid().optional(),
+//     customerName: z.string().min(1, 'Customer name is required').optional(),
+//     customerEmail: z.string().email().optional(),
+//     customerPhone: z.string().optional(),
 
-    title: z.string().min(1, 'Title is required').optional(),
-    description: z.string().optional(),
+//     title: z.string().min(1, 'Title is required').optional(),
+//     description: z.string().optional(),
 
-    materials: z.array(MaterialItemSchema).optional(),
-    materialsTotal: z.number().nonnegative().default(0),
+//     materials: z.array(MaterialItemSchema).optional(),
+//     materialsTotal: z.number().nonnegative().default(0),
 
-    workmanship: z.array(WorkmanshipItemSchema).optional(),
-    workmanshipTotal: z.number().nonnegative().default(0),
+//     workmanship: z.array(WorkmanshipItemSchema).optional(),
+//     workmanshipTotal: z.number().nonnegative().default(0),
 
-    otherCosts: z.array(OtherCostSchema).optional(),
-    otherCostsTotal: z.number().nonnegative().default(0),
+//     otherCosts: z.array(OtherCostSchema).optional(),
+//     otherCostsTotal: z.number().nonnegative().default(0),
 
-    includeVAT: z.boolean().default(false),
-    vatAmount: z.number().nonnegative().optional(),
-    totalAmount: z.number().positive('Total amount must be positive'),
+//     includeVAT: z.boolean().default(false),
+//     vatAmount: z.number().nonnegative().optional(),
+//     totalAmount: z.number().positive('Total amount must be positive'),
 
-    validUntil: z.date().optional(),
-    issueDate: z.date().default(() => new Date()),
-  })
-  .refine(
-    data => {
-      const calculated =
-        data.materialsTotal + data.workmanshipTotal + data.otherCostsTotal;
-      const withVAT =
-        data.includeVAT && data.vatAmount
-          ? calculated + data.vatAmount
-          : calculated;
-      return Math.abs(withVAT - data.totalAmount) < 0.01; // Allow small rounding differences
-    },
-    {
-      message:
-        'Total amount must equal materials + workmanship + other costs + VAT',
-    }
-  );
+//     validUntil: z.date().optional(),
+//     issueDate: z.date().default(() => new Date()),
+//   })
+//   .refine(
+//     data => {
+//       const calculated =
+//         data.materialsTotal + data.workmanshipTotal + data.otherCostsTotal;
+//       const withVAT =
+//         data.includeVAT && data.vatAmount
+//           ? calculated + data.vatAmount
+//           : calculated;
+//       return Math.abs(withVAT - data.totalAmount) < 0.01; // Allow small rounding differences
+//     },
+//     {
+//       message:
+//         'Total amount must equal materials + workmanship + other costs + VAT',
+//     }
+//   );
 
-export const UpdateQuotationSchema = CreateQuotationSchema.partial().extend({
-  status: QuotationStatusSchema.optional(),
-});
+// export const UpdateQuotationSchema = CreateQuotationSchema.partial().extend({
+//   status: QuotationStatusSchema.optional(),
+// });
 
-export type CreateQuotationInput = z.infer<typeof CreateQuotationSchema>;
-export type UpdateQuotationInput = z.infer<typeof UpdateQuotationSchema>;
+// export type CreateQuotationInput = z.infer<typeof CreateQuotationSchema>;
+// export type UpdateQuotationInput = z.infer<typeof UpdateQuotationSchema>;
 
 // ============================================
 // SALE SCHEMAS

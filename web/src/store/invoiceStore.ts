@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { api } from '@/lib/axios';
-import { InvoiceStore, InvoiceStatus, Invoice } from '@/types/invoice';
+import { InvoiceStore, InvoiceStatus, Invoice } from '@/types/invoices';
 
 const RENDER_LIMIT = 20;
 const CACHE_DURATION = 5 * 60 * 1000;
@@ -24,13 +24,10 @@ export const useInvoiceStore = create<InvoiceStore>()(
         const { lastFetchTime, allInvoices } = get();
         const now = Date.now();
 
-        // ✅ ALWAYS show cached data first if available
         if (allInvoices.length > 0) {
-          // Display cached data immediately
           get().applyFilters();
         }
 
-        // Check if we need to fetch new data
         const shouldFetch =
           forceRefresh ||
           allInvoices.length === 0 ||
@@ -38,18 +35,15 @@ export const useInvoiceStore = create<InvoiceStore>()(
           now - lastFetchTime > CACHE_DURATION;
 
         if (!shouldFetch) {
-          // Data is fresh, no need to fetch
           return;
         }
 
-        // Only show skeleton if NO cached data exists
         set({
           isInitialLoading: allInvoices.length === 0,
           error: null,
         });
 
         try {
-          // Fetch ALL invoices at once (no pagination)
           const response = await api.get('/invoices?limit=10000');
           const invoices = response.data.invoices || [];
 
@@ -59,7 +53,6 @@ export const useInvoiceStore = create<InvoiceStore>()(
             lastFetchTime: Date.now(),
           });
 
-          // Re-apply filters with fresh data
           get().applyFilters();
         } catch (error) {
           console.error('Error fetching invoices:', error);
@@ -77,7 +70,6 @@ export const useInvoiceStore = create<InvoiceStore>()(
 
         set({ isPaginating: true });
 
-        // Simulate loading delay for smooth UX
         setTimeout(() => {
           const newCount = Math.min(
             displayCount + RENDER_LIMIT,
@@ -107,14 +99,12 @@ export const useInvoiceStore = create<InvoiceStore>()(
 
         let filtered = [...allInvoices];
 
-        // Apply status filter
         if (statusFilter !== 'ALL') {
           filtered = filtered.filter(
             invoice => invoice.status === statusFilter
           );
         }
 
-        // Apply search filter (local search)
         if (searchQuery.trim()) {
           const lowerQuery = searchQuery.toLowerCase();
           filtered = filtered.filter(invoice => {
@@ -133,7 +123,6 @@ export const useInvoiceStore = create<InvoiceStore>()(
           });
         }
 
-        // Sort by date (newest first)
         filtered.sort(
           (a, b) =>
             new Date(b.issueDate).getTime() - new Date(a.issueDate).getTime()
@@ -178,14 +167,15 @@ export const useInvoiceStore = create<InvoiceStore>()(
         }
       },
 
-      // ✅ Get single invoice by invoice number
       getInvoiceByNumber: (invoiceNumber: string): Invoice | undefined => {
         const { allInvoices } = get();
         return allInvoices.find(inv => inv.invoiceNumber === invoiceNumber);
       },
 
-      // ✅ Update single invoice in store (after conversion to sales)
-      updateInvoice: (invoiceId: string, updatedData: Partial<Invoice>) => {
+      updateInvoice: (
+        invoiceId: string,
+        updatedData: Partial<Invoice> | Invoice
+      ) => {
         const { allInvoices } = get();
         const updatedInvoices = allInvoices.map(inv =>
           inv.id === invoiceId ? { ...inv, ...updatedData } : inv
@@ -196,6 +186,12 @@ export const useInvoiceStore = create<InvoiceStore>()(
           lastFetchTime: Date.now(),
         });
 
+        get().applyFilters();
+      },
+
+      addInvoice: (invoice: Invoice) => {
+        const { allInvoices } = get();
+        set({ allInvoices: [...allInvoices, invoice] });
         get().applyFilters();
       },
 

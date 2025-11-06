@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
-import { getAuthUser } from '@/lib/auth/server';
-import { convertToSalesSchema } from '@/lib/validations/invoice';
+import { getAuthUser } from '@/lib/utils/server';
+import { addPaymentSchema } from '@/lib/validations/general';
 import { generateReceiptNumber, toTwoDecimals } from '@/lib/fn';
 import { prisma } from '@/lib/prisma';
 
@@ -29,7 +29,7 @@ export async function POST(
     const { userId } = await getAuthUser(request);
 
     const body = await request.json();
-    const validationResult = convertToSalesSchema.safeParse(body);
+    const validationResult = addPaymentSchema.safeParse(body);
 
     if (!validationResult.success) {
       return NextResponse.json(

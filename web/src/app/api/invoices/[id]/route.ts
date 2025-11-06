@@ -1,26 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
-import { getAuthUser } from '@/lib/auth/server';
-import { invoiceSchema } from '@/lib/validations/invoice';
+import { getAuthUser } from '@/lib/utils/server';
+import { baseInvoiceSchema } from '@/lib/validations/invoices';
 
-const prisma = new PrismaClient();
-
-// GET Single Invoice - GET /api/invoices/[id]
+// GET Single Invoice
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  props: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Authenticate user
+    const { params } = props;
+    const { id } = await params;
     const { userId } = await getAuthUser(request);
 
     // Get invoice
     const invoice = await prisma.invoice.findFirst({
-      where: {
-        id: params.id,
-        userId, // Ensure invoice belongs to user
-      },
+      where: { id, userId },
       include: {
         customer: {
           select: {
@@ -61,10 +57,7 @@ export async function GET(
     console.error('Get invoice error:', error);
 
     if (error instanceof Error && error.message.includes('Unauthorized')) {
-      return NextResponse.json(
-        { message: error.message },
-        { status: 401 }
-      );
+      return NextResponse.json({ message: error.message }, { status: 401 });
     }
 
     return NextResponse.json(
@@ -76,21 +69,18 @@ export async function GET(
   }
 }
 
-// UPDATE Invoice - PATCH /api/invoices/[id]
+// UPDATE Invoice
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  props: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Authenticate user
+    const { params } = props;
+    const { id } = await params;
     const { userId } = await getAuthUser(request);
 
-    // Check if invoice exists and belongs to user
     const existingInvoice = await prisma.invoice.findFirst({
-      where: {
-        id: params.id,
-        userId,
-      },
+      where: { id, userId },
     });
 
     if (!existingInvoice) {
@@ -110,9 +100,9 @@ export async function PATCH(
 
     // Parse and validate request body
     const body = await request.json();
-    
+
     // Partial validation schema
-    const updateSchema = invoiceSchema.partial();
+    const updateSchema = baseInvoiceSchema.partial();
     const validationResult = updateSchema.safeParse(body);
 
     if (!validationResult.success) {
@@ -146,7 +136,7 @@ export async function PATCH(
 
     // Update invoice
     const invoice = await prisma.invoice.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         ...(data.customer && {
           customerId: data.customer.id || null,
@@ -155,12 +145,16 @@ export async function PATCH(
           customerPhone: data.customer.id ? null : data.customer.phone,
         }),
         ...(data.invoiceTitle !== undefined && { title: data.invoiceTitle }),
-        ...(data.invoiceDescription !== undefined && { description: data.invoiceDescription }),
+        ...(data.invoiceDescription !== undefined && {
+          description: data.invoiceDescription,
+        }),
         ...(data.includeVAT !== undefined && { includeVAT: data.includeVAT }),
         ...(data.items && { items: data.items }),
         ...(data.amount !== undefined && { amount: data.amount }),
         ...(data.vatAmount !== undefined && { vatAmount: data.vatAmount }),
-        ...(data.totalAmount !== undefined && { totalAmount: data.totalAmount }),
+        ...(data.totalAmount !== undefined && {
+          totalAmount: data.totalAmount,
+        }),
       },
       include: {
         customer: true,
@@ -179,10 +173,7 @@ export async function PATCH(
     console.error('Update invoice error:', error);
 
     if (error instanceof Error && error.message.includes('Unauthorized')) {
-      return NextResponse.json(
-        { message: error.message },
-        { status: 401 }
-      );
+      return NextResponse.json({ message: error.message }, { status: 401 });
     }
 
     if (error instanceof z.ZodError) {
@@ -249,10 +240,7 @@ export async function DELETE(
     console.error('Delete invoice error:', error);
 
     if (error instanceof Error && error.message.includes('Unauthorized')) {
-      return NextResponse.json(
-        { message: error.message },
-        { status: 401 }
-      );
+      return NextResponse.json({ message: error.message }, { status: 401 });
     }
 
     return NextResponse.json(

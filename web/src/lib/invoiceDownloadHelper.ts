@@ -4,8 +4,8 @@ import {
   downloadAsPDF,
   DownloadConfig,
 } from '@/lib/downloadUtils';
-import { InvoiceDownloadLayout } from '@/components/dashboard/invoice/InvoiceDownloadLayout';
-import { Invoice } from '@/types/invoice';
+import { InvoiceDownloadLayout } from '@/components/dashboard/invoices/InvoiceDownloadLayout';
+import { Invoice } from '@/types/invoices';
 
 interface BusinessInfo {
   name: string;

@@ -1,4 +1,5 @@
-import { InvoiceStatus } from '@/types/invoice';
+import { InvoiceStatus } from '@/types/invoices';
+import { QuotationStatus } from '@/types/quotations';
 
 import {
   FileText,
@@ -8,6 +9,10 @@ import {
   Ban,
   ArrowRightLeft,
   LucideIcon,
+  AlertCircle,
+  DollarSign,
+  CheckCircle,
+  XCircle,
 } from 'lucide-react';
 
 interface StatusConfig {
@@ -48,6 +53,47 @@ export function getStatusConfig(status: InvoiceStatus): StatusConfig {
   return configs[status] || configs.DRAFT;
 }
 
+export function getQuotationStatusConfig(
+  status: QuotationStatus
+): StatusConfig {
+  const configs: Record<QuotationStatus, StatusConfig> = {
+    DRAFT: {
+      chipColor: 'secondary',
+      icon: FileText,
+    },
+    SENT: {
+      chipColor: 'primary',
+      icon: Mail,
+    },
+    UNPAID: {
+      chipColor: 'warning',
+      icon: AlertCircle,
+    },
+    PARTIALLY_PAID: {
+      chipColor: 'warning',
+      icon: DollarSign,
+    },
+    PAID: {
+      chipColor: 'success',
+      icon: CheckCircle,
+    },
+    EXPIRED: {
+      chipColor: 'danger',
+      icon: Clock,
+    },
+    CANCELLED: {
+      chipColor: 'danger',
+      icon: Ban,
+    },
+    REFUNDED: {
+      chipColor: 'default',
+      icon: XCircle,
+    },
+  };
+
+  return configs[status] || configs.DRAFT;
+}
+
 export const getAlertColor = (
   type: 'error' | 'info' | 'success' | 'warning'
 ) => {
@@ -64,6 +110,22 @@ export const getAlertColor = (
       return 'default' as const;
   }
 };
+
+export const QUOTATION_STATUS_TAGS = [
+  { label: 'All', value: 'ALL', color: 'default' as const },
+  { label: 'Draft', value: 'DRAFT', color: 'secondary' as const },
+  { label: 'Sent', value: 'SENT', color: 'primary' as const },
+  { label: 'Unpaid', value: 'UNPAID', color: 'warning' as const },
+  {
+    label: 'Partially Paid',
+    value: 'PARTIALLY_PAID',
+    color: 'warning' as const,
+  },
+  { label: 'Paid', value: 'PAID', color: 'success' as const },
+  { label: 'Expired', value: 'EXPIRED', color: 'danger' as const },
+  { label: 'Cancelled', value: 'CANCELLED', color: 'danger' as const },
+  { label: 'Refunded', value: 'REFUNDED', color: 'default' as const },
+];
 
 export const STATUS_TAGS: {
   label: string;
@@ -94,6 +156,24 @@ export function generateInvoiceNumber(userId: string): string {
   }
 
   return `INV-${year}${month}${day}${hours}${minutes}${seconds}-${userIdPart}-${random}`;
+}
+
+export function generateQuotationNumber(userId: string): string {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+  const userIdPart = userId.slice(-4).toUpperCase();
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let random = '';
+  for (let i = 0; i < 4; i++) {
+    random += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+
+  return `QO-${year}${month}${day}${hours}${minutes}${seconds}-${userIdPart}-${random}`;
 }
 
 export function generateReceiptNumber(userId: string): string {

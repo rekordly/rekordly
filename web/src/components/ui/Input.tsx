@@ -10,7 +10,6 @@ import {
   SelectItem,
 } from '@heroui/react';
 
-// ✅ Shared base props
 interface BaseInputProps<T extends FieldValues> {
   name: Path<T>;
   control: Control<T>;
@@ -20,7 +19,6 @@ interface BaseInputProps<T extends FieldValues> {
   isRequired?: boolean;
 }
 
-// ✅ Text input
 interface TextInputProps<T extends FieldValues> extends BaseInputProps<T> {
   type?: 'text' | 'email' | 'tel' | 'url' | 'date' | 'datetime-local' | 'time';
   startContent?: React.ReactNode;
@@ -44,27 +42,57 @@ export function TextInput<T extends FieldValues>({
     <Controller
       name={name}
       control={control}
-      render={({ field, fieldState: { error } }) => (
-        <Input
-          {...field}
-          type={type}
-          label={label}
-          placeholder={placeholder}
-          description={description}
-          isRequired={isRequired}
-          isDisabled={isDisabled}
-          variant="bordered"
-          color="primary"
-          startContent={startContent}
-          endContent={endContent}
-          classNames={{
-            inputWrapper: 'border-1 h-14 border-default-300 rounded-2xl',
-            label: 'font-light text-default-400',
-          }}
-          isInvalid={!!error}
-          errorMessage={error?.message}
-        />
-      )}
+      render={({ field, fieldState: { error } }) => {
+        const { value, onChange, ...restField } = field;
+
+        let formattedValue: string | undefined;
+
+        const rawValue = value as unknown;
+
+        if (rawValue instanceof Date) {
+          if (type === 'date') {
+            formattedValue = rawValue.toISOString().split('T')[0];
+          } else if (type === 'datetime-local') {
+            formattedValue = rawValue.toISOString().slice(0, 16);
+          }
+        } else if (typeof value === 'string') {
+          formattedValue = value;
+        }
+
+        return (
+          <Input
+            {...restField}
+            type={type}
+            label={label}
+            placeholder={placeholder}
+            description={description}
+            isRequired={isRequired}
+            isDisabled={isDisabled}
+            variant="bordered"
+            color="primary"
+            startContent={startContent}
+            endContent={endContent}
+            value={formattedValue ?? ''}
+            onChange={e => {
+              const val = e.target.value;
+
+              if (type === 'date' && val) {
+                onChange(new Date(val));
+              } else if (type === 'datetime-local' && val) {
+                onChange(new Date(val));
+              } else {
+                onChange(val);
+              }
+            }}
+            classNames={{
+              inputWrapper: 'border-1 h-14 border-default-300 rounded-2xl',
+              label: 'font-light text-default-400',
+            }}
+            isInvalid={!!error}
+            errorMessage={error?.message}
+          />
+        );
+      }}
     />
   );
 }
