@@ -20,26 +20,24 @@ export const CustomMultiSelect: React.FC<CustomMultiSelectProps> = ({
   return (
     <div className="mb-4">
       <Controller
-        name={name}
         control={control}
+        name={name}
         render={({ field }) => (
           <Select
+            classNames={{
+              trigger: 'border-1 h-14 border-default-300 rounded-2xl',
+              label: 'font-light text-default-400',
+            }}
+            errorMessage={error}
+            isInvalid={!!error}
             label={label}
+            selectedKeys={field.value || []}
             selectionMode="multiple"
             variant="bordered"
-            selectedKeys={field.value || []}
-            onSelectionChange={(keys) => field.onChange(Array.from(keys))}
-            classNames={{
-              trigger: "border-1 h-14 border-default-300 rounded-2xl",
-              label: "font-light text-default-400"
-            }}
-            isInvalid={!!error}
-            errorMessage={error}
+            onSelectionChange={keys => field.onChange(Array.from(keys))}
           >
-            {options.map((option) => (
-              <SelectItem key={option.key} value={option.key}>
-                {option.label}
-              </SelectItem>
+            {options.map(option => (
+              <SelectItem key={option.key}>{option.label}</SelectItem>
             ))}
           </Select>
         )}

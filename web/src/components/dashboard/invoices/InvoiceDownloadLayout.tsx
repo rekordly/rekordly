@@ -1,4 +1,5 @@
 import React from 'react';
+
 import { formatCurrency, formatDate, getStatusConfig } from '@/lib/fn';
 import { Invoice, InvoiceItemType } from '@/types/invoices';
 
@@ -52,8 +53,8 @@ export const InvoiceDownloadLayout: React.FC<InvoiceDownloadLayoutProps> = ({
         <div>
           {businessInfo?.logo ? (
             <img
-              src={businessInfo.logo}
               alt="Logo"
+              src={businessInfo.logo}
               style={{ height: '50px', marginBottom: '12px' }}
             />
           ) : (

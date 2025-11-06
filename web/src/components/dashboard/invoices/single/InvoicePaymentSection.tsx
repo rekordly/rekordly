@@ -8,6 +8,7 @@ import {
   ArrowRight,
 } from '@phosphor-icons/react';
 import { useRouter } from 'next/navigation';
+
 import { formatCurrency } from '@/lib/fn';
 import { Invoice } from '@/types/invoices';
 
@@ -36,22 +37,22 @@ export default function InvoicePaymentSection({
           </p>
           {isFullyPaid && (
             <Chip
-              size="sm"
-              variant="flat"
-              color="success"
-              startContent={<CheckCircle size={12} weight="fill" />}
               className="h-5"
+              color="success"
+              size="sm"
+              startContent={<CheckCircle size={12} weight="fill" />}
+              variant="flat"
             >
               Paid
             </Chip>
           )}
           {hasBalance && (
             <Chip
-              size="sm"
-              variant="solid"
-              color="danger"
-              startContent={<WarningCircle size={12} weight="fill" />}
               className="h-5"
+              color="danger"
+              size="sm"
+              startContent={<WarningCircle size={12} weight="fill" />}
+              variant="solid"
             >
               Partial
             </Chip>
@@ -91,14 +92,14 @@ export default function InvoicePaymentSection({
 
         {invoice.sale.receiptNumber && (
           <Button
-            size="sm"
+            className="w-full font-semibold"
             color="primary"
-            variant="flat"
             endContent={<ArrowRight size={14} weight="bold" />}
+            size="sm"
+            variant="flat"
             onPress={() =>
               router.push(`/dashboard/receipt/${invoice.sale?.receiptNumber}`)
             }
-            className="w-full font-semibold"
           >
             View Receipt
           </Button>

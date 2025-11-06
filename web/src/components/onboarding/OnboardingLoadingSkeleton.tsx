@@ -1,4 +1,4 @@
-"use client";
+'use client';
 import React from 'react';
 import { Skeleton } from '@heroui/react';
 
@@ -48,7 +48,7 @@ export const OnboardingLoadingSkeleton: React.FC = () => {
             {/* Form Skeleton */}
             <div className="space-y-6">
               <Skeleton className="h-8 w-1/2 rounded-lg" />
-              
+
               <div className="space-y-4">
                 <Skeleton className="h-14 w-full rounded-2xl" />
                 <Skeleton className="h-14 w-full rounded-2xl" />

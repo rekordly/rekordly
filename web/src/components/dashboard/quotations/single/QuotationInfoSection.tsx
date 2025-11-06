@@ -2,6 +2,7 @@
 
 import { Card, CardBody, Chip } from '@heroui/react';
 import { Calendar } from '@phosphor-icons/react';
+
 import { formatDate, getQuotationStatusConfig } from '@/lib/fn';
 import { Quotation } from '@/types/quotations';
 
@@ -32,9 +33,9 @@ export default function QuotationInfoSection({
               </p>
             </div>
             <Chip
-              variant="flat"
-              color={statusConfig.chipColor}
               className="font-semibold bg-white/20 text-white backdrop-blur-sm"
+              color={statusConfig.chipColor}
+              variant="flat"
             >
               {quotation.status}
             </Chip>
@@ -49,7 +50,7 @@ export default function QuotationInfoSection({
             <div className="flex-1">
               <p className="text-xs md:text-sm text-default-400 mb-1">Issued</p>
               <p className="text-xs md:text-sm font-semibold text-default-900 flex items-center gap-1">
-                <Calendar size={12} className="text-default-500" />
+                <Calendar className="text-default-500" size={12} />
                 {formatDate(quotation.issueDate)}
               </p>
             </div>
@@ -61,7 +62,7 @@ export default function QuotationInfoSection({
                     Valid Until
                   </p>
                   <p className="text-xs md:text-sm font-semibold text-default-900 flex items-center gap-1">
-                    <Calendar size={12} className="text-default-500" />
+                    <Calendar className="text-default-500" size={12} />
                     {formatDate(quotation.validUntil)}
                   </p>
                 </div>

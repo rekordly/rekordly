@@ -1,7 +1,8 @@
 // hooks/useApi.ts
 import { useState } from 'react';
-import { api, handleApiError } from '@/lib/axios';
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
+
+import { api, handleApiError } from '@/lib/axios';
 
 interface UseApiOptions {
   addToast?: (toast: {
@@ -158,7 +159,9 @@ export function useApi(options: UseApiOptions = {}) {
     setIsLoading(true);
     try {
       const response = await api.get(url, config);
+
       handleSuccess(response);
+
       return response.data;
     } catch (error) {
       handleError(error);
@@ -173,7 +176,9 @@ export function useApi(options: UseApiOptions = {}) {
     setIsLoading(true);
     try {
       const response = await api.post(url, data, config);
+
       handleSuccess(response);
+
       return response.data;
     } catch (error) {
       // handleError(error);
@@ -188,7 +193,9 @@ export function useApi(options: UseApiOptions = {}) {
     setIsLoading(true);
     try {
       const response = await api.put(url, data, config);
+
       handleSuccess(response);
+
       return response.data;
     } catch (error) {
       // handleError(error);
@@ -207,7 +214,9 @@ export function useApi(options: UseApiOptions = {}) {
     setIsLoading(true);
     try {
       const response = await api.patch(url, data, config);
+
       handleSuccess(response);
+
       return response.data;
     } catch (error) {
       // handleError(error);
@@ -222,7 +231,9 @@ export function useApi(options: UseApiOptions = {}) {
     setIsLoading(true);
     try {
       const response = await api.delete(url, config);
+
       handleSuccess(response);
+
       return response.data;
     } catch (error) {
       // handleError(error);

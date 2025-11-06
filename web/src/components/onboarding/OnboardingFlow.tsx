@@ -58,6 +58,7 @@ export const OnboardingFlow: React.FC<SessionUser> = ({ user }) => {
     const step1Schema = user.hasPassword
       ? personalInfoSchema
       : personalInfoSchemaWithPassword;
+
     return step1Schema.merge(workTypeSchema).merge(finalSchema);
   };
 
@@ -113,6 +114,7 @@ export const OnboardingFlow: React.FC<SessionUser> = ({ user }) => {
             type: 'manual',
             message: "Passwords don't match",
           });
+
           return;
         }
       }
@@ -183,8 +185,8 @@ export const OnboardingFlow: React.FC<SessionUser> = ({ user }) => {
               <div className="mb-8">
                 {currentStep === 1 && (
                   <Step1PersonalInfo
-                    hasPassword={user.hasPassword}
                     emailDisabled={!!user.email}
+                    hasPassword={user.hasPassword}
                   />
                 )}
 
@@ -196,10 +198,10 @@ export const OnboardingFlow: React.FC<SessionUser> = ({ user }) => {
               <div className="flex gap-4">
                 {currentStep > 1 && (
                   <Button
+                    className="flex-1 h-12 rounded-xl"
                     type="button"
                     variant="bordered"
                     onPress={handleBack}
-                    className="flex-1 h-12 rounded-xl"
                   >
                     Back
                   </Button>
@@ -207,19 +209,19 @@ export const OnboardingFlow: React.FC<SessionUser> = ({ user }) => {
 
                 {currentStep < 3 ? (
                   <Button
-                    type="button"
-                    color="primary"
-                    onPress={handleNext}
                     className="flex-1 h-12 rounded-xl bg-gradient-to-r from-primary-800 to-primary-600"
+                    color="primary"
+                    type="button"
+                    onPress={handleNext}
                   >
                     Next
                   </Button>
                 ) : (
                   <Button
-                    type="submit"
+                    className="flex-1 h-12 rounded-xl bg-gradient-to-r from-primary-800 to-primary-600"
                     color="primary"
                     isLoading={isSubmitting}
-                    className="flex-1 h-12 rounded-xl bg-gradient-to-r from-primary-800 to-primary-600"
+                    type="submit"
                   >
                     Complete Onboarding
                   </Button>

@@ -14,6 +14,7 @@ import {
 import { Plus, CurrencyCircleDollar } from '@phosphor-icons/react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { FormProvider, useForm, Resolver } from 'react-hook-form';
+
 import { Quotation } from '@/types/quotations';
 import { NumberInput, TextInput, DropdownInput } from '@/components/ui/Input';
 import { formatCurrency } from '@/lib/fn';
@@ -22,7 +23,6 @@ import { useApi } from '@/hooks/useApi';
 import { addPaymentSchema } from '@/lib/validations/general';
 import { AddPaymentType } from '@/types';
 import { paymentMethods } from '@/config/constant';
-import { InvoiceFormType } from '@/types/invoices';
 
 interface AddQuotationPaymentProps {
   quotation: Quotation;
@@ -63,6 +63,7 @@ export default function AddQuotationPayment({
         updateQuotation(quotation.id, updatedQuotation);
 
         const newBalance = updatedQuotation.balance || 0;
+
         reset({
           amountPaid: newBalance,
           paymentMethod: 'BANK_TRANSFER',
@@ -100,22 +101,22 @@ export default function AddQuotationPayment({
   return (
     <>
       <Button
-        size="md"
-        color={hasPayments ? 'primary' : 'secondary'}
-        variant="shadow"
-        startContent={<Plus size={16} weight="bold" />}
-        onPress={onOpen}
         className="w-full font-semibold"
+        color={hasPayments ? 'primary' : 'secondary'}
+        size="md"
+        startContent={<Plus size={16} weight="bold" />}
+        variant="shadow"
+        onPress={onOpen}
       >
         {hasPayments ? 'Add Payment' : 'Record Payment'}
       </Button>
 
       <Modal
-        isOpen={isOpen}
-        onClose={handleClose}
-        placement="center"
         backdrop="blur"
+        isOpen={isOpen}
+        placement="center"
         size="lg"
+        onClose={handleClose}
       >
         <ModalContent>
           {() => (
@@ -124,8 +125,8 @@ export default function AddQuotationPayment({
                 <ModalHeader className="flex flex-col gap-1 font-heading tracking-tight">
                   <div className="flex items-center gap-2">
                     <CurrencyCircleDollar
-                      size={24}
                       className="text-secondary"
+                      size={24}
                     />
                     <span>Add Payment</span>
                   </div>
@@ -137,17 +138,8 @@ export default function AddQuotationPayment({
 
                 <ModalBody className="gap-4">
                   <NumberInput<AddPaymentType>
-                    name="amountPaid"
-                    control={methods.control}
-                    label="amountPaid Paid"
-                    placeholder="0.00"
-                    min={0} // ✅ Allow 0
-                    max={quotation.balance}
-                    step={0.01}
                     isRequired
-                    startContent={
-                      <span className="text-default-400 text-sm">₦</span>
-                    }
+                    control={methods.control}
                     description={
                       amountPaid !== undefined &&
                       amountPaid !== quotation.balance
@@ -158,37 +150,46 @@ export default function AddQuotationPayment({
                             : 'Full payment'
                         : 'Enter 0 to record without payment'
                     }
+                    label="amountPaid Paid"
+                    max={quotation.balance}
+                    min={0} // ✅ Allow 0
+                    name="amountPaid"
+                    placeholder="0.00"
+                    startContent={
+                      <span className="text-default-400 text-sm">₦</span>
+                    }
+                    step={0.01}
                   />
 
                   <DropdownInput<AddPaymentType>
-                    name="paymentMethod"
-                    control={methods.control}
-                    label="Payment Method"
-                    placeholder="Select payment method"
-                    items={paymentMethods}
                     isRequired
+                    control={methods.control}
+                    items={paymentMethods}
+                    label="Payment Method"
+                    name="paymentMethod"
+                    placeholder="Select payment method"
                   />
 
                   <TextInput<AddPaymentType>
-                    name="paymentDate"
                     control={methods.control}
                     label="Payment Date"
+                    name="paymentDate"
                     placeholder="Select date"
                     type="date"
                   />
 
                   <TextInput<AddPaymentType>
-                    name="reference"
                     control={methods.control}
-                    label="Reference/Transaction ID"
-                    placeholder="e.g., TXN123456"
                     description="Optional: Add payment reference or transaction ID"
+                    label="Reference/Transaction ID"
+                    name="reference"
+                    placeholder="e.g., TXN123456"
                   />
 
                   <TextInput<AddPaymentType>
-                    name="notes"
                     control={methods.control}
                     label="Notes"
+                    name="notes"
                     placeholder="Add any additional notes..."
                   />
 
@@ -196,9 +197,9 @@ export default function AddQuotationPayment({
                     amountPaid !== undefined &&
                     amountPaid > 0 && (
                       <Chip
+                        className="w-full text-xs"
                         color="warning"
                         variant="flat"
-                        className="w-full text-xs"
                       >
                         ⚠️ Partial payment: {formatCurrency(balance)} balance
                         remaining
@@ -207,9 +208,9 @@ export default function AddQuotationPayment({
 
                   {balance < 0 && amountPaid !== undefined && (
                     <Chip
+                      className="w-full text-xs"
                       color="danger"
                       variant="flat"
-                      className="w-full text-xs"
                     >
                       ⚠️ Overpayment: {formatCurrency(Math.abs(balance))} excess
                     </Chip>
@@ -227,16 +228,16 @@ export default function AddQuotationPayment({
 
                 <ModalFooter>
                   <Button
+                    isDisabled={isSubmitting || isLoading}
                     variant="light"
                     onPress={handleClose}
-                    isDisabled={isSubmitting || isLoading}
                   >
                     Cancel
                   </Button>
                   <Button
                     color="primary"
-                    type="submit"
                     isLoading={isSubmitting || isLoading}
+                    type="submit"
                   >
                     Add Payment
                   </Button>

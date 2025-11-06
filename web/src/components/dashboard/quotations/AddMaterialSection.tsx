@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Plus } from 'lucide-react';
 import { useRef } from 'react';
 import { addToast } from '@heroui/react';
+
 import { TextInput, NumberInput } from '@/components/ui/Input';
 import { formatCurrency } from '@/lib/fn';
 import { addMaterialItemSchema } from '@/lib/validations/quotations';
@@ -74,9 +75,9 @@ export function AddMaterialSection() {
             <div className="grid md:grid-cols-2 gap-3">
               <div className="md:col-span-2">
                 <TextInput<AddMaterialItemType>
-                  name="name"
                   control={materialControl}
                   label="Description"
+                  name="name"
                   placeholder="e.g. Wire"
                 />
               </div>
@@ -84,25 +85,25 @@ export function AddMaterialSection() {
               <div className="md:col-span-2 grid grid-cols-2 gap-3">
                 <div className="col-span-1">
                   <NumberInput<AddMaterialItemType>
-                    name="qty"
                     control={materialControl}
                     label="Qty"
-                    placeholder="0"
                     min={1}
+                    name="qty"
+                    placeholder="0"
                   />
                 </div>
 
                 <div className="col-span-1">
                   <NumberInput<AddMaterialItemType>
-                    name="unitPrice"
                     control={materialControl}
                     label="Rate (₦)"
-                    placeholder="0.00"
                     min={0}
-                    step={0.01}
+                    name="unitPrice"
+                    placeholder="0.00"
                     startContent={
                       <span className="text-default-400 text-sm">₦</span>
                     }
+                    step={0.01}
                   />
                 </div>
               </div>
@@ -117,10 +118,10 @@ export function AddMaterialSection() {
               </div>
 
               <Button
-                type="button"
                 color="primary"
-                variant="flat"
                 startContent={<Plus className="w-4 h-4" />}
+                type="button"
+                variant="flat"
                 onPress={() => handleAddMaterialSubmit(onAddMaterial)()}
               >
                 Add Material

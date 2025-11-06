@@ -1,9 +1,10 @@
 'use client';
 
 import { Link } from '@heroui/react';
-import { MenuItem, SubMenuItem } from '@/config/menu';
 import { usePathname } from 'next/navigation';
 import { ChevronDown } from 'lucide-react';
+
+import { MenuItem, SubMenuItem } from '@/config/menu';
 
 interface MenuItemLinkProps {
   item: MenuItem;
@@ -34,7 +35,6 @@ export function MenuItemLink({
       <div className="w-full">
         {/* Parent Menu Item */}
         <button
-          onClick={() => onToggle?.(item.name)}
           className={`
             flex items-center justify-between w-full px-4 py-3 rounded-lg transition-all
             ${
@@ -43,6 +43,7 @@ export function MenuItemLink({
                 : 'text-foreground hover:bg-default-100'
             }
           `}
+          onClick={() => onToggle?.(item.name)}
         >
           <div className="flex items-center gap-3">
             <Icon
@@ -84,8 +85,6 @@ export function MenuItemLink({
   // Regular menu item without subitems
   return (
     <Link
-      href={item.href!}
-      onClick={onClose}
       className={`
         flex items-center gap-3 px-4 py-3 rounded-lg transition-all w-full
         ${
@@ -94,6 +93,8 @@ export function MenuItemLink({
             : 'text-foreground hover:bg-default-100'
         }
       `}
+      href={item.href!}
+      onClick={onClose}
     >
       <Icon className="w-5 h-5" strokeWidth={isActive ? 2.5 : 2} />
       <span>{item.name}</span>
@@ -113,8 +114,6 @@ function SubMenuItemLink({ subItem, onClose }: SubMenuItemLinkProps) {
 
   return (
     <Link
-      href={subItem.href}
-      onClick={onClose}
       className={`
         flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all w-full text-sm
         ${
@@ -123,6 +122,8 @@ function SubMenuItemLink({ subItem, onClose }: SubMenuItemLinkProps) {
             : 'text-default-600 hover:bg-default-100 hover:text-foreground'
         }
       `}
+      href={subItem.href}
+      onClick={onClose}
     >
       <SubIcon className="w-4 h-4" strokeWidth={isActive ? 2.5 : 2} />
       <span>{subItem.name}</span>

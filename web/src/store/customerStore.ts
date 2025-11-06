@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+
 import { api } from '@/lib/axios';
 import { CustomerType } from '@/types';
 
@@ -59,6 +60,7 @@ export const useCustomerStore = create<CustomerStore>()(
 
       addCustomer: (customer: CustomerType) => {
         const { customers } = get();
+
         set({ customers: [customer, ...customers] });
       },
 

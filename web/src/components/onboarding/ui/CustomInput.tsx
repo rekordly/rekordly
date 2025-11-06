@@ -12,15 +12,15 @@ export const CustomInput = forwardRef<HTMLInputElement, CustomInputProps>(
     <div className="mb-4">
       <Input
         ref={ref}
+        classNames={{
+          inputWrapper: 'border-1 h-14 border-default-300 rounded-2xl',
+          label: 'font-light text-default-400',
+        }}
+        color="primary"
+        errorMessage={error}
+        isInvalid={!!error}
         label={label}
         variant="bordered"
-        color='primary'
-        classNames={{
-          inputWrapper: "border-1 h-14 border-default-300 rounded-2xl",
-          label: "font-light text-default-400"
-        }}
-        isInvalid={!!error}
-        errorMessage={error}
         {...props}
       />
     </div>

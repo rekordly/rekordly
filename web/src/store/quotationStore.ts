@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+
 import { api } from '@/lib/axios';
 import { QuotationStore, Quotation } from '@/types/quotations';
 import { QuotationStatusType } from '@/types';
@@ -55,8 +56,7 @@ export const useQuotationStore = create<QuotationStore>()(
           });
 
           get().applyFilters();
-        } catch (error) {
-          console.error('Error fetching quotations:', error);
+        } catch {
           set({
             error: 'Failed to fetch quotations',
             isInitialLoading: false,
@@ -111,6 +111,7 @@ export const useQuotationStore = create<QuotationStore>()(
         // Apply search filter (local search)
         if (searchQuery.trim()) {
           const lowerQuery = searchQuery.toLowerCase();
+
           filtered = filtered.filter(quotation => {
             const customerName =
               quotation.customer?.name || quotation.customerName || '';
@@ -166,8 +167,7 @@ export const useQuotationStore = create<QuotationStore>()(
           });
 
           get().applyFilters();
-        } catch (error) {
-          console.error('Error searching quotations:', error);
+        } catch {
           set({ isPaginating: false });
         }
       },
@@ -177,6 +177,7 @@ export const useQuotationStore = create<QuotationStore>()(
         quotationNumber: string
       ): Quotation | undefined => {
         const { allQuotations } = get();
+
         return allQuotations.find(
           quot => quot.quotationNumber === quotationNumber
         );
@@ -201,6 +202,7 @@ export const useQuotationStore = create<QuotationStore>()(
 
       addQuotation: (quotation: Quotation) => {
         const { allQuotations } = get();
+
         set({ allQuotations: [...allQuotations, quotation] });
         get().applyFilters();
       },

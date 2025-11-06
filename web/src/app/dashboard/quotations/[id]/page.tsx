@@ -47,6 +47,7 @@ export default function SingleQuotation() {
         setIsFetching(true);
         await fetchQuotations();
         setIsFetching(false);
+
         return;
       }
 
@@ -136,7 +137,7 @@ export default function SingleQuotation() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
         <div className="bg-danger-50 dark:bg-danger-900/20 rounded-full p-6">
-          <FileX size={48} className="text-danger-500" />
+          <FileX className="text-danger-500" size={48} />
         </div>
         <h3 className="text-xl font-semibold">Quotation Not Found</h3>
         <p className="text-default-500 text-center max-w-md">
@@ -158,10 +159,10 @@ export default function SingleQuotation() {
   return (
     <div className="max-w-7xl mx-auto">
       <QuotationHeader
-        onShare={handleShare}
-        onDownloadPDF={handleDownloadPDF}
-        onDownloadImage={handleDownloadImage}
         isDownloading={isDownloading}
+        onDownloadImage={handleDownloadImage}
+        onDownloadPDF={handleDownloadPDF}
+        onShare={handleShare}
       />
 
       <div className="lg:grid lg:grid-cols-3 lg:gap-6 mt-6 lg:mt-0">

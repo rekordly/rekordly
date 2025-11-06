@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 
 import { prisma } from '@/lib/prisma';
-import { z } from 'zod';
 import { getAuthUser } from '@/lib/utils/server';
 import { resolveCustomer } from '@/lib/utils/customer';
 import { quotationSchema } from '@/lib/validations/quotations';
 import { generateQuotationNumber, toTwoDecimals } from '@/lib/fn';
-import { error } from 'console';
 
 export async function POST(request: NextRequest) {
   try {
@@ -32,10 +31,12 @@ export async function POST(request: NextRequest) {
 
     let quotationNumber = generateQuotationNumber(userId);
     let attempts = 0;
+
     while (attempts < 5) {
       const existing = await prisma.quotation.findUnique({
         where: { quotationNumber },
       });
+
       if (!existing) break;
       quotationNumber = generateQuotationNumber(userId);
       attempts++;
@@ -92,7 +93,9 @@ export async function POST(request: NextRequest) {
     });
 
     const { customer, ...quotationWithoutCustomer } = quotation;
+
     console.log(customer, quotationWithoutCustomer);
+
     return NextResponse.json(
       {
         message:
@@ -141,6 +144,7 @@ export async function GET(request: NextRequest) {
     const skip = (page - 1) * limit;
 
     const where: any = { userId };
+
     if (status) where.status = status;
     if (customerId) where.customerId = customerId;
 

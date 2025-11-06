@@ -5,8 +5,9 @@ import { Card, CardBody, Button, Checkbox } from '@heroui/react';
 import { Divider } from '@heroui/divider';
 import { useFormContext, Controller } from 'react-hook-form';
 import { Trash2 } from 'lucide-react';
-import { InvoiceItemType } from '@/types/invoices';
 import { useEffect } from 'react';
+
+import { InvoiceItemType } from '@/types/invoices';
 import { formatCurrency } from '@/lib/fn';
 
 const VAT_RATE = 0.075; // 7.5%
@@ -35,6 +36,7 @@ export function InvoiceSummary() {
     const updatedItems = items.filter(
       (item: InvoiceItemType) => item.id !== id
     );
+
     setValue('items', updatedItems);
   };
 
@@ -78,11 +80,11 @@ export function InvoiceSummary() {
                         {formatCurrency(item.amount)}
                       </span>
                       <Button
-                        type="button"
-                        size="sm"
-                        color="danger"
-                        variant="light"
                         isIconOnly
+                        color="danger"
+                        size="sm"
+                        type="button"
+                        variant="light"
                         onPress={() => removeItem(item.id)}
                       >
                         <Trash2 className="w-4 h-4" />
@@ -94,8 +96,8 @@ export function InvoiceSummary() {
 
               <div className="pt-2">
                 <Controller
-                  name="includeVAT"
                   control={control}
+                  name="includeVAT"
                   render={({ field }) => (
                     <Checkbox
                       isSelected={field.value}

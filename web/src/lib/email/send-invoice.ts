@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+
 import { formatCurrency, formatDate } from '@/lib/fn';
 
 interface BusinessInfo {

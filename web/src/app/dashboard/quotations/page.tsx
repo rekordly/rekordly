@@ -59,6 +59,7 @@ export default function QuotationPage() {
 
   useEffect(() => {
     const element = observerTarget.current;
+
     if (!element) return;
 
     const observer = new IntersectionObserver(handleObserver, {
@@ -131,44 +132,44 @@ export default function QuotationPage() {
           {/* Stats Section */}
           <div className="flex-1 gap-3 grid grid-cols-2">
             <StatCard
-              tag="Amount"
-              title={formatCurrency(totalAmount)}
+              compact
+              gradient
+              className="col-span-2"
               description="Total Revenue"
               gradientColor="primary"
-              gradient
-              compact
-              className="col-span-2"
+              tag="Amount"
+              title={formatCurrency(totalAmount)}
             />
             <StatCard
+              compact
+              gradient
+              description="Quotations"
+              gradientColor="secondary"
               tag="All"
-              title={totalQuotations.toString()}
-              description="Quotations"
-              gradientColor="secondary"
               tagColor="secondary"
-              gradient
-              compact
+              title={totalQuotations.toString()}
             />
             <StatCard
-              tag="Paid"
-              title={paidQuotations.toString()}
+              compact
+              gradient
               description="Quotations"
               gradientColor="secondary"
+              tag="Paid"
               tagColor="secondary"
-              gradient
-              compact
+              title={paidQuotations.toString()}
             />
           </div>
 
           {/* Quotations List Section */}
           <div className="w-full lg:w-8/12 space-y-6">
-            <Card shadow="none" className="rounded-3xl px-2">
+            <Card className="rounded-3xl px-2" shadow="none">
               <CardHeader className="flex items-center justify-between py-6">
                 <div className="flex items-center gap-2">
                   <div>
                     <h3 className="text-base font-semibold text-foreground font-heading tracking-tight leading-tight flex items-center gap-2">
                       Quotations
                       {(isInitialLoading || isRefreshing || isPaginating) && (
-                        <Spinner size="sm" color="primary" />
+                        <Spinner color="primary" size="sm" />
                       )}
                     </h3>
                     <p className="text-xs text-default-500">
@@ -181,19 +182,19 @@ export default function QuotationPage() {
 
                 <div className="flex gap-2">
                   <Button
-                    color="default"
-                    variant="ghost"
                     isIconOnly
-                    onPress={handleManualRefresh}
-                    isDisabled={isRefreshing}
                     className={isRefreshing ? 'animate-spin' : ''}
+                    color="default"
+                    isDisabled={isRefreshing}
                     startContent={<RefreshCw className="w-5 h-5" />}
+                    variant="ghost"
+                    onPress={handleManualRefresh}
                   />
 
                   <Button
+                    isIconOnly
                     color="default"
                     variant={showSearch ? 'flat' : 'ghost'}
-                    isIconOnly
                     onPress={() => {
                       if (showSearch && searchQuery) {
                         handleClearSearch();
@@ -210,10 +211,10 @@ export default function QuotationPage() {
                   </Button>
 
                   <Button
-                    color="primary"
                     isIconOnly
-                    onPress={() => setIsModalOpen(true)}
+                    color="primary"
                     startContent={<Plus className="w-5 h-5" />}
+                    onPress={() => setIsModalOpen(true)}
                   />
                 </div>
               </CardHeader>
@@ -221,12 +222,11 @@ export default function QuotationPage() {
               <CardBody className="space-y-3">
                 {showSearch && (
                   <Input
-                    placeholder="Search by customer, quotation number, or amount..."
-                    value={searchQuery}
-                    onValueChange={handleSearch}
-                    startContent={
-                      <Search className="w-4 h-4 text-default-400" />
-                    }
+                    autoFocus
+                    classNames={{
+                      input: 'text-sm',
+                      inputWrapper: 'h-12 rounded-2xl',
+                    }}
                     endContent={
                       searchQuery && (
                         <Button
@@ -239,11 +239,12 @@ export default function QuotationPage() {
                         </Button>
                       )
                     }
-                    classNames={{
-                      input: 'text-sm',
-                      inputWrapper: 'h-12 rounded-2xl',
-                    }}
-                    autoFocus
+                    placeholder="Search by customer, quotation number, or amount..."
+                    startContent={
+                      <Search className="w-4 h-4 text-default-400" />
+                    }
+                    value={searchQuery}
+                    onValueChange={handleSearch}
                   />
                 )}
 
@@ -273,9 +274,9 @@ export default function QuotationPage() {
                     </p>
                     {!searchQuery && statusFilter === 'ALL' && (
                       <Button
+                        className="mt-4"
                         color="primary"
                         size="sm"
-                        className="mt-4"
                         onPress={() => setIsModalOpen(true)}
                       >
                         Create Your First Quotation
@@ -289,17 +290,17 @@ export default function QuotationPage() {
                     displayedQuotations.map(quotation => (
                       <QuotationCard
                         key={quotation.id}
-                        id={quotation.id}
-                        quotationNumber={quotation.quotationNumber}
-                        title={quotation.title || 'Quotation'}
-                        status={quotation.status}
+                        amount={formatCurrency(quotation.totalAmount)}
                         customerName={
                           quotation.customer?.name ||
                           quotation.customerName ||
                           'No Customer'
                         }
-                        amount={formatCurrency(quotation.totalAmount)}
                         date={formatDate(quotation.issueDate)}
+                        id={quotation.id}
+                        quotationNumber={quotation.quotationNumber}
+                        status={quotation.status}
+                        title={quotation.title || 'Quotation'}
                         onDelete={refreshQuotations}
                         onEdit={handleEdit}
                       />
@@ -308,7 +309,7 @@ export default function QuotationPage() {
 
                 <div ref={observerTarget} className="py-4 text-center">
                   {isPaginating && hasMore && (
-                    <Spinner size="sm" color="primary" />
+                    <Spinner color="primary" size="sm" />
                   )}
                   {!isPaginating && hasMore && (
                     <p className="text-xs text-default-400">
@@ -324,8 +325,8 @@ export default function QuotationPage() {
 
       <CreateQuotationModal
         isOpen={isModalOpen}
-        onClose={handleModalClose}
         quotationId={editQuotationId}
+        onClose={handleModalClose}
       />
     </>
   );

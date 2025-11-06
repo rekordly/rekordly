@@ -13,7 +13,8 @@ import {
 } from '@heroui/react';
 import { Plus, CurrencyCircleDollar } from '@phosphor-icons/react';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { FormProvider, useForm, Resolver } from 'react-hook-form';
+import { FormProvider, useForm } from 'react-hook-form';
+
 import { Invoice } from '@/types/invoices';
 import { NumberInput, TextInput, DropdownInput } from '@/components/ui/Input';
 import { formatCurrency } from '@/lib/fn';
@@ -60,6 +61,7 @@ export default function ConvertToSales({ invoice }: ConvertToSalesProps) {
         updateInvoice(invoice.id, updatedInvoice);
 
         const newBalance = updatedInvoice.sale?.balance || 0;
+
         reset({
           amountPaid: newBalance,
           paymentMethod: 'BANK_TRANSFER',
@@ -100,22 +102,22 @@ export default function ConvertToSales({ invoice }: ConvertToSalesProps) {
   return (
     <>
       <Button
-        size="md"
-        color={isConverted ? 'primary' : 'secondary'}
-        variant="shadow"
-        startContent={<Plus size={16} weight="bold" />}
-        onPress={onOpen}
         className="w-full font-semibold"
+        color={isConverted ? 'primary' : 'secondary'}
+        size="md"
+        startContent={<Plus size={16} weight="bold" />}
+        variant="shadow"
+        onPress={onOpen}
       >
         {isConverted ? 'Add Payment' : 'Convert to Sales'}
       </Button>
 
       <Modal
-        isOpen={isOpen}
-        onClose={handleClose}
-        placement="center"
         backdrop="blur"
+        isOpen={isOpen}
+        placement="center"
         size="lg"
+        onClose={handleClose}
       >
         <ModalContent>
           {() => (
@@ -124,8 +126,8 @@ export default function ConvertToSales({ invoice }: ConvertToSalesProps) {
                 <ModalHeader className="flex flex-col gap-1 font-heading tracking-tight">
                   <div className="flex items-center gap-2">
                     <CurrencyCircleDollar
-                      size={24}
                       className="text-secondary"
+                      size={24}
                     />
                     <span>Convert Invoice to Sales</span>
                   </div>
@@ -137,65 +139,65 @@ export default function ConvertToSales({ invoice }: ConvertToSalesProps) {
 
                 <ModalBody className="gap-4">
                   <NumberInput<AddPaymentType>
-                    name="amountPaid"
-                    control={methods.control}
-                    label="Amount Paid"
-                    placeholder="0.00"
-                    min={0}
-                    max={outstandingBalance}
-                    step={0.01}
                     isRequired
-                    startContent={
-                      <span className="text-default-400 text-sm">₦</span>
-                    }
+                    control={methods.control}
                     description={
                       balance !== outstandingBalance && amountPaid
                         ? `Balance: ${formatCurrency(Math.abs(balance))} ${balance > 0 ? 'remaining' : 'overpaid'}`
                         : undefined
                     }
+                    label="Amount Paid"
+                    max={outstandingBalance}
+                    min={0}
+                    name="amountPaid"
+                    placeholder="0.00"
+                    startContent={
+                      <span className="text-default-400 text-sm">₦</span>
+                    }
+                    step={0.01}
                   />
 
                   <DropdownInput<AddPaymentType>
-                    name="paymentMethod"
-                    control={methods.control}
-                    label="Payment Method"
-                    placeholder="Select payment method"
-                    items={paymentMethods}
                     isRequired
+                    control={methods.control}
+                    items={paymentMethods}
+                    label="Payment Method"
+                    name="paymentMethod"
+                    placeholder="Select payment method"
                   />
 
                   <TextInput<AddPaymentType>
-                    name="paymentDate"
                     control={methods.control}
                     label="Payment Date"
+                    name="paymentDate"
                     placeholder="Select date"
                     type="datetime-local"
                   />
 
                   <TextInput<AddPaymentType>
-                    name="reference"
                     control={methods.control}
-                    label="Reference/Transaction ID"
-                    placeholder="e.g., TXN123456"
                     description="Optional: Add payment reference or transaction ID"
+                    label="Reference/Transaction ID"
+                    name="reference"
+                    placeholder="e.g., TXN123456"
                   />
 
                   <TextInput<AddPaymentType>
-                    name="notes"
                     control={methods.control}
                     label="Notes"
+                    name="notes"
                     placeholder="Add any additional notes..."
                   />
 
                   {balance > 0 && amountPaid && (
-                    <Chip color="warning" variant="flat" className="w-full">
+                    <Chip className="w-full" color="warning" variant="flat">
                       ⚠️ Partial payment: {formatCurrency(balance)} balance
                       remaining
                     </Chip>
                   )}
 
                   {balance < 0 && amountPaid && (
-                    <Chip color="danger" variant="flat" className="w-full">
+                    <Chip className="w-full" color="danger" variant="flat">
                       ⚠️ Overpayment: {formatCurrency(Math.abs(balance))} excess
                     </Chip>
                   )}
@@ -203,16 +205,16 @@ export default function ConvertToSales({ invoice }: ConvertToSalesProps) {
 
                 <ModalFooter>
                   <Button
+                    isDisabled={isSubmitting || isLoading}
                     variant="light"
                     onPress={handleClose}
-                    isDisabled={isSubmitting || isLoading}
                   >
                     Cancel
                   </Button>
                   <Button
                     color={isConverted ? 'primary' : 'secondary'}
-                    type="submit"
                     isLoading={isSubmitting || isLoading}
+                    type="submit"
                   >
                     {isConverted ? 'Add Payment' : 'Convert to Sales'}
                   </Button>

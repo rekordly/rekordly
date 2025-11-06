@@ -2,6 +2,7 @@
 
 import { Card, CardBody, Chip } from '@heroui/react';
 import { Receipt, CheckCircle, WarningCircle } from '@phosphor-icons/react';
+
 import { formatCurrency, formatDate } from '@/lib/fn';
 import { Quotation } from '@/types/quotations';
 
@@ -27,22 +28,22 @@ export default function QuotationPaymentSection({
           </p>
           {isFullyPaid && (
             <Chip
-              size="sm"
-              variant="flat"
-              color="success"
-              startContent={<CheckCircle size={12} weight="fill" />}
               className="h-5"
+              color="success"
+              size="sm"
+              startContent={<CheckCircle size={12} weight="fill" />}
+              variant="flat"
             >
               Paid
             </Chip>
           )}
           {hasBalance && (
             <Chip
-              size="sm"
-              variant="solid"
-              color="warning"
-              startContent={<WarningCircle size={12} weight="fill" />}
               className="h-5"
+              color="warning"
+              size="sm"
+              startContent={<WarningCircle size={12} weight="fill" />}
+              variant="solid"
             >
               Partial
             </Chip>

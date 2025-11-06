@@ -1,6 +1,7 @@
 import React from 'react';
 import { useFormContext, Controller } from 'react-hook-form';
 import { CheckboxGroup, Checkbox } from '@heroui/react';
+
 import { workTypes } from '../constant';
 
 export const Step2WorkType: React.FC = () => {
@@ -14,8 +15,8 @@ export const Step2WorkType: React.FC = () => {
       <h2 className="text-2xl font-bold mb-6">How do you earn income?</h2>
 
       <Controller
-        name="workTypes"
         control={control}
+        name="workTypes"
         render={({ field }) => (
           <CheckboxGroup value={field.value} onChange={field.onChange}>
             {workTypes.map(type => (

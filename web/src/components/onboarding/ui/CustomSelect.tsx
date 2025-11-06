@@ -11,46 +11,45 @@ interface CustomSelectProps {
   [key: string]: any;
 }
 
-export const CustomSelect: React.FC<CustomSelectProps> = ({ 
-  label, 
-  options, 
-  error, 
+export const CustomSelect: React.FC<CustomSelectProps> = ({
+  label,
+  options,
+  error,
   name,
   isRequired,
-  ...props 
+  ...props
 }) => {
   const { control } = useFormContext();
 
   return (
     <div className="mb-4">
       <Controller
-        name={name}
         control={control}
-        rules={{ required: isRequired ? `${label} is required` : false }}
+        name={name}
         render={({ field }) => (
           <Select
+            classNames={{
+              trigger: 'border-1 h-14 border-default-300 rounded-2xl',
+              label: 'font-light text-default-400',
+            }}
+            errorMessage={error}
+            isInvalid={!!error}
             label={label}
-            variant="bordered"
             selectedKeys={field.value ? [field.value] : []}
-            onSelectionChange={(keys) => {
+            variant="bordered"
+            onSelectionChange={keys => {
               const value = Array.from(keys)[0] as string;
+
               field.onChange(value);
             }}
-            classNames={{
-              trigger: "border-1 h-14 border-default-300 rounded-2xl",
-              label: "font-light text-default-400"
-            }}
-            isInvalid={!!error}
-            errorMessage={error}
             {...props}
           >
-            {options.map((option) => (
-              <SelectItem key={option}>
-                {option}
-              </SelectItem>
+            {options.map(option => (
+              <SelectItem key={option}>{option}</SelectItem>
             ))}
           </Select>
         )}
+        rules={{ required: isRequired ? `${label} is required` : false }}
       />
     </div>
   );

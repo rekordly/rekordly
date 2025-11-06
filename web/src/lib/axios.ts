@@ -1,4 +1,5 @@
 import axios, { AxiosError } from 'axios';
+
 import { handleSignOut } from '@/lib/auth/logout';
 
 interface ApiErrorResponse {
@@ -8,6 +9,7 @@ interface ApiErrorResponse {
 
 const showToast = async (title: string, description: string) => {
   const { addToast } = await import('@heroui/react');
+
   addToast({
     title,
     description,
@@ -34,6 +36,7 @@ api.interceptors.response.use(
         await showToast('Error', 'Session expired. Please log in again');
       }
       await handleSignOut();
+
       return Promise.reject(error);
     }
 

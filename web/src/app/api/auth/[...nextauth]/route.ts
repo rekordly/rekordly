@@ -5,8 +5,9 @@ import AppleProvider from 'next-auth/providers/apple';
 import EmailProvider from 'next-auth/providers/email';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import { PrismaAdapter } from '@next-auth/prisma-adapter';
-import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
+
+import { prisma } from '@/lib/prisma';
 import { sendOtpCode } from '@/lib/auth/otp';
 import { OTPProvider } from '@/lib/auth/otpAuth';
 
@@ -129,6 +130,7 @@ export const authOptions: AuthOptions = {
             credentials.password,
             user.password
           );
+
           if (!isValid) {
             throw new Error('Invalid credentials');
           }
@@ -266,6 +268,7 @@ export const authOptions: AuthOptions = {
               },
             });
           }
+
           return true;
         }
 
@@ -280,6 +283,7 @@ export const authOptions: AuthOptions = {
         ) {
           return `/account?error=${encodeURIComponent('Database connection error. Please try again later.')}`;
         }
+
         // Return error string to be passed in query params
         return `/account?error=${encodeURIComponent('An error occurred during sign in')}`;
       }
@@ -351,6 +355,7 @@ export const authOptions: AuthOptions = {
               },
             },
           });
+
           if (updatedUser) {
             token.onboarded = updatedUser.onboarded;
             token.hasPassword = !!updatedUser.password;
@@ -384,6 +389,7 @@ export const authOptions: AuthOptions = {
         if (token.email) session.user.email = token.email;
         // if (token.image) session.user.image = token.image;
       }
+
       return session;
     },
 
@@ -392,10 +398,12 @@ export const authOptions: AuthOptions = {
       if (url.startsWith('/')) return `${baseUrl}${url}`;
       // Allows callback URLs on the same origin
       else if (new URL(url).origin === baseUrl) return url;
+
       return baseUrl;
     },
   },
 };
 
 const handler = NextAuth(authOptions);
+
 export { handler as GET, handler as POST };

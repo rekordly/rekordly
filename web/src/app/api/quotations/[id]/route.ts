@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
+
 import { getAuthUser } from '@/lib/utils/server';
 import { baseQuotationSchema } from '@/lib/validations/quotations';
 
@@ -198,6 +199,7 @@ export async function DELETE(
   try {
     const params = await props.params;
     const { userId } = await getAuthUser(request);
+
     console.log(params);
 
     const quotation = await prisma.quotation.findFirst({

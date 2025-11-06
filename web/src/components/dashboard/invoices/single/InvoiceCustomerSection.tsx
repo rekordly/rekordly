@@ -1,7 +1,8 @@
 'use client';
 
 import { Card, CardBody, Avatar } from '@heroui/react';
-import { User, Envelope, Phone } from '@phosphor-icons/react';
+import { Envelope, Phone } from '@phosphor-icons/react';
+
 import { Invoice } from '@/types/invoices';
 
 interface InvoiceCustomerSectionProps {
@@ -18,6 +19,7 @@ export default function InvoiceCustomerSection({
   // Get initials for avatar
   const getInitials = (name: string) => {
     if (name === 'N/A') return 'NA';
+
     return name
       .split(' ')
       .map(n => n[0])
@@ -35,8 +37,8 @@ export default function InvoiceCustomerSection({
 
         <div className="flex items-start gap-3">
           <Avatar
-            name={getInitials(customerName)}
             className="bg-gradient-to-br from-primary-400 to-primary-600 text-white font-semibold flex-shrink-0"
+            name={getInitials(customerName)}
             size="md"
           />
 
@@ -49,8 +51,8 @@ export default function InvoiceCustomerSection({
               {customerEmail && (
                 <div className="flex items-center gap-2 text-xs md:text-sm text-default-600">
                   <Envelope
-                    size={14}
                     className="text-default-400 flex-shrink-0"
+                    size={14}
                   />
                   <span className="truncate">{customerEmail}</span>
                 </div>
@@ -58,7 +60,7 @@ export default function InvoiceCustomerSection({
 
               {customerPhone && (
                 <div className="flex items-center gap-2 text-xs md:text-sm text-default-600">
-                  <Phone size={14} className="text-default-400 flex-shrink-0" />
+                  <Phone className="text-default-400 flex-shrink-0" size={14} />
                   <span>{customerPhone}</span>
                 </div>
               )}

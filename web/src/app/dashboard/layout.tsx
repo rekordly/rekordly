@@ -1,7 +1,8 @@
 // app/dashboard/layout.tsx
+import { getServerSession } from 'next-auth';
+
 import Navbar from '@/components/dashboard/Navbar';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { getServerSession } from 'next-auth';
 import { Sidebar } from '@/components/dashboard/layout/Sidebar';
 import { QuickAction } from '@/components/quick-action';
 

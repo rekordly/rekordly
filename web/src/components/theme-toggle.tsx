@@ -17,7 +17,7 @@ export function ThemeToggle() {
 
   if (!mounted) {
     return (
-      <Button isIconOnly variant="light" className="" aria-label="Toggle theme">
+      <Button isIconOnly aria-label="Toggle theme" className="" variant="light">
         <Sun className="size-5" />
       </Button>
     );
@@ -26,10 +26,10 @@ export function ThemeToggle() {
   return (
     <Button
       isIconOnly
-      variant="flat"
-      className={clsx('border-0 transition-colors bg-background')}
-      onPress={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
       aria-label="Toggle theme"
+      className={clsx('border-0 transition-colors bg-background')}
+      variant="flat"
+      onPress={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
     >
       {theme === 'dark' ? (
         <Sun className="size-5 text-brand" />

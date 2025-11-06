@@ -1,9 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Modal, ModalContent, ModalHeader, ModalBody } from '@heroui/modal';
 import { Button } from '@heroui/button';
-import { Skeleton } from '@heroui/skeleton';
 import {
   addToast,
   Drawer,
@@ -249,12 +247,12 @@ export function CreateQuotationModal({
 
   return (
     <Drawer
-      isOpen={isOpen}
-      onClose={handleClose}
-      size="lg"
-      placement="right"
       backdrop="blur"
       className="bg-background"
+      isOpen={isOpen}
+      placement="right"
+      size="lg"
+      onClose={handleClose}
     >
       <DrawerContent>
         <DrawerHeader>
@@ -274,7 +272,7 @@ export function CreateQuotationModal({
             </div>
           ) : (
             <FormProvider {...methods}>
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+              <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
                 <CustomerDetails customers={customers} />
                 <QuotationHeading />
                 <AddMaterialSection />
@@ -284,27 +282,27 @@ export function CreateQuotationModal({
                 <div className="flex gap-3 justify-end pt-4 border-t border-divider">
                   {!isEditMode && (
                     <Button
-                      type="button"
+                      className="px-6"
                       color="default"
-                      variant="bordered"
+                      isDisabled={isSubmitting}
+                      isLoading={isSavingDraft}
                       radius="lg"
                       size="lg"
+                      type="button"
+                      variant="bordered"
                       onPress={handleSaveDraft}
-                      isLoading={isSavingDraft}
-                      isDisabled={isSubmitting}
-                      className="px-6"
                     >
                       Save as Draft
                     </Button>
                   )}
                   <Button
-                    type="submit"
+                    className="px-6"
                     color="primary"
+                    isDisabled={isSavingDraft}
+                    isLoading={isSubmitting}
                     radius="lg"
                     size="lg"
-                    isLoading={isSubmitting}
-                    isDisabled={isSavingDraft}
-                    className="px-6"
+                    type="submit"
                   >
                     {isEditMode
                       ? 'Update Invoice'

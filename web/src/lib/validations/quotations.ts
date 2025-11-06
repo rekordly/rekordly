@@ -1,7 +1,6 @@
 import { z } from 'zod';
 
 import { customerSchema, QuotationStatusSchema } from './general';
-import { baseInvoiceSchema } from '@/lib/validations/invoices';
 
 export const MaterialItemSchema = z.object({
   id: z.number(),

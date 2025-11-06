@@ -5,6 +5,7 @@ import { Divider } from '@heroui/divider';
 import { useFormContext, Controller } from 'react-hook-form';
 import { Trash2 } from 'lucide-react';
 import { useEffect } from 'react';
+
 import { formatCurrency } from '@/lib/fn';
 import { VAT_RATE } from '@/config/constant';
 import { MaterialItemType, OtherCostType } from '@/types/quotations';
@@ -43,6 +44,7 @@ export function QuotationSummary() {
     const updatedMaterials = materials.filter(
       (material: MaterialItemType) => material.id !== id
     );
+
     setValue('materials', updatedMaterials);
   };
 
@@ -50,6 +52,7 @@ export function QuotationSummary() {
     const updatedCosts = otherCosts.filter(
       (cost: OtherCostType) => cost.id !== id
     );
+
     setValue('otherCosts', updatedCosts);
   };
 
@@ -99,11 +102,11 @@ export function QuotationSummary() {
                         </div>
                         <div className="col-span-1 flex items-center justify-end">
                           <Button
-                            type="button"
-                            size="sm"
-                            color="danger"
-                            variant="light"
                             isIconOnly
+                            color="danger"
+                            size="sm"
+                            type="button"
+                            variant="light"
                             onPress={() => removeMaterial(material.id)}
                           >
                             <Trash2 className="w-4 h-4" />
@@ -139,11 +142,11 @@ export function QuotationSummary() {
                         </div>
                         <div className="col-span-1 flex items-center justify-end">
                           <Button
-                            type="button"
-                            size="sm"
-                            color="danger"
-                            variant="light"
                             isIconOnly
+                            color="danger"
+                            size="sm"
+                            type="button"
+                            variant="light"
                             onPress={() => removeCost(cost.id)}
                           >
                             <Trash2 className="w-4 h-4" />
@@ -160,8 +163,8 @@ export function QuotationSummary() {
               {/* VAT Checkbox */}
               <div className="pt-2">
                 <Controller
-                  name="includeVAT"
                   control={control}
+                  name="includeVAT"
                   render={({ field }) => (
                     <Checkbox
                       isSelected={field.value}

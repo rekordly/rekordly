@@ -1,14 +1,19 @@
-import { prisma } from "@/lib/prisma";
-import crypto from "crypto";
-import nodemailer from "nodemailer";
+import crypto from 'crypto';
+
+import nodemailer from 'nodemailer';
+
+import { prisma } from '@/lib/prisma';
 
 export function generateOtpCode(): string {
   return crypto.randomInt(100000, 999999).toString();
 }
 
-export async function sendOtpCode(email: string, purpose: string = "login_recovery") {
+export async function sendOtpCode(
+  email: string,
+  purpose: string = 'login_recovery'
+) {
   const code = generateOtpCode();
-  const expiresAt = new Date(Date.now() + 10* 30 * 1000);
+  const expiresAt = new Date(Date.now() + 10 * 30 * 1000);
 
   await prisma.otpCode.deleteMany({
     where: { email, purpose, used: false },
@@ -19,11 +24,16 @@ export async function sendOtpCode(email: string, purpose: string = "login_recove
   });
 
   await sendOtpEmail(email, code);
+
   return { success: true };
 }
 
 // lib/auth/otp.ts
-export async function verifyOtpCode(email: string, code: string, purpose: string = "login_recovery") {
+export async function verifyOtpCode(
+  email: string,
+  code: string,
+  purpose: string = 'login_recovery'
+) {
   const otpRecord = await prisma.otpCode.findFirst({
     where: {
       email,
@@ -35,7 +45,7 @@ export async function verifyOtpCode(email: string, code: string, purpose: string
   });
 
   if (!otpRecord) {
-    return { valid: false, error: "Invalid or expired code" };
+    return { valid: false, error: 'Invalid or expired code' };
   }
 
   await prisma.otpCode.update({
@@ -44,7 +54,7 @@ export async function verifyOtpCode(email: string, code: string, purpose: string
   });
 
   // If this is for login, also mark the email as verified if it's not already
-  if (purpose === "login_recovery") {
+  if (purpose === 'login_recovery') {
     const user = await prisma.user.findUnique({
       where: { email },
     });
@@ -73,7 +83,7 @@ async function sendOtpEmail(email: string, code: string) {
   await transporter.sendMail({
     from: process.env.EMAIL_FROM,
     to: email,
-    subject: "Your verification code",
+    subject: 'Your verification code',
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2>Your Verification Code</h2>

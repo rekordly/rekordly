@@ -3,7 +3,6 @@ import { Metadata, Viewport } from 'next';
 import clsx from 'clsx';
 
 import { Providers } from './providers';
-import { ThemeToggle } from '@/components/theme-toggle';
 
 import { siteConfig } from '@/config/site';
 import { fontSans, fontMono, fontHeading } from '@/config/fonts'; // ← UPDATED

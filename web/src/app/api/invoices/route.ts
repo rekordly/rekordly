@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+
+import { prisma } from '@/lib/prisma';
 import { getAuthUser } from '@/lib/utils/server';
 import { invoiceSchema } from '@/lib/validations/invoices';
 import { generateInvoiceNumber, toTwoDecimals } from '@/lib/fn';
@@ -36,10 +37,12 @@ export async function POST(request: NextRequest) {
     // Generate unique invoice number
     let invoiceNumber = generateInvoiceNumber(userId);
     let attempts = 0;
+
     while (attempts < 5) {
       const existing = await prisma.invoice.findUnique({
         where: { invoiceNumber },
       });
+
       if (!existing) break;
       invoiceNumber = generateInvoiceNumber(userId);
       attempts++;
@@ -171,6 +174,7 @@ export async function GET(request: NextRequest) {
     const skip = (page - 1) * limit;
 
     const where: any = { userId };
+
     if (status) where.status = status;
     if (customerId) where.customerId = customerId;
 

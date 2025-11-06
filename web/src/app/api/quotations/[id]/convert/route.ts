@@ -1,6 +1,7 @@
 // app/api/quotations/[id]/payment/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+
 import { getAuthUser } from '@/lib/utils/server';
 import { toTwoDecimals } from '@/lib/fn';
 import { prisma } from '@/lib/prisma';
@@ -94,6 +95,7 @@ export async function POST(
     const newTotalPaid = toTwoDecimals(existingAmountPaid + paymentAmount);
 
     let newStatus = quotation.status;
+
     if (newBalance === 0) {
       newStatus = 'PAID';
     } else if (newTotalPaid > 0) {

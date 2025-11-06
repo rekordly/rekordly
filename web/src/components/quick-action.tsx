@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { Button } from '@heroui/button';
-import { Plus, Receipt, TrendingDown, TrendingUp, X } from 'lucide-react';
+import { Plus, Receipt, TrendingDown, TrendingUp } from 'lucide-react';
+
 import { CreateInvoiceModal } from '@/components/modals/CreateInvoiceModal';
 import { useInvoiceStore } from '@/store/invoiceStore';
 
@@ -61,7 +62,6 @@ export function QuickAction() {
           {actions.map((action, index) => (
             <button
               key={action.label}
-              onClick={action.action}
               className={`
                 ${action.color} ${action.hoverColor}
                 flex items-center gap-3 pl-4 pr-5 py-3 
@@ -77,6 +77,7 @@ export function QuickAction() {
               style={{
                 transitionDelay: isOpen ? `${index * 50}ms` : '0ms',
               }}
+              onClick={action.action}
             >
               <div className="w-7 h-7 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
                 {action.icon}
@@ -92,8 +93,6 @@ export function QuickAction() {
       {/* Main FAB Button */}
       <Button
         isIconOnly
-        radius="full"
-        size="lg"
         className={`
           fixed bottom-6 right-6 z-50 w-14 h-14 
           bg-gradient-to-br from-primary-400 to-primary-600 
@@ -102,6 +101,8 @@ export function QuickAction() {
           transform transition-all duration-300 
           ${isOpen ? 'rotate-45 scale-110' : 'rotate-0 scale-100'}
         `}
+        radius="full"
+        size="lg"
         onPress={() => setIsOpen(!isOpen)}
       >
         <Plus className="w-6 h-6 text-white" />

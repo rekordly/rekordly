@@ -33,11 +33,13 @@ const convertModernColors = (element: HTMLElement): void => {
           value.includes('color('))
       ) {
         const tempDiv = document.createElement('div');
+
         tempDiv.style.cssText = `position: absolute; visibility: hidden; ${prop}: ${value};`;
         document.body.appendChild(tempDiv);
         const rgbValue = window
           .getComputedStyle(tempDiv)
           .getPropertyValue(prop);
+
         document.body.removeChild(tempDiv);
 
         if (rgbValue && rgbValue !== value) {
@@ -47,15 +49,19 @@ const convertModernColors = (element: HTMLElement): void => {
     });
 
     const bgImage = computedStyle.backgroundImage;
+
     if (bgImage && (bgImage.includes('oklab') || bgImage.includes('oklch'))) {
       el.style.backgroundImage = bgImage.replace(
         /ok(lab|lch)\([^)]+\)/g,
         match => {
           const tempDiv = document.createElement('div');
+
           tempDiv.style.cssText = `position: absolute; visibility: hidden; color: ${match};`;
           document.body.appendChild(tempDiv);
           const rgb = window.getComputedStyle(tempDiv).color;
+
           document.body.removeChild(tempDiv);
+
           return rgb;
         }
       );
@@ -79,6 +85,7 @@ export const prepareElementForDownload = (
   const { backgroundColor = '#ffffff', width = 800 } = config;
 
   const container = document.createElement('div');
+
   container.style.cssText = `
     position: absolute;
     left: -99999px;
@@ -90,6 +97,7 @@ export const prepareElementForDownload = (
   `;
 
   const clone = element.cloneNode(true) as HTMLElement;
+
   container.appendChild(clone);
   document.body.appendChild(container);
 
@@ -147,6 +155,7 @@ export const downloadAsImage = async (
       element,
       config
     );
+
     cleanup = cleanupFn;
 
     const canvas = await generateCanvas(container, { ...config, scale: 3 });
@@ -155,6 +164,7 @@ export const downloadAsImage = async (
       if (!blob) return;
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
+
       link.href = url;
       link.download = `${fileName}.png`;
       document.body.appendChild(link);
@@ -188,6 +198,7 @@ export const downloadAsPDF = async (
       element,
       config
     );
+
     cleanup = cleanupFn;
 
     // Generate high-quality canvas
@@ -222,6 +233,7 @@ export const downloadAsPDF = async (
     if (scaledHeight <= availableHeight) {
       // Single page - center vertically
       const y = (pdfHeight - scaledHeight) / 2;
+
       pdf.addImage(
         imgData,
         'JPEG',
@@ -249,10 +261,12 @@ export const downloadAsPDF = async (
 
         // Create canvas for this page slice
         const pageCanvas = document.createElement('canvas');
+
         pageCanvas.width = imgWidth;
         pageCanvas.height = currentSliceHeight;
 
         const pageCtx = pageCanvas.getContext('2d');
+
         if (pageCtx) {
           pageCtx.drawImage(
             canvas,
@@ -314,6 +328,7 @@ export const shareAsImage = async (
       element,
       config
     );
+
     cleanup = cleanupFn;
 
     const canvas = await generateCanvas(container, config);

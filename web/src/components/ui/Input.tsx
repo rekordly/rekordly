@@ -40,8 +40,8 @@ export function TextInput<T extends FieldValues>({
 }: TextInputProps<T>) {
   return (
     <Controller
-      name={name}
       control={control}
+      name={name}
       render={({ field, fieldState: { error } }) => {
         const { value, onChange, ...restField } = field;
 
@@ -62,17 +62,23 @@ export function TextInput<T extends FieldValues>({
         return (
           <Input
             {...restField}
-            type={type}
+            classNames={{
+              inputWrapper: 'border-1 h-14 border-default-300 rounded-2xl',
+              label: 'font-light text-default-400',
+            }}
+            color="primary"
+            description={description}
+            endContent={endContent}
+            errorMessage={error?.message}
+            isDisabled={isDisabled}
+            isInvalid={!!error}
+            isRequired={isRequired}
             label={label}
             placeholder={placeholder}
-            description={description}
-            isRequired={isRequired}
-            isDisabled={isDisabled}
-            variant="bordered"
-            color="primary"
             startContent={startContent}
-            endContent={endContent}
+            type={type}
             value={formattedValue ?? ''}
+            variant="bordered"
             onChange={e => {
               const val = e.target.value;
 
@@ -84,12 +90,6 @@ export function TextInput<T extends FieldValues>({
                 onChange(val);
               }
             }}
-            classNames={{
-              inputWrapper: 'border-1 h-14 border-default-300 rounded-2xl',
-              label: 'font-light text-default-400',
-            }}
-            isInvalid={!!error}
-            errorMessage={error?.message}
           />
         );
       }}
@@ -113,29 +113,29 @@ export function NumberInput<T extends FieldValues>({
 }: TextInputProps<T> & { min?: number; max?: number; step?: number }) {
   return (
     <Controller
-      name={name}
       control={control}
+      name={name}
       render={({ field, fieldState: { error } }) => (
         <Input
           {...field}
-          type="number"
-          label={label}
-          placeholder={placeholder}
-          description={description}
-          isRequired={isRequired}
-          variant="bordered"
-          color="primary"
-          min={min}
-          max={max}
-          step={step}
-          startContent={startContent}
-          endContent={endContent}
           classNames={{
             inputWrapper: 'border-1 h-14 border-default-300 rounded-2xl',
             label: 'font-light text-default-400',
           }}
-          isInvalid={!!error}
+          color="primary"
+          description={description}
+          endContent={endContent}
           errorMessage={error?.message}
+          isInvalid={!!error}
+          isRequired={isRequired}
+          label={label}
+          max={max}
+          min={min}
+          placeholder={placeholder}
+          startContent={startContent}
+          step={step}
+          type="number"
+          variant="bordered"
           onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
         />
       )}
@@ -172,25 +172,24 @@ export function AutocompleteInput<T extends FieldValues, I = any>({
 }: AutocompleteInputProps<T, I>) {
   return (
     <Controller
-      name={name}
       control={control}
+      name={name}
       render={({ field, fieldState: { error } }) => (
         <Autocomplete
+          allowsCustomValue={!disallowTyping}
+          classNames={{
+            base: 'border-1 border-default-300 rounded-2xl',
+          }}
+          color="primary"
+          description={description}
+          errorMessage={error?.message}
+          isDisabled={isDisabled}
+          isInvalid={!!error}
+          isRequired={isRequired}
           label={label}
           placeholder={placeholder}
-          description={description}
-          isRequired={isRequired}
-          isDisabled={isDisabled}
-          variant="bordered"
-          color="primary"
           selectedKey={field.value || null}
-          onSelectionChange={key => {
-            const stringKey = key as string;
-            field.onChange(stringKey || '');
-            if (onSelectionChange && stringKey) {
-              onSelectionChange(stringKey);
-            }
-          }}
+          variant="bordered"
           onInputChange={value => {
             // If typing is disallowed and value changes, ignore it
             if (disallowTyping && value && field.value) {
@@ -200,12 +199,14 @@ export function AutocompleteInput<T extends FieldValues, I = any>({
               onInputChange(value);
             }
           }}
-          allowsCustomValue={!disallowTyping}
-          classNames={{
-            base: 'border-1 border-default-300 rounded-2xl',
+          onSelectionChange={key => {
+            const stringKey = key as string;
+
+            field.onChange(stringKey || '');
+            if (onSelectionChange && stringKey) {
+              onSelectionChange(stringKey);
+            }
           }}
-          isInvalid={!!error}
-          errorMessage={error?.message}
         >
           {items.map(item => {
             const value = getOptionValue
@@ -214,6 +215,7 @@ export function AutocompleteInput<T extends FieldValues, I = any>({
             const labelText = getOptionLabel
               ? getOptionLabel(item)
               : (item as any).name;
+
             return (
               <AutocompleteItem key={value} textValue={labelText}>
                 {labelText}
@@ -238,28 +240,29 @@ export function DropdownInput<T extends FieldValues>({
 }: BaseInputProps<T> & { items: { value: string; label: string }[] }) {
   return (
     <Controller
-      name={name}
       control={control}
+      name={name}
       render={({ field, fieldState: { error } }) => (
         <Select
           {...field}
-          label={label}
-          placeholder={placeholder}
-          description={description}
-          isRequired={isRequired}
-          variant="bordered"
-          color="primary"
-          selectedKeys={field.value ? [field.value] : []}
-          onSelectionChange={keys => {
-            const value = Array.from(keys)[0] as string;
-            field.onChange(value);
-          }}
           classNames={{
             trigger: 'border-1 h-14 border-default-300 rounded-2xl',
             label: 'font-light text-default-400',
           }}
-          isInvalid={!!error}
+          color="primary"
+          description={description}
           errorMessage={error?.message}
+          isInvalid={!!error}
+          isRequired={isRequired}
+          label={label}
+          placeholder={placeholder}
+          selectedKeys={field.value ? [field.value] : []}
+          variant="bordered"
+          onSelectionChange={keys => {
+            const value = Array.from(keys)[0] as string;
+
+            field.onChange(value);
+          }}
         >
           {items.map(item => (
             <SelectItem key={item.value}>{item.label}</SelectItem>

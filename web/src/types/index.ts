@@ -1,5 +1,5 @@
-import { DefaultSession } from 'next-auth';
 import { z } from 'zod';
+
 import {
   addPaymentSchema,
   customerSchema,

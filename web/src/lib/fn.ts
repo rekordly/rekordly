@@ -1,10 +1,6 @@
-import { InvoiceStatus } from '@/types/invoices';
-import { QuotationStatus } from '@/types/quotations';
-
 import {
   FileText,
   Mail,
-  BadgeCheck,
   Clock,
   Ban,
   ArrowRightLeft,
@@ -14,6 +10,9 @@ import {
   CheckCircle,
   XCircle,
 } from 'lucide-react';
+
+import { InvoiceStatus } from '@/types/invoices';
+import { QuotationStatusType } from '@/types/index';
 
 interface StatusConfig {
   icon: LucideIcon;
@@ -54,9 +53,9 @@ export function getStatusConfig(status: InvoiceStatus): StatusConfig {
 }
 
 export function getQuotationStatusConfig(
-  status: QuotationStatus
+  status: QuotationStatusType
 ): StatusConfig {
-  const configs: Record<QuotationStatus, StatusConfig> = {
+  const configs: Record<QuotationStatusType, StatusConfig> = {
     DRAFT: {
       chipColor: 'secondary',
       icon: FileText,
@@ -151,6 +150,7 @@ export function generateInvoiceNumber(userId: string): string {
   const userIdPart = userId.slice(-4).toUpperCase();
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let random = '';
+
   for (let i = 0; i < 4; i++) {
     random += chars.charAt(Math.floor(Math.random() * chars.length));
   }
@@ -169,6 +169,7 @@ export function generateQuotationNumber(userId: string): string {
   const userIdPart = userId.slice(-4).toUpperCase();
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let random = '';
+
   for (let i = 0; i < 4; i++) {
     random += chars.charAt(Math.floor(Math.random() * chars.length));
   }
@@ -188,6 +189,7 @@ export function generateReceiptNumber(userId: string): string {
   const userIdPart = userId.slice(-4).toUpperCase();
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let random = '';
+
   for (let i = 0; i < 4; i++) {
     random += chars.charAt(Math.floor(Math.random() * chars.length));
   }
@@ -197,6 +199,7 @@ export function generateReceiptNumber(userId: string): string {
 
 export const toTwoDecimals = (value: number | null): number => {
   if (value === null || value === undefined) return 0;
+
   return parseFloat(value.toFixed(2));
 };
 
@@ -287,6 +290,7 @@ export function formatRelativeTime(date: string | Date): string {
 
 export function truncateText(text: string, maxLength: number = 50): string {
   if (text.length <= maxLength) return text;
+
   return `${text.substring(0, maxLength)}...`;
 }
 
@@ -306,6 +310,7 @@ export function getStatusColor(status: string): string {
 
 export function calculatePercentage(value: number, total: number): string {
   if (total === 0) return '0.0';
+
   return ((value / total) * 100).toFixed(1);
 }
 
@@ -321,6 +326,8 @@ export function formatPhoneNumber(phone: string): string {
 
 export function getInitials(name: string): string {
   const names = name.trim().split(' ');
+
   if (names.length === 1) return names[0].substring(0, 2).toUpperCase();
+
   return `${names[0][0]}${names[names.length - 1][0]}`.toUpperCase();
 }

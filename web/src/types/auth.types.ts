@@ -1,12 +1,11 @@
-import * as z from "zod";
+import * as z from 'zod';
 
 import {
-  withPasswordSchema, 
+  withPasswordSchema,
   withEmailSchema,
-  forgotPasswordSchema, 
-  resetPasswordSchema 
+  forgotPasswordSchema,
+  resetPasswordSchema,
 } from '@/lib/validations/auth.schema';
-
 
 export type withPasswordType = z.infer<typeof withPasswordSchema>;
 export type withEmailType = z.infer<typeof withEmailSchema>;

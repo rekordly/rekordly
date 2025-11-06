@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+
 import { api } from '@/lib/axios';
 import { InvoiceStore, InvoiceStatus, Invoice } from '@/types/invoices';
 
@@ -107,6 +108,7 @@ export const useInvoiceStore = create<InvoiceStore>()(
 
         if (searchQuery.trim()) {
           const lowerQuery = searchQuery.toLowerCase();
+
           filtered = filtered.filter(invoice => {
             const customerName =
               invoice.customer?.name || invoice.customerName || '';
@@ -169,6 +171,7 @@ export const useInvoiceStore = create<InvoiceStore>()(
 
       getInvoiceByNumber: (invoiceNumber: string): Invoice | undefined => {
         const { allInvoices } = get();
+
         return allInvoices.find(inv => inv.invoiceNumber === invoiceNumber);
       },
 
@@ -191,6 +194,7 @@ export const useInvoiceStore = create<InvoiceStore>()(
 
       addInvoice: (invoice: Invoice) => {
         const { allInvoices } = get();
+
         set({ allInvoices: [...allInvoices, invoice] });
         get().applyFilters();
       },

@@ -1,4 +1,5 @@
 import { renderToStaticMarkup } from 'react-dom/server';
+
 import {
   downloadAsImage,
   downloadAsPDF,
@@ -25,6 +26,7 @@ const createInvoiceElement = (options: InvoiceDownloadOptions): HTMLElement => {
 
   // Create container
   const container = document.createElement('div');
+
   container.innerHTML = renderToStaticMarkup(
     InvoiceDownloadLayout({ invoice, businessInfo })
   );

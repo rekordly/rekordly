@@ -2,6 +2,7 @@
 
 import { Button } from '@heroui/react';
 import { Trash2 } from 'lucide-react';
+
 import { formatCurrency } from '@/lib/fn';
 import { OtherCostType } from '@/types/quotations';
 
@@ -20,9 +21,9 @@ export function CostItem({ cost, onRemove }: CostItemProps) {
         <p className="text-sm font-semibold">{formatCurrency(cost.amount)}</p>
         <Button
           isIconOnly
+          color="danger"
           size="sm"
           variant="light"
-          color="danger"
           onPress={() => onRemove(cost.id)}
         >
           <Trash2 size={16} />

@@ -11,44 +11,42 @@ interface CustomAutocompleteProps {
   [key: string]: any;
 }
 
-export const CustomAutocomplete: React.FC<CustomAutocompleteProps> = ({ 
-  label, 
-  options, 
-  error, 
+export const CustomAutocomplete: React.FC<CustomAutocompleteProps> = ({
+  label,
+  options,
+  error,
   name,
   allowsCustomValue = false,
-  ...props 
+  ...props
 }) => {
   const { control } = useFormContext();
 
   return (
     <div className="mb-4">
       <Controller
-        name={name}
         control={control}
+        name={name}
         render={({ field }) => (
           <Autocomplete
-            label={label}
-            variant="bordered"
-            selectedKey={field.value}
-            onSelectionChange={field.onChange}
             allowsCustomValue={allowsCustomValue}
-            onInputChange={(value) => {
+            classNames={{
+              base: 'border-1 border-default-300 rounded-2xl',
+            }}
+            errorMessage={error}
+            isInvalid={!!error}
+            label={label}
+            selectedKey={field.value}
+            variant="bordered"
+            onInputChange={value => {
               if (allowsCustomValue) {
                 field.onChange(value);
               }
             }}
-            classNames={{
-              base: "border-1 border-default-300 rounded-2xl",
-            }}
-            isInvalid={!!error}
-            errorMessage={error}
+            onSelectionChange={field.onChange}
             {...props}
           >
-            {options.map((option) => (
-              <AutocompleteItem key={option}>
-                {option}
-              </AutocompleteItem>
+            {options.map(option => (
+              <AutocompleteItem key={option}>{option}</AutocompleteItem>
             ))}
           </Autocomplete>
         )}

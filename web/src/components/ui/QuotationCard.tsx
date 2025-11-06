@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Trash2, Edit } from 'lucide-react';
 import {
@@ -14,6 +13,7 @@ import {
   addToast,
   Chip,
 } from '@heroui/react';
+
 import { getQuotationStatusConfig } from '@/lib/fn';
 import { QuotationCardProps } from '@/types/quotations';
 import { useApi } from '@/hooks/useApi';
@@ -58,15 +58,15 @@ export function QuotationCard({
   return (
     <>
       <div
-        onClick={() => router.push(`/dashboard/quotations/${quotationNumber}`)}
         className="group relative bg-white dark:bg-background rounded-2xl p-4 mb-3 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer border border-transparent hover:border-primary/20"
+        onClick={() => router.push(`/dashboard/quotations/${quotationNumber}`)}
       >
         {/* Top Row: Icon, Quotation Number & Title */}
         <div className="flex items-start gap-3 mb-3">
           <Chip
+            className="w-9 h-9 px-0 rounded-xl items-center justify-center flex-shrink-0"
             color={statusConfig.chipColor}
             variant="solid"
-            className="w-9 h-9 px-0 rounded-xl items-center justify-center flex-shrink-0"
           >
             {Icon && <Icon size={16} />}
           </Chip>
@@ -85,10 +85,10 @@ export function QuotationCard({
           <p className="text-lg font-bold text-foreground">{amount}</p>
 
           <Chip
-            color={statusConfig.chipColor}
-            variant="flat"
-            size="sm"
             className="h-6 flex-shrink-0"
+            color={statusConfig.chipColor}
+            size="sm"
+            variant="flat"
           >
             <span className="text-[0.65rem] font-medium">{status}</span>
           </Chip>
@@ -123,25 +123,25 @@ export function QuotationCard({
           >
             <Button
               isIconOnly
-              size="sm"
-              variant="light"
-              color="primary"
               className="min-w-unit-7 w-unit-7 h-unit-7"
+              color="primary"
+              size="sm"
+              title="Edit invoice"
+              variant="light"
               onPress={handleEdit}
               // isDisabled={isConverted}
               aria-label="Edit invoice"
-              title="Edit invoice"
             >
               <Edit size={16} />
             </Button>
             <Button
               isIconOnly
+              aria-label="Delete quotation"
+              className="min-w-unit-7 w-unit-7 h-unit-7"
+              color="danger"
               size="sm"
               variant="light"
-              color="danger"
-              className="min-w-unit-7 w-unit-7 h-unit-7"
               onPress={onOpen}
-              aria-label="Delete quotation"
             >
               <Trash2 size={16} />
             </Button>
@@ -151,11 +151,11 @@ export function QuotationCard({
 
       {/* Delete Confirmation Modal */}
       <Modal
-        isOpen={isOpen}
-        onClose={onClose}
-        placement="center"
         backdrop="blur"
+        isOpen={isOpen}
+        placement="center"
         size="xs"
+        onClose={onClose}
       >
         <ModalContent>
           {onClose => (
@@ -171,16 +171,16 @@ export function QuotationCard({
               </ModalBody>
               <ModalFooter>
                 <Button
+                  isDisabled={isDeleting}
                   variant="light"
                   onPress={onClose}
-                  isDisabled={isDeleting}
                 >
                   Cancel
                 </Button>
                 <Button
                   color="danger"
-                  onPress={handleDeleteConfirm}
                   isLoading={isDeleting}
+                  onPress={handleDeleteConfirm}
                 >
                   Delete
                 </Button>

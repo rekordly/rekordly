@@ -18,6 +18,7 @@ export async function getAuthUser(request: NextRequest): Promise<AuthResult> {
 
   if (!token) {
     const authHeader = request.headers.get('authorization');
+
     if (authHeader?.startsWith('Bearer ')) {
       const jwtToken = authHeader.substring(7);
 

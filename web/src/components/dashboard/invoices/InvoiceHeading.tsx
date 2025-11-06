@@ -3,6 +3,7 @@
 import { Card, CardBody } from '@heroui/card';
 import { Divider } from '@heroui/divider';
 import { useFormContext } from 'react-hook-form';
+
 import { TextInput } from '@/components/ui/Input';
 
 export function InvoiceHeading() {
@@ -21,17 +22,17 @@ export function InvoiceHeading() {
 
           <div className="grid md:grid-cols-2 gap-4">
             <TextInput
-              name="invoiceTitle"
+              isRequired
               control={control}
               label="Invoice Title"
+              name="invoiceTitle"
               placeholder="e.g., Quotation for Web Development Services"
-              isRequired
             />
 
             <TextInput
-              name="dueDate"
               control={control}
               label="Due Date (optional)"
+              name="dueDate"
               placeholder="Select due date"
               type="datetime-local"
             />
@@ -39,9 +40,9 @@ export function InvoiceHeading() {
 
           <div className="grid grid-cols-1">
             <TextInput
-              name="invoiceDescription"
               control={control}
               label="Invoice Description (optional)"
+              name="invoiceDescription"
               placeholder="Add any notes or payment instructions..."
             />
           </div>

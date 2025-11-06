@@ -1,5 +1,5 @@
 import React from 'react';
-import { useRadio, VisuallyHidden, cn } from "@heroui/react";
+import { useRadio, VisuallyHidden, cn } from '@heroui/react';
 
 interface CustomRadioProps {
   value: string;
@@ -7,7 +7,7 @@ interface CustomRadioProps {
   description?: string;
 }
 
-export const CustomRadio: React.FC<CustomRadioProps> = (props) => {
+export const CustomRadio: React.FC<CustomRadioProps> = props => {
   const {
     Component,
     children,
@@ -24,9 +24,9 @@ export const CustomRadio: React.FC<CustomRadioProps> = (props) => {
     <Component
       {...getBaseProps()}
       className={cn(
-        "group inline-flex items-center hover:opacity-70 active:opacity-50 justify-between flex-row-reverse tap-highlight-transparent",
-        "w-full cursor-pointer border-2 border-default-200 rounded-2xl gap-4 p-4 mb-3",
-        "data-[selected=true]:border-primary",
+        'group inline-flex items-center hover:opacity-70 active:opacity-50 justify-between flex-row-reverse tap-highlight-transparent',
+        'w-full cursor-pointer border-2 border-default-200 rounded-2xl gap-4 p-4 mb-3',
+        'data-[selected=true]:border-primary'
       )}
     >
       <VisuallyHidden>
@@ -36,7 +36,11 @@ export const CustomRadio: React.FC<CustomRadioProps> = (props) => {
         <span {...getControlProps()} />
       </span>
       <div {...getLabelWrapperProps()} className="flex flex-col gap-1">
-        {children && <span {...getLabelProps()} className="text-base font-semibold">{children}</span>}
+        {children && (
+          <span {...getLabelProps()} className="text-base font-semibold">
+            {children}
+          </span>
+        )}
         {description && (
           <span className="text-sm text-default-500">{description}</span>
         )}

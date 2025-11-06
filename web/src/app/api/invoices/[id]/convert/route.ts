@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
+
 import { getAuthUser } from '@/lib/utils/server';
 import { addPaymentSchema } from '@/lib/validations/general';
 import { generateReceiptNumber, toTwoDecimals } from '@/lib/fn';
@@ -189,10 +190,12 @@ export async function POST(
     // ✅ Generate receipt number OUTSIDE transaction
     let receiptNumber = generateReceiptNumber(userId);
     let attempts = 0;
+
     while (attempts < 5) {
       const existing = await prisma.sale.findUnique({
         where: { receiptNumber },
       });
+
       if (!existing) break;
       receiptNumber = generateReceiptNumber(userId);
       attempts++;

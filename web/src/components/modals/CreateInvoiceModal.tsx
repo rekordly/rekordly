@@ -215,12 +215,12 @@ export function CreateInvoiceModal({
 
   return (
     <Drawer
-      isOpen={isOpen}
-      onClose={handleClose}
-      size="lg"
-      placement="right"
       backdrop="blur"
       className="bg-background"
+      isOpen={isOpen}
+      placement="right"
+      size="lg"
+      onClose={handleClose}
     >
       <DrawerContent>
         <DrawerHeader>
@@ -242,7 +242,7 @@ export function CreateInvoiceModal({
             </div>
           ) : (
             <FormProvider {...methods}>
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+              <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
                 <CustomerDetails customers={customers} />
                 <InvoiceHeading />
                 <AddItemSection />
@@ -251,27 +251,27 @@ export function CreateInvoiceModal({
                 <div className="flex gap-3 justify-end pt-4 border-t border-divider">
                   {!isEditMode && (
                     <Button
-                      type="button"
+                      className="px-6"
                       color="default"
-                      variant="bordered"
+                      isDisabled={isSubmitting}
+                      isLoading={isSavingDraft}
                       radius="lg"
                       size="lg"
+                      type="button"
+                      variant="bordered"
                       onPress={handleSaveDraft}
-                      isLoading={isSavingDraft}
-                      isDisabled={isSubmitting}
-                      className="px-6"
                     >
                       Save as Draft
                     </Button>
                   )}
                   <Button
-                    type="submit"
+                    className="px-6"
                     color="primary"
+                    isDisabled={isSavingDraft || isConverted}
+                    isLoading={isSubmitting}
                     radius="lg"
                     size="lg"
-                    isLoading={isSubmitting}
-                    isDisabled={isSavingDraft || isConverted}
-                    className="px-6"
+                    type="submit"
                   >
                     {isEditMode
                       ? 'Update Invoice'

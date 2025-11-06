@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { z } from 'zod';
+
 import {
   personalInfoSchema,
   personalInfoSchemaWithPassword,
   workTypeSchema,
   finalSchema,
 } from '@/lib/validations/onboarding';
-import { z } from 'zod';
 
 const prisma = new PrismaClient();
 
@@ -25,8 +26,10 @@ export async function POST(request: NextRequest) {
     // If no next-auth token, try Authorization header (for mobile)
     if (!token) {
       const authHeader = request.headers.get('authorization');
+
       if (authHeader?.startsWith('Bearer ')) {
         const jwtToken = authHeader.substring(7);
+
         // Verify and decode the JWT token
         token = await getToken({
           req: {
@@ -101,6 +104,7 @@ export async function POST(request: NextRequest) {
     // Only update password if user doesn't have one and password is provided
     if (!hasPassword && data.password) {
       const hashedPassword = await bcrypt.hash(data.password, 12);
+
       userUpdateData.password = hashedPassword;
     }
 
@@ -176,8 +180,10 @@ export async function GET(request: NextRequest) {
     // If no next-auth token, try Authorization header (for mobile)
     if (!token) {
       const authHeader = request.headers.get('authorization');
+
       if (authHeader?.startsWith('Bearer ')) {
         const jwtToken = authHeader.substring(7);
+
         token = await getToken({
           req: {
             headers: { authorization: `Bearer ${jwtToken}` },
@@ -208,6 +214,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ user }, { status: 200 });
   } catch (error) {
     console.error('Error checking onboarding status:', error);
+
     return NextResponse.json(
       { message: 'Internal server error' },
       { status: 500 }

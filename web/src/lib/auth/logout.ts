@@ -20,7 +20,6 @@ const clearAllZustandStores = () => {
   console.log('All Zustand stores cleared');
 };
 
-
 export const handleSignOut = async () => {
   try {
     clearAllZustandStores();

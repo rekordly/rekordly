@@ -2,6 +2,7 @@
 
 import { Button } from '@heroui/react';
 import { Trash2 } from 'lucide-react';
+
 import { formatCurrency } from '@/lib/fn';
 import { MaterialItemType } from '@/types/quotations';
 
@@ -32,11 +33,11 @@ export function MaterialItem({ material, onRemove }: MaterialItemProps) {
           {formatCurrency(material.total)}
         </span>
         <Button
-          type="button"
-          size="sm"
-          color="danger"
-          variant="light"
           isIconOnly
+          color="danger"
+          size="sm"
+          type="button"
+          variant="light"
           onPress={() => onRemove(material.id)}
         >
           <Trash2 className="w-4 h-4" />

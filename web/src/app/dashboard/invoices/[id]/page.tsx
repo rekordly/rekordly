@@ -4,17 +4,16 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Button, Skeleton, addToast } from '@heroui/react';
 import { ArrowLeft, FileX } from '@phosphor-icons/react';
+import { useSession } from 'next-auth/react';
 
 import { useInvoiceStore } from '@/store/invoiceStore';
 import useInvoiceDownload from '@/lib/invoiceDownloadHelper';
-
 import InvoiceHeader from '@/components/dashboard/invoices/single/InvoiceHeader';
 import InvoiceInfoSection from '@/components/dashboard/invoices/single/InvoiceInfoSection';
 import InvoiceCustomerSection from '@/components/dashboard/invoices/single/InvoiceCustomerSection';
 import InvoiceItemsSection from '@/components/dashboard/invoices/single/InvoiceItemsSection';
 import InvoicePaymentSection from '@/components/dashboard/invoices/single/InvoicePaymentSection';
 import ConvertToSales from '@/components/dashboard/invoices/single/ConvertToSales';
-import { useSession } from 'next-auth/react';
 
 export default function SingleInvoice() {
   const params = useParams();
@@ -54,6 +53,7 @@ export default function SingleInvoice() {
         setIsFetching(true);
         await fetchInvoices();
         setIsFetching(false);
+
         return;
       }
 
@@ -178,7 +178,7 @@ export default function SingleInvoice() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
         <div className="bg-danger-50 dark:bg-danger-900/20 rounded-full p-6">
-          <FileX size={48} className="text-danger-500" />
+          <FileX className="text-danger-500" size={48} />
         </div>
         <h3 className="text-xl font-semibold">Invoice Not Found</h3>
         <p className="text-default-500 text-center max-w-md">
@@ -199,10 +199,10 @@ export default function SingleInvoice() {
   return (
     <div className="max-w-7xl mx-auto">
       <InvoiceHeader
-        onShare={handleShare}
-        onDownloadPDF={handleDownloadPDF}
-        onDownloadImage={handleDownloadImage}
         isDownloading={isDownloading}
+        onDownloadImage={handleDownloadImage}
+        onDownloadPDF={handleDownloadPDF}
+        onShare={handleShare}
       />
 
       <div className="lg:grid lg:grid-cols-3 lg:gap-6 mt-6 lg:mt-0">

@@ -1,8 +1,9 @@
 // lib/auth/otpAuth.ts
 import { Provider } from 'next-auth/providers';
+import { User } from 'next-auth';
+
 import { prisma } from '@/lib/prisma';
 import { verifyOtpCode } from '@/lib/auth/otp';
-import { User } from 'next-auth';
 
 export const OTPProvider: Provider = {
   id: 'otp',

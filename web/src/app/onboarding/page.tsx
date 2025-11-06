@@ -2,14 +2,15 @@
 import { redirect } from 'next/navigation';
 import { getServerSession } from 'next-auth';
 import { CheckIcon } from 'lucide-react';
+import { Suspense } from 'react';
+
 import { OnboardingFlow } from '@/components/onboarding/OnboardingFlow';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { OnboardingLoadingSkeleton } from '@/components/onboarding/OnboardingLoadingSkeleton';
-import { Suspense } from 'react';
 
 export default async function OnboardingPage() {
   const session = await getServerSession(authOptions);
-  
+
   // Redirect if not authenticated
   if (!session?.user) {
     redirect('/account');
@@ -28,7 +29,8 @@ export default async function OnboardingPage() {
           <div className="text-white text-center max-w-lg">
             <h1 className="text-5xl font-bold mb-6">Welcome to rekordly</h1>
             <p className="text-xl mb-8 opacity-90">
-              "Take control of your finances. Track every naira, maximize every opportunity."
+              Take control of your finances. Track every naira, maximize every
+              opportunity.
             </p>
             <div className="flex items-center justify-center gap-2">
               <CheckIcon className="w-6 h-6" />
@@ -40,7 +42,9 @@ export default async function OnboardingPage() {
             </div>
             <div className="flex items-center justify-center gap-2 mt-4">
               <CheckIcon className="w-6 h-6" />
-              <span className="text-lg">Financial insights at your fingertips</span>
+              <span className="text-lg">
+                Financial insights at your fingertips
+              </span>
             </div>
           </div>
         </div>

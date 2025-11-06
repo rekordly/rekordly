@@ -37,21 +37,21 @@ export default function InvoiceHeader({
       data-section="header"
     >
       <Button
-        variant="light"
-        startContent={<ArrowLeft size={20} />}
-        onPress={() => router.push('/dashboard/invoices')}
         className="text-default-600"
+        startContent={<ArrowLeft size={20} />}
+        variant="light"
+        onPress={() => router.push('/dashboard/invoices')}
       >
         Back
       </Button>
 
       <div className="flex gap-2">
         <Button
-          variant="bordered"
           isIconOnly
-          onPress={onShare}
           className="border-default-200"
           title="Copy invoice link"
+          variant="bordered"
+          onPress={onShare}
         >
           <ShareNetwork size={20} />
         </Button>
@@ -60,9 +60,9 @@ export default function InvoiceHeader({
           <DropdownTrigger>
             <Button
               color="primary"
-              startContent={<DownloadSimple size={20} />}
-              isLoading={isDownloading}
               isDisabled={isDownloading}
+              isLoading={isDownloading}
+              startContent={<DownloadSimple size={20} />}
             >
               {isDownloading ? 'Downloading...' : 'Download'}
             </Button>
@@ -70,17 +70,17 @@ export default function InvoiceHeader({
           <DropdownMenu aria-label="Download options">
             <DropdownItem
               key="pdf"
+              isDisabled={isDownloading}
               startContent={<FilePdf size={20} weight="duotone" />}
               onPress={() => onDownloadPDF?.('professional')}
-              isDisabled={isDownloading}
             >
               Download as PDF
             </DropdownItem>
             <DropdownItem
               key="image"
+              isDisabled={isDownloading}
               startContent={<FileImage size={20} weight="duotone" />}
               onPress={() => onDownloadImage?.('professional')}
-              isDisabled={isDownloading}
             >
               Download as Image
             </DropdownItem>

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useFormContext } from 'react-hook-form';
 import { EyeIcon, EyeOffIcon } from 'lucide-react';
+
 import { CustomInput } from '../ui/CustomInput';
 import { CustomSelect } from '../ui/CustomSelect';
 import { heardFromOptions } from '../constant';
@@ -10,11 +11,14 @@ interface Step1PersonalInfoProps {
   emailDisabled: boolean;
 }
 
-export const Step1PersonalInfo: React.FC<Step1PersonalInfoProps> = ({ 
-  hasPassword, 
-  emailDisabled 
+export const Step1PersonalInfo: React.FC<Step1PersonalInfoProps> = ({
+  hasPassword,
+  emailDisabled,
 }) => {
-  const { register, formState: { errors } } = useFormContext();
+  const {
+    register,
+    formState: { errors },
+  } = useFormContext();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
@@ -26,17 +30,17 @@ export const Step1PersonalInfo: React.FC<Step1PersonalInfoProps> = ({
         label="Full Name"
         placeholder="Rekordly User"
         {...register('fullName')}
-        error={errors.fullName?.message as string}
         isRequired
+        error={errors.fullName?.message as string}
       />
 
       <CustomInput
         label="Phone Number"
-        type="tel"
         placeholder="08000000000"
+        type="tel"
         {...register('phoneNumber')}
-        error={errors.phoneNumber?.message as string}
         isRequired
+        error={errors.phoneNumber?.message as string}
       />
 
       <CustomInput
@@ -44,8 +48,8 @@ export const Step1PersonalInfo: React.FC<Step1PersonalInfoProps> = ({
         placeholder="user@rekordly.com"
         type="email"
         {...register('email')}
-        error={errors.email?.message as string}
         isRequired
+        error={errors.email?.message as string}
         isDisabled={emailDisabled}
       />
 
@@ -54,46 +58,54 @@ export const Step1PersonalInfo: React.FC<Step1PersonalInfoProps> = ({
           <CustomInput
             label="Password"
             placeholder="******"
-            type={showPassword ? "text" : "password"}
+            type={showPassword ? 'text' : 'password'}
             {...register('password')}
-            error={errors.password?.message as string}
             isRequired
             endContent={
-              <button 
-                type="button" 
-                onClick={() => setShowPassword(!showPassword)}
+              <button
                 className="focus:outline-none"
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
               >
-                {showPassword ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
+                {showPassword ? (
+                  <EyeOffIcon size={16} />
+                ) : (
+                  <EyeIcon size={16} />
+                )}
               </button>
             }
+            error={errors.password?.message as string}
           />
 
           <CustomInput
             label="Confirm Password"
             placeholder="******"
-            type={showConfirmPassword ? "text" : "password"}
+            type={showConfirmPassword ? 'text' : 'password'}
             {...register('confirmPassword')}
-            error={errors.confirmPassword?.message as string}
             isRequired
             endContent={
-              <button 
-                type="button" 
-                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+              <button
                 className="focus:outline-none"
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
               >
-                {showConfirmPassword ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
+                {showConfirmPassword ? (
+                  <EyeOffIcon size={16} />
+                ) : (
+                  <EyeIcon size={16} />
+                )}
               </button>
             }
+            error={errors.confirmPassword?.message as string}
           />
         </>
       )}
 
       <CustomSelect
+        error={errors.heardFrom?.message as string}
         label="How did you hear about us?"
         name="heardFrom"
         options={heardFromOptions}
-        error={errors.heardFrom?.message as string}
       />
 
       <CustomInput

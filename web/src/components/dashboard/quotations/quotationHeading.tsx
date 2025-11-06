@@ -3,6 +3,7 @@
 import { Card, CardBody } from '@heroui/card';
 import { Divider } from '@heroui/divider';
 import { useFormContext } from 'react-hook-form';
+
 import { TextInput } from '@/components/ui/Input';
 
 export function QuotationHeading() {
@@ -21,31 +22,31 @@ export function QuotationHeading() {
 
           <div className="grid grid-cols-1 gap-4">
             <TextInput
-              name="quotationTitle"
+              isRequired
               control={control}
               label="Quotation Title"
+              name="quotationTitle"
               placeholder="e.g., Quotation for Web Development Services"
-              isRequired
             />
             <TextInput
-              name="quotationDescription"
               control={control}
               label="Quotation Description (optional)"
+              name="quotationDescription"
               placeholder="Add any notes or payment instructions..."
             />
             <div className="grid md:grid-cols-2 gap-4">
               <TextInput
-                name="issueDate"
                 control={control}
                 label="Issue Date"
+                name="issueDate"
                 placeholder="Select due date"
                 type="date"
               />
 
               <TextInput
-                name="validUntil"
                 control={control}
                 label="Valid Until (optional)"
+                name="validUntil"
                 placeholder="Select due date"
                 type="datetime-local"
               />

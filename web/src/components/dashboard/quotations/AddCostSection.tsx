@@ -4,11 +4,11 @@ import { Card, CardBody, Button, Checkbox } from '@heroui/react';
 import { Divider } from '@heroui/divider';
 import { useForm, useFormContext } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { addToast } from '@heroui/react';
+
 import { TextInput, NumberInput } from '@/components/ui/Input';
-import { formatCurrency } from '@/lib/fn';
 import { AddOtherCostInput, OtherCostType } from '@/types/quotations';
 import { addOtherCostSchema } from '@/lib/validations/quotations';
 
@@ -41,9 +41,11 @@ export function AddCostSection() {
     };
 
     const updatedCosts = [...otherCosts, newCost];
+
     setValue('otherCosts', updatedCosts);
 
     const newTotal = updatedCosts.reduce((sum, cost) => sum + cost.amount, 0);
+
     setValue('otherCostsTotal', newTotal);
 
     resetCostForm({
@@ -74,13 +76,13 @@ export function AddCostSection() {
 
         <div className="space-y-2">
           <NumberInput
-            name="workmanship"
             control={control}
             label="Workmanship (₦)"
-            placeholder="0.00"
             min={0}
-            step={0.01}
+            name="workmanship"
+            placeholder="0.00"
             startContent={<span className="text-default-400">₦</span>}
+            step={0.01}
           />
         </div>
 
@@ -88,8 +90,8 @@ export function AddCostSection() {
 
         <Checkbox
           isSelected={showOtherCosts}
-          onValueChange={setShowOtherCosts}
           size="sm"
+          onValueChange={setShowOtherCosts}
         >
           <span className="text-sm">
             Add other costs (e.g., transportation, etc)
@@ -106,31 +108,31 @@ export function AddCostSection() {
               <div className="grid grid-cols-12 gap-3">
                 <div className="col-span-12 md:col-span-8">
                   <TextInput
-                    name="description"
                     control={otherCostControl}
                     label="Description"
+                    name="description"
                     placeholder="e.g., transportation"
                   />
                 </div>
                 <div className="col-span-12 md:col-span-4">
                   <NumberInput
-                    name="amount"
                     control={otherCostControl}
                     label="Amount (₦)"
-                    placeholder="0.00"
                     min={0}
-                    step={0.01}
+                    name="amount"
+                    placeholder="0.00"
                     startContent={<span className="text-default-400">₦</span>}
+                    step={0.01}
                   />
                 </div>
               </div>
 
               <Button
-                color="primary"
-                variant="flat"
                 fullWidth
                 className="mt-auto"
+                color="primary"
                 startContent={<Plus size={16} />}
+                variant="flat"
                 onPress={() => handleAddCostSubmit(onAddCost)()}
               >
                 Add Cost

@@ -15,12 +15,15 @@ import {
   useDisclosure,
 } from '@heroui/react';
 import { ChartNoAxesGantt, LogOut, Receipt } from 'lucide-react';
-import { SessionUser, MenuItem, SessionFlowProps } from '@/types';
+import { useState } from 'react';
+
+import { ThemeToggle } from '../theme-toggle';
+
 import { MenuItemLink } from './MenuItemLinkProps ';
+
+import { SessionUser } from '@/types';
 import { menuItems } from '@/config/menu';
 import { handleSignOut } from '@/lib/auth/logout';
-import { ThemeToggle } from '../theme-toggle';
-import { useState } from 'react';
 
 export default function DashboardNavbar({ user }: SessionUser) {
   const [expandedItem, setExpandedItem] = useState<string | null>(null);
@@ -37,11 +40,11 @@ export default function DashboardNavbar({ user }: SessionUser) {
 
   return (
     <HeroUINavbar
-      onMenuOpenChange={setIsMenuOpen}
-      isMenuOpen={isMenuOpen}
-      maxWidth="full"
       className="py-1"
       height="64px"
+      isMenuOpen={isMenuOpen}
+      maxWidth="full"
+      onMenuOpenChange={setIsMenuOpen}
     >
       <NavbarContent>
         <NavbarBrand>
@@ -66,11 +69,11 @@ export default function DashboardNavbar({ user }: SessionUser) {
           />
 
           <Button
-            onPress={onOpen}
             isIconOnly
-            variant="light"
-            size="sm"
             className="size-6 min-w-auto"
+            size="sm"
+            variant="light"
+            onPress={onOpen}
           >
             <ChartNoAxesGantt className="size-5" />
           </Button>
@@ -83,18 +86,15 @@ export default function DashboardNavbar({ user }: SessionUser) {
             avatarProps={{
               src: userImage,
             }}
-            name={userName}
             description={user?.email || ''}
+            name={userName}
           />
         </NavbarContent>
       </NavbarContent>
 
       <Drawer
-        isOpen={isOpen}
-        size="xs"
-        onClose={onClose}
-        placement="left"
         backdrop="blur"
+        isOpen={isOpen}
         motionProps={{
           variants: {
             enter: {
@@ -113,6 +113,9 @@ export default function DashboardNavbar({ user }: SessionUser) {
             },
           },
         }}
+        placement="left"
+        size="xs"
+        onClose={onClose}
       >
         <DrawerContent>
           {onClose => (
@@ -123,12 +126,12 @@ export default function DashboardNavbar({ user }: SessionUser) {
                     src: userImage,
                     size: 'lg',
                   }}
-                  name={userName}
-                  description={user?.email || ''}
                   classNames={{
                     name: 'font-semibold',
                     description: 'text-default-500',
                   }}
+                  description={user?.email || ''}
+                  name={userName}
                 />
               </DrawerHeader>
 
@@ -137,9 +140,9 @@ export default function DashboardNavbar({ user }: SessionUser) {
                   {menuItems.map((item, index) => (
                     <MenuItemLink
                       key={index}
+                      expandedItem={expandedItem}
                       item={item}
                       onClose={onClose}
-                      expandedItem={expandedItem}
                       onToggle={handleToggle}
                     />
                   ))}
@@ -148,11 +151,11 @@ export default function DashboardNavbar({ user }: SessionUser) {
 
               <DrawerFooter className="border-t border-divider">
                 <Button
+                  className="w-full"
                   color="danger"
+                  startContent={<LogOut className="w-4 h-4" />}
                   variant="flat"
                   onPress={handleSignOut}
-                  className="w-full"
-                  startContent={<LogOut className="w-4 h-4" />}
                 >
                   Sign Out
                 </Button>

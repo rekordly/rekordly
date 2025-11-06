@@ -3,25 +3,29 @@ import { useFormContext, Controller } from 'react-hook-form';
 import { Checkbox } from '@heroui/react';
 
 export const FinalConfirmation: React.FC = () => {
-  const { control, formState: { errors } } = useFormContext();
+  const {
+    control,
+    formState: { errors },
+  } = useFormContext();
 
   return (
     <div className="space-y-4 mt-6 pt-6 border-t border-default-200">
       <h3 className="font-semibold text-lg mb-4">Final Confirmation</h3>
-      
+
       <Controller
-        name="confirmAccuracy"
         control={control}
+        name="confirmAccuracy"
         render={({ field }) => (
           <Checkbox
+            classNames={{
+              base: 'max-w-full gap-2 mb-1.5',
+            }}
             isSelected={field.value}
             onValueChange={field.onChange}
-            classNames={{
-              base: "max-w-full gap-2 mb-1.5",
-            }}
           >
             <span className="text-sm">
-              I confirm that all the information provided is accurate and up-to-date
+              I confirm that all the information provided is accurate and
+              up-to-date
             </span>
           </Checkbox>
         )}
@@ -33,41 +37,50 @@ export const FinalConfirmation: React.FC = () => {
       )}
 
       <Controller
-        name="confirmNotifications"
         control={control}
+        name="confirmNotifications"
         render={({ field }) => (
           <Checkbox
+            classNames={{
+              base: 'max-w-full gap-2 mb-1.5',
+            }}
             isSelected={field.value}
             onValueChange={field.onChange}
-            classNames={{
-              base: "max-w-full gap-2 mb-1.5",
-            }}
           >
             <span className="text-sm">
-              I want to receive notifications about tax deadlines and financial tips (Optional)
+              I want to receive notifications about tax deadlines and financial
+              tips (Optional)
             </span>
           </Checkbox>
         )}
       />
 
       <Controller
-        name="confirmTerms"
         control={control}
+        name="confirmTerms"
         render={({ field }) => (
           <Checkbox
+            classNames={{
+              base: 'max-w-full gap-2',
+            }}
             isSelected={field.value}
             onValueChange={field.onChange}
-            classNames={{
-              base: "max-w-full gap-2",
-            }}
           >
             <span className="text-sm">
               I agree to the{' '}
-              <a href="/terms" target="_blank" className="text-primary underline">
+              <a
+                className="text-primary underline"
+                href="/terms"
+                target="_blank"
+              >
                 Terms of Service
               </a>{' '}
               and{' '}
-              <a href="/privacy" target="_blank" className="text-primary underline">
+              <a
+                className="text-primary underline"
+                href="/privacy"
+                target="_blank"
+              >
                 Privacy Policy
               </a>
             </span>

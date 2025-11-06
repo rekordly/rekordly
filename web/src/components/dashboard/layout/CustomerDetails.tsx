@@ -1,16 +1,12 @@
 'use client';
 
-import { Card, CardBody, CardHeader } from '@heroui/card';
+import { Card, CardBody } from '@heroui/card';
 import { Divider } from '@heroui/divider';
 import { Checkbox } from '@heroui/react';
 import { useFormContext } from 'react-hook-form';
-import {
-  AutocompleteInput,
-  NumberInput,
-  TextInput,
-} from '@/components/ui/Input';
-
 import { useState, useEffect } from 'react';
+
+import { AutocompleteInput, TextInput } from '@/components/ui/Input';
 import { CustomerType } from '@/types';
 
 interface CustomerDetailsProps {
@@ -33,6 +29,7 @@ export function CustomerDetails({ customers }: CustomerDetailsProps) {
       // If existing customer is selected, hide the checkbox
       setShowAddAsNewCustomer(false);
       setValue('addAsNewCustomer', false);
+
       return;
     }
 
@@ -58,6 +55,7 @@ export function CustomerDetails({ customers }: CustomerDetailsProps) {
 
   const handleCustomerSelect = (customerId: string) => {
     const customer = customers.find(c => c.id === customerId);
+
     if (!customer) return;
 
     // Auto-fill all customer fields
@@ -82,6 +80,7 @@ export function CustomerDetails({ customers }: CustomerDetailsProps) {
       setValue('addAsNewCustomer', false);
       setIsCustomerSelected(false);
       setShowAddAsNewCustomer(false);
+
       return;
     }
 
@@ -109,35 +108,35 @@ export function CustomerDetails({ customers }: CustomerDetailsProps) {
           <div className="grid md:grid-cols-2 gap-4">
             <div className="md:col-span-2">
               <AutocompleteInput
-                name="customer.id"
                 control={control}
-                label="Customer Name"
-                placeholder="Search or enter customer name"
-                items={customers}
+                disallowTyping={isCustomerSelected || selectedCustomerId}
                 getOptionLabel={c => c.name ?? ''}
                 getOptionValue={c => c.id ?? ''}
-                onSelectionChange={handleCustomerSelect}
+                items={customers}
+                label="Customer Name"
+                name="customer.id"
+                placeholder="Search or enter customer name"
                 onInputChange={handleCustomerNameInput}
-                disallowTyping={isCustomerSelected || selectedCustomerId}
+                onSelectionChange={handleCustomerSelect}
               />
             </div>
 
             <TextInput
-              name="customer.phone"
               control={control}
+              isDisabled={isCustomerSelected || selectedCustomerId}
               label="Phone Number"
+              name="customer.phone"
               placeholder="08012345678"
               type="tel"
-              isDisabled={isCustomerSelected || selectedCustomerId}
             />
 
             <TextInput
-              name="customer.email"
               control={control}
+              isDisabled={isCustomerSelected || selectedCustomerId}
               label="Email Address"
+              name="customer.email"
               placeholder="customer@example.com"
               type="email"
-              isDisabled={isCustomerSelected || selectedCustomerId}
             />
           </div>
 

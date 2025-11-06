@@ -57,6 +57,7 @@ export default function InvoicePage() {
 
   useEffect(() => {
     const element = observerTarget.current;
+
     if (!element) return;
 
     const observer = new IntersectionObserver(handleObserver, {
@@ -132,44 +133,44 @@ export default function InvoicePage() {
           {/* Stats Section */}
           <div className="flex-1 gap-3 grid grid-cols-2">
             <StatCard
-              tag="Amount"
-              title={formatCurrency(totalAmount)}
+              compact
+              gradient
+              className="col-span-2"
               description="Total Revenue"
               gradientColor="primary"
-              gradient
-              compact
-              className="col-span-2"
+              tag="Amount"
+              title={formatCurrency(totalAmount)}
             />
             <StatCard
+              compact
+              gradient
+              description="Invoices"
+              gradientColor="secondary"
               tag="All"
-              title={totalInvoices.toString()}
-              description="Invoices"
-              gradientColor="secondary"
               tagColor="secondary"
-              gradient
-              compact
+              title={totalInvoices.toString()}
             />
             <StatCard
-              tag="Converted"
-              title={paidInvoices.toString()}
+              compact
+              gradient
               description="Invoices"
               gradientColor="secondary"
+              tag="Converted"
               tagColor="secondary"
-              gradient
-              compact
+              title={paidInvoices.toString()}
             />
           </div>
 
           {/* Invoices List Section */}
           <div className="w-full lg:w-8/12 space-y-6">
-            <Card shadow="none" className="rounded-3xl px-2">
+            <Card className="rounded-3xl px-2" shadow="none">
               <CardHeader className="flex items-center justify-between py-6">
                 <div className="flex items-center gap-2">
                   <div>
                     <h3 className="text-base font-semibold text-foreground font-heading tracking-tight leading-tight flex items-center gap-2">
                       Invoices
                       {(isInitialLoading || isRefreshing || isPaginating) && (
-                        <Spinner size="sm" color="primary" />
+                        <Spinner color="primary" size="sm" />
                       )}
                     </h3>
                     <p className="text-xs text-default-500">
@@ -182,19 +183,19 @@ export default function InvoicePage() {
 
                 <div className="flex gap-2">
                   <Button
-                    color="default"
-                    variant="ghost"
                     isIconOnly
-                    onPress={handleManualRefresh}
-                    isDisabled={isRefreshing}
                     className={isRefreshing ? 'animate-spin' : ''}
+                    color="default"
+                    isDisabled={isRefreshing}
                     startContent={<RefreshCw className="w-5 h-5" />}
+                    variant="ghost"
+                    onPress={handleManualRefresh}
                   />
 
                   <Button
+                    isIconOnly
                     color="default"
                     variant={showSearch ? 'flat' : 'ghost'}
-                    isIconOnly
                     onPress={() => {
                       if (showSearch && searchQuery) {
                         handleClearSearch();
@@ -211,10 +212,10 @@ export default function InvoicePage() {
                   </Button>
 
                   <Button
-                    color="primary"
                     isIconOnly
-                    onPress={() => setIsModalOpen(true)}
+                    color="primary"
                     startContent={<Plus className="w-5 h-5" />}
+                    onPress={() => setIsModalOpen(true)}
                   />
                 </div>
               </CardHeader>
@@ -222,12 +223,11 @@ export default function InvoicePage() {
               <CardBody className="space-y-3">
                 {showSearch && (
                   <Input
-                    placeholder="Search by customer, invoice number, or amount..."
-                    value={searchQuery}
-                    onValueChange={handleSearch}
-                    startContent={
-                      <Search className="w-4 h-4 text-default-400" />
-                    }
+                    autoFocus
+                    classNames={{
+                      input: 'text-sm',
+                      inputWrapper: 'h-12 rounded-2xl',
+                    }}
                     endContent={
                       searchQuery && (
                         <Button
@@ -240,11 +240,12 @@ export default function InvoicePage() {
                         </Button>
                       )
                     }
-                    classNames={{
-                      input: 'text-sm',
-                      inputWrapper: 'h-12 rounded-2xl',
-                    }}
-                    autoFocus
+                    placeholder="Search by customer, invoice number, or amount..."
+                    startContent={
+                      <Search className="w-4 h-4 text-default-400" />
+                    }
+                    value={searchQuery}
+                    onValueChange={handleSearch}
                   />
                 )}
 
@@ -252,9 +253,9 @@ export default function InvoicePage() {
                   {STATUS_TAGS.map(tag => (
                     <Chip
                       key={tag.value}
+                      className="cursor-pointer text-xs"
                       color={statusFilter === tag.value ? tag.color : 'default'}
                       variant={statusFilter === tag.value ? 'solid' : 'flat'}
-                      className="cursor-pointer text-xs"
                       onClick={() => setStatusFilter(tag.value)}
                     >
                       {tag.label}
@@ -274,9 +275,9 @@ export default function InvoicePage() {
                     </p>
                     {!searchQuery && statusFilter === 'ALL' && (
                       <Button
+                        className="mt-4"
                         color="primary"
                         size="sm"
-                        className="mt-4"
                         onPress={() => setIsModalOpen(true)}
                       >
                         Create Your First Invoice
@@ -290,17 +291,17 @@ export default function InvoicePage() {
                     displayedInvoices.map(invoice => (
                       <InvoiceCard
                         key={invoice.id}
-                        id={invoice.id}
-                        invoiceNumber={invoice.invoiceNumber}
-                        title={invoice.title || 'Invoice'}
-                        status={invoice.status}
+                        amount={formatCurrency(invoice.totalAmount)}
                         customerName={
                           invoice.customer?.name ||
                           invoice.customerName ||
                           'No Customer'
                         }
-                        amount={formatCurrency(invoice.totalAmount)}
                         date={formatDate(invoice.issueDate)}
+                        id={invoice.id}
+                        invoiceNumber={invoice.invoiceNumber}
+                        status={invoice.status}
+                        title={invoice.title || 'Invoice'}
                         onDelete={refreshInvoices}
                         onEdit={handleEdit}
                       />
@@ -309,7 +310,7 @@ export default function InvoicePage() {
 
                 <div ref={observerTarget} className="py-4 text-center">
                   {isPaginating && hasMore && (
-                    <Spinner size="sm" color="primary" />
+                    <Spinner color="primary" size="sm" />
                   )}
                   {!isPaginating && hasMore && (
                     <p className="text-xs text-default-400">
@@ -324,10 +325,10 @@ export default function InvoicePage() {
       </div>
 
       <CreateInvoiceModal
+        invoiceId={editInvoiceId}
         isOpen={isModalOpen}
         onClose={handleModalClose}
         onSuccess={handleSuccess}
-        invoiceId={editInvoiceId}
       />
     </>
   );

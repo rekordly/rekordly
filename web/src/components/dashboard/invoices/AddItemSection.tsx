@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Plus } from 'lucide-react';
 import { useRef } from 'react';
 import { addToast } from '@heroui/react';
+
 import { TextInput, NumberInput } from '@/components/ui/Input';
 import { AddItemFormType, InvoiceItemType } from '@/types/invoices';
 import { addItemSchema } from '@/lib/validations/invoices';
@@ -72,9 +73,9 @@ export function AddItemSection() {
             <div className="grid md:grid-cols-2 gap-3">
               <div className="md:col-span-2">
                 <TextInput<AddItemFormType>
-                  name="itemDescription"
                   control={itemControl}
                   label="Description"
+                  name="itemDescription"
                   placeholder="Item description"
                 />
               </div>
@@ -82,25 +83,25 @@ export function AddItemSection() {
               <div className="md:col-span-2 grid grid-cols-2 gap-3">
                 <div className="col-span-1">
                   <NumberInput<AddItemFormType>
-                    name="itemQuantity"
                     control={itemControl}
                     label="Qty"
-                    placeholder="0"
                     min={1}
+                    name="itemQuantity"
+                    placeholder="0"
                   />
                 </div>
 
                 <div className="col-span-1">
                   <NumberInput<AddItemFormType>
-                    name="itemRate"
                     control={itemControl}
                     label="Rate (₦)"
-                    placeholder="0.00"
                     min={0}
-                    step={0.01}
+                    name="itemRate"
+                    placeholder="0.00"
                     startContent={
                       <span className="text-default-400 text-sm">₦</span>
                     }
+                    step={0.01}
                   />
                 </div>
               </div>
@@ -115,10 +116,10 @@ export function AddItemSection() {
               </div>
 
               <Button
-                type="button"
                 color="primary"
-                variant="flat"
                 startContent={<Plus className="w-4 h-4" />}
+                type="button"
+                variant="flat"
                 onPress={() => handleAddItemSubmit(onAddItem)()}
               >
                 Add Item

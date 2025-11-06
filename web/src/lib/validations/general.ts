@@ -391,6 +391,7 @@ export const CreateSaleSchema = z
           Math.abs(data.grossProfit - (data.revenue - data.costOfSales)) < 0.01
         );
       }
+
       return true;
     },
     { message: 'Gross profit must equal revenue minus cost of sales' }
@@ -443,6 +444,7 @@ export const CreatePurchaseSchema = z
         data.includeVAT && data.vatAmount
           ? calculated + data.vatAmount
           : calculated;
+
       return Math.abs(withVAT - data.totalAmount) < 0.01;
     },
     { message: 'Total amount must equal subtotal + other costs + VAT' }

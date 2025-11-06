@@ -1,37 +1,19 @@
 'use client';
-import React, { useState } from 'react';
+import React from 'react';
 import { Card, CardBody, CardHeader } from '@heroui/card';
 import { Button } from '@heroui/button';
 import { Chip } from '@heroui/chip';
-import { Select, SelectItem } from '@heroui/select';
-import {
-  TrendingUp,
-  TrendingDown,
-  DollarSign,
-  ShoppingCart,
-  CreditCard,
-  Receipt,
-  Plus,
-  ArrowUpRight,
-  ArrowDownRight,
-  Calendar,
-} from 'lucide-react';
+import { DollarSign, Receipt } from 'lucide-react';
 import {
   LineChart,
   Line,
-  BarChart,
-  Bar,
-  AreaChart,
-  Area,
   PieChart,
   Pie,
   Cell,
   XAxis,
   YAxis,
-  CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend,
 } from 'recharts';
 
 interface RevenueData {
@@ -123,21 +105,21 @@ const recentTransactions = [
 
 // Reusable Chart Components
 const RevenueChart = ({ data }: RevenueChartProps) => (
-  <ResponsiveContainer width="100%" height={350}>
+  <ResponsiveContainer height={350} width="100%">
     <LineChart data={data}>
       <defs>
-        <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
+        <linearGradient id="colorIncome" x1="0" x2="0" y1="0" y2="1">
           <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.3} />
           <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0} />
         </linearGradient>
-        <linearGradient id="colorExpenses" x1="0" y1="0" x2="0" y2="1">
+        <linearGradient id="colorExpenses" x1="0" x2="0" y1="0" y2="1">
           <stop offset="5%" stopColor="#EF4444" stopOpacity={0.3} />
           <stop offset="95%" stopColor="#EF4444" stopOpacity={0} />
         </linearGradient>
       </defs>
       {/* <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" /> */}
-      <XAxis dataKey="month" stroke="#6B7280" fontSize={10} />
-      <YAxis stroke="#6B7280" fontSize={10} />
+      <XAxis dataKey="month" fontSize={10} stroke="#6B7280" />
+      <YAxis fontSize={10} stroke="#6B7280" />
       <Tooltip
         contentStyle={{
           backgroundColor: '#FFF',
@@ -147,36 +129,36 @@ const RevenueChart = ({ data }: RevenueChartProps) => (
         }}
       />
       <Line
-        type="monotone"
         dataKey="Income"
+        fill="url(#colorIncome)"
+        fillOpacity={1}
         stroke="#8B5CF6"
         strokeWidth={2}
-        fillOpacity={1}
-        fill="url(#colorIncome)"
+        type="monotone"
       />
       <Line
-        type="monotone"
         dataKey="Expenses"
+        fill="url(#colorExpenses)"
+        fillOpacity={1}
         stroke="#EF4444"
         strokeWidth={2}
-        fillOpacity={1}
-        fill="url(#colorExpenses)"
+        type="monotone"
       />
     </LineChart>
   </ResponsiveContainer>
 );
 
 const CategoryPieChart = ({ data }: CategoryPieChartProps) => (
-  <ResponsiveContainer width="100%" height={250}>
+  <ResponsiveContainer height={250} width="100%">
     <PieChart>
       <Pie
-        data={data}
         cx="50%"
         cy="50%"
+        data={data}
+        dataKey="value"
         innerRadius={60}
         outerRadius={80}
         paddingAngle={2}
-        dataKey="value"
       >
         {data.map((entry: CategoryData, index: number) => (
           <Cell key={`cell-${index}`} fill={entry.color} />
@@ -200,9 +182,9 @@ export default function Dashboard() {
             <CardHeader>
               <Chip
                 className="p-3 uppercase"
+                color="primary"
                 size="sm"
                 variant="flat"
-                color="primary"
               >
                 Total Income
               </Chip>
@@ -211,10 +193,10 @@ export default function Dashboard() {
               <div className="flex md:justify-between flex-row-reverse gap-4">
                 <div className="flex-3/12 mb-2 md:mb-0">
                   <Chip
-                    variant="shadow"
+                    className="item-center size-16 rounded-2xl"
                     color="primary"
                     size="lg"
-                    className="item-center size-16 rounded-2xl"
+                    variant="shadow"
                   >
                     <DollarSign size={'24'} />
                   </Chip>
@@ -240,9 +222,9 @@ export default function Dashboard() {
             <CardHeader>
               <Chip
                 className="p-3 uppercase"
+                color="secondary"
                 size="sm"
                 variant="flat"
-                color="secondary"
               >
                 Total Income
               </Chip>
@@ -251,10 +233,10 @@ export default function Dashboard() {
               <div className="flex md:justify-between flex-row-reverse gap-4">
                 <div className="flex-3/12 mb-2 md:mb-0">
                   <Chip
-                    variant="shadow"
+                    className="item-center size-16 rounded-2xl"
                     color="secondary"
                     size="lg"
-                    className="item-center size-16 rounded-2xl"
+                    variant="shadow"
                   >
                     <DollarSign size={'24'} />
                   </Chip>
@@ -329,7 +311,7 @@ export default function Dashboard() {
                 Your latest business activties
               </p>
             </div>
-            <Button variant="light" color="primary" size="sm">
+            <Button color="primary" size="sm" variant="light">
               View All
             </Button>
           </CardHeader>
