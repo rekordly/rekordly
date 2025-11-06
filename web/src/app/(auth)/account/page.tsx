@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { use } from 'react';
 
 import { EmailScreen } from '@/components/auth/EmailScreen';
 import { PasswordScreen } from '@/components/auth/PasswordScreen';
@@ -9,13 +10,18 @@ import { OtpScreen } from '@/components/auth/OtpScreen';
 type ScreenState = 'email' | 'password' | 'otp';
 
 interface LoginPageProps {
-  searchParams?: { error?: string };
+  searchParams?: Promise<{ error?: string }>;
 }
 
 export default function LoginPage({ searchParams }: LoginPageProps) {
   const [screenState, setScreenState] = useState<ScreenState>('email');
   const [userEmail, setUserEmail] = useState('');
-  const initialError = searchParams?.error;
+
+  // FIX: Provide a typed fallback for the use() hook
+  const resolvedSearchParams = use(
+    searchParams || Promise.resolve({ error: undefined })
+  );
+  const initialError = resolvedSearchParams.error;
 
   const handlePasswordClick = () => {
     setScreenState('password');
