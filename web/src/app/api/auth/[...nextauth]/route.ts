@@ -10,6 +10,7 @@ import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
 import { sendOtpCode } from '@/lib/auth/otp';
 import { OTPProvider } from '@/lib/auth/otpAuth';
+import { sendVerificationRequest } from '@/lib/auth/email-provider-custom';
 
 export const authOptions: AuthOptions = {
   adapter: PrismaAdapter(prisma),
@@ -18,13 +19,12 @@ export const authOptions: AuthOptions = {
     strategy: 'jwt',
   },
 
-  // Add custom pages to prevent default error redirects
   pages: {
     signIn: '/account',
     signOut: '/account',
-    error: '/account', // Error code passed in query string as ?error=
-    verifyRequest: '/account', // Used for check email page
-    newUser: '/onboarding', // New users will be directed here on first sign in
+    error: '/account',
+    verifyRequest: '/account',
+    newUser: '/onboarding',
   },
 
   providers: [
@@ -38,12 +38,14 @@ export const authOptions: AuthOptions = {
         },
       },
       from: process.env.EMAIL_FROM,
+      // Use custom email template
+      sendVerificationRequest,
     }),
 
     CredentialsProvider({
       id: 'credentials',
       name: 'Credentials',
-      type: 'credentials' as const, // Use 'as const' to ensure literal type
+      type: 'credentials' as const,
       credentials: {
         email: { label: 'Email', type: 'email' },
         password: { label: 'Password', type: 'password' },
@@ -76,7 +78,7 @@ export const authOptions: AuthOptions = {
             },
           });
 
-          // User not found
+          // User not found - create account and send OTP
           if (!user) {
             try {
               const hashedPassword = await bcrypt.hash(
@@ -91,12 +93,12 @@ export const authOptions: AuthOptions = {
                   onboarded: false,
                 },
               });
+
               await sendOtpCode(credentials.email, 'login_recovery');
               throw new Error(
-                'Account Created Successfully!. Check your email for the confirmation code.'
+                'Account Created Successfully! Check your email for the confirmation code.'
               );
             } catch (error) {
-              // Handle database connection errors
               console.error('User creation error:', error);
               if (
                 error instanceof Error &&
@@ -105,6 +107,13 @@ export const authOptions: AuthOptions = {
                 throw new Error(
                   'Database connection error. Please try again later.'
                 );
+              }
+              // Re-throw if it's our success message
+              if (
+                error instanceof Error &&
+                error.message.includes('Account Created Successfully')
+              ) {
+                throw error;
               }
               throw new Error('Failed to create account. Please try again.');
             }
@@ -135,7 +144,6 @@ export const authOptions: AuthOptions = {
             throw new Error('Invalid credentials');
           }
 
-          // Transform null to undefined for NextAuth compatibility
           return {
             id: user.id,
             email: user.email!,
@@ -156,7 +164,6 @@ export const authOptions: AuthOptions = {
               : undefined,
           };
         } catch (error) {
-          // Handle database connection errors
           console.error('Credentials authorization error:', error);
           if (
             error instanceof Error &&
@@ -202,20 +209,17 @@ export const authOptions: AuthOptions = {
           include: { accounts: true },
         });
 
-        // Social login (Google, Facebook, Apple, etc.)
+        // Social login
         if (account && account.type === 'oauth') {
-          // User exists
           if (existingUser) {
             const hasProvider = existingUser.accounts.some(
               acc => acc.provider === account.provider
             );
 
-            // Provider already linked - allow sign in
             if (hasProvider) {
               return true;
             }
 
-            // New provider for existing user - link it
             await prisma.account.create({
               data: {
                 userId: existingUser.id,
@@ -231,7 +235,6 @@ export const authOptions: AuthOptions = {
               },
             });
 
-            // Update email verification if provider is verified
             if (!existingUser.emailVerified) {
               await prisma.user.update({
                 where: { id: existingUser.id },
@@ -242,7 +245,6 @@ export const authOptions: AuthOptions = {
             return true;
           }
 
-          // New user - create account
           await prisma.user.create({
             data: {
               email: user.email!,
@@ -258,7 +260,6 @@ export const authOptions: AuthOptions = {
 
         // Email provider
         if (account && account.type === 'email') {
-          // New user
           if (!existingUser) {
             await prisma.user.create({
               data: {
@@ -272,11 +273,9 @@ export const authOptions: AuthOptions = {
           return true;
         }
 
-        // Credentials provider - handled in authorize
         return true;
       } catch (error) {
         console.error('SignIn callback error:', error);
-        // Handle database connection errors
         if (
           error instanceof Error &&
           error.message.includes("Can't reach database server")
@@ -284,7 +283,6 @@ export const authOptions: AuthOptions = {
           return `/account?error=${encodeURIComponent('Database connection error. Please try again later.')}`;
         }
 
-        // Return error string to be passed in query params
         return `/account?error=${encodeURIComponent('An error occurred during sign in')}`;
       }
     },
@@ -334,7 +332,6 @@ export const authOptions: AuthOptions = {
         }
       }
 
-      // Update token if user data changes
       if (trigger === 'update') {
         try {
           const updatedUser = await prisma.user.findUnique({
@@ -387,18 +384,14 @@ export const authOptions: AuthOptions = {
         session.user.onboarding = token.onboarding;
         if (token.name) session.user.name = token.name;
         if (token.email) session.user.email = token.email;
-        // if (token.image) session.user.image = token.image;
       }
 
       return session;
     },
 
     async redirect({ url, baseUrl }) {
-      // Allows relative callback URLs
       if (url.startsWith('/')) return `${baseUrl}${url}`;
-      // Allows callback URLs on the same origin
       else if (new URL(url).origin === baseUrl) return url;
-
       return baseUrl;
     },
   },

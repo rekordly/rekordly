@@ -41,7 +41,7 @@ export default function RootLayout({
           fontHeading.variable // ← ADDED
         )}
       >
-        <Providers themeProps={{ attribute: 'class', defaultTheme: 'dark' }}>
+        <Providers themeProps={{ attribute: 'class', defaultTheme: 'light' }}>
           {children}
           {/* <ThemeToggle /> */}
         </Providers>
