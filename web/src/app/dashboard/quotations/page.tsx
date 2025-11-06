@@ -279,7 +279,7 @@ export default function QuotationPage() {
                         size="sm"
                         onPress={() => setIsModalOpen(true)}
                       >
-                        Create Your First Quotation.
+                        Create Your First Quotation
                       </Button>
                     )}
                   </div>
