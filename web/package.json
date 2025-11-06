@@ -15,7 +15,6 @@
     "type-check": "tsc --noEmit",
     "check": "npm run type-check && npm run lint",
     "check:fix": "npm run format && npm run lint:fix && npm run type-check",
-    "prebuild": "npm run type-check",
     "build:safe": "npm run check:fix && npm run build",
     "validate": "npm run format:check && npm run type-check && npm run lint"
   },
