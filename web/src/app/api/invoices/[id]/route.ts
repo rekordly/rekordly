@@ -195,18 +195,16 @@ export async function PATCH(
 // DELETE Invoice - DELETE /api/invoices/[id]
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  props: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Authenticate user
+    const { params } = props;
+    const { id } = await params;
     const { userId } = await getAuthUser(request);
 
     // Check if invoice exists and belongs to user
     const invoice = await prisma.invoice.findFirst({
-      where: {
-        id: params.id,
-        userId,
-      },
+      where: { id, userId },
     });
 
     if (!invoice) {
@@ -226,7 +224,7 @@ export async function DELETE(
 
     // Delete invoice
     await prisma.invoice.delete({
-      where: { id: params.id },
+      where: { id },
     });
 
     return NextResponse.json(

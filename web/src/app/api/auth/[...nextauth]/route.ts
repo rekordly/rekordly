@@ -142,6 +142,7 @@ export const authOptions: AuthOptions = {
             emailVerified: user.emailVerified ?? undefined,
             onboarded: user.onboarded,
             password: user.password,
+            hasPassword: !!user.password,
             onboarding: user.onboarding
               ? {
                   businessName: user.onboarding.businessName,
