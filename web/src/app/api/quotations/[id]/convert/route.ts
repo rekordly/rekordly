@@ -108,13 +108,6 @@ export async function POST(
       ? new Date(data.paymentDate)
       : new Date();
 
-    const existingIncomeRecord = await prisma.incomeRecord.findFirst({
-      where: {
-        sourceType: 'QUOTATION_PAYMENT',
-        sourceId: quotation.id,
-      },
-    });
-
     await prisma.$transaction(
       async tx => {
         if (paymentAmount > 0) {
@@ -142,25 +135,6 @@ export async function POST(
             status: newStatus,
           },
         });
-
-        if (!existingIncomeRecord && quotation.workmanship > 0) {
-          await tx.incomeRecord.create({
-            data: {
-              userId,
-              mainCategory: 'BUSINESS_PROFIT',
-              subCategory: 'SERVICE_FEES',
-              sourceType: 'QUOTATION_PAYMENT',
-              sourceId: quotation.id,
-              grossAmount: toTwoDecimals(quotation.workmanship),
-              taxableAmount: toTwoDecimals(quotation.workmanship),
-              description: `Workmanship for ${quotation.title || quotation.quotationNumber}`,
-              date: paymentDate,
-              vatAmount: quotation.includeVAT
-                ? toTwoDecimals((quotation.workmanship * 0.075) / 1.075)
-                : 0,
-            },
-          });
-        }
       },
       {
         maxWait: 10000,
@@ -199,9 +173,7 @@ export async function POST(
 
     return NextResponse.json(
       {
-        message: !existingIncomeRecord
-          ? 'Payment recorded and workmanship income added'
-          : 'Payment added successfully',
+        message: 'Payment added successfully',
         success: true,
         quotation: updatedQuotation,
       },

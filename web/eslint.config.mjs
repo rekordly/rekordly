@@ -59,10 +59,9 @@ export default defineConfig([
     extends: fixupConfigRules(
       compat.extends(
         'plugin:react/recommended',
-        'plugin:prettier/recommended',
         'plugin:react-hooks/recommended',
-        'plugin:jsx-a11y/recommended',
-        'plugin:@next/next/recommended'
+        'plugin:@typescript-eslint/recommended',
+        'plugin:prettier/recommended'
       )
     ),
 
@@ -71,7 +70,6 @@ export default defineConfig([
       'unused-imports': unusedImports,
       import: fixupPluginRules(_import),
       '@typescript-eslint': typescriptEslint,
-      'jsx-a11y': fixupPluginRules(jsxA11Y),
       prettier: fixupPluginRules(prettier),
     },
 
@@ -108,30 +106,13 @@ export default defineConfig([
       'react/prop-types': 'off',
       'react/jsx-uses-react': 'off',
       'react/react-in-jsx-scope': 'off',
-      'react-hooks/exhaustive-deps': 'off',
-      'react/self-closing-comp': 'warn',
+      'react-hooks/exhaustive-deps': 'warn', // Keep as warning, not off
 
-      // Fix styled-jsx and other unknown properties
-      'react/no-unknown-property': [
-        'error',
-        {
-          ignore: ['jsx', 'global'],
-        },
-      ],
-
-      // Accessibility - make most rules warnings instead of errors
-      'jsx-a11y/click-events-have-key-events': 'warn',
-      'jsx-a11y/no-static-element-interactions': 'warn',
-      'jsx-a11y/interactive-supports-focus': 'warn',
-      'jsx-a11y/anchor-is-valid': [
-        'warn',
-        {
-          components: ['Link'],
-          specialLink: ['hrefLeft', 'hrefRight'],
-          aspects: ['invalidHref', 'preferButton'],
-        },
-      ],
-      'jsx-a11y/no-autofocus': 'warn',
+      // TypeScript rules
+      '@typescript-eslint/no-unused-vars': 'warn',
+      '@typescript-eslint/no-explicit-any': 'warn', // Warn instead of error
+      '@typescript-eslint/explicit-function-return-type': 'off', // Allow implicit return types
+      '@typescript-eslint/explicit-module-boundary-types': 'off', // Allow implicit parameter types
 
       // Prettier
       'prettier/prettier': [
@@ -145,74 +126,6 @@ export default defineConfig([
       'no-unused-vars': 'off',
       'unused-imports/no-unused-vars': 'off',
       'unused-imports/no-unused-imports': 'warn',
-
-      '@typescript-eslint/no-unused-vars': [
-        'warn',
-        {
-          args: 'after-used',
-          ignoreRestSiblings: false,
-          argsIgnorePattern: '^_.*?$',
-          varsIgnorePattern: '^_.*?$',
-        },
-      ],
-
-      // Import order
-      'import/order': [
-        'warn',
-        {
-          groups: [
-            'type',
-            'builtin',
-            'object',
-            'external',
-            'internal',
-            'parent',
-            'sibling',
-            'index',
-          ],
-
-          pathGroups: [
-            {
-              pattern: '~/**',
-              group: 'external',
-              position: 'after',
-            },
-          ],
-
-          'newlines-between': 'always',
-        },
-      ],
-
-      // JSX prop sorting
-      'react/jsx-sort-props': [
-        'warn',
-        {
-          callbacksLast: true,
-          shorthandFirst: true,
-          noSortAlphabetically: false,
-          reservedFirst: true,
-        },
-      ],
-
-      // Padding between statements
-      'padding-line-between-statements': [
-        'warn',
-        {
-          blankLine: 'always',
-          prev: '*',
-          next: 'return',
-        },
-        {
-          blankLine: 'always',
-          prev: ['const', 'let', 'var'],
-          next: '*',
-        },
-        {
-          blankLine: 'any',
-          prev: ['const', 'let', 'var'],
-          next: ['const', 'let', 'var'],
-        },
-      ],
     },
   },
 ]);

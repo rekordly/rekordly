@@ -5,6 +5,8 @@ import {
   customerSchema,
   QuotationStatusSchema,
   InvoiceStatusSchema,
+  SaleStatusSchema,
+  RefundSchema,
 } from '@/lib/validations/general';
 
 export interface SessionUser {
@@ -29,3 +31,43 @@ export type AddPaymentType = z.infer<typeof addPaymentSchema>;
 export type CustomerType = z.infer<typeof customerSchema>;
 export type QuotationStatusType = z.infer<typeof QuotationStatusSchema>;
 export type InvoiceStatusType = z.infer<typeof InvoiceStatusSchema>;
+
+export type SaleStatusType = z.infer<typeof SaleStatusSchema>;
+export type RefundType = z.infer<typeof RefundSchema>;
+
+export interface RefundFormData {
+  refundReason: string;
+  refundDate?: string;
+}
+
+export interface PaymentRecord {
+  id: string;
+  saleId?: string | null;
+  quotationId?: string | null;
+  purchaseId?: string | null;
+  amount: number;
+  paymentDate: string;
+  paymentMethod:
+    | 'CASH'
+    | 'BANK_TRANSFER'
+    | 'CARD'
+    | 'MOBILE_MONEY'
+    | 'CHEQUE'
+    | 'OTHER';
+  category: 'INCOME' | 'EXPENSE';
+  payableType: 'SALE' | 'QUOTATION' | 'PURCHASE';
+  reference?: string | null;
+  notes?: string | null;
+}
+
+export interface RefundableItem {
+  id: string;
+  totalAmount: number;
+  amountPaid: number;
+  balance: number;
+  status: string;
+  refundAmount?: number | null;
+  refundReason?: string | null;
+  refundDate?: string | Date | null;
+  payments?: PaymentRecord[];
+}

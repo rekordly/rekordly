@@ -9,10 +9,11 @@ import {
   DollarSign,
   CheckCircle,
   XCircle,
+  RefreshCw,
 } from 'lucide-react';
 
 import { InvoiceStatus } from '@/types/invoices';
-import { QuotationStatusType } from '@/types/index';
+import { QuotationStatusType, SaleStatusType } from '@/types/index';
 
 interface StatusConfig {
   icon: LucideIcon;
@@ -93,6 +94,33 @@ export function getQuotationStatusConfig(
   return configs[status] || configs.DRAFT;
 }
 
+export function getSaleStatusConfig(status: SaleStatusType): StatusConfig {
+  const configs: Record<SaleStatusType, StatusConfig> = {
+    UNPAID: {
+      chipColor: 'danger',
+      icon: AlertCircle,
+    },
+    PARTIALLY_PAID: {
+      chipColor: 'secondary',
+      icon: DollarSign,
+    },
+    PAID: {
+      chipColor: 'success',
+      icon: CheckCircle,
+    },
+    REFUNDED: {
+      chipColor: 'primary',
+      icon: XCircle,
+    },
+    PARTIALLY_REFUNDED: {
+      chipColor: 'warning',
+      icon: RefreshCw,
+    },
+  };
+
+  return configs[status] || configs.UNPAID;
+}
+
 export const getAlertColor = (
   type: 'error' | 'info' | 'success' | 'warning'
 ) => {
@@ -124,6 +152,23 @@ export const QUOTATION_STATUS_TAGS = [
   { label: 'Expired', value: 'EXPIRED', color: 'danger' as const },
   { label: 'Cancelled', value: 'CANCELLED', color: 'danger' as const },
   { label: 'Refunded', value: 'REFUNDED', color: 'default' as const },
+];
+
+export const SALE_STATUS_TAGS = [
+  { label: 'All', value: 'ALL', color: 'default' as const },
+  { label: 'Unpaid', value: 'UNPAID', color: 'warning' as const },
+  {
+    label: 'Partially Paid',
+    value: 'PARTIALLY_PAID',
+    color: 'secondary' as const,
+  },
+  { label: 'Paid', value: 'PAID', color: 'success' as const },
+  { label: 'Refunded', value: 'REFUNDED', color: 'danger' as const },
+  {
+    label: 'Partially Refunded',
+    value: 'PARTIALLY_REFUNDED',
+    color: 'danger' as const,
+  },
 ];
 
 export const STATUS_TAGS: {
@@ -194,7 +239,7 @@ export function generateReceiptNumber(userId: string): string {
     random += chars.charAt(Math.floor(Math.random() * chars.length));
   }
 
-  return `REC-${year}${month}${day}${hours}${minutes}${seconds}-${userIdPart}-${random}`;
+  return `SAL-${year}${month}${day}${hours}${minutes}${seconds}-${userIdPart}-${random}`;
 }
 
 export const toTwoDecimals = (value: number | null): number => {

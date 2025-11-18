@@ -202,6 +202,8 @@ export async function DELETE(
     const { params } = props;
     const { id } = await params;
     const { userId } = await getAuthUser(request);
+    console.log('Deleting invoice with id:', id);
+    console.log('Authenticated userId:', userId);
 
     // Check if invoice exists and belongs to user
     const invoice = await prisma.invoice.findFirst({

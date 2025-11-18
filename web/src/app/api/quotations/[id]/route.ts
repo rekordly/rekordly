@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 
 import { getAuthUser } from '@/lib/utils/server';
 import { baseQuotationSchema } from '@/lib/validations/quotations';
 
-const prisma = new PrismaClient();
+
 
 export async function GET(
   request: NextRequest,
@@ -55,8 +55,6 @@ export async function GET(
       { message: 'Internal server error' },
       { status: 500 }
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }
 
@@ -186,9 +184,7 @@ export async function PATCH(
       { message: 'Internal server error' },
       { status: 500 }
     );
-  } finally {
-    await prisma.$disconnect();
-  }
+  } 
 }
 
 // DELETE
@@ -259,7 +255,5 @@ export async function DELETE(
       { message: 'Internal server error' },
       { status: 500 }
     );
-  } finally {
-    await prisma.$disconnect();
-  }
+  } 
 }
