@@ -28,17 +28,21 @@ export const customerSchema = z.object({
   email: z.string().email('Invalid email address').optional().or(z.literal('')),
 });
 
-export const RefundSchema = z.object({
-  refundReason: z
-    .string()
-    .min(3, 'Refund reason must be at least 3 characters')
-    .max(500, 'Refund reason must not exceed 500 characters'),
-  refundDate: z.union([z.string(), z.date()]).default(() => new Date()),
-}).transform(data => ({
-  ...data,
+export const RefundSchema = z
+  .object({
+    refundReason: z
+      .string()
+      .min(3, 'Refund reason must be at least 3 characters')
+      .max(500, 'Refund reason must not exceed 500 characters'),
+    refundDate: z.union([z.string(), z.date()]).default(() => new Date()),
+  })
+  .transform(data => ({
+    ...data,
     refundDate:
-    data.refundDate instanceof Date ? data.refundDate : new Date(data.refundDate),
-}));
+      data.refundDate instanceof Date
+        ? data.refundDate
+        : new Date(data.refundDate),
+  }));
 
 // Edit Payment Schema
 

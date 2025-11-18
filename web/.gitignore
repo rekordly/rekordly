@@ -43,3 +43,4 @@ bun.lockb
 /src/generated/prisma
 src/generated
 prisma/generated
+eslint.config copy.mjs

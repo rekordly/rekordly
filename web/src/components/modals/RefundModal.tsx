@@ -8,7 +8,6 @@ import {
   ModalBody,
   ModalFooter,
   useDisclosure,
-  Chip,
   addToast,
   Alert,
 } from '@heroui/react';

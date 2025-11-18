@@ -5,8 +5,6 @@ import { z } from 'zod';
 import { getAuthUser } from '@/lib/utils/server';
 import { baseQuotationSchema } from '@/lib/validations/quotations';
 
-
-
 export async function GET(
   request: NextRequest,
   props: { params: Promise<{ id: string }> }
@@ -184,7 +182,7 @@ export async function PATCH(
       { message: 'Internal server error' },
       { status: 500 }
     );
-  } 
+  }
 }
 
 // DELETE
@@ -255,5 +253,5 @@ export async function DELETE(
       { message: 'Internal server error' },
       { status: 500 }
     );
-  } 
+  }
 }

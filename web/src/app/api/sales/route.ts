@@ -56,8 +56,8 @@ export async function POST(request: NextRequest) {
     // Process items with proper decimal conversion
     const items = data.items.map(item => ({
       ...item,
-      unitPrice: toTwoDecimals(item.unitPrice),
-      total: toTwoDecimals(item.total),
+      rate: toTwoDecimals(item.rate),
+      amount: toTwoDecimals(item.amount),
     }));
 
     // Process other expenses with proper decimal conversion

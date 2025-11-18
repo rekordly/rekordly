@@ -252,8 +252,6 @@ export function CreateSaleDrawer({
     return result;
   };
 
-
-
   const onSubmit = async (data: SaleFormType) => {
     console.log(currentStep);
     if (stepRef.current !== TOTAL_STEPS) return;
