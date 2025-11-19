@@ -8,7 +8,6 @@ generator client {
   provider = "prisma-client-js"
 }
 
-
 model User {
   id            String          @id @default(cuid())
   name          String?
@@ -113,6 +112,8 @@ model Customer {
   email     String?
   phone     String?
   
+  customerRole CustomerRole @default(BUYER)
+  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -120,14 +121,22 @@ model Customer {
   invoices   Invoice[]
   quotations Quotation[]
   sales      Sale[]
+  purchases  Purchase[]  
+  expenses   Expense[]   
 
-  @@unique([userId, email])
+  @@unique([userId, email, customerRole])
   @@index([userId])
+  @@index([userId, customerRole])
   @@index([userId, phone])
 }
 
+enum CustomerRole {
+  BUYER    
+  SUPPLIER 
+}
+
 // ============================================
-// QUOTATIONS (with REFUNDED status)
+// QUOTATIONS
 // ============================================
 
 model Quotation {
@@ -154,7 +163,6 @@ model Quotation {
   vatAmount   Float?
   totalAmount Float
 
-  // Payment tracking
   amountPaid Float @default(0)
   balance    Float
 
@@ -162,7 +170,6 @@ model Quotation {
   validUntil  DateTime?
   issueDate   DateTime        @default(now())
   
-  // Refund tracking
   refundReason  String?
   refundDate    DateTime?
   refundAmount  Float?
@@ -255,7 +262,6 @@ model Sale {
   description String?
   items       Json
   
-  
   subtotal       Float  
   discountType   DiscountType?
   discountValue  Float? 
@@ -267,16 +273,14 @@ model Sale {
   
   deliveryCost       Float @default(0)
   otherSaleExpenses  Json? 
-  totalSaleExpenses  Float @default(0) // Sum of delivery + other expenses
+  totalSaleExpenses  Float @default(0)
 
-  // Payment tracking
   amountPaid Float @default(0)
   balance    Float
 
   status    SaleStatus @default(UNPAID)
   saleDate  DateTime   @default(now())
   
-  // Refund tracking
   refundReason  String?
   refundDate    DateTime?
   refundAmount  Float?
@@ -288,7 +292,6 @@ model Sale {
   customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
   
   payments Payment[]
-  incomeRecords IncomeRecord[]
 
   @@index([userId])
   @@index([userId, status])
@@ -299,7 +302,6 @@ enum DiscountType {
   PERCENTAGE
   FIXED_AMOUNT
 }
-
 
 enum SaleSourceType {
   DIRECT
@@ -319,6 +321,9 @@ model Purchase {
   purchaseNumber String @unique
   userId         String
 
+  customerId  String?
+  customer    Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  
   vendorName  String
   vendorEmail String?
   vendorPhone String?
@@ -348,7 +353,7 @@ model Purchase {
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
   
-  expense   Expense?
+  expense  Expense?
   payments Payment[]
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -356,6 +361,7 @@ model Purchase {
   @@index([userId])
   @@index([userId, status])
   @@index([userId, purchaseDate])
+  @@index([userId, customerId])
 }
 
 enum PurchaseStatus {
@@ -424,27 +430,24 @@ model IncomeRecord {
   mainCategory IncomeMainCategory
   subCategory  IncomeSubCategory
   
-  // Can be negative for refunds
-  grossAmount   Float
-  taxableAmount Float
+  grossAmount   Float  
   
   description String?
   date        DateTime @default(now())
   
-  sourceType IncomeSourceType?
-  sourceId   String?
-  saleId     String?
-  sale       Sale? @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  // NEW: Relations for GAINS tracking
+  fixedAssetId   String?
+  fixedAsset     FixedAsset? @relation(fields: [fixedAssetId], references: [id], onDelete: SetNull)
   
-  employer String?
-  assetId  String?
+  digitalAssetId String?
+  digitalAsset   DigitalAsset? @relation(fields: [digitalAssetId], references: [id], onDelete: SetNull)
   
-  withholdingTax Float? @default(0)
-  vatAmount      Float? @default(0)
+  securityId     String?
+  security       Security? @relation(fields: [securityId], references: [id], onDelete: SetNull)
+  
   
   isRefund        Boolean @default(false)
   refundReason    String?
-  originalRecordId String? // Link to original income being refunded
   
   attachments Json?
   
@@ -458,12 +461,16 @@ model IncomeRecord {
   @@index([userId, subCategory])
   @@index([userId, mainCategory, date])
   @@index([userId, isRefund])
+  @@index([userId, fixedAssetId])
+  @@index([userId, digitalAssetId])
+  @@index([userId, securityId])
 }
 
 enum IncomeMainCategory {
   BUSINESS_PROFIT
   EMPLOYMENT_INCOME
   TRUST_ESTATE_INCOME
+  GAINS  
 }
 
 enum IncomeSubCategory {
@@ -475,9 +482,6 @@ enum IncomeSubCategory {
   RENTAL_INCOME
   INTEREST_INCOME
   DIVIDENDS
-  CAPITAL_GAINS
-  DIGITAL_ASSET_GAINS
-  SECURITIES_GAINS
   PRIZES_AWARDS
   REBATES_DISCOUNTS
   OTHER_BUSINESS_INCOME
@@ -493,48 +497,48 @@ enum IncomeSubCategory {
   // C. Trust/Estate Income
   TRUST_DISTRIBUTION
   ESTATE_DISTRIBUTION
+  
+  // D. GAINS
+  CAPITAL_GAINS        // From Fixed Asset disposal
+  DIGITAL_ASSET_GAINS  // From Digital Asset sales
+  SECURITIES_GAINS     // From Security trades
 }
 
-enum IncomeSourceType {
-  SALE_PAYMENT
-  QUOTATION_PAYMENT
-  DIRECT_ENTRY
-  ASSET_DISPOSAL
-  SECURITY_TRADE
-  EMPLOYMENT
-  PASSIVE
-}
-
-
+// UPDATED: Added customer relation and vendor fields
 model Expense {
   id          String @id @default(cuid())
   userId      String
   
   category    ExpenseCategory
-  subCategory String?
+  subCategory String?  // User can type custom subcategory
   
-  // Can be negative for purchase returns
-  amount      Float
+  amount      Float  // Can be negative for returns
   description String
   date        DateTime @default(now())
   
+  // Tax info - set by system, not user
   isDeductible        Boolean @default(true)
   deductionPercentage Int     @default(100)
   taxCategory         ExpenseTaxCategory?
   
-  // Fixed relation
+  // KEPT: Purchase relation
   purchaseId String?   @unique
   purchase   Purchase? @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
+  
+  // NEW: Customer/Vendor relation
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  
+  // NEW: Vendor information (can be stored even without customer link)
+  vendorName  String?
   
   // Return tracking
   isReturn         Boolean @default(false)
   returnReason     String?
-  originalExpenseId String?
   
   receipt     String?
   attachments Json?
   
-  vendor    String?
   reference String?
   
   createdAt DateTime @default(now())
@@ -547,6 +551,7 @@ model Expense {
   @@index([userId, isDeductible])
   @@index([userId, category, date])
   @@index([userId, isReturn])
+  @@index([userId, customerId])
 }
 
 enum ExpenseCategory {
@@ -588,6 +593,7 @@ enum ExpenseTaxCategory {
   ENTERTAINMENT
 }
 
+// UPDATED: Added incomeRecords relation for GAINS tracking
 model FixedAsset {
   id          String @id @default(cuid())
   userId      String
@@ -605,11 +611,14 @@ model FixedAsset {
   
   disposalDate     DateTime?
   disposalProceeds Float?
-  capitalGain      Float?
+  capitalGain      Float?  // Calculated: disposalProceeds - currentValue
   
   description String?
   status      AssetStatus @default(ACTIVE)
   attachments Json?
+  
+  // NEW: Link to income records for capital gains
+  incomeRecords IncomeRecord[]
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -638,6 +647,7 @@ enum AssetStatus {
   WRITTEN_OFF
 }
 
+// UPDATED: Added incomeRecords relation for GAINS tracking
 model DigitalAsset {
   id          String @id @default(cuid())
   userId      String
@@ -650,7 +660,7 @@ model DigitalAsset {
   averageCost  Float
   currentValue Float
   
-  transactions Json[]
+  transactions Json[]  // Array of buy/sell transactions
   
   totalGains  Float @default(0)
   totalLosses Float @default(0)
@@ -658,6 +668,9 @@ model DigitalAsset {
   description String?
   status      AssetStatus @default(ACTIVE)
   attachments Json?
+  
+  // NEW: Link to income records for gains
+  incomeRecords IncomeRecord[]
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -677,7 +690,7 @@ enum DigitalAssetType {
   OTHER
 }
 
-
+// UPDATED: Added incomeRecords relation for GAINS tracking
 model Security {
   id          String @id @default(cuid())
   userId      String
@@ -691,7 +704,7 @@ model Security {
   averageCost  Float
   currentValue Float
   
-  transactions Json[]
+  transactions Json[]  // Array of buy/sell transactions
   
   dividendsReceived Float @default(0)
   interestReceived  Float @default(0)
@@ -701,6 +714,9 @@ model Security {
   status      AssetStatus @default(ACTIVE)
   description String?
   attachments Json?
+  
+  // NEW: Link to income records for gains
+  incomeRecords IncomeRecord[]
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
