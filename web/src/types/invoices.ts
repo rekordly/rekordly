@@ -5,6 +5,7 @@ import {
   invoiceSchema,
   addItemSchema,
 } from '@/lib/validations/invoices';
+import { PaymentMethod } from '@/types/index';
 
 export type InvoiceItemType = z.infer<typeof invoiceItemSchema>;
 export type InvoiceFormType = z.infer<typeof invoiceSchema>;
@@ -49,7 +50,17 @@ export interface Invoice {
     amountPaid: number;
     balance: number;
     status: string;
-    payments: JSON | null;
+    payments: {
+      id: string;
+      saleId: string;
+      amount: number;
+      paymentDate: string;
+      paymentMethod: PaymentMethod;
+      category: 'EXPENSE' | 'INCOME';
+      payableType: 'SALE';
+      reference?: string | null;
+      notes?: string | null;
+    }[];
   };
 }
 

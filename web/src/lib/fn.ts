@@ -26,14 +26,18 @@ interface StatusConfig {
     | 'danger';
 }
 
+// ============================================================================
+// CONSISTENT STATUS CONFIGURATIONS
+// ============================================================================
+
 export function getStatusConfig(status: InvoiceStatus): StatusConfig {
   const configs: Record<InvoiceStatus, StatusConfig> = {
     DRAFT: {
-      chipColor: 'secondary',
+      chipColor: 'default',
       icon: FileText,
     },
     SENT: {
-      chipColor: 'success',
+      chipColor: 'primary',
       icon: Mail,
     },
     OVERDUE: {
@@ -45,7 +49,7 @@ export function getStatusConfig(status: InvoiceStatus): StatusConfig {
       icon: Ban,
     },
     CONVERTED: {
-      chipColor: 'primary',
+      chipColor: 'secondary',
       icon: ArrowRightLeft,
     },
   };
@@ -58,7 +62,7 @@ export function getQuotationStatusConfig(
 ): StatusConfig {
   const configs: Record<QuotationStatusType, StatusConfig> = {
     DRAFT: {
-      chipColor: 'secondary',
+      chipColor: 'default',
       icon: FileText,
     },
     SENT: {
@@ -70,7 +74,7 @@ export function getQuotationStatusConfig(
       icon: AlertCircle,
     },
     PARTIALLY_PAID: {
-      chipColor: 'warning',
+      chipColor: 'secondary',
       icon: DollarSign,
     },
     PAID: {
@@ -86,8 +90,12 @@ export function getQuotationStatusConfig(
       icon: Ban,
     },
     REFUNDED: {
-      chipColor: 'default',
+      chipColor: 'danger',
       icon: XCircle,
+    },
+    PARTIALLY_REFUNDED: {
+      chipColor: 'warning',
+      icon: RefreshCw,
     },
   };
 
@@ -97,7 +105,7 @@ export function getQuotationStatusConfig(
 export function getSaleStatusConfig(status: SaleStatusType): StatusConfig {
   const configs: Record<SaleStatusType, StatusConfig> = {
     UNPAID: {
-      chipColor: 'danger',
+      chipColor: 'warning',
       icon: AlertCircle,
     },
     PARTIALLY_PAID: {
@@ -109,7 +117,7 @@ export function getSaleStatusConfig(status: SaleStatusType): StatusConfig {
       icon: CheckCircle,
     },
     REFUNDED: {
-      chipColor: 'primary',
+      chipColor: 'danger',
       icon: XCircle,
     },
     PARTIALLY_REFUNDED: {
@@ -138,20 +146,29 @@ export const getAlertColor = (
   }
 };
 
+// ============================================================================
+// CONSISTENT STATUS TAGS
+// ============================================================================
+
 export const QUOTATION_STATUS_TAGS = [
   { label: 'All', value: 'ALL', color: 'default' as const },
-  { label: 'Draft', value: 'DRAFT', color: 'secondary' as const },
+  { label: 'Draft', value: 'DRAFT', color: 'default' as const },
   { label: 'Sent', value: 'SENT', color: 'primary' as const },
   { label: 'Unpaid', value: 'UNPAID', color: 'warning' as const },
   {
     label: 'Partially Paid',
     value: 'PARTIALLY_PAID',
-    color: 'warning' as const,
+    color: 'secondary' as const,
   },
   { label: 'Paid', value: 'PAID', color: 'success' as const },
   { label: 'Expired', value: 'EXPIRED', color: 'danger' as const },
   { label: 'Cancelled', value: 'CANCELLED', color: 'danger' as const },
-  { label: 'Refunded', value: 'REFUNDED', color: 'default' as const },
+  { label: 'Refunded', value: 'REFUNDED', color: 'danger' as const },
+  {
+    label: 'Partially Refunded',
+    value: 'PARTIALLY_REFUNDED',
+    color: 'warning' as const,
+  },
 ];
 
 export const SALE_STATUS_TAGS = [
@@ -167,7 +184,7 @@ export const SALE_STATUS_TAGS = [
   {
     label: 'Partially Refunded',
     value: 'PARTIALLY_REFUNDED',
-    color: 'danger' as const,
+    color: 'warning' as const,
   },
 ];
 
@@ -179,10 +196,14 @@ export const STATUS_TAGS: {
   { label: 'All', value: 'ALL', color: 'default' },
   { label: 'Draft', value: 'DRAFT', color: 'default' },
   { label: 'Sent', value: 'SENT', color: 'primary' },
-  { label: 'Converted', value: 'CONVERTED', color: 'primary' },
+  { label: 'Converted', value: 'CONVERTED', color: 'secondary' },
   { label: 'Overdue', value: 'OVERDUE', color: 'danger' },
   { label: 'Cancelled', value: 'CANCELLED', color: 'danger' },
 ];
+
+// ============================================================================
+// NUMBER GENERATORS
+// ============================================================================
 
 export function generateInvoiceNumber(userId: string): string {
   const date = new Date();
@@ -241,6 +262,30 @@ export function generateReceiptNumber(userId: string): string {
 
   return `SAL-${year}${month}${day}${hours}${minutes}${seconds}-${userIdPart}-${random}`;
 }
+
+export function generatePurchaseNumber(userId: string): string {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+
+  const userIdPart = userId.slice(-4).toUpperCase();
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let random = '';
+
+  for (let i = 0; i < 4; i++) {
+    random += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+
+  return `PUR-${year}${month}${day}${hours}${minutes}${seconds}-${userIdPart}-${random}`;
+}
+
+// ============================================================================
+// FORMATTING UTILITIES
+// ============================================================================
 
 export const toTwoDecimals = (value: number | null): number => {
   if (value === null || value === undefined) return 0;
@@ -344,10 +389,14 @@ export function getStatusColor(status: string): string {
     DRAFT: 'default',
     SENT: 'primary',
     PAID: 'success',
-    PARTIALLY_PAID: 'warning',
+    PARTIALLY_PAID: 'secondary',
     OVERDUE: 'danger',
-    CANCELLED: 'default',
+    CANCELLED: 'danger',
     CONVERTED: 'secondary',
+    UNPAID: 'warning',
+    EXPIRED: 'danger',
+    REFUNDED: 'danger',
+    PARTIALLY_REFUNDED: 'warning',
   };
 
   return statusMap[status] || 'default';

@@ -1,5 +1,3 @@
-// app/api/sales/[id]/refund/route.ts
-
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -7,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { getAuthUser } from '@/lib/utils/server';
 import { RefundSchema } from '@/lib/validations/general';
 import { toTwoDecimals } from '@/lib/fn';
+import { PaymentMethod, StatusType } from '@/types/index';
 
 export async function POST(
   request: NextRequest,
@@ -53,52 +52,100 @@ export async function POST(
       );
     }
 
-    if (existingSale.refundAmount && existingSale.refundAmount > 0) {
+    const refundAmount = toTwoDecimals(data.refundAmount);
+
+    // Validate refund amount doesn't exceed amount paid
+    if (refundAmount > existingSale.amountPaid) {
       return NextResponse.json(
-        { message: 'This sale has already been refunded' },
+        { message: 'Refund amount cannot exceed amount paid' },
         { status: 400 }
       );
     }
 
-    // Full refund amount is the amount paid
-    const refundAmount = toTwoDecimals(existingSale.amountPaid);
+    // Check if adding this refund would exceed total paid
+    const existingRefundAmount = existingSale.refundAmount || 0;
+    const totalRefundAmount = toTwoDecimals(
+      existingRefundAmount + refundAmount
+    );
 
-    // Update sale with refund information
-    const updatedSale = await prisma.sale.update({
-      where: { id: saleId },
-      data: {
-        refundAmount,
-        refundReason: data.refundReason,
-        refundDate: data.refundDate ? new Date(data.refundDate) : new Date(),
-        status: 'REFUNDED',
-        balance: toTwoDecimals(existingSale.totalAmount), // Reset balance to total
-        amountPaid: 0, // Reset amount paid to 0
-      },
-      include: {
-        customer: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            phone: true,
+    if (totalRefundAmount > existingSale.amountPaid) {
+      return NextResponse.json(
+        { message: 'Total refund amount cannot exceed amount paid' },
+        { status: 400 }
+      );
+    }
+
+    let status: StatusType;
+
+    if (totalRefundAmount === existingSale.amountPaid) {
+      status = 'REFUNDED';
+    } else {
+      status = 'PARTIALLY_REFUNDED'; // Has been partially refunded
+    }
+
+    const refundDate = data.refundDate ? new Date(data.refundDate) : new Date();
+
+    const result = await prisma.$transaction(
+      async tx => {
+        const refundPayment = await tx.payment.create({
+          data: {
+            userId,
+            payableType: 'SALE',
+            saleId: saleId,
+            amount: refundAmount,
+            paymentDate: refundDate,
+            paymentMethod: (data.paymentMethod ||
+              'BANK_TRANSFER') as PaymentMethod,
+            category: 'EXPENSE',
+            reference: data.reference || null,
+            notes: data.refundReason
+              ? `Refund for sale ${existingSale.receiptNumber}: ${data.refundReason}`
+              : `Refund for sale ${existingSale.receiptNumber}`,
           },
-        },
-        payments: {
-          orderBy: { paymentDate: 'desc' },
-        },
+        });
+
+        const updatedSale = await tx.sale.update({
+          where: { id: saleId },
+          data: {
+            refundAmount: totalRefundAmount,
+            refundReason: data.refundReason,
+            refundDate,
+            status,
+          },
+          include: {
+            customer: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                phone: true,
+              },
+            },
+            payments: {
+              orderBy: { paymentDate: 'desc' },
+            },
+          },
+        });
+
+        return { sale: updatedSale, payment: refundPayment };
       },
-    });
+      {
+        maxWait: 10000,
+        timeout: 10000,
+      }
+    );
 
     return NextResponse.json(
       {
         message: 'Refund processed successfully',
         success: true,
-        sale: updatedSale,
+        sale: result.sale,
+        payment: result.payment,
       },
       { status: 200 }
     );
   } catch (error) {
-    console.error('Refund error:', error);
+    console.error('Sale refund error:', error);
 
     if (error instanceof Error && error.message.includes('Unauthorized')) {
       return NextResponse.json({ message: error.message }, { status: 401 });

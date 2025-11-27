@@ -208,21 +208,15 @@ export const useQuotationStore = create<QuotationStore>()(
       },
 
       deleteQuotation: async (id: string) => {
-        try {
-          await api.delete(`/quotations/${id}`);
-          const { allQuotations } = get();
-          const updatedQuotations = allQuotations.filter(
-            quot => quot.id !== id
-          );
+        await api.delete(`/quotations/${id}`);
+        const { allQuotations } = get();
+        const updatedQuotations = allQuotations.filter(quot => quot.id !== id);
 
-          set({
-            allQuotations: updatedQuotations,
-            lastFetchTime: Date.now(),
-          });
-          get().applyFilters();
-        } catch (error) {
-          throw error;
-        }
+        set({
+          allQuotations: updatedQuotations,
+          lastFetchTime: Date.now(),
+        });
+        get().applyFilters();
       },
 
       clearSearch: () => {

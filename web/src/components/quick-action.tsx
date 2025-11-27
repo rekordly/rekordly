@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Button } from '@heroui/button';
 import { Plus, Receipt, TrendingDown, TrendingUp } from 'lucide-react';
 
-import { CreateInvoiceModal } from '@/components/modals/CreateInvoiceModal';
+import { CreateInvoiceDrawer } from '@/components/drawer/CreateInvoiceDrawer';
 import { useInvoiceStore } from '@/store/invoiceStore';
 
 interface ActionItem {
@@ -108,7 +108,7 @@ export function QuickAction() {
         <Plus className="w-6 h-6 text-white" />
       </Button>
 
-      <CreateInvoiceModal
+      <CreateInvoiceDrawer
         isOpen={showInvoiceModal}
         onClose={() => setShowInvoiceModal(false)}
         onSuccess={async () => {

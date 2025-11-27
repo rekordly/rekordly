@@ -14,6 +14,12 @@ import QuotationItemsSection from '@/components/dashboard/quotations/single/Quot
 import QuotationCustomerSection from '@/components/dashboard/quotations/single/QuotationCustomerSection';
 import QuotationPaymentSection from '@/components/dashboard/quotations/single/QuotationPaymentSection';
 
+import { PaymentSection } from '@/components/dashboard/PaymentSection';
+import { AddPaymentModal } from '@/components/modals/AddPaymentModal';
+import { RefundModal } from '@/components/modals/RefundModal';
+import { CustomerInfoSection } from '@/components/dashboard/CustomerInfoSection';
+import { RefundInfoSection } from '@/components/dashboard/RefundInfoSection';
+
 export default function SingleQuotation() {
   const params = useParams();
   const router = useRouter();
@@ -30,7 +36,8 @@ export default function SingleQuotation() {
   const quotation = useQuotationStore(state =>
     state.allQuotations.find(quot => quot.quotationNumber === quotationNumber)
   );
-  const { fetchQuotations, isInitialLoading } = useQuotationStore();
+  const { fetchQuotations, updateQuotation, isInitialLoading } =
+    useQuotationStore();
 
   const [notFound, setNotFound] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -111,6 +118,24 @@ export default function SingleQuotation() {
     });
   };
 
+  const handleRefundSuccess = (data: any) => {
+    if (data.quotation && quotation) {
+      updateQuotation(quotation.id, data.quotation);
+    }
+  };
+
+  const handlePaymentSuccess = (data: any) => {
+    if (data.quotation && quotation) {
+      updateQuotation(quotation.id, data.quotation);
+    }
+
+    if (data.entity && quotation) {
+      updateQuotation(quotation.id, data.entity);
+    }
+  };
+
+  const handlePaymentUpdate = () => {};
+
   const showSkeleton = !quotation && (isInitialLoading || isFetching);
 
   if (showSkeleton) {
@@ -156,6 +181,14 @@ export default function SingleQuotation() {
     );
   }
 
+  const canRefund =
+    quotation.amountPaid > 0 &&
+    (quotation.status === 'PAID' || quotation.status === 'PARTIALLY_PAID') &&
+    !quotation.refundAmount;
+  const refunded =
+    quotation.status === 'REFUNDED' ||
+    quotation.status === 'PARTIALLY_REFUNDED';
+
   return (
     <div className="max-w-7xl mx-auto">
       <QuotationHeader
@@ -168,23 +201,75 @@ export default function SingleQuotation() {
       <div className="lg:grid lg:grid-cols-3 lg:gap-6 mt-6 lg:mt-0">
         <div className="lg:col-span-2 space-y-6">
           <QuotationInfoSection quotation={quotation} />
+          <RefundInfoSection
+            refundAmount={quotation.refundAmount || 0}
+            refundDate={quotation.refundDate}
+            refundReason={quotation.refundReason}
+            status={quotation.status}
+          />
           <QuotationItemsSection quotation={quotation} />
-
           {quotation.payments && quotation.payments.length > 0 && (
             <div className="lg:hidden">
-              <QuotationPaymentSection quotation={quotation} />
+              <PaymentSection
+                totalAmount={quotation.totalAmount}
+                amountPaid={quotation.amountPaid}
+                balance={quotation.balance}
+                payments={quotation.payments}
+                showActions={true}
+                onPaymentUpdate={handlePaymentUpdate}
+                entityType="quotation"
+                entityId={quotation.id}
+              />
             </div>
           )}
         </div>
 
         <div className="space-y-6 mt-6 lg:mt-0">
-          <QuotationCustomerSection quotation={quotation} />
+          {/* <QuotationCustomerSection quotation={quotation} /> */}
+          <CustomerInfoSection
+            name={quotation.customer?.name || quotation.customerName}
+            email={quotation.customer?.email || quotation.customerEmail}
+            phone={quotation.customer?.phone || quotation.customerPhone}
+            // title="Billed To"
+          />
 
           <div className="hidden lg:block">
-            <QuotationPaymentSection quotation={quotation} />
+            <PaymentSection
+              totalAmount={quotation.totalAmount}
+              amountPaid={quotation.amountPaid}
+              balance={quotation.balance}
+              payments={quotation.payments}
+              showActions={true}
+              onPaymentUpdate={handlePaymentUpdate}
+              entityType="quotation"
+              entityId={quotation.id}
+            />
           </div>
 
-          <AddQuotationPayment quotation={quotation} />
+          {/* Action Buttons */}
+          <div className="space-y-3">
+            {quotation.status !== 'PAID' && !refunded && (
+              <AddPaymentModal
+                entityType="quotation"
+                entityId={quotation.id}
+                entityNumber={quotation.quotationNumber}
+                totalAmount={quotation.totalAmount}
+                amountPaid={quotation.amountPaid}
+                balance={quotation.balance}
+                onSuccess={handlePaymentSuccess}
+              />
+            )}
+            {canRefund && (
+              <RefundModal
+                amountPaid={quotation.amountPaid}
+                itemId={quotation.id}
+                itemNumber={quotation.quotationNumber}
+                itemType="quotation"
+                totalAmount={quotation.totalAmount}
+                onSuccess={handleRefundSuccess}
+              />
+            )}
+          </div>
         </div>
       </div>
     </div>

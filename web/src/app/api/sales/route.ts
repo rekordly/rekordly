@@ -120,6 +120,9 @@ export async function POST(request: NextRequest) {
           status,
           saleDate,
         },
+        include: {
+          customer: true,
+        },
       });
 
       // Create payment record if amount was paid
@@ -139,13 +142,26 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      return { sale, payment };
+      const { customer } = sale;
+      const customerResponse = customer
+        ? {
+            id: customer.id,
+            userId: customer.userId,
+            name: customer.name,
+            email: customer.email,
+            phone: customer.phone,
+            customerRole: customer.customerRole,
+          }
+        : null;
+
+      return { sale, payment, customerResponse };
     });
 
     return NextResponse.json(
       {
         message: 'Sale created successfully',
         success: true,
+        customer: result.customerResponse,
         sale: result.sale,
         payment: result.payment,
       },

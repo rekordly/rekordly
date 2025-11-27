@@ -1,15 +1,17 @@
 import { z } from 'zod';
 
+export const PaymentMethodSchema = z.enum([
+  'CASH',
+  'BANK_TRANSFER',
+  'CARD',
+  'MOBILE_MONEY',
+  'CHEQUE',
+  'OTHER',
+]);
+
 export const addPaymentSchema = z.object({
   amountPaid: z.number().nonnegative('Amount cannot be negative'),
-  paymentMethod: z.enum([
-    'CASH',
-    'BANK_TRANSFER',
-    'CARD',
-    'MOBILE_MONEY',
-    'CHEQUE',
-    'OTHER',
-  ]),
+  paymentMethod: PaymentMethodSchema,
   reference: z.string().optional(),
   notes: z.string().optional(),
   paymentDate: z.union([z.string(), z.date()]),
@@ -26,15 +28,38 @@ export const customerSchema = z.object({
         'Phone number must contain only digits (optionally starting with +) and be 8–15 digits long',
     }),
   email: z.string().email('Invalid email address').optional().or(z.literal('')),
+  customerRole: z.enum(['BUYER', 'SUPPLIER']).optional(),
 });
+
+// lib/validations/general.ts
 
 export const RefundSchema = z
   .object({
+    refundAmount: z
+      .number({
+        message: 'Refund amount must be a number',
+      })
+      .positive('Refund amount must be greater than 0')
+      .min(0.01, 'Refund amount must be at least ₦0.01'),
     refundReason: z
-      .string()
+      .string({
+        message: 'Refund reason is required',
+      })
       .min(3, 'Refund reason must be at least 3 characters')
       .max(500, 'Refund reason must not exceed 500 characters'),
     refundDate: z.union([z.string(), z.date()]).default(() => new Date()),
+    paymentMethod: z
+      .enum([
+        'CASH',
+        'BANK_TRANSFER',
+        'CARD',
+        'MOBILE_MONEY',
+        'CHEQUE',
+        'OTHER',
+      ])
+      .optional()
+      .default('BANK_TRANSFER'),
+    reference: z.string().optional(),
   })
   .transform(data => ({
     ...data,
@@ -43,6 +68,8 @@ export const RefundSchema = z
         ? data.refundDate
         : new Date(data.refundDate),
   }));
+
+export type RefundType = z.infer<typeof RefundSchema>;
 
 // Edit Payment Schema
 
@@ -67,6 +94,7 @@ export const QuotationStatusSchema = z.enum([
   'EXPIRED',
   'CANCELLED',
   'REFUNDED',
+  'PARTIALLY_REFUNDED',
 ]);
 
 export const SaleSourceTypeSchema = z.enum(['DIRECT', 'FROM_INVOICE']);
@@ -90,15 +118,6 @@ export const PurchaseStatusSchema = z.enum([
 export const PayableTypeSchema = z.enum(['QUOTATION', 'SALE', 'PURCHASE']);
 
 export const PaymentCategorySchema = z.enum(['INCOME', 'EXPENSE']);
-
-export const PaymentMethodSchema = z.enum([
-  'CASH',
-  'BANK_TRANSFER',
-  'CARD',
-  'MOBILE_MONEY',
-  'CHEQUE',
-  'OTHER',
-]);
 
 export const IncomeMainCategorySchema = z.enum([
   'BUSINESS_PROFIT',

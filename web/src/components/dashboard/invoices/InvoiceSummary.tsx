@@ -55,7 +55,7 @@ export function InvoiceSummary() {
             </p>
           ) : (
             <>
-              <div className="space-y-2">
+              {/* <div className="space-y-2">
                 {items.map((item: InvoiceItemType) => (
                   <div
                     key={item.id}
@@ -92,7 +92,7 @@ export function InvoiceSummary() {
                     </div>
                   </div>
                 ))}
-              </div>
+              </div> */}
 
               <div className="pt-2">
                 <Controller
@@ -112,7 +112,9 @@ export function InvoiceSummary() {
               <div className="flex justify-end pt-2">
                 <div className="w-full md:w-1/3 space-y-3">
                   <div className="flex justify-between text-sm">
-                    <span className="text-default-600">Subtotal:</span>
+                    <span className="text-default-600">
+                      Items ({items.length}):
+                    </span>
                     <span className="font-semibold">
                       {formatCurrency(subtotal)}
                     </span>

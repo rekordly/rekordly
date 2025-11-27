@@ -3,8 +3,8 @@ import { Card, CardBody, Button } from '@heroui/react';
 import { Divider } from '@heroui/divider';
 import { useForm, useFormContext } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Plus } from 'lucide-react';
-import { useRef } from 'react';
+import { Plus, Edit2, Trash2 } from 'lucide-react';
+import { useRef, useState } from 'react';
 import { addToast } from '@heroui/react';
 
 import { TextInput, NumberInput } from '@/components/ui/Input';
@@ -15,6 +15,9 @@ import { AddMaterialItemType, MaterialItemType } from '@/types/quotations';
 export function AddMaterialSection() {
   const { setValue, watch } = useFormContext();
   const materials = watch('materials') || [];
+  const [editingMaterialId, setEditingMaterialId] = useState<number | null>(
+    null
+  );
 
   const {
     control: materialControl,
@@ -25,8 +28,6 @@ export function AddMaterialSection() {
     resolver: zodResolver(addMaterialItemSchema),
     defaultValues: {
       name: '',
-      // materialQuantity: 1,
-      // materialRate: 0,
     },
     mode: 'onChange',
   });
@@ -35,30 +36,86 @@ export function AddMaterialSection() {
   const materialRate = watchItem('unitPrice') ?? 0;
   const idCounter = useRef(1);
 
-  // add item handler
+  // Edit material handler
+  const handleEditMaterial = (material: MaterialItemType) => {
+    setEditingMaterialId(material.id);
+    resetItemForm({
+      name: material.name,
+      qty: material.qty,
+      unitPrice: material.unitPrice,
+    });
+  };
+
+  // Remove material handler
+  const removeMaterial = (id: number) => {
+    const updatedMaterials = materials.filter(
+      (material: MaterialItemType) => material.id !== id
+    );
+    setValue('materials', updatedMaterials, { shouldValidate: true });
+
+    addToast({
+      title: 'Material Removed',
+      description: 'Material has been removed from the quotation',
+      color: 'success',
+    });
+  };
+
+  // Add or update material handler
   const onAddMaterial = (data: AddMaterialItemType) => {
-    const newItem: MaterialItemType = {
-      id: idCounter.current++,
-      name: data.name,
-      qty: data.qty,
-      unitPrice: data.unitPrice,
-      total: data.qty * data.unitPrice,
-    };
+    if (editingMaterialId !== null) {
+      // Update existing material
+      const updatedMaterials = materials.map((material: MaterialItemType) =>
+        material.id === editingMaterialId
+          ? {
+              ...material,
+              name: data.name,
+              qty: data.qty,
+              unitPrice: data.unitPrice,
+              total: data.qty * data.unitPrice,
+            }
+          : material
+      );
 
-    // Update the materials in the main form
-    setValue('materials', [...materials, newItem]);
+      setValue('materials', updatedMaterials, { shouldValidate: true });
+      setEditingMaterialId(null);
 
-    // Reset the item form
+      addToast({
+        title: 'Material Updated',
+        description: 'Material has been updated successfully',
+        color: 'success',
+      });
+    } else {
+      // Add new material
+      const newItem: MaterialItemType = {
+        id: idCounter.current++,
+        name: data.name,
+        qty: data.qty,
+        unitPrice: data.unitPrice,
+        total: data.qty * data.unitPrice,
+      };
+
+      setValue('materials', [...materials, newItem]);
+
+      addToast({
+        title: 'Material Added',
+        description: 'Material has been added to the quotation',
+        color: 'success',
+      });
+    }
+
     resetItemForm({
       name: '',
       qty: 1,
       unitPrice: 0,
     });
+  };
 
-    addToast({
-      title: 'Material Added',
-      description: 'Material has been added to the invoice',
-      color: 'success',
+  const handleCancelEdit = () => {
+    setEditingMaterialId(null);
+    resetItemForm({
+      name: '',
+      qty: 1,
+      unitPrice: 0,
     });
   };
 
@@ -117,17 +174,102 @@ export function AddMaterialSection() {
                 </span>
               </div>
 
-              <Button
-                color="primary"
-                startContent={<Plus className="w-4 h-4" />}
-                type="button"
-                variant="flat"
-                onPress={() => handleAddMaterialSubmit(onAddMaterial)()}
-              >
-                Add Material
-              </Button>
+              <div className="flex gap-2">
+                {editingMaterialId !== null && (
+                  <Button
+                    color="default"
+                    size="sm"
+                    type="button"
+                    variant="flat"
+                    onPress={handleCancelEdit}
+                  >
+                    Cancel
+                  </Button>
+                )}
+                <Button
+                  color="primary"
+                  startContent={
+                    editingMaterialId !== null ? (
+                      <Edit2 className="w-4 h-4" />
+                    ) : (
+                      <Plus className="w-4 h-4" />
+                    )
+                  }
+                  type="button"
+                  variant="flat"
+                  onPress={() => handleAddMaterialSubmit(onAddMaterial)()}
+                >
+                  {editingMaterialId !== null
+                    ? 'Update Material'
+                    : 'Add Material'}
+                </Button>
+              </div>
             </div>
           </div>
+
+          {/* Display added materials */}
+          {materials.length > 0 && (
+            <>
+              <Divider />
+              <div className="space-y-2">
+                <h5 className="text-xs font-medium text-default-500 uppercase">
+                  Added Materials ({materials.length})
+                </h5>
+                <div className="space-y-2">
+                  {materials.map((material: MaterialItemType) => (
+                    <div
+                      key={material.id}
+                      className={`flex items-center justify-between p-3 rounded-lg transition-colors ${
+                        editingMaterialId === material.id
+                          ? 'bg-primary-50 border border-primary'
+                          : 'bg-default-50 hover:bg-default-100'
+                      }`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">
+                          {material.name}
+                        </p>
+                        <p className="text-xs text-default-500">
+                          {material.qty} × {formatCurrency(material.unitPrice)}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        <span className="text-sm font-medium">
+                          {formatCurrency(material.total)}
+                        </span>
+                        <div className="flex gap-1">
+                          <Button
+                            isIconOnly
+                            color={
+                              editingMaterialId === material.id
+                                ? 'primary'
+                                : 'default'
+                            }
+                            size="sm"
+                            type="button"
+                            variant="light"
+                            onPress={() => handleEditMaterial(material)}
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            isIconOnly
+                            color="danger"
+                            size="sm"
+                            type="button"
+                            variant="light"
+                            onPress={() => removeMaterial(material.id)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </CardBody>
     </Card>

@@ -9,7 +9,7 @@ export default function AuthLayout({
   return (
     <div className="w-full max-h-screen flex flex-col md:flex-row overflow-hidden">
       <div className="hidden md:flex flex-1 max-h-screen overflow-hidden">
-        <Image className="object-fill" src="/illustration.svg" />
+        <Image className="object-fill" src="/illustration.svg" alt="Rekordly" />
       </div>
 
       <div className="w-full md:w-5/12 overflow-y-auto">{children}</div>

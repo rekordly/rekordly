@@ -194,8 +194,6 @@ export async function DELETE(
     const params = await props.params;
     const { userId } = await getAuthUser(request);
 
-    console.log(params);
-
     const quotation = await prisma.quotation.findFirst({
       where: {
         id: params.id,
@@ -210,14 +208,6 @@ export async function DELETE(
       );
     }
 
-    // Don't allow deleting invoices that have been converted to sales
-    // if (invoice.saleId) {
-    //   return NextResponse.json(
-    //     { message: 'Cannot delete invoice that has been converted to sale' },
-    //     { status: 400 }
-    //   );
-    // }
-
     await prisma.$transaction([
       prisma.payment.deleteMany({
         where: { quotationId: params.id },
@@ -225,21 +215,10 @@ export async function DELETE(
       prisma.quotation.delete({
         where: { id: params.id },
       }),
-      prisma.incomeRecord.deleteMany({
-        where: { sourceId: params.id },
-      }),
     ]);
 
     return NextResponse.json(
       { message: 'Quotation deleted successfully', success: true },
-      { status: 200 }
-    );
-
-    return NextResponse.json(
-      {
-        message: 'Quotation deleted successfully',
-        success: true,
-      },
       { status: 200 }
     );
   } catch (error) {

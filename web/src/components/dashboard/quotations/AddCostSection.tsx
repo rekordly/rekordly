@@ -4,18 +4,20 @@ import { Card, CardBody, Button, Checkbox } from '@heroui/react';
 import { Divider } from '@heroui/divider';
 import { useForm, useFormContext } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Plus } from 'lucide-react';
+import { Plus, Edit2, Trash2 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { addToast } from '@heroui/react';
 
 import { TextInput, NumberInput } from '@/components/ui/Input';
 import { AddOtherCostInput, OtherCostType } from '@/types/quotations';
 import { addOtherCostSchema } from '@/lib/validations/quotations';
+import { formatCurrency } from '@/lib/fn';
 
 export function AddCostSection() {
   const { setValue, watch, control } = useFormContext();
   const otherCosts = watch('otherCosts') || [];
   const [showOtherCosts, setShowOtherCosts] = useState(false);
+  const [editingCostId, setEditingCostId] = useState<number | null>(null);
 
   const {
     control: otherCostControl,
@@ -33,30 +35,99 @@ export function AddCostSection() {
 
   const idCounter = useRef(1);
 
+  // Edit cost handler
+  const handleEditCost = (cost: OtherCostType) => {
+    setEditingCostId(cost.id);
+    resetCostForm({
+      description: cost.description,
+      amount: cost.amount,
+    });
+  };
+
+  // Remove cost handler
+  const removeCost = (id: number) => {
+    const updatedCosts = otherCosts.filter(
+      (cost: OtherCostType) => cost.id !== id
+    );
+    setValue('otherCosts', updatedCosts, { shouldValidate: true });
+
+    const newTotal = updatedCosts.reduce(
+      (sum: number, cost: OtherCostType) => sum + cost.amount,
+      0
+    );
+    setValue('otherCostsTotal', newTotal, { shouldValidate: true });
+
+    addToast({
+      title: 'Cost Removed',
+      description: 'Cost has been removed from the quotation',
+      color: 'success',
+    });
+  };
+
+  // Add or update cost handler
   const onAddCost = (data: AddOtherCostInput) => {
-    const newCost: OtherCostType = {
-      id: idCounter.current++,
-      description: data.description,
-      amount: data.amount,
-    };
+    if (editingCostId !== null) {
+      // Update existing cost
+      const updatedCosts = otherCosts.map((cost: OtherCostType) =>
+        cost.id === editingCostId
+          ? {
+              ...cost,
+              description: data.description,
+              amount: data.amount,
+            }
+          : cost
+      );
 
-    const updatedCosts = [...otherCosts, newCost];
+      setValue('otherCosts', updatedCosts, { shouldValidate: true });
 
-    setValue('otherCosts', updatedCosts);
+      const newTotal = updatedCosts.reduce(
+        (sum: number, cost: OtherCostType) => sum + cost.amount,
+        0
+      );
+      setValue('otherCostsTotal', newTotal, { shouldValidate: true });
 
-    const newTotal = updatedCosts.reduce((sum, cost) => sum + cost.amount, 0);
+      setEditingCostId(null);
 
-    setValue('otherCostsTotal', newTotal);
+      addToast({
+        title: 'Cost Updated',
+        description: 'Cost has been updated successfully',
+        color: 'success',
+      });
+    } else {
+      // Add new cost
+      const newCost: OtherCostType = {
+        id: idCounter.current++,
+        description: data.description,
+        amount: data.amount,
+      };
+
+      const updatedCosts = [...otherCosts, newCost];
+      setValue('otherCosts', updatedCosts, { shouldValidate: true });
+
+      const newTotal = updatedCosts.reduce(
+        (sum: number, cost: OtherCostType) => sum + cost.amount,
+        0
+      );
+      setValue('otherCostsTotal', newTotal, { shouldValidate: true });
+
+      addToast({
+        title: 'Other Cost Added',
+        description: 'Cost has been added to the quotation',
+        color: 'success',
+      });
+    }
 
     resetCostForm({
       description: '',
       amount: 0,
     });
+  };
 
-    addToast({
-      title: 'Other Cost Added',
-      description: 'Cost has been added to the quotation',
-      color: 'success',
+  const handleCancelEdit = () => {
+    setEditingCostId(null);
+    resetCostForm({
+      description: '',
+      amount: 0,
     });
   };
 
@@ -127,17 +198,96 @@ export function AddCostSection() {
                 </div>
               </div>
 
-              <Button
-                fullWidth
-                className="mt-auto"
-                color="primary"
-                startContent={<Plus size={16} />}
-                variant="flat"
-                onPress={() => handleAddCostSubmit(onAddCost)()}
-              >
-                Add Cost
-              </Button>
+              <div className="flex gap-2">
+                {editingCostId !== null && (
+                  <Button
+                    color="default"
+                    size="sm"
+                    type="button"
+                    variant="flat"
+                    onPress={handleCancelEdit}
+                  >
+                    Cancel
+                  </Button>
+                )}
+                <Button
+                  fullWidth
+                  color="primary"
+                  startContent={
+                    editingCostId !== null ? (
+                      <Edit2 size={16} />
+                    ) : (
+                      <Plus size={16} />
+                    )
+                  }
+                  variant="flat"
+                  onPress={() => handleAddCostSubmit(onAddCost)()}
+                >
+                  {editingCostId !== null ? 'Update Cost' : 'Add Cost'}
+                </Button>
+              </div>
             </div>
+
+            {/* Display added costs */}
+            {otherCosts.length > 0 && (
+              <>
+                <Divider />
+                <div className="space-y-2">
+                  <h5 className="text-xs font-medium text-default-500 uppercase">
+                    Added Costs ({otherCosts.length})
+                  </h5>
+                  <div className="space-y-2">
+                    {otherCosts.map((cost: OtherCostType) => (
+                      <div
+                        key={cost.id}
+                        className={`flex items-center justify-between p-3 rounded-lg transition-colors ${
+                          editingCostId === cost.id
+                            ? 'bg-primary-50 border border-primary'
+                            : 'bg-default-50 hover:bg-default-100'
+                        }`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">
+                            {cost.description}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-3 flex-shrink-0">
+                          <span className="text-sm font-medium">
+                            {formatCurrency(cost.amount)}
+                          </span>
+                          <div className="flex gap-1">
+                            <Button
+                              isIconOnly
+                              color={
+                                editingCostId === cost.id
+                                  ? 'primary'
+                                  : 'default'
+                              }
+                              size="sm"
+                              type="button"
+                              variant="light"
+                              onPress={() => handleEditCost(cost)}
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              isIconOnly
+                              color="danger"
+                              size="sm"
+                              type="button"
+                              variant="light"
+                              onPress={() => removeCost(cost.id)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
           </>
         )}
       </CardBody>

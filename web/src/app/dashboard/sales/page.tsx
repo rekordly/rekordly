@@ -10,7 +10,7 @@ import { Plus, Receipt, Search, X, RefreshCw } from 'lucide-react';
 
 import StatCard from '@/components/ui/StatCard';
 import { SaleCard } from '@/components/ui/SalesCard';
-import { CreateSaleDrawer } from '@/components/modals/CreateSaleDrawer';
+import { CreateSaleDrawer } from '@/components/drawer/CreateSaleDrawer';
 import { useSaleStore } from '@/store/saleStore';
 import { formatCurrency, formatDate, SALE_STATUS_TAGS } from '@/lib/fn';
 import { CardSkeleton } from '@/components/skeleton/CardSkeleton';

@@ -9,6 +9,7 @@ import {
   SaleItemSchema,
 } from '@/lib/validations/sales';
 import { SaleStatusSchema } from '@/lib/validations/general';
+import { PaymentMethod } from '@/types/index';
 
 // Inferred types from schemas
 export type CustomerAndSaleDetailsType = z.infer<
@@ -86,14 +87,8 @@ export interface Sale {
     saleId: string;
     amount: number;
     paymentDate: string;
-    paymentMethod:
-      | 'CASH'
-      | 'BANK_TRANSFER'
-      | 'CARD'
-      | 'MOBILE_MONEY'
-      | 'CHEQUE'
-      | 'OTHER';
-    category: 'INCOME';
+    paymentMethod: PaymentMethod;
+    category: 'EXPENSE' | 'INCOME';
     payableType: 'SALE';
     reference?: string | null;
     notes?: string | null;

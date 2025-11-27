@@ -7,7 +7,7 @@ import {
   addMaterialItemSchema,
   addOtherCostSchema,
 } from '@/lib/validations/quotations';
-import { QuotationStatusType } from '@/types/index';
+import { QuotationStatusType, PaymentMethod } from '@/types/index';
 
 export type MaterialItemType = z.infer<typeof MaterialItemSchema>;
 export type AddMaterialItemType = z.infer<typeof addMaterialItemSchema>;
@@ -65,7 +65,9 @@ export interface Quotation {
     quotationId: string;
     amount: number;
     paymentDate: string;
-    paymentMethod: string;
+    paymentMethod: PaymentMethod;
+    category: 'EXPENSE' | 'INCOME';
+    payableType: 'QUOTATION';
     reference?: string | null;
     notes?: string | null;
   }[];

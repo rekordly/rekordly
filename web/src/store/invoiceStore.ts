@@ -200,19 +200,15 @@ export const useInvoiceStore = create<InvoiceStore>()(
       },
 
       deleteInvoice: async (id: string) => {
-        try {
-          await api.delete(`/invoices/${id}`);
-          const { allInvoices } = get();
-          const updatedInvoices = allInvoices.filter(inv => inv.id !== id);
+        await api.delete(`/invoices/${id}`);
+        const { allInvoices } = get();
+        const updatedInvoices = allInvoices.filter(inv => inv.id !== id);
 
-          set({
-            allInvoices: updatedInvoices,
-            lastFetchTime: Date.now(),
-          });
-          get().applyFilters();
-        } catch (error) {
-          throw error;
-        }
+        set({
+          allInvoices: updatedInvoices,
+          lastFetchTime: Date.now(),
+        });
+        get().applyFilters();
       },
 
       clearSearch: () => {

@@ -13,6 +13,10 @@ import { SaleCustomerSection } from '@/components/dashboard/sales/single/SaleCus
 import { SalePaymentSection } from '@/components/dashboard/sales/single/SalePaymentSection';
 import { AddSalePayment } from '@/components/dashboard/sales/single/AddSalePayment';
 import { RefundModal } from '@/components/modals/RefundModal';
+import { PaymentSection } from '@/components/dashboard/PaymentSection';
+import { EditPaymentModal } from '@/components/modals/EditPaymentModal';
+import { CustomerInfoSection } from '@/components/dashboard/CustomerInfoSection';
+import { RefundInfoSection } from '@/components/dashboard/RefundInfoSection';
 
 export default function SingleSale() {
   const params = useParams();
@@ -171,25 +175,49 @@ export default function SingleSale() {
       <div className="lg:grid lg:grid-cols-3 lg:gap-6 mt-6 lg:mt-0">
         <div className="lg:col-span-2 space-y-6">
           <SaleInfoSection sale={sale} />
+          <RefundInfoSection
+            refundAmount={sale.refundAmount || 0}
+            refundDate={sale.refundDate}
+            refundReason={sale.refundReason}
+            status={sale.status}
+          />
           <SaleItemsSection sale={sale} />
 
           {sale.payments && sale.payments.length > 0 && (
             <div className="lg:hidden">
-              <SalePaymentSection
-                sale={sale}
+              <PaymentSection
+                totalAmount={sale.totalAmount}
+                amountPaid={sale.amountPaid}
+                balance={sale.balance}
+                payments={sale.payments}
+                showActions={true}
                 onPaymentUpdate={handlePaymentUpdate}
+                entityType="sale"
+                entityId={sale.id}
               />
             </div>
           )}
         </div>
 
         <div className="space-y-6 mt-6 lg:mt-0">
-          <SaleCustomerSection sale={sale} />
+          {/* <SaleCustomerSection sale={sale} /> */}
+          <CustomerInfoSection
+            name={sale.customer?.name || sale.customerName}
+            email={sale.customer?.email || sale.customerEmail}
+            phone={sale.customer?.phone || sale.customerPhone}
+            // title="Billed To"
+          />
 
           <div className="hidden lg:block">
-            <SalePaymentSection
-              sale={sale}
+            <PaymentSection
+              totalAmount={sale.totalAmount}
+              amountPaid={sale.amountPaid}
+              balance={sale.balance}
+              payments={sale.payments}
+              showActions={true}
               onPaymentUpdate={handlePaymentUpdate}
+              entityType="sale"
+              entityId={sale.id}
             />
           </div>
 

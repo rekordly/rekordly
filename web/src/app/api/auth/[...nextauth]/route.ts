@@ -250,7 +250,7 @@ export const authOptions: AuthOptions = {
               email: user.email!,
               name: user.name ?? '',
               image: user.image,
-              emailVerified: new Date() || null,
+              emailVerified: new Date(),
               onboarded: false,
             },
           });

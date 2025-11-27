@@ -10,7 +10,7 @@ import { Plus, FileText, Search, X, RefreshCw } from 'lucide-react';
 
 import StatCard from '@/components/ui/StatCard';
 import { QuotationCard } from '@/components/ui/QuotationCard';
-import { CreateQuotationModal } from '@/components/modals/CreateQuotationModal';
+import { CreateQuotationDrawer } from '@/components/drawer/CreateQuotationDrawer';
 import { useQuotationStore } from '@/store/quotationStore';
 import { formatCurrency, formatDate, QUOTATION_STATUS_TAGS } from '@/lib/fn';
 import { CardSkeleton } from '@/components/skeleton/CardSkeleton';
@@ -323,7 +323,7 @@ export default function QuotationPage() {
         </div>
       </div>
 
-      <CreateQuotationModal
+      <CreateQuotationDrawer
         isOpen={isModalOpen}
         quotationId={editQuotationId}
         onClose={handleModalClose}

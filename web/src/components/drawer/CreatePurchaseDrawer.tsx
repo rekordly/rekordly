@@ -13,31 +13,33 @@ import {
 import { zodResolver } from '@hookform/resolvers/zod';
 import { FormProvider, Resolver, useForm } from 'react-hook-form';
 
-import { CustomerDetails } from '@/components/dashboard/layout/CustomerDetails';
-import { SaleHeading } from '@/components/dashboard/sales/SaleHeading';
-import { AddSaleItemSection } from '@/components/dashboard/sales/AddSaleItemSection';
-import { ExpensesAndPaymentSection } from '@/components/dashboard/sales/ExpensesAndPaymentSection';
-import { SaleSummary } from '@/components/dashboard/sales/SaleSummary';
 import { useCustomerStore } from '@/store/customerStore';
 import { api } from '@/lib/axios';
 import { FormSkeleton } from '@/components/skeleton/FormSkeleton';
-import { CreateSaleSchema } from '@/lib/validations/sales';
-import { useSaleStore } from '@/store/saleStore';
-import { SaleFormType } from '@/types/sales';
+import { CreatePurchaseSchema } from '@/lib/validations/purchases';
+import { usePurchaseStore } from '@/store/purchase-store';
+import { PurchaseFormType } from '@/types/purchases';
 
-interface CreateSaleDrawerProps {
+// Import components (we'll create these next)
+import { CustomerDetails } from '@/components/dashboard/layout/CustomerDetails';
+import { PurchaseHeading } from '../dashboard/purchase/PurchaseHeading';
+import { AddPurchaseItemSection } from '../dashboard/purchase/AddPurchaseItemSection';
+import { PurchaseCostsAndPaymentSection } from '../dashboard/purchase/PurchaseCostsAndPaymentSection';
+import { PurchaseSummary } from '../dashboard/purchase/PurchaseSummary';
+
+interface CreatePurchaseDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void | Promise<void>;
-  saleId?: string | null;
+  purchaseId?: string | null;
 }
 
-export function CreateSaleDrawer({
+export function CreatePurchaseDrawer({
   isOpen,
   onClose,
   onSuccess,
-  saleId,
-}: CreateSaleDrawerProps) {
+  purchaseId,
+}: CreatePurchaseDrawerProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const TOTAL_STEPS = 3;
@@ -64,36 +66,36 @@ export function CreateSaleDrawer({
   }, [currentStep]);
 
   const {
-    customers,
+    customersByRole,
     loading: loadingCustomers,
     fetchCustomers,
     addCustomer,
   } = useCustomerStore();
 
-  const { allSales, updateSale, addSale } = useSaleStore();
+  const { allPurchases, updatePurchase, addPurchase } = usePurchaseStore();
 
-  const isEditMode = !!saleId;
+  const isEditMode = !!purchaseId;
 
-  const methods = useForm<SaleFormType>({
-    resolver: zodResolver(CreateSaleSchema) as Resolver<SaleFormType>,
+  const methods = useForm<PurchaseFormType>({
+    resolver: zodResolver(CreatePurchaseSchema) as Resolver<PurchaseFormType>,
     defaultValues: {
-      sourceType: 'DIRECT',
-      invoiceId: '',
-      customer: { id: '', name: '', phone: '', email: '' },
+      customer: {
+        id: '',
+        name: '',
+        email: '',
+        phone: '',
+        customerRole: 'SUPPLIER',
+      },
       addAsNewCustomer: false,
       title: '',
       description: '',
-      saleDate: new Date(),
+      purchaseDate: new Date(),
       items: [],
       subtotal: 0,
+      otherCosts: [],
+      otherCostsTotal: 0,
       includeVAT: false,
       vatAmount: 0,
-      discountType: undefined,
-      discountValue: 0,
-      discountAmount: 0,
-      deliveryCost: 0,
-      otherSaleExpenses: [],
-      totalSaleExpenses: 0,
       totalAmount: 0,
       amountPaid: 0,
       balance: 0,
@@ -110,65 +112,55 @@ export function CreateSaleDrawer({
       fetchCustomers();
       setCurrentStep(1);
 
-      if (isEditMode && saleId) {
-        const sale = allSales.find(s => s.id === saleId);
-
-        if (sale) {
+      if (isEditMode && purchaseId) {
+        const purchase = allPurchases.find(p => p.id === purchaseId);
+        console.log('Editing purchase:', purchase);
+        if (purchase) {
           reset({
-            sourceType: sale.sourceType,
-            invoiceId: sale.invoiceId || '',
-            customer: sale.customerId
-              ? {
-                  id: sale.customerId,
-                  name: sale.customer?.name || '',
-                  phone: sale.customer?.phone || '',
-                  email: sale.customer?.email || '',
-                }
-              : {
-                  id: '',
-                  name: sale.customerName || '',
-                  phone: sale.customerPhone || '',
-                  email: sale.customerEmail || '',
-                },
+            customer: {
+              id: purchase.customerId || '',
+              name: purchase.vendorName || '',
+              email: purchase.vendorEmail || '',
+              phone: purchase.vendorPhone || '',
+            },
             addAsNewCustomer: false,
-            title: sale.title || '',
-            description: sale.description || '',
-            saleDate: sale.saleDate ? new Date(sale.saleDate) : new Date(),
-            items: sale.items || [],
-            subtotal: sale.subtotal || 0,
-            includeVAT: sale.includeVAT,
-            vatAmount: sale.vatAmount || 0,
-            discountType: sale.discountType || undefined,
-            discountValue: sale.discountValue || 0,
-            discountAmount: sale.discountAmount || 0,
-            deliveryCost: sale.deliveryCost || 0,
-            otherSaleExpenses: sale.otherSaleExpenses || [],
-            totalSaleExpenses: sale.totalSaleExpenses || 0,
-            totalAmount: sale.totalAmount || 0,
-            amountPaid: sale.amountPaid || 0,
-            balance: sale.balance || 0,
-            status: sale.status,
+            title: purchase.title || '',
+            description: purchase.description || '',
+            purchaseDate: purchase.purchaseDate
+              ? new Date(purchase.purchaseDate)
+              : new Date(),
+            items: purchase.items || [],
+            subtotal: purchase.subtotal || 0,
+            otherCosts: purchase.otherCosts || [],
+            otherCostsTotal: purchase.otherCostsTotal || 0,
+            includeVAT: purchase.includeVAT,
+            vatAmount: purchase.vatAmount || 0,
+            totalAmount: purchase.totalAmount || 0,
+            amountPaid: purchase.amountPaid || 0,
+            balance: purchase.balance || 0,
+            status: purchase.status,
+            paymentMethod: 'BANK_TRANSFER',
           });
         }
       } else {
         reset({
-          sourceType: 'DIRECT',
-          invoiceId: '',
-          customer: { id: '', name: '', phone: '', email: '' },
+          customer: {
+            id: '',
+            name: '',
+            email: '',
+            phone: '',
+            customerRole: 'SUPPLIER',
+          },
           addAsNewCustomer: false,
           title: '',
           description: '',
-          saleDate: new Date(),
+          purchaseDate: new Date(),
           items: [],
           subtotal: 0,
+          otherCosts: [],
+          otherCostsTotal: 0,
           includeVAT: false,
           vatAmount: 0,
-          discountType: undefined,
-          discountValue: 0,
-          discountAmount: 0,
-          deliveryCost: 0,
-          otherSaleExpenses: [],
-          totalSaleExpenses: 0,
           totalAmount: 0,
           amountPaid: 0,
           balance: 0,
@@ -177,7 +169,7 @@ export function CreateSaleDrawer({
         });
       }
     }
-  }, [isOpen, saleId, isEditMode, allSales, fetchCustomers, reset]);
+  }, [isOpen, purchaseId, isEditMode, allPurchases, fetchCustomers, reset]);
 
   const handleClose = () => {
     onClose();
@@ -187,12 +179,16 @@ export function CreateSaleDrawer({
   const getFirstError = () => {
     const errors = formState.errors;
 
-    // Check for nested errors
+    // Check for customer errors
     if (errors.customer) {
-      const customerErrors = errors.customer as any;
-      if (customerErrors.name) return customerErrors.name.message;
-      if (customerErrors.phone) return customerErrors.phone.message;
-      if (customerErrors.email) return customerErrors.email.message;
+      const customerError = errors.customer as any;
+      if (customerError.name) return customerError.name.message;
+      if (customerError.email) return customerError.email.message;
+      if (customerError.phone) return customerError.phone.message;
+    }
+
+    if (errors.title) {
+      return errors.title.message;
     }
 
     if (errors.items) {
@@ -212,28 +208,28 @@ export function CreateSaleDrawer({
     if (errorFields.length > 0) {
       const firstField = errorFields[0];
       const error = errors[firstField] as any;
-      return error?.message || 'Please fix the errors before proceeding';
+      return error?.message || 'Please fix errors before proceeding';
     }
 
-    return 'Please fix the errors before proceeding';
+    return 'Please fix errors before proceeding';
   };
 
   const validateStep = async (step: number): Promise<boolean> => {
-    let fieldsToValidate: (keyof SaleFormType)[] = [];
+    let fieldsToValidate: (keyof PurchaseFormType)[] = [];
 
     switch (step) {
       case 1:
-        fieldsToValidate = ['items', 'subtotal'];
+        fieldsToValidate = ['customer', 'title', 'purchaseDate'];
         break;
       case 2:
-        fieldsToValidate = ['customer', 'title', 'saleDate'];
+        fieldsToValidate = ['items', 'subtotal'];
         break;
       case 3:
         fieldsToValidate = [
           'totalAmount',
           'balance',
           'amountPaid',
-          'discountAmount',
+          'otherCostsTotal',
         ];
         break;
     }
@@ -252,8 +248,7 @@ export function CreateSaleDrawer({
     return result;
   };
 
-  const onSubmit = async (data: SaleFormType) => {
-    console.log(currentStep);
+  const onSubmit = async (data: PurchaseFormType) => {
     if (stepRef.current !== TOTAL_STEPS) return;
     setIsSubmitting(true);
     try {
@@ -265,34 +260,38 @@ export function CreateSaleDrawer({
             ? 'PARTIALLY_PAID'
             : 'UNPAID';
 
-      const saleData = {
+      const purchaseData = {
         ...data,
         status,
-        saleDate:
-          data.saleDate instanceof Date
-            ? data.saleDate.toISOString()
-            : new Date(data.saleDate).toISOString(),
+        purchaseDate:
+          data.purchaseDate instanceof Date
+            ? data.purchaseDate.toISOString()
+            : new Date(data.purchaseDate).toISOString(),
+        createExpense: true,
       };
 
-      if (isEditMode && saleId) {
-        const response = await api.patch(`/sales/${saleId}`, saleData);
+      if (isEditMode && purchaseId) {
+        const response = await api.patch(
+          `/purchases/${purchaseId}`,
+          purchaseData
+        );
 
-        updateSale(saleId, response.data.sale);
+        updatePurchase(purchaseId, response.data.purchase);
+
+        if (data.addAsNewCustomer && response.data.customer) {
+          addCustomer(response.data.customer);
+        }
 
         addToast({
           title: 'Success!',
-          description: 'Sale updated successfully',
+          description: 'Purchase updated successfully',
           color: 'success',
         });
-
-        if (data.addAsNewCustomer && response.data.customer) {
-          addCustomer(response.data.customer);
-        }
       } else {
-        const response = await api.post('/sales', saleData);
+        const response = await api.post('/purchases', purchaseData);
 
-        if (response.data.sale) {
-          addSale(response.data.sale);
+        if (response.data.purchase) {
+          addPurchase(response.data.purchase);
         }
 
         if (data.addAsNewCustomer && response.data.customer) {
@@ -301,7 +300,7 @@ export function CreateSaleDrawer({
 
         addToast({
           title: 'Success!',
-          description: 'Sale created successfully',
+          description: 'Purchase created successfully',
           color: 'success',
         });
       }
@@ -312,10 +311,11 @@ export function CreateSaleDrawer({
         await onSuccess();
       }
     } catch (error: any) {
-      console.error('Error creating/updating sale:', error);
+      console.error('Error creating/updating purchase:', error);
       addToast({
         title: 'Error',
-        description: error?.response?.data?.message || 'Failed to save sale',
+        description:
+          error?.response?.data?.message || 'Failed to save purchase',
         color: 'danger',
       });
     } finally {
@@ -328,21 +328,26 @@ export function CreateSaleDrawer({
       case 1:
         return (
           <div className="space-y-4">
-            <AddSaleItemSection />
+            <CustomerDetails
+              customers={customersByRole.SUPPLIER}
+              role="SUPPLIER"
+              title="Supplier Details"
+              optional={false}
+            />
+            <PurchaseHeading />
           </div>
         );
       case 2:
         return (
           <div className="space-y-4">
-            <CustomerDetails customers={customers} />
-            <SaleHeading />
+            <AddPurchaseItemSection />
           </div>
         );
       case 3:
         return (
           <div className="space-y-4">
-            <ExpensesAndPaymentSection />
-            <SaleSummary />
+            <PurchaseCostsAndPaymentSection />
+            <PurchaseSummary />
           </div>
         );
       default:
@@ -353,11 +358,11 @@ export function CreateSaleDrawer({
   const getStepTitle = () => {
     switch (currentStep) {
       case 1:
-        return 'Sale Items';
+        return 'Supplier & Purchase Details';
       case 2:
-        return 'Customer & Sale Details';
+        return 'Purchase Items';
       case 3:
-        return 'Additional Charges & Payment';
+        return 'Costs & Payment';
       default:
         return '';
     }
@@ -366,11 +371,11 @@ export function CreateSaleDrawer({
   const getStepDescription = () => {
     switch (currentStep) {
       case 1:
-        return 'Add items to this sale';
+        return 'Enter supplier information and purchase details';
       case 2:
-        return 'Enter customer information and sale details';
+        return 'Add items to this purchase';
       case 3:
-        return 'Add expenses, discounts, VAT and payment';
+        return 'Add additional costs, VAT and payment information';
       default:
         return '';
     }
@@ -390,7 +395,7 @@ export function CreateSaleDrawer({
           <DrawerContent>
             <DrawerHeader className="flex-col items-start">
               <h3 className="text-lg font-semibold text-foreground">
-                {isEditMode ? 'Edit Sale' : 'Create New Sale'}
+                {isEditMode ? 'Edit Purchase' : 'Create New Purchase'}
               </h3>
               <div className="flex items-center justify-between w-full mt-2">
                 <p className="text-xs text-default-500">
@@ -461,7 +466,6 @@ export function CreateSaleDrawer({
                     {currentStep === TOTAL_STEPS && (
                       <Button
                         type="submit"
-                        // disabled={isSubmitting}
                         className="px-6"
                         color="primary"
                         isLoading={isSubmitting}

@@ -10,7 +10,7 @@ import { Plus, FileText, Search, X, RefreshCw } from 'lucide-react';
 
 import StatCard from '@/components/ui/StatCard';
 import { InvoiceCard } from '@/components/ui/InvoiceCard';
-import { CreateInvoiceModal } from '@/components/modals/CreateInvoiceModal';
+import { CreateInvoiceDrawer } from '@/components/drawer/CreateInvoiceDrawer';
 import { useInvoiceStore } from '@/store/invoiceStore';
 import { formatCurrency, formatDate, STATUS_TAGS } from '@/lib/fn';
 import { CardSkeleton } from '@/components/skeleton/CardSkeleton';
@@ -324,7 +324,7 @@ export default function InvoicePage() {
         </div>
       </div>
 
-      <CreateInvoiceModal
+      <CreateInvoiceDrawer
         invoiceId={editInvoiceId}
         isOpen={isModalOpen}
         onClose={handleModalClose}

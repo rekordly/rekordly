@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Button, Skeleton, addToast } from '@heroui/react';
-import { ArrowLeft, FileX } from '@phosphor-icons/react';
+import { ArrowLeft, FileX, ArrowRight } from '@phosphor-icons/react';
 import { useSession } from 'next-auth/react';
 
 import { useInvoiceStore } from '@/store/invoiceStore';
@@ -14,6 +14,8 @@ import InvoiceCustomerSection from '@/components/dashboard/invoices/single/Invoi
 import InvoiceItemsSection from '@/components/dashboard/invoices/single/InvoiceItemsSection';
 import InvoicePaymentSection from '@/components/dashboard/invoices/single/InvoicePaymentSection';
 import ConvertToSales from '@/components/dashboard/invoices/single/ConvertToSales';
+import { CustomerInfoSection } from '@/components/dashboard/CustomerInfoSection';
+import { PaymentSection } from '@/components/dashboard/PaymentSection';
 
 export default function SingleInvoice() {
   const params = useParams();
@@ -212,17 +214,44 @@ export default function SingleInvoice() {
 
           {invoice.sale && (
             <div className="lg:hidden">
-              <InvoicePaymentSection invoice={invoice} />
+              {/* <InvoicePaymentSection invoice={invoice} /> */}
+              <PaymentSection
+                totalAmount={invoice.totalAmount}
+                amountPaid={invoice.sale.amountPaid}
+                balance={invoice.sale.balance}
+                payments={invoice.sale.payments}
+                showActions={false}
+                entityType="invoice"
+                entityId={invoice.id}
+              />
             </div>
           )}
         </div>
 
         <div className="space-y-6 mt-6 lg:mt-0">
-          <InvoiceCustomerSection invoice={invoice} />
+          {/* <InvoiceCustomerSection invoice={invoice} /> */}
+          <CustomerInfoSection
+            name={invoice.customer?.name || invoice.customerName}
+            email={invoice.customer?.email || invoice.customerEmail}
+            phone={invoice.customer?.phone || invoice.customerPhone}
+            // title="Billed To"
+          />
 
-          <div className="hidden lg:block">
-            <InvoicePaymentSection invoice={invoice} />
-          </div>
+          {invoice.sale && (
+            <div className="hidden lg:block">
+              {/* <InvoicePaymentSection invoice={invoice} /> */}
+              <PaymentSection
+                totalAmount={invoice.totalAmount}
+                amountPaid={invoice.sale.amountPaid}
+                balance={invoice.sale.balance}
+                payments={invoice.sale.payments}
+                showActions={false}
+                entityType="invoice"
+                entityId={invoice.id}
+                entityNumber={invoice.sale.receiptNumber}
+              />
+            </div>
+          )}
 
           <ConvertToSales invoice={invoice} />
         </div>

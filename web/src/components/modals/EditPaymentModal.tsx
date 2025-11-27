@@ -68,7 +68,7 @@ export function EditPaymentModal({
     reset({
       amountPaid: payment.amount,
       paymentMethod: payment.paymentMethod,
-      paymentDate: new Date(payment.paymentDate).toISOString().split('T')[0],
+      paymentDate: new Date(payment.paymentDate).toISOString().slice(0, 16),
       reference: payment.reference || '',
       notes: payment.notes || '',
     });
@@ -80,7 +80,6 @@ export function EditPaymentModal({
     showSuccessToast: true,
     onSuccess: data => {
       if (onSuccess) onSuccess(data);
-      console.log('Edit payment successful:', data);
       handleClose();
     },
   });
@@ -206,7 +205,7 @@ export function EditPaymentModal({
                     control={methods.control}
                     label="Payment Date"
                     name="paymentDate"
-                    type="date"
+                    type="datetime-local"
                   />
 
                   <TextInput

@@ -11,12 +11,77 @@ import { CustomerType } from '@/types';
 
 interface CustomerDetailsProps {
   customers: CustomerType[];
+  role?: 'BUYER' | 'SUPPLIER' | 'CUSTOMER';
+  title?: string;
+  optional?: boolean;
 }
 
-export function CustomerDetails({ customers }: CustomerDetailsProps) {
+export function CustomerDetails({
+  customers,
+  role = 'CUSTOMER',
+  title,
+  optional = true,
+}: CustomerDetailsProps) {
   const { control, setValue, watch } = useFormContext();
   const [isCustomerSelected, setIsCustomerSelected] = useState(false);
   const [showAddAsNewCustomer, setShowAddAsNewCustomer] = useState(false);
+
+  // Get the appropriate title based on role
+  const getRoleTitle = () => {
+    if (title) return title;
+    switch (role) {
+      case 'BUYER':
+        return 'Customer Details';
+      case 'SUPPLIER':
+        return 'Supplier Details';
+      default:
+        return 'Customer Details';
+    }
+  };
+
+  const getRoleLabel = () => {
+    switch (role) {
+      case 'BUYER':
+        return 'Customer';
+      case 'SUPPLIER':
+        return 'Supplier';
+      default:
+        return 'Customer';
+    }
+  };
+
+  const getRolePlaceholder = () => {
+    switch (role) {
+      case 'BUYER':
+        return 'Search or enter customer name';
+      case 'SUPPLIER':
+        return 'Search or enter supplier name';
+      default:
+        return 'Search or enter customer name';
+    }
+  };
+
+  const getAddAsNewText = () => {
+    switch (role) {
+      case 'BUYER':
+        return 'Add as new customer';
+      case 'SUPPLIER':
+        return 'Add as new supplier';
+      default:
+        return 'Add as new customer';
+    }
+  };
+
+  const getSaveForFutureText = () => {
+    switch (role) {
+      case 'BUYER':
+        return 'Save this customer for future invoices';
+      case 'SUPPLIER':
+        return 'Save this supplier for future purchases';
+      default:
+        return 'Save this customer for future invoices';
+    }
+  };
 
   const selectedCustomerId = watch('customer.id');
   const customerName = watch('customer.name');
@@ -79,12 +144,15 @@ export function CustomerDetails({ customers }: CustomerDetailsProps) {
       setValue('customer.email', '');
       setValue('addAsNewCustomer', false);
       setIsCustomerSelected(false);
+      setValue(
+        'customer.customerRole',
+        role === 'SUPPLIER' ? 'SUPPLIER' : 'BUYER'
+      );
       setShowAddAsNewCustomer(false);
 
       return;
     }
 
-    // If they're typing and not selecting from list, enable fields
     if (!customers.find(c => c.name === name)) {
       setValue('customer.id', '');
       setIsCustomerSelected(false);
@@ -98,9 +166,11 @@ export function CustomerDetails({ customers }: CustomerDetailsProps) {
           <div className="space-y-2 px-2 ">
             <div className="flex items-center gap-2">
               <h4 className="text-sm font-semibold text-foreground">
-                Customer Details
+                {getRoleTitle()}
               </h4>
-              <span className="text-xs text-default-400">(Optional)</span>
+              {optional && (
+                <span className="text-xs text-default-400">(Optional)</span>
+              )}
             </div>
             <Divider />
           </div>
@@ -113,9 +183,9 @@ export function CustomerDetails({ customers }: CustomerDetailsProps) {
                 getOptionLabel={c => c.name ?? ''}
                 getOptionValue={c => c.id ?? ''}
                 items={customers}
-                label="Customer Name"
+                label={`${getRoleLabel()} Name`}
                 name="customer.id"
-                placeholder="Search or enter customer name"
+                placeholder={getRolePlaceholder()}
                 onInputChange={handleCustomerNameInput}
                 onSelectionChange={handleCustomerSelect}
               />
@@ -147,10 +217,10 @@ export function CustomerDetails({ customers }: CustomerDetailsProps) {
                 size="sm"
                 onChange={e => setValue('addAsNewCustomer', e.target.checked)}
               >
-                <span className="text-sm">Add as new customer</span>
+                <span className="text-sm">{getAddAsNewText()}</span>
               </Checkbox>
               <p className="text-xs text-default-400 ml-6">
-                Save this customer for future invoices
+                {getSaveForFutureText()}
               </p>
             </div>
           )}

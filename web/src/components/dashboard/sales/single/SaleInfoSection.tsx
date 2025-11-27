@@ -23,7 +23,7 @@ export function SaleInfoSection({ sale }: SaleInfoSectionProps) {
         <CardBody className="p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs md:text-sm font-medium text-secondary-100 mb-0.5">
+              <p className="text-xs md:text-sm font-medium text-white mb-0.5">
                 Receipt Number
               </p>
               <p className="text-lg font-semibold font-heading tracking-tight text-white">
@@ -96,49 +96,6 @@ export function SaleInfoSection({ sale }: SaleInfoSectionProps) {
                 </p>
               </div>
             )}
-          </CardBody>
-        </Card>
-      )}
-
-      {/* Refund Info Card */}
-      {sale.refundAmount && sale.refundAmount > 0 && (
-        <Card
-          className="w-full rounded-xl bg-danger-50 dark:bg-danger-900/20"
-          shadow="none"
-        >
-          <CardBody className="p-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-xs md:text-sm font-semibold text-danger-700 dark:text-danger-500">
-                Refund Information
-              </p>
-              <Chip color="danger" size="sm" variant="flat">
-                {sale.status}
-              </Chip>
-            </div>
-            <div className="space-y-1">
-              <div className="flex justify-between text-xs md:text-sm">
-                <span className="text-danger-600">Refund Amount:</span>
-                <span className="font-bold text-danger-700">
-                  ₦{sale.refundAmount.toLocaleString()}
-                </span>
-              </div>
-              {sale.refundDate && (
-                <div className="flex justify-between text-xs md:text-sm">
-                  <span className="text-danger-600">Refund Date:</span>
-                  <span className="font-medium text-danger-700">
-                    {formatDate(sale.refundDate)}
-                  </span>
-                </div>
-              )}
-              {sale.refundReason && (
-                <div className="mt-2 pt-2 border-t border-danger-200 dark:border-danger-800">
-                  <p className="text-xs text-danger-600 mb-0.5">Reason:</p>
-                  <p className="text-xs md:text-sm text-danger-700">
-                    {sale.refundReason}
-                  </p>
-                </div>
-              )}
-            </div>
           </CardBody>
         </Card>
       )}

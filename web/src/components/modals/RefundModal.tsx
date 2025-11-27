@@ -9,18 +9,19 @@ import {
   ModalFooter,
   useDisclosure,
   addToast,
-  Alert,
 } from '@heroui/react';
 import { ArrowUUpLeft } from '@phosphor-icons/react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { FormProvider, useForm } from 'react-hook-form';
 import type { Resolver } from 'react-hook-form';
+import { useEffect } from 'react';
 
-import { TextInput } from '@/components/ui/Input';
+import { TextInput, NumberInput, DropdownInput } from '@/components/ui/Input';
 import { formatCurrency } from '@/lib/fn';
 import { useApi } from '@/hooks/useApi';
 import { RefundSchema } from '@/lib/validations/general';
 import { RefundType } from '@/types';
+import { paymentMethods } from '@/config/constant';
 
 interface RefundModalProps {
   itemType: 'sale' | 'quotation' | 'purchase';
@@ -45,17 +46,29 @@ export function RefundModal({
   const methods = useForm<RefundType>({
     resolver: zodResolver(RefundSchema) as Resolver<RefundType>,
     defaultValues: {
+      refundAmount: amountPaid,
       refundReason: '',
       refundDate: new Date(),
     },
-    mode: 'onChange',
+    mode: 'all',
   });
 
   const {
     handleSubmit,
     formState: { isSubmitting },
     reset,
+    watch,
+    setValue,
   } = methods;
+
+  const refundAmount = watch('refundAmount');
+
+  // Update refund amount when amountPaid changes
+  useEffect(() => {
+    if (isOpen) {
+      setValue('refundAmount', amountPaid);
+    }
+  }, [isOpen, amountPaid, setValue]);
 
   const { post, isLoading } = useApi({
     addToast,
@@ -103,7 +116,7 @@ export function RefundModal({
         variant="flat"
         onPress={onOpen}
       >
-        Process Full Refund
+        Process Refund
       </Button>
 
       <Modal
@@ -120,7 +133,7 @@ export function RefundModal({
                 <ModalHeader className="flex flex-col gap-1 font-heading tracking-tight">
                   <div className="flex items-center gap-2">
                     <ArrowUUpLeft className="text-danger" size={24} />
-                    <span>Process Full Refund</span>
+                    <span>Process Refund</span>
                   </div>
                   <p className="text-xs font-normal text-default-500 mt-1">
                     {getItemLabel()}: {itemNumber}
@@ -128,50 +141,62 @@ export function RefundModal({
                 </ModalHeader>
 
                 <ModalBody className="gap-4">
-                  {/* Summary Info */}
-                  <div className="bg-danger-50 dark:bg-danger-900/20 p-4 rounded-lg space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-danger-700 dark:text-danger-500">
-                        Total Amount:
-                      </span>
-                      <span className="font-semibold text-danger-800 dark:text-danger-400">
+                  {/* Compact Summary */}
+                  <div className="text-xs text-default-600 space-y-1">
+                    <p>
+                      Total:{' '}
+                      <span className="font-semibold">
                         {formatCurrency(totalAmount)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-danger-700 dark:text-danger-500">
-                        Amount Paid:
-                      </span>
-                      <span className="font-semibold text-danger-800 dark:text-danger-400">
+                      </span>{' '}
+                      • Amount Paid:{' '}
+                      <span className="font-semibold">
                         {formatCurrency(amountPaid)}
+                      </span>{' '}
+                      • Refund:{' '}
+                      <span className="font-semibold text-danger">
+                        {formatCurrency(refundAmount || 0)}
                       </span>
-                    </div>
-                    <div className="flex justify-between text-base pt-2 border-t border-danger-200 dark:border-danger-800">
-                      <span className="font-bold text-danger-900 dark:text-danger-300">
-                        Refund Amount:
-                      </span>
-                      <span className="font-bold text-danger-900 dark:text-danger-300">
-                        {formatCurrency(amountPaid)}
-                      </span>
-                    </div>
+                    </p>
                   </div>
 
-                  <Alert
-                    className="w-full text-xs"
-                    color="danger"
-                    variant="flat"
-                    title={`This will refund the full amount paid (
-                    ${formatCurrency(amountPaid)}).
-                    ${getItemLabel()} status will be updated to REFUNDED.`}
+                  <NumberInput
+                    isRequired
+                    control={methods.control}
+                    description={`Maximum: ${formatCurrency(amountPaid)}`}
+                    label="Refund Amount"
+                    name="refundAmount"
+                    placeholder="0.00"
+                    startContent={
+                      <span className="text-default-400 text-sm">₦</span>
+                    }
+                    step={0.01}
+                    min={0.01}
+                    max={amountPaid}
+                  />
+
+                  <DropdownInput
+                    isRequired
+                    control={methods.control}
+                    items={paymentMethods}
+                    label="Payment Method"
+                    name="paymentMethod"
+                    placeholder="Select payment method"
                   />
 
                   <TextInput
                     isRequired
                     control={methods.control}
-                    description="Provide a clear reason for this refund"
                     label="Refund Reason"
                     name="refundReason"
-                    placeholder="e.g., Customer returned goods, Cancelled order, Quality issue..."
+                    placeholder="e.g., Customer returned goods, Cancelled order..."
+                  />
+
+                  <TextInput
+                    control={methods.control}
+                    description="Optional: Add payment reference or transaction ID"
+                    label="Reference/Transaction ID"
+                    name="reference"
+                    placeholder="e.g., TXN123456"
                   />
 
                   <TextInput

@@ -12,11 +12,16 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search');
+    const customerRole = searchParams.get('customerRole'); // BUYER or SUPPLIER
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '50');
     const skip = (page - 1) * limit;
 
     const where: any = { userId };
+
+    if (customerRole) {
+      where.customerRole = customerRole;
+    }
 
     if (search) {
       where.OR = [
@@ -26,15 +31,16 @@ export async function GET(request: NextRequest) {
       ];
     }
 
-    // Get customers with pagination
-    const [customers, total] = await Promise.all([
+    // Get all customers and group them by role
+    const [allCustomers, total] = await Promise.all([
       prisma.customer.findMany({
-        where,
+        where: { userId },
         select: {
           id: true,
           name: true,
           email: true,
           phone: true,
+          customerRole: true,
           createdAt: true,
           updatedAt: true,
           _count: {
@@ -45,16 +51,44 @@ export async function GET(request: NextRequest) {
           },
         },
         orderBy: { createdAt: 'desc' },
-        skip,
-        take: limit,
       }),
-      prisma.customer.count({ where }),
+      prisma.customer.count({ where: { userId } }),
     ]);
+
+    // Group customers by role
+    const customersByRole = {
+      BUYER: allCustomers.filter(c => c.customerRole === 'BUYER'),
+      SUPPLIER: allCustomers.filter(c => c.customerRole === 'SUPPLIER'),
+      ALL: allCustomers, // For backward compatibility
+    };
+
+    // If customerRole filter is specified, return filtered list
+    if (customerRole) {
+      const filteredCustomers = allCustomers.filter(
+        c => c.customerRole === customerRole
+      );
+
+      return NextResponse.json(
+        {
+          success: true,
+          customers: filteredCustomers,
+          customersByRole,
+          pagination: {
+            page,
+            limit,
+            total: filteredCustomers.length,
+            totalPages: Math.ceil(filteredCustomers.length / limit),
+          },
+        },
+        { status: 200 }
+      );
+    }
 
     return NextResponse.json(
       {
         success: true,
-        customers,
+        customers: allCustomers,
+        customersByRole,
         pagination: {
           page,
           limit,
