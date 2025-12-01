@@ -7,29 +7,13 @@ import { invoiceSchema } from '@/lib/validations/invoices';
 import { generateInvoiceNumber, toTwoDecimals } from '@/lib/fn';
 import { sendInvoiceEmail } from '@/lib/email/send-invoice';
 import { resolveCustomer } from '@/lib/utils/customer';
+import { validateRequest } from '@/lib/utils/validation';
 
 export async function POST(request: NextRequest) {
   try {
     const { userId } = await getAuthUser(request);
 
-    const body = await request.json();
-    const validationResult = invoiceSchema.safeParse(body);
-
-    if (!validationResult.success) {
-      const fieldErrors = validationResult.error.flatten().fieldErrors;
-      const firstError =
-        Object.values(fieldErrors).flat()[0] || 'Validation failed';
-
-      return NextResponse.json(
-        {
-          error: 'Validation failed',
-          message: firstError,
-        },
-        { status: 400 }
-      );
-    }
-
-    const data = validationResult.data;
+    const data = await validateRequest(request, invoiceSchema);
 
     const { customerId, customerName, customerEmail, customerPhone } =
       await resolveCustomer(userId, data.customer, data.addAsNewCustomer);
@@ -142,15 +126,10 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Create invoice error:', error);
 
+    if (error instanceof NextResponse) return error;
+
     if (error instanceof Error && error.message.includes('Unauthorized')) {
       return NextResponse.json({ message: error.message }, { status: 401 });
-    }
-
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { message: 'Validation error', errors: error.flatten().fieldErrors },
-        { status: 400 }
-      );
     }
 
     return NextResponse.json(

@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 
 import { prisma } from '@/lib/prisma';
 import { getAuthUser } from '@/lib/utils/server';
 import { resolveCustomer } from '@/lib/utils/customer';
 import { CreateSaleSchema } from '@/lib/validations/sales';
 import { generateReceiptNumber, toTwoDecimals } from '@/lib/fn';
+import { validateRequest } from '@/lib/utils/validation';
 
 export async function POST(request: NextRequest) {
   try {
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const data = validationResult.data;
+    const data = await validateRequest(request, CreateSaleSchema);
 
     const { customerId, customerName, customerEmail, customerPhone } =
       await resolveCustomer(userId, data.customer, data.addAsNewCustomer);
@@ -170,15 +170,10 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Create sale error:', error);
 
+    if (error instanceof NextResponse) return error;
+
     if (error instanceof Error && error.message.includes('Unauthorized')) {
       return NextResponse.json({ message: error.message }, { status: 401 });
-    }
-
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { message: 'Validation error', errors: error.flatten().fieldErrors },
-        { status: 400 }
-      );
     }
 
     return NextResponse.json(
@@ -262,6 +257,8 @@ export async function GET(request: NextRequest) {
     );
   } catch (error) {
     console.error('Get sales error:', error);
+
+    if (error instanceof NextResponse) return error;
 
     if (error instanceof Error && error.message.includes('Unauthorized')) {
       return NextResponse.json({ message: error.message }, { status: 401 });

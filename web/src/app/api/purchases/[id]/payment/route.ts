@@ -102,13 +102,6 @@ export async function POST(
                 phone: true,
               },
             },
-            expense: {
-              select: {
-                id: true,
-                category: true,
-                amount: true,
-              },
-            },
             payments: {
               select: {
                 id: true,

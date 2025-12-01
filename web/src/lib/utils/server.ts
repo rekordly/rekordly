@@ -8,6 +8,7 @@ interface AuthResult {
   token: JWT | null;
   userId: string;
   userEmail: string;
+  workTypes: string[];
 }
 
 export async function getAuthUser(request: NextRequest): Promise<AuthResult> {
@@ -39,6 +40,7 @@ export async function getAuthUser(request: NextRequest): Promise<AuthResult> {
     token,
     userId: token.sub,
     userEmail: token.email,
+    workTypes: token.onboarding?.workTypes,
   };
 
   // try {

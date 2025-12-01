@@ -8,6 +8,7 @@ import {
   AutocompleteItem,
   Select,
   SelectItem,
+  NumberInput as InputNumber,
 } from '@heroui/react';
 
 interface BaseInputProps<T extends FieldValues> {
@@ -97,7 +98,7 @@ export function TextInput<T extends FieldValues>({
   );
 }
 
-// ✅ Number input
+// ✅ Improved Number input - handles empty state properly
 export function NumberInput<T extends FieldValues>({
   name,
   control,
@@ -136,14 +137,14 @@ export function NumberInput<T extends FieldValues>({
           step={step}
           type="number"
           variant="bordered"
-          onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
+          onChange={e => field.onChange(parseFloat(e.target.value))}
         />
       )}
     />
   );
 }
 
-// ✅ Simplified Autocomplete input - just handles display and selection
+// ✅ Fixed Autocomplete - removed problematic onInputChange logic
 interface AutocompleteInputProps<T extends FieldValues, I = any>
   extends BaseInputProps<T> {
   items: I[];
@@ -177,9 +178,6 @@ export function AutocompleteInput<T extends FieldValues, I = any>({
       render={({ field, fieldState: { error } }) => (
         <Autocomplete
           allowsCustomValue={!disallowTyping}
-          classNames={{
-            base: 'border-1 border-default-300 rounded-2xl',
-          }}
           color="primary"
           description={description}
           errorMessage={error?.message}
@@ -188,24 +186,34 @@ export function AutocompleteInput<T extends FieldValues, I = any>({
           isRequired={isRequired}
           label={label}
           placeholder={placeholder}
-          selectedKey={field.value || null}
           variant="bordered"
+          selectedKey={
+            items.some(i => {
+              const val = getOptionValue ? getOptionValue(i) : (i as any).id;
+              return val === field.value;
+            })
+              ? field.value
+              : null
+          }
+          inputValue={
+            !items.some(i => {
+              const val = getOptionValue ? getOptionValue(i) : (i as any).id;
+              return val === field.value;
+            })
+              ? field.value
+              : undefined
+          }
           onInputChange={value => {
-            // If typing is disallowed and value changes, ignore it
-            if (disallowTyping && value && field.value) {
-              return;
-            }
-            if (onInputChange) {
-              onInputChange(value);
-            }
+            if (disallowTyping && value && field.value) return;
+
+            field.onChange(value); // ← VERY important
+            onInputChange?.(value);
           }}
           onSelectionChange={key => {
             const stringKey = key as string;
 
             field.onChange(stringKey || '');
-            if (onSelectionChange && stringKey) {
-              onSelectionChange(stringKey);
-            }
+            onSelectionChange?.(stringKey);
           }}
         >
           {items.map(item => {

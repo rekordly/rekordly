@@ -28,11 +28,6 @@ export const workTypes = [
     label: 'Small Business Owner',
     desc: 'You own a registered company that may have employees',
   },
-  {
-    value: 'digital-trader',
-    label: 'Digital Asset Trader',
-    desc: 'Primary income from digital assets like crypto and NFTs',
-  },
 ];
 
 export const businessCategories = {

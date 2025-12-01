@@ -30,14 +30,7 @@ export async function GET(
             phone: true,
           },
         },
-        expense: {
-          select: {
-            id: true,
-            category: true,
-            amount: true,
-            description: true,
-          },
-        },
+
         payments: {
           select: {
             id: true,
@@ -181,13 +174,6 @@ export async function PATCH(
             phone: true,
           },
         },
-        expense: {
-          select: {
-            id: true,
-            category: true,
-            amount: true,
-          },
-        },
         payments: {
           select: {
             id: true,
@@ -252,7 +238,6 @@ export async function DELETE(
       },
       include: {
         payments: true,
-        expense: true,
       },
     });
 
@@ -269,13 +254,6 @@ export async function DELETE(
       await tx.payment.deleteMany({
         where: { purchaseId: id },
       });
-
-      // Delete related expense if exists
-      if (existingPurchase.expense) {
-        await tx.expense.delete({
-          where: { id: existingPurchase.expense.id },
-        });
-      }
 
       // Delete the purchase
       await tx.purchase.delete({

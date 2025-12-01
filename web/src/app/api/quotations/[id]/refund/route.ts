@@ -135,6 +135,8 @@ export async function POST(
   } catch (error) {
     console.error('quotation refund error:', error);
 
+    if (error instanceof NextResponse) return error;
+
     if (error instanceof Error && error.message.includes('Unauthorized')) {
       return NextResponse.json({ message: error.message }, { status: 401 });
     }

@@ -49,13 +49,7 @@ export const personalInfoSchemaWithPassword = z
 export const workTypeSchema = z.object({
   workTypes: z
     .array(
-      z.enum([
-        'self-employed',
-        'freelancer',
-        'employed',
-        'business-owner',
-        'digital-trader',
-      ])
+      z.enum(['self-employed', 'freelancer', 'employed', 'business-owner'])
     )
     .min(1, { message: 'Please select at least one work type' }),
 });

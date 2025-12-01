@@ -51,7 +51,7 @@ export function AddPaymentModal({
   const { isOpen, onOpen, onClose } = useDisclosure();
 
   const initialAmount = balance > 0 ? balance : 0;
-  
+
   const methods = useForm<AddPaymentType>({
     resolver: zodResolver(addPaymentSchema) as Resolver<AddPaymentType>,
     defaultValues: {
@@ -69,7 +69,7 @@ export function AddPaymentModal({
     formState: { isSubmitting },
     reset,
     watch,
-} = methods;
+  } = methods;
 
   useEffect(() => {
     if (isOpen) {
@@ -85,8 +85,8 @@ export function AddPaymentModal({
 
   const amount = watch('amountPaid');
   const newBalance = balance - (amount || 0);
-  
-  const overPayment = (amount > 0 && newBalance < 0)
+
+  const overPayment = amount > 0 && newBalance < 0;
 
   const { post, isLoading } = useApi({
     addToast,
@@ -263,7 +263,7 @@ export function AddPaymentModal({
                   <Button
                     color="primary"
                     isDisabled={isSubmitting || isLoading || overPayment}
-                    isLoading={isSubmitting || isLoading }
+                    isLoading={isSubmitting || isLoading}
                     type="submit"
                   >
                     Add Payment

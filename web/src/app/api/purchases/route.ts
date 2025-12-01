@@ -136,28 +136,9 @@ export async function POST(request: NextRequest) {
           });
         }
 
-        let expense = null;
-        if (body.createExpense) {
-          expense = await tx.expense.create({
-            data: {
-              userId,
-              category: 'COST_OF_GOODS',
-              amount: totalAmount,
-              description: `Purchase from ${customerName || 'Unknown Supplier'}: ${data.title || 'Items'}`,
-              date: purchaseDate,
-              purchaseId: purchase.id,
-              customerId,
-              vendorName: customerName,
-              isDeductible: true,
-              deductionPercentage: 100,
-              taxCategory: 'CAPITAL_EXPENDITURE',
-            },
-          });
-        }
-
         const { customer } = purchase;
 
-        return { purchase, payment, expense, customer };
+        return { purchase, payment, customer };
       },
       {
         maxWait: 10000, // 10 seconds
@@ -172,7 +153,6 @@ export async function POST(request: NextRequest) {
         customer: result.customer,
         purchase: result.purchase,
         payment: result.payment,
-        expense: result.expense,
       },
       { status: 201 }
     );
@@ -239,13 +219,6 @@ export async function GET(request: NextRequest) {
               name: true,
               email: true,
               phone: true,
-            },
-          },
-          expense: {
-            select: {
-              id: true,
-              category: true,
-              amount: true,
             },
           },
           payments: {

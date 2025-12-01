@@ -6,22 +6,32 @@ import {
   Receipt,
   Users,
   TrendingDown,
+  TrendingUp,
   Wallet,
   Building2,
   HardDrive,
   LineChart,
   ChartLine,
-  TrendingUp,
   Landmark,
   Shield,
   Bell,
   User,
+  DollarSign,
+  Banknote,
+  CreditCard,
+  Briefcase,
+  UserCheck,
+  HandCoins,
+  Gift,
+  PiggyBank,
 } from 'lucide-react';
 
 export interface SubMenuItem {
   name: string;
-  href: string;
+  href?: string;
   icon: LucideIcon;
+  action?: 'modal' | 'drawer'; // For items that open modals/drawers
+  actionType?: string; // Type identifier for the action
 }
 
 export interface MenuItem {
@@ -39,30 +49,106 @@ export const menuItems: MenuItem[] = [
     icon: House,
   },
 
-  // Billing (Quotes & Invoices)
+  // Income Section
   {
-    name: 'Billing',
-    icon: Wallet,
+    name: 'Income',
+    icon: TrendingUp,
     subItems: [
-      { name: 'Quotations', href: '/dashboard/quotations', icon: FileText },
+      // Regular income tracking pages
+      {
+        name: 'Quotations',
+        href: '/dashboard/quotations',
+        icon: FileText,
+      },
       { name: 'Invoices', href: '/dashboard/invoices', icon: Receipt },
-      { name: 'Sales', href: '/dashboard/sales', icon: TrendingUp },
-      // { name: 'Returns', href: '/dashboard/sales/returns', icon: Landmark },
+      { name: 'Sales', href: '/dashboard/sales', icon: DollarSign },
+
+      // Quick entry modals/drawers for common income types
+      {
+        name: 'Salary Payment',
+        icon: Banknote,
+        action: 'drawer',
+        actionType: 'salary',
+      },
+      {
+        name: 'Commission',
+        icon: HandCoins,
+        action: 'drawer',
+        actionType: 'commission',
+      },
+      {
+        name: 'Dividend Income',
+        icon: PiggyBank,
+        action: 'drawer',
+        actionType: 'dividend',
+      },
+      {
+        name: 'Other Income',
+        icon: Wallet,
+        action: 'drawer',
+        actionType: 'other-income',
+      },
     ],
   },
 
-  {
-    name: 'Purchases',
-    href: '/dashboard/purchases',
-    icon: ShoppingCart,
-  },
-
+  // Expenses Section
   {
     name: 'Expenses',
-    href: '/dashboard/expenses',
     icon: TrendingDown,
+    subItems: [
+      // Purchases moved under expenses
+      {
+        name: 'Purchases',
+        href: '/dashboard/purchases',
+        icon: ShoppingCart,
+      },
+      {
+        name: 'Expenses',
+        href: '/dashboard/expenses/records',
+        icon: TrendingDown,
+      },
+
+      // Quick entry modals/drawers for common expense types
+      {
+        name: 'Salaries',
+        icon: UserCheck,
+        action: 'drawer',
+        actionType: 'salary',
+      },
+      {
+        name: 'Rent Payment',
+        icon: Building2,
+        action: 'drawer',
+        actionType: 'rent',
+      },
+      {
+        name: 'Utilities',
+        icon: Banknote,
+        action: 'drawer',
+        actionType: 'utilities',
+      },
+      {
+        name: 'Fuel',
+        icon: CreditCard,
+        action: 'drawer',
+        actionType: 'fuel',
+      },
+      {
+        name: 'Professional Fees',
+        icon: Briefcase,
+        action: 'drawer',
+        actionType: 'professional-fees',
+      },
+      {
+        name: 'Subscriptions',
+        icon: Receipt,
+        action: 'drawer',
+        actionType: 'subscriptions',
+      },
+    ],
   },
 
+  // Assets Section
   {
     name: 'Assets',
     icon: Building2,
@@ -85,6 +171,7 @@ export const menuItems: MenuItem[] = [
     ],
   },
 
+  // Reports Section
   {
     name: 'Reports',
     icon: ChartLine,
@@ -104,7 +191,11 @@ export const menuItems: MenuItem[] = [
         href: '/dashboard/reports/cashflow',
         icon: LineChart,
       },
-      { name: 'Sales Report', href: '/dashboard/reports/sales', icon: Receipt },
+      {
+        name: 'Income Report',
+        href: '/dashboard/reports/income',
+        icon: TrendingUp,
+      },
       {
         name: 'Expense Report',
         href: '/dashboard/reports/expenses',
@@ -115,16 +206,22 @@ export const menuItems: MenuItem[] = [
         href: '/dashboard/reports/assets',
         icon: Building2,
       },
-      { name: 'Tax Report', href: '/dashboard/reports/tax', icon: FileText },
+      {
+        name: 'Tax Report',
+        href: '/dashboard/reports/tax',
+        icon: FileText,
+      },
     ],
   },
 
+  // Customers
   {
     name: 'Customers',
     href: '/dashboard/customers',
     icon: Users,
   },
 
+  // Account Section
   {
     name: 'Account',
     icon: User,
@@ -139,3 +236,10 @@ export const menuItems: MenuItem[] = [
     ],
   },
 ];
+
+// Type guard to check if a menu item has an action
+export function hasAction(
+  item: SubMenuItem
+): item is SubMenuItem & { action: 'modal' | 'drawer'; actionType: string } {
+  return item.action !== undefined && item.actionType !== undefined;
+}

@@ -19,7 +19,7 @@ import { useState } from 'react';
 
 import { ThemeToggle } from '../theme-toggle';
 
-import { MenuItemLink } from './MenuItemLinkProps ';
+import { MenuItemLink } from './MenuItemLinkProps';
 
 import { SessionUser } from '@/types';
 import { menuItems } from '@/config/menu';

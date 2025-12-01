@@ -4,13 +4,14 @@ import { Link } from '@heroui/react';
 import { usePathname } from 'next/navigation';
 import { ChevronDown } from 'lucide-react';
 
-import { MenuItem, SubMenuItem } from '@/config/menu';
+import { MenuItem, SubMenuItem, hasAction } from '@/config/menu';
 
 interface MenuItemLinkProps {
   item: MenuItem;
   onClose?: () => void;
   expandedItem?: string | null;
   onToggle?: (itemName: string) => void;
+  onAction?: (actionType: string, action: 'modal' | 'drawer') => void;
 }
 
 export function MenuItemLink({
@@ -18,6 +19,7 @@ export function MenuItemLink({
   onClose,
   expandedItem,
   onToggle,
+  onAction,
 }: MenuItemLinkProps) {
   const pathname = usePathname();
   const Icon = item.icon;
@@ -25,7 +27,7 @@ export function MenuItemLink({
   // Check if this item or any of its subitems is active
   const isActive = item.href ? pathname === item.href : false;
   const hasActiveSubItem = item.subItems?.some(
-    subItem => pathname === subItem.href
+    subItem => subItem.href && pathname === subItem.href
   );
   const isExpanded = expandedItem === item.name;
 
@@ -65,15 +67,16 @@ export function MenuItemLink({
         <div
           className={`
             overflow-hidden transition-all duration-200 ease-in-out
-            ${isExpanded ? 'max-h-96 opacity-100 mt-1' : 'max-h-0 opacity-0'}
+            ${isExpanded ? 'max-h-[600px] opacity-100 mt-1' : 'max-h-0 opacity-0'}
           `}
         >
           <div className="pl-4 space-y-1">
-            {item.subItems.map(subItem => (
+            {item.subItems.map((subItem, index) => (
               <SubMenuItemLink
-                key={subItem.href}
+                key={subItem.href || `action-${index}`}
                 subItem={subItem}
                 onClose={onClose}
+                onAction={onAction}
               />
             ))}
           </div>
@@ -105,13 +108,37 @@ export function MenuItemLink({
 interface SubMenuItemLinkProps {
   subItem: SubMenuItem;
   onClose?: () => void;
+  onAction?: (actionType: string, action: 'modal' | 'drawer') => void;
 }
 
-function SubMenuItemLink({ subItem, onClose }: SubMenuItemLinkProps) {
+function SubMenuItemLink({ subItem, onClose, onAction }: SubMenuItemLinkProps) {
   const pathname = usePathname();
-  const isActive = pathname === subItem.href;
   const SubIcon = subItem.icon;
 
+  // Check if this is an action item (modal/drawer)
+  const isActionItem = hasAction(subItem);
+  const isActive = subItem.href ? pathname === subItem.href : false;
+
+  // Handle action items (modal/drawer)
+  if (isActionItem) {
+    return (
+      <button
+        className={`
+          flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all w-full text-sm
+          text-default-600 hover:bg-default-100 hover:text-foreground
+        `}
+        onClick={() => {
+          onAction?.(subItem.actionType, subItem.action);
+          onClose?.();
+        }}
+      >
+        <SubIcon className="w-4 h-4" strokeWidth={2} />
+        <span>{subItem.name}</span>
+      </button>
+    );
+  }
+
+  // Handle regular link items
   return (
     <Link
       className={`
@@ -122,7 +149,7 @@ function SubMenuItemLink({ subItem, onClose }: SubMenuItemLinkProps) {
             : 'text-default-600 hover:bg-default-100 hover:text-foreground'
         }
       `}
-      href={subItem.href}
+      href={subItem.href!}
       onClick={onClose}
     >
       <SubIcon className="w-4 h-4" strokeWidth={isActive ? 2.5 : 2} />

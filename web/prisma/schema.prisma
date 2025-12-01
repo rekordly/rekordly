@@ -62,7 +62,7 @@ model Account {
 }
 
 model Session {
-  id           String   @id @default(cuid())
+  id           String   @id @default(uuid())
   sessionToken String   @unique
   userId       String
   expires      DateTime
@@ -78,7 +78,7 @@ model VerificationToken {
 }
 
 model OtpCode {
-  id        String   @id @default(cuid())
+  id        String   @id @default(nanoid())
   email     String
   code      String
   purpose   String
@@ -106,7 +106,7 @@ model OnboardingData {
 }
 
 model Customer {
-  id        String   @id @default(cuid())
+  id        String   @id @default(nanoid(12))
   userId    String
   name      String
   email     String?
@@ -140,7 +140,7 @@ enum CustomerRole {
 // ============================================
 
 model Quotation {
-  id              String @id @default(cuid())
+  id              String @id @default(nanoid(12))
   quotationNumber String @unique
   userId          String
 
@@ -200,7 +200,7 @@ enum QuotationStatus {
 }
 
 model Invoice {
-  id            String @id @default(cuid())
+  id            String @id @default(nanoid(10))
   invoiceNumber String @unique
   userId        String
 
@@ -245,7 +245,7 @@ enum InvoiceStatus {
 }
 
 model Sale {
-  id            String @id @default(cuid())
+  id            String @id @default(nanoid(10))
   receiptNumber String @unique
   userId        String
 
@@ -317,7 +317,7 @@ enum SaleStatus {
 }
 
 model Purchase {
-  id             String @id @default(cuid())
+  id             String @id @default(nanoid(10))
   purchaseNumber String @unique
   userId         String
 
@@ -353,8 +353,7 @@ model Purchase {
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
   
-  expense  Expense?
-  payments Payment[]
+    payments Payment[]
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -373,7 +372,7 @@ enum PurchaseStatus {
 }
 
 model Payment {
-  id            String   @id @default(cuid())
+  id            String   @id @default(ulid())
   userId        String
   
   payableType   PayableType
@@ -381,6 +380,8 @@ model Payment {
   saleId        String?
   quotationId   String?
   purchaseId    String?
+  incomeId      String?
+  expensesId    String?
   
   amount        Float
   paymentDate   DateTime      @default(now())
@@ -395,6 +396,8 @@ model Payment {
   sale      Sale?      @relation(fields: [saleId], references: [id], onDelete: Cascade)
   quotation Quotation? @relation(fields: [quotationId], references: [id], onDelete: Cascade)
   purchase  Purchase?  @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  income  IncomeRecord?  @relation(fields: [incomeId], references: [id], onDelete: Cascade)
+  expenses  Expense?  @relation(fields: [expensesId], references: [id], onDelete: Cascade)
   
   @@index([userId, payableType])
   @@index([userId, saleId])
@@ -407,6 +410,8 @@ enum PayableType {
   QUOTATION
   SALE
   PURCHASE
+  OTHER_INCOME
+  OTHER_EXPENSES
 }
 
 enum PaymentCategory {
@@ -424,35 +429,29 @@ enum PaymentMethod {
 }
 
 model IncomeRecord {
-  id          String @id @default(cuid())
+  id          String @id @default(ulid())
   userId      String
   
   mainCategory IncomeMainCategory
   subCategory  IncomeSubCategory
+  customSubCategory String?
   
   grossAmount   Float  
+  taxablePercentage Float?  // Added to store the taxable percentage
   
   description String?
   date        DateTime @default(now())
   
-  // NEW: Relations for GAINS tracking
-  fixedAssetId   String?
-  fixedAsset     FixedAsset? @relation(fields: [fixedAssetId], references: [id], onDelete: SetNull)
-  
-  digitalAssetId String?
-  digitalAsset   DigitalAsset? @relation(fields: [digitalAssetId], references: [id], onDelete: SetNull)
-  
-  securityId     String?
-  security       Security? @relation(fields: [securityId], references: [id], onDelete: SetNull)
-  
-  
   isRefund        Boolean @default(false)
   refundReason    String?
+  refundDate    DateTime?
   
   attachments Json?
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  payments Payment[]
   
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   
@@ -461,20 +460,20 @@ model IncomeRecord {
   @@index([userId, subCategory])
   @@index([userId, mainCategory, date])
   @@index([userId, isRefund])
-  @@index([userId, fixedAssetId])
-  @@index([userId, digitalAssetId])
-  @@index([userId, securityId])
 }
 
 enum IncomeMainCategory {
   BUSINESS_PROFIT
-  EMPLOYMENT_INCOME
-  TRUST_ESTATE_INCOME
-  GAINS  
+EMPLOYMENT_INCOME
+INVESTMENT_INCOME
+PROPERTY_INCOME
+DIGITAL_ASSETS
+TRUST_ESTATE_INCOME
+OTHER_INCOME
+EXEMPT_INCOME 
 }
 
 enum IncomeSubCategory {
-  // A. Business/Trade Income
   TRADE_PROFIT
   SERVICE_FEES
   COMMISSION
@@ -485,61 +484,75 @@ enum IncomeSubCategory {
   PRIZES_AWARDS
   REBATES_DISCOUNTS
   OTHER_BUSINESS_INCOME
-  
-  // B. Employment Income
+
   SALARY
   BONUS
   ALLOWANCES
   BENEFITS_IN_KIND
   PENSION
   SEVERANCE
-  
-  // C. Trust/Estate Income
+
+  INVESTMENT_RETURN
+  CAPITAL_GAINS
+  STOCK_OPTIONS
+  MUTUAL_FUNDS
+  BONDS
+
+  PROPERTY_RENTAL
+  PROPERTY_LEASING
+  PROPERTY_DISPOSAL
+
+  CRYPTOCURRENCY_TRADING
+  DIGITAL_ASSET_MINING
+  NFT_SALES
+  DIGITAL_SERVICES
+
   TRUST_DISTRIBUTION
   ESTATE_DISTRIBUTION
-  
-  // D. GAINS
-  CAPITAL_GAINS        // From Fixed Asset disposal
-  DIGITAL_ASSET_GAINS  // From Digital Asset sales
-  SECURITIES_GAINS     // From Security trades
+
+  GIFTS_RECEIVED
+  DONATIONS_RECEIVED
+  GRANTS
+  COMPENSATION
+  INSURANCE_PROCEEDS
+  INHERITANCE
+  LOAN_FORGIVENESS
+  CUSTOM
+
+  RETURN_OF_CAPITAL
+  LOAN_RECEIVED
+  SPECIFIC_EXEMPTIONS
 }
 
-// UPDATED: Added customer relation and vendor fields
 model Expense {
-  id          String @id @default(cuid())
+  id          String @id @default(ulid())
   userId      String
   
   category    ExpenseCategory
-  subCategory String?  // User can type custom subcategory
+  subCategory String? 
   
-  amount      Float  // Can be negative for returns
+  amount      Float 
   description String
   date        DateTime @default(now())
   
-  // Tax info - set by system, not user
   isDeductible        Boolean @default(true)
   deductionPercentage Int     @default(100)
-  taxCategory         ExpenseTaxCategory?
+  note                String?
   
-  // KEPT: Purchase relation
-  purchaseId String?   @unique
-  purchase   Purchase? @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
-  
-  // NEW: Customer/Vendor relation
+  vendorName  String?
+
   customerId String?
   customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
   
-  // NEW: Vendor information (can be stored even without customer link)
-  vendorName  String?
-  
-  // Return tracking
   isReturn         Boolean @default(false)
   returnReason     String?
+  returnDate    DateTime?
   
   receipt     String?
   attachments Json?
   
   reference String?
+  payments Payment[]
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -555,12 +568,11 @@ model Expense {
 }
 
 enum ExpenseCategory {
+  // Fully Deductible Business Expenses
   COST_OF_GOODS
   RENT_RATES
   UTILITIES
   SALARIES_WAGES
-  TRANSPORTATION
-  FUEL
   REPAIRS_MAINTENANCE
   OFFICE_SUPPLIES
   SOFTWARE_SUBSCRIPTIONS
@@ -568,34 +580,36 @@ enum ExpenseCategory {
   INSURANCE
   LICENSES_PERMITS
   ADVERTISING
-  MARKETING
   BANK_CHARGES
-  INTEREST_PAID
-  DONATIONS
   TRAINING
+  
+  // Partially Deductible Business Expenses
+  INTEREST_ON_DEBT
+  BAD_DEBTS
+  DONATIONS
   DEPRECIATION
-  PERSONAL_EXPENSE
+  RESEARCH_DEVELOPMENT
+  ENTERTAINMENT
+  
+  // Individual/Employee Expenses
+  PERSONAL_EXPENSES
+  RESIDENTIAL_RENT
+  TRANSPORTATION
+  
+  // Non-Deductible Expenses
+  FINES_PENALTIES
+  BENEFITS_IN_KIND
+  NON_APPROVED_PENSION
+  PERSONAL_LIVING_EXPENSES
+  
+  // Other Expenses
   OTHER
 }
 
-enum ExpenseTaxCategory {
-  RENT_AND_PREMISES
-  EMPLOYEE_COSTS
-  REPAIRS_MAINTENANCE
-  INTEREST_ON_DEBT
-  BAD_DEBTS
-  RESEARCH_DEVELOPMENT
-  DONATIONS_DEDUCTIBLE
-  CAPITAL_EXPENDITURE
-  PERSONAL_EXPENSE
-  FINES_PENALTIES
-  NON_APPROVED_PENSION
-  ENTERTAINMENT
-}
 
-// UPDATED: Added incomeRecords relation for GAINS tracking
+
 model FixedAsset {
-  id          String @id @default(cuid())
+  id          String @id @default(nanoid(12))
   userId      String
   
   name        String
@@ -616,9 +630,6 @@ model FixedAsset {
   description String?
   status      AssetStatus @default(ACTIVE)
   attachments Json?
-  
-  // NEW: Link to income records for capital gains
-  incomeRecords IncomeRecord[]
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -647,9 +658,8 @@ enum AssetStatus {
   WRITTEN_OFF
 }
 
-// UPDATED: Added incomeRecords relation for GAINS tracking
 model DigitalAsset {
-  id          String @id @default(cuid())
+  id          String @id @default(nanoid(12))
   userId      String
   
   type        DigitalAssetType
@@ -669,9 +679,6 @@ model DigitalAsset {
   status      AssetStatus @default(ACTIVE)
   attachments Json?
   
-  // NEW: Link to income records for gains
-  incomeRecords IncomeRecord[]
-  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
@@ -690,9 +697,8 @@ enum DigitalAssetType {
   OTHER
 }
 
-// UPDATED: Added incomeRecords relation for GAINS tracking
 model Security {
-  id          String @id @default(cuid())
+  id          String @id @default(nanoid(12))
   userId      String
   
   type        SecurityType
@@ -714,9 +720,6 @@ model Security {
   status      AssetStatus @default(ACTIVE)
   description String?
   attachments Json?
-  
-  // NEW: Link to income records for gains
-  incomeRecords IncomeRecord[]
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

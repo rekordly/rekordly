@@ -32,8 +32,8 @@ export function AddPurchaseItemSection() {
     ) as Resolver<Omit<PurchaseItemType, 'id' | 'total'>>,
     defaultValues: {
       description: '',
-      quantity: 1,
-      unitPrice: 0,
+      quantity: undefined,
+      unitPrice: undefined,
     },
     mode: 'onChange',
   });
@@ -135,8 +135,8 @@ export function AddPurchaseItemSection() {
     // Reset item form
     resetItemForm({
       description: '',
-      quantity: 1,
-      unitPrice: 0,
+      quantity: undefined,
+      unitPrice: undefined,
     });
   };
 
@@ -144,8 +144,8 @@ export function AddPurchaseItemSection() {
     setEditingItemId(null);
     resetItemForm({
       description: '',
-      quantity: 1,
-      unitPrice: 0,
+      quantity: undefined,
+      unitPrice: undefined,
     });
   };
 

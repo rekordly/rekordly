@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 
 import { prisma } from '@/lib/prisma';
 import { getAuthUser } from '@/lib/utils/server';
 import { RefundSchema } from '@/lib/validations/general';
 import { toTwoDecimals } from '@/lib/fn';
 import { PaymentMethod, StatusType } from '@/types/index';
+import { validateRequest } from '@/lib/utils/validation';
 
 export async function POST(
   request: NextRequest,
@@ -42,7 +42,7 @@ export async function POST(
       );
     }
 
-    const data = validationResult.data;
+    const data = await validateRequest(request, RefundSchema);
 
     // Validate refund conditions
     if (existingSale.amountPaid === 0) {
@@ -147,15 +147,10 @@ export async function POST(
   } catch (error) {
     console.error('Sale refund error:', error);
 
+    if (error instanceof NextResponse) return error;
+
     if (error instanceof Error && error.message.includes('Unauthorized')) {
       return NextResponse.json({ message: error.message }, { status: 401 });
-    }
-
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { message: 'Validation error', errors: error.flatten().fieldErrors },
-        { status: 400 }
-      );
     }
 
     return NextResponse.json(

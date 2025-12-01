@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 
 import { prisma } from '@/lib/prisma';
 import { getAuthUser } from '@/lib/utils/server';
@@ -63,13 +62,12 @@ export async function POST(
       );
     }
 
-
     let status: StatusType;
 
     if (totalRefundAmount === existingPurchase.amountPaid) {
       status = 'REFUNDED';
     } else {
-      status = 'PARTIALLY_REFUNDED'; 
+      status = 'PARTIALLY_REFUNDED';
     }
 
     const refundDate = data.refundDate ? new Date(data.refundDate) : new Date();
@@ -136,15 +134,10 @@ export async function POST(
   } catch (error) {
     console.error('Purchase refund error:', error);
 
+    if (error instanceof NextResponse) return error;
+
     if (error instanceof Error && error.message.includes('Unauthorized')) {
       return NextResponse.json({ message: error.message }, { status: 401 });
-    }
-
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { message: 'Validation error', errors: error.flatten().fieldErrors },
-        { status: 400 }
-      );
     }
 
     return NextResponse.json(
