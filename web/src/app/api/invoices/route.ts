@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
 
     const data = await validateRequest(request, invoiceSchema);
 
-    const { customerId, customerName, customerEmail, customerPhone } =
+    const { customerId, customerName, customerEmail, customerPhone, customer } =
       await resolveCustomer(userId, data.customer, data.addAsNewCustomer);
 
     // Generate unique invoice number
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
         status: data.status || 'DRAFT',
       },
       include: {
-        customer: true,
+        // customer: true,
         user: {
           select: {
             id: true,
@@ -87,9 +87,9 @@ export async function POST(request: NextRequest) {
 
     if (
       invoice.status === 'SENT' &&
-      (invoice.customerEmail || invoice.customer?.email)
+      (invoice.customerEmail || customer?.email)
     ) {
-      const recipientEmail = invoice.customerEmail || invoice.customer?.email;
+      const recipientEmail = invoice.customerEmail || customer?.email;
 
       if (recipientEmail) {
         try {
@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const { user, customer, ...invoiceWithoutUser } = invoice;
+    const { user, ...invoiceWithoutUser } = invoice;
 
     return NextResponse.json(
       {

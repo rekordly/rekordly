@@ -4,8 +4,9 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { getAuthUser } from '@/lib/utils/server';
 import { resolveCustomer } from '@/lib/utils/customer';
-import { CreateSaleSchema } from '@/lib/validations/sales';
+import { BaseSaleSchema, CreateSaleSchema } from '@/lib/validations/sales';
 import { toTwoDecimals } from '@/lib/fn';
+import { validateRequest } from '@/lib/utils/validation';
 
 // PATCH /api/sales/[id] - Update sale
 export async function PATCH(
@@ -16,11 +17,10 @@ export async function PATCH(
     const { params } = props;
     const { id } = await params;
     const { userId } = await getAuthUser(request);
-    const saleId = id;
 
     // Check if sale exists and belongs to user
     const existingSale = await prisma.sale.findFirst({
-      where: { id: saleId, userId },
+      where: { id, userId },
       include: {
         payments: true,
       },
@@ -33,92 +33,156 @@ export async function PATCH(
       );
     }
 
-    const body = await request.json();
-    const validationResult = CreateSaleSchema.safeParse(body);
+    // Use partial schema for updates
+    const updateSchema = BaseSaleSchema.partial();
+    const data = await validateRequest(request, updateSchema);
 
-    if (!validationResult.success) {
-      return NextResponse.json(
-        {
-          error: 'Validation failed',
-          message: validationResult.error.flatten().fieldErrors,
+    // Validate customer if provided and has an ID
+    if (data.customer?.id) {
+      const customer = await prisma.customer.findFirst({
+        where: {
+          id: data.customer.id,
+          userId,
         },
-        { status: 400 }
-      );
+      });
+
+      if (!customer) {
+        return NextResponse.json(
+          { message: 'Customer not found or does not belong to you' },
+          { status: 404 }
+        );
+      }
     }
 
-    const data = validationResult.data;
+    // Resolve customer only if customer data is provided
+    let customer = null;
+    if (data.customer?.customerRole) {
+      const resolvedCustomer = await resolveCustomer(
+        userId,
+        data.customer,
+        data.addAsNewCustomer
+      );
+      customer = resolvedCustomer.customer;
+    }
 
-    const { customerId, customerName, customerEmail, customerPhone } =
-      await resolveCustomer(userId, data.customer, data.addAsNewCustomer);
-
-    // Process items with proper decimal conversion
-    const items = data.items.map(item => ({
+    // Process items with proper decimal conversion if provided
+    const items = data.items?.map(item => ({
       ...item,
       rate: toTwoDecimals(item.amount),
       amount: toTwoDecimals(item.amount),
     }));
 
-    // Process other expenses with proper decimal conversion
-    const otherSaleExpenses = (data.otherSaleExpenses || []).map(expense => ({
+    // Process other expenses with proper decimal conversion if provided
+    const otherSaleExpenses = data.otherSaleExpenses?.map(expense => ({
       ...expense,
       amount: toTwoDecimals(expense.amount),
     }));
 
-    // Determine status based on payment
-    let status: 'PAID' | 'UNPAID' | 'PARTIALLY_PAID' = 'UNPAID';
-    const totalAmount = toTwoDecimals(data.totalAmount);
-    const amountPaid = toTwoDecimals(data.amountPaid || 0);
-    const balance = toTwoDecimals(data.balance);
+    // Determine status based on payment if amounts are provided
+    let status = undefined;
+    if (data.totalAmount !== undefined && data.amountPaid !== undefined) {
+      const totalAmount = toTwoDecimals(data.totalAmount);
+      const amountPaid = toTwoDecimals(data.amountPaid);
 
-    if (amountPaid >= totalAmount) {
-      status = 'PAID';
-    } else if (amountPaid > 0) {
-      status = 'PARTIALLY_PAID';
+      if (amountPaid >= totalAmount) {
+        status = 'PAID';
+      } else if (amountPaid > 0) {
+        status = 'PARTIALLY_PAID';
+      } else {
+        status = 'UNPAID';
+      }
     }
 
-    const saleDate = data.saleDate ? new Date(data.saleDate) : new Date();
-
-    // Calculate payment difference
+    // Calculate payment difference if amountPaid is being updated
     const previousAmountPaid = existingSale.amountPaid;
-    const paymentDifference = amountPaid - previousAmountPaid;
+    const newAmountPaid =
+      data.amountPaid !== undefined
+        ? toTwoDecimals(data.amountPaid)
+        : previousAmountPaid;
+    const paymentDifference = newAmountPaid - previousAmountPaid;
+
+    const saleDate = data.saleDate ? new Date(data.saleDate) : undefined;
 
     // Update sale with transaction
     const result = await prisma.$transaction(async tx => {
+      // Build update data object
+      const updateData: any = {};
+
+      if (data.sourceType !== undefined)
+        updateData.sourceType = data.sourceType;
+      if (data.invoiceId !== undefined) {
+        updateData.invoiceId = data.invoiceId || null;
+      }
+
+      if (data.customer) {
+        if (data.customer.id) {
+          updateData.customerId = data.customer.id;
+          updateData.customerName = null;
+          updateData.customerEmail = null;
+          updateData.customerPhone = null;
+        } else {
+          updateData.customerId = null;
+          updateData.customerName = data.customer.name;
+          updateData.customerEmail = data.customer.email || null;
+          updateData.customerPhone = data.customer.phone || null;
+        }
+      }
+
+      if (data.title !== undefined) updateData.title = data.title;
+      if (data.description !== undefined) {
+        updateData.description = data.description || null;
+      }
+      if (items) updateData.items = items;
+      if (data.subtotal !== undefined) {
+        updateData.subtotal = toTwoDecimals(data.subtotal);
+      }
+      if (data.discountType !== undefined) {
+        updateData.discountType = data.discountType || null;
+      }
+      if (data.discountValue !== undefined) {
+        updateData.discountValue = data.discountValue
+          ? toTwoDecimals(data.discountValue)
+          : null;
+      }
+      if (data.discountAmount !== undefined) {
+        updateData.discountAmount = toTwoDecimals(data.discountAmount);
+      }
+      if (data.deliveryCost !== undefined) {
+        updateData.deliveryCost = toTwoDecimals(data.deliveryCost);
+      }
+      if (otherSaleExpenses) updateData.otherSaleExpenses = otherSaleExpenses;
+      if (data.totalSaleExpenses !== undefined) {
+        updateData.totalSaleExpenses = toTwoDecimals(data.totalSaleExpenses);
+      }
+      if (data.includeVAT !== undefined)
+        updateData.includeVAT = data.includeVAT;
+      if (data.vatAmount !== undefined) {
+        updateData.vatAmount = toTwoDecimals(data.vatAmount);
+      }
+      if (data.totalAmount !== undefined) {
+        updateData.totalAmount = toTwoDecimals(data.totalAmount);
+      }
+      if (data.amountPaid !== undefined) {
+        updateData.amountPaid = toTwoDecimals(data.amountPaid);
+      }
+      if (data.balance !== undefined) {
+        updateData.balance = toTwoDecimals(data.balance);
+      }
+      if (status !== undefined) updateData.status = status;
+      if (saleDate) updateData.saleDate = saleDate;
+
       // Update the sale
       const sale = await tx.sale.update({
-        where: { id: saleId },
-        data: {
-          sourceType: data.sourceType || 'DIRECT',
-          invoiceId: data.invoiceId || null,
-          customerId,
-          customerName,
-          customerEmail,
-          customerPhone,
-          title: data.title,
-          description: data.description || null,
-          items,
-          subtotal: toTwoDecimals(data.subtotal),
-          discountType: data.discountType || null,
-          discountValue: data.discountValue
-            ? toTwoDecimals(data.discountValue)
-            : null,
-          discountAmount: toTwoDecimals(data.discountAmount || 0),
-          deliveryCost: toTwoDecimals(data.deliveryCost || 0),
-          otherSaleExpenses,
-          totalSaleExpenses: toTwoDecimals(data.totalSaleExpenses || 0),
-          includeVAT: data.includeVAT,
-          vatAmount: toTwoDecimals(data.vatAmount || 0),
-          totalAmount,
-          amountPaid,
-          balance,
-          status,
-          saleDate,
+        where: { id },
+        data: updateData,
+        include: {
+          customer: true,
         },
       });
 
-      // Handle payment changes
+      // Handle payment changes only if amountPaid was updated
       let payment = null;
-      if (paymentDifference > 0) {
+      if (data.amountPaid !== undefined && paymentDifference > 0) {
         // Additional payment made
         payment = await tx.payment.create({
           data: {
@@ -126,18 +190,15 @@ export async function PATCH(
             payableType: 'SALE',
             saleId: sale.id,
             amount: toTwoDecimals(paymentDifference),
-            paymentDate: saleDate,
+            paymentDate: saleDate || new Date(),
             paymentMethod: data.paymentMethod || 'BANK_TRANSFER',
             category: 'INCOME',
             notes: `Additional payment for sale ${existingSale.receiptNumber}`,
           },
         });
-      } else if (paymentDifference < 0) {
-        // Payment reduced - you might want to handle refunds here
-        // For now, we'll just log it
-        console.warn(
-          `Payment reduced for sale ${saleId}: ${paymentDifference}`
-        );
+      } else if (data.amountPaid !== undefined && paymentDifference < 0) {
+        // Payment reduced - log it for now
+        console.warn(`Payment reduced for sale ${id}: ${paymentDifference}`);
       }
 
       return { sale, payment };
@@ -149,21 +210,17 @@ export async function PATCH(
         success: true,
         sale: result.sale,
         payment: result.payment,
+        customer,
       },
       { status: 200 }
     );
   } catch (error) {
     console.error('Update sale error:', error);
 
+    if (error instanceof NextResponse) return error;
+
     if (error instanceof Error && error.message.includes('Unauthorized')) {
       return NextResponse.json({ message: error.message }, { status: 401 });
-    }
-
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { message: 'Validation error', errors: error.flatten().fieldErrors },
-        { status: 400 }
-      );
     }
 
     return NextResponse.json(
@@ -182,11 +239,10 @@ export async function DELETE(
     const { params } = props;
     const { id } = await params;
     const { userId } = await getAuthUser(request);
-    const saleId = id;
 
     // Check if sale exists and belongs to user
     const existingSale = await prisma.sale.findFirst({
-      where: { id: saleId, userId },
+      where: { id, userId },
     });
 
     if (!existingSale) {
@@ -198,7 +254,7 @@ export async function DELETE(
 
     // Delete sale (payments will be cascade deleted)
     await prisma.sale.delete({
-      where: { id: saleId },
+      where: { id },
     });
 
     return NextResponse.json(
@@ -231,10 +287,9 @@ export async function GET(
     const { params } = props;
     const { id } = await params;
     const { userId } = await getAuthUser(request);
-    const saleId = id;
 
     const sale = await prisma.sale.findFirst({
-      where: { id: saleId, userId },
+      where: { id, userId },
       include: {
         customer: {
           select: {

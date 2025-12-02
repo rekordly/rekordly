@@ -6,26 +6,14 @@ import { getAuthUser } from '@/lib/utils/server';
 import { resolveCustomer } from '@/lib/utils/customer';
 import { CreatePurchaseSchema } from '@/lib/validations/purchases';
 import { generatePurchaseNumber, toTwoDecimals } from '@/lib/fn';
+import { validateRequest } from '@/lib/utils/validation';
 
 export async function POST(request: NextRequest) {
   try {
     const { userId } = await getAuthUser(request);
 
-    const body = await request.json();
-    const validationResult = CreatePurchaseSchema.safeParse(body);
-
-    if (!validationResult.success) {
-      return NextResponse.json(
-        {
-          error: 'Validation failed',
-          message: validationResult.error.flatten().fieldErrors,
-        },
-        { status: 400 }
-      );
-    }
-
-    const data = validationResult.data;
-    const { customerId, customerName } = await resolveCustomer(
+    const data = await validateRequest(request, CreatePurchaseSchema);
+    const { customerId, customerName, customer } = await resolveCustomer(
       userId,
       data.customer,
       data.addAsNewCustomer
@@ -136,9 +124,7 @@ export async function POST(request: NextRequest) {
           });
         }
 
-        const { customer } = purchase;
-
-        return { purchase, payment, customer };
+        return { purchase, payment };
       },
       {
         maxWait: 10000, // 10 seconds
@@ -150,7 +136,7 @@ export async function POST(request: NextRequest) {
       {
         message: 'Purchase created successfully',
         success: true,
-        customer: result.customer,
+        customer,
         purchase: result.purchase,
         payment: result.payment,
       },
@@ -159,15 +145,10 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Create purchase error:', error);
 
+    if (error instanceof NextResponse) return error;
+
     if (error instanceof Error && error.message.includes('Unauthorized')) {
       return NextResponse.json({ message: error.message }, { status: 401 });
-    }
-
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { message: 'Validation error', errors: error.flatten().fieldErrors },
-        { status: 400 }
-      );
     }
 
     return NextResponse.json(

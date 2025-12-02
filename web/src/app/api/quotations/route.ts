@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
 
     const data = validationResult.data;
 
-    const { customerId, customerName, customerEmail, customerPhone } =
+    const { customerId, customerName, customerEmail, customerPhone, customer } =
       await resolveCustomer(userId, data.customer, data.addAsNewCustomer);
 
     let quotationNumber = generateQuotationNumber(userId);
@@ -92,10 +92,6 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const { customer, ...quotationWithoutCustomer } = quotation;
-
-    console.log(customer, quotationWithoutCustomer);
-
     return NextResponse.json(
       {
         message:
@@ -103,7 +99,7 @@ export async function POST(request: NextRequest) {
             ? 'Quotation created and sent successfully'
             : 'Quotation saved as draft',
         success: true,
-        quotation: quotationWithoutCustomer,
+        quotation,
         customer,
       },
       { status: 201 }

@@ -6,6 +6,7 @@ import { getAuthUser } from '@/lib/utils/server';
 import { addPaymentSchema } from '@/lib/validations/general';
 import { generateReceiptNumber, toTwoDecimals } from '@/lib/fn';
 import { prisma } from '@/lib/prisma';
+import { validateRequest } from '@/lib/utils/validation';
 
 const processItems = (items: any): Prisma.InputJsonValue => {
   if (!items) return items;
@@ -29,20 +30,7 @@ export async function POST(
     const params = await props.params;
     const { userId } = await getAuthUser(request);
 
-    const body = await request.json();
-    const validationResult = addPaymentSchema.safeParse(body);
-
-    if (!validationResult.success) {
-      return NextResponse.json(
-        {
-          message: 'Validation failed',
-          errors: validationResult.error.flatten().fieldErrors,
-        },
-        { status: 400 }
-      );
-    }
-
-    const data = validationResult.data;
+    const data = await validateRequest(request, addPaymentSchema);
     const amountPaid = toTwoDecimals(data.amountPaid);
 
     // ✅ Fetch invoice with minimal data first (outside transaction)
@@ -302,6 +290,8 @@ export async function POST(
     );
   } catch (error) {
     console.error('Convert invoice error:', error);
+
+    if (error instanceof NextResponse) return error;
 
     if (error instanceof Error && error.message.includes('Unauthorized')) {
       return NextResponse.json({ message: error.message }, { status: 401 });

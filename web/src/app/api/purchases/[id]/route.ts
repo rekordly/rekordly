@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma';
 import { getAuthUser } from '@/lib/utils/server';
 import { UpdatePurchaseSchema } from '@/lib/validations/purchases';
 import { toTwoDecimals } from '@/lib/fn';
+import { validateRequest } from '@/lib/utils/validation';
+import { resolveCustomer } from '@/lib/utils/customer';
 
 // GET /api/purchases/[id] - Get single purchase
 export async function GET(
@@ -86,20 +88,8 @@ export async function PATCH(
     const { id } = await params;
     const { userId } = await getAuthUser(request);
 
-    const body = await request.json();
-    const validationResult = UpdatePurchaseSchema.safeParse(body);
-
-    if (!validationResult.success) {
-      return NextResponse.json(
-        {
-          error: 'Validation failed',
-          message: validationResult.error.flatten().fieldErrors,
-        },
-        { status: 400 }
-      );
-    }
-
-    const data = validationResult.data;
+    const updatePurchaseSchema = UpdatePurchaseSchema.partial();
+    const data = await validateRequest(request, updatePurchaseSchema);
 
     // Check if purchase exists and belongs to user
     const existingPurchase = await prisma.purchase.findFirst({
@@ -114,6 +104,33 @@ export async function PATCH(
         { message: 'Purchase not found' },
         { status: 404 }
       );
+    }
+
+    if (data.customer?.id) {
+      const customer = await prisma.customer.findFirst({
+        where: {
+          id: data.customer.id,
+          userId,
+        },
+      });
+
+      if (!customer) {
+        return NextResponse.json(
+          { message: 'Customer not found or does not belong to you' },
+          { status: 404 }
+        );
+      }
+    }
+
+    let customer = null;
+
+    if (data.customer?.customerRole) {
+      const resolvedCustomer = await resolveCustomer(
+        userId,
+        data.customer,
+        data.addAsNewCustomer
+      );
+      customer = resolvedCustomer.customer;
     }
 
     // Prepare update data
@@ -196,21 +213,17 @@ export async function PATCH(
         message: 'Purchase updated successfully',
         success: true,
         purchase: updatedPurchase,
+        customer,
       },
       { status: 200 }
     );
   } catch (error) {
     console.error('Update purchase error:', error);
 
+    if (error instanceof NextResponse) return error;
+
     if (error instanceof Error && error.message.includes('Unauthorized')) {
       return NextResponse.json({ message: error.message }, { status: 401 });
-    }
-
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { message: 'Validation error', errors: error.flatten().fieldErrors },
-        { status: 400 }
-      );
     }
 
     return NextResponse.json(

@@ -48,12 +48,12 @@ export default function DashboardNavbar({ user }: SessionUser) {
   const handleAction = (actionType: string, action: 'modal' | 'drawer') => {
     const incomeTypes = ['salary', 'commission', 'dividend', 'other-income'];
     const expenseTypes = [
-      'office-supplies',
+      'salary',
       'rent',
       'utilities',
-      'meals',
-      'travel',
-      'software',
+      'fuel',
+      'professional-fees',
+      'subscriptions',
     ];
 
     if (incomeTypes.includes(actionType)) {

@@ -175,63 +175,101 @@ export function AutocompleteInput<T extends FieldValues, I = any>({
     <Controller
       control={control}
       name={name}
-      render={({ field, fieldState: { error } }) => (
-        <Autocomplete
-          allowsCustomValue={!disallowTyping}
-          color="primary"
-          description={description}
-          errorMessage={error?.message}
-          isDisabled={isDisabled}
-          isInvalid={!!error}
-          isRequired={isRequired}
-          label={label}
-          placeholder={placeholder}
-          variant="bordered"
-          selectedKey={
-            items.some(i => {
-              const val = getOptionValue ? getOptionValue(i) : (i as any).id;
-              return val === field.value;
-            })
-              ? field.value
-              : null
-          }
-          inputValue={
-            !items.some(i => {
-              const val = getOptionValue ? getOptionValue(i) : (i as any).id;
-              return val === field.value;
-            })
-              ? field.value
-              : undefined
-          }
-          onInputChange={value => {
-            if (disallowTyping && value && field.value) return;
+      render={({ field, fieldState: { error } }) => {
+        // Find the selected item based on field value
+        const selectedItem = items.find(item => {
+          const itemValue = getOptionValue
+            ? getOptionValue(item)
+            : (item as any).id;
+          const itemLabel = getOptionLabel
+            ? getOptionLabel(item)
+            : (item as any).name;
 
-            field.onChange(value); // ← VERY important
-            onInputChange?.(value);
-          }}
-          onSelectionChange={key => {
-            const stringKey = key as string;
+          // Match by ID (value) or by name (label)
+          return itemValue === field.value || itemLabel === field.value;
+        });
 
-            field.onChange(stringKey || '');
-            onSelectionChange?.(stringKey);
-          }}
-        >
-          {items.map(item => {
-            const value = getOptionValue
-              ? getOptionValue(item)
-              : (item as any).id;
-            const labelText = getOptionLabel
-              ? getOptionLabel(item)
-              : (item as any).name;
+        const selectedKey = selectedItem
+          ? getOptionValue
+            ? getOptionValue(selectedItem)
+            : (selectedItem as any).id
+          : null;
 
-            return (
-              <AutocompleteItem key={value} textValue={labelText}>
-                {labelText}
-              </AutocompleteItem>
-            );
-          })}
-        </Autocomplete>
-      )}
+        const selectedLabel = selectedItem
+          ? getOptionLabel
+            ? getOptionLabel(selectedItem)
+            : (selectedItem as any).name
+          : null;
+
+        // Determine what to show in the input
+        // If there's a selected item, show its label
+        // Otherwise, show what the user typed (field.value)
+        const displayValue = selectedLabel || field.value || '';
+
+        return (
+          <Autocomplete
+            allowsCustomValue={!disallowTyping}
+            color="primary"
+            description={description}
+            errorMessage={error?.message}
+            isDisabled={isDisabled}
+            isInvalid={!!error}
+            isRequired={isRequired}
+            label={label}
+            placeholder={placeholder}
+            variant="bordered"
+            selectedKey={selectedKey}
+            inputValue={displayValue}
+            onInputChange={value => {
+              if (disallowTyping && value && field.value) return;
+
+              field.onChange(value);
+              onInputChange?.(value);
+            }}
+            onSelectionChange={key => {
+              const stringKey = key as string;
+
+              if (stringKey) {
+                // Find the selected item and set the name as field value
+                const selectedItem = items.find(item => {
+                  const itemValue = getOptionValue
+                    ? getOptionValue(item)
+                    : (item as any).id;
+                  return itemValue === stringKey;
+                });
+
+                if (selectedItem) {
+                  const itemLabel = getOptionLabel
+                    ? getOptionLabel(selectedItem)
+                    : (selectedItem as any).name;
+                  field.onChange(itemLabel); // Set the name/label as the field value
+                } else {
+                  field.onChange(stringKey);
+                }
+              } else {
+                field.onChange('');
+              }
+
+              onSelectionChange?.(stringKey);
+            }}
+          >
+            {items.map(item => {
+              const value = getOptionValue
+                ? getOptionValue(item)
+                : (item as any).id;
+              const labelText = getOptionLabel
+                ? getOptionLabel(item)
+                : (item as any).name;
+
+              return (
+                <AutocompleteItem key={value} textValue={labelText}>
+                  {labelText}
+                </AutocompleteItem>
+              );
+            })}
+          </Autocomplete>
+        );
+      }}
     />
   );
 }

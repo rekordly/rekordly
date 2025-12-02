@@ -23,8 +23,9 @@ export function CustomerDetails({
   optional = true,
 }: CustomerDetailsProps) {
   const { control, setValue, watch } = useFormContext();
-  const [isCustomerSelected, setIsCustomerSelected] = useState(false);
   const [showAddAsNewCustomer, setShowAddAsNewCustomer] = useState(false);
+  const [isExistingCustomerSelected, setIsExistingCustomerSelected] =
+    useState(false);
 
   // Get the appropriate title based on role
   const getRoleTitle = () => {
@@ -90,11 +91,10 @@ export function CustomerDetails({
 
   // Check if we should show "Add as new customer" checkbox
   useEffect(() => {
-    if (isCustomerSelected) {
-      // If existing customer is selected, hide the checkbox
+    if (isExistingCustomerSelected) {
+      // If existing customer is selected via dropdown, hide the checkbox
       setShowAddAsNewCustomer(false);
       setValue('addAsNewCustomer', false);
-
       return;
     }
 
@@ -114,50 +114,83 @@ export function CustomerDetails({
     customerName,
     customerPhone,
     customerEmail,
-    isCustomerSelected,
+    isExistingCustomerSelected,
     setValue,
   ]);
 
   const handleCustomerSelect = (customerId: string) => {
+    if (!customerId) {
+      // Selection was cleared
+      setIsExistingCustomerSelected(false);
+      setValue('customer.id', '');
+      return;
+    }
+
     const customer = customers.find(c => c.id === customerId);
 
     if (!customer) return;
 
+    // Mark that an existing customer was selected from dropdown
+    setIsExistingCustomerSelected(true);
+
     // Auto-fill all customer fields
     setValue('customer.id', customer.id ?? '');
-    setValue('customer.name', customer.name ?? '');
+    setValue('customer.name', customer.name ?? ''); // This will be set by AutocompleteInput
     setValue('customer.phone', customer.phone ?? '');
     setValue('customer.email', customer.email ?? '');
     setValue('addAsNewCustomer', false);
-
-    setIsCustomerSelected(true);
     setShowAddAsNewCustomer(false);
   };
 
   const handleCustomerNameInput = (name: string) => {
+    // Always update the name field
     setValue('customer.name', name);
 
     if (!name || name.trim() === '') {
+      // Clear all fields if name is empty
       setValue('customer.id', '');
-      setValue('customer.name', '');
       setValue('customer.phone', '');
       setValue('customer.email', '');
       setValue('addAsNewCustomer', false);
-      setIsCustomerSelected(false);
       setValue(
         'customer.customerRole',
         role === 'SUPPLIER' ? 'SUPPLIER' : 'BUYER'
       );
       setShowAddAsNewCustomer(false);
-
+      setIsExistingCustomerSelected(false);
       return;
     }
 
-    if (!customers.find(c => c.name === name)) {
-      setValue('customer.id', '');
-      setIsCustomerSelected(false);
-    }
+    // Don't auto-select when typing - let user type freely
+    // Only clear the ID to indicate it's potentially a new customer
+    setValue('customer.id', '');
+    setIsExistingCustomerSelected(false);
   };
+
+  // Watch for changes to phone/email to clear selection if edited
+  useEffect(() => {
+    if (isExistingCustomerSelected) {
+      // If phone or email is edited after selecting an existing customer,
+      // clear the selection
+      const customer = customers.find(c => c.id === selectedCustomerId);
+      if (customer) {
+        const phoneChanged = (customerPhone || '') !== (customer.phone || '');
+        const emailChanged = (customerEmail || '') !== (customer.email || '');
+
+        if (phoneChanged || emailChanged) {
+          setValue('customer.id', '');
+          setIsExistingCustomerSelected(false);
+        }
+      }
+    }
+  }, [
+    customerPhone,
+    customerEmail,
+    isExistingCustomerSelected,
+    selectedCustomerId,
+    customers,
+    setValue,
+  ]);
 
   return (
     <Card className="w-full rounded-2xl " shadow="none">
@@ -179,12 +212,13 @@ export function CustomerDetails({
             <div className="md:col-span-2">
               <AutocompleteInput
                 control={control}
-                disallowTyping={isCustomerSelected || selectedCustomerId}
+                // Only disable typing when an existing customer is actively selected
+                disallowTyping={isExistingCustomerSelected}
                 getOptionLabel={c => c.name ?? ''}
                 getOptionValue={c => c.id ?? ''}
                 items={customers}
                 label={`${getRoleLabel()} Name`}
-                name="customer.id"
+                name="customer.name"
                 placeholder={getRolePlaceholder()}
                 onInputChange={handleCustomerNameInput}
                 onSelectionChange={handleCustomerSelect}
@@ -193,7 +227,7 @@ export function CustomerDetails({
 
             <TextInput
               control={control}
-              isDisabled={isCustomerSelected || selectedCustomerId}
+              isDisabled={isExistingCustomerSelected}
               label="Phone Number"
               name="customer.phone"
               placeholder="08012345678"
@@ -202,7 +236,7 @@ export function CustomerDetails({
 
             <TextInput
               control={control}
-              isDisabled={isCustomerSelected || selectedCustomerId}
+              isDisabled={isExistingCustomerSelected}
               label="Email Address"
               name="customer.email"
               placeholder="customer@example.com"
@@ -210,7 +244,7 @@ export function CustomerDetails({
             />
           </div>
 
-          {!selectedCustomerId && (
+          {!isExistingCustomerSelected && showAddAsNewCustomer && (
             <div className="pt-2">
               <Checkbox
                 name="addAsNewCustomer"

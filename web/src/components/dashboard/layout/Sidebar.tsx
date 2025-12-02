@@ -42,11 +42,9 @@ export function Sidebar({
     ];
 
     if (incomeTypes.includes(actionType)) {
-      // Open income drawer with prefilled type
       setIncomeType(actionType);
       setIsIncomeModalOpen(true);
     } else if (expenseTypes.includes(actionType)) {
-      // Open expense drawer with prefilled type
       setExpenseType(actionType);
       setIsExpensesModalOpen(true);
     }

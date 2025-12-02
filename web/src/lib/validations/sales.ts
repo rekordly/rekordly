@@ -60,16 +60,17 @@ export const ExpensesAndPaymentSchema = z.object({
   paymentMethod: PaymentMethodSchema.default('BANK_TRANSFER'),
 });
 
-// Complete schema with transformations and validations
-export const CreateSaleSchema = CustomerAndSaleDetailsSchema.merge(
+// Base schema without transformations (for partial updates)
+export const BaseSaleSchema = CustomerAndSaleDetailsSchema.merge(
   ItemsAndPricingSchema
-)
-  .merge(ExpensesAndPaymentSchema)
-  .transform(data => ({
-    ...data,
-    saleDate:
-      data.saleDate instanceof Date ? data.saleDate : new Date(data.saleDate),
-  }))
+).merge(ExpensesAndPaymentSchema);
+
+// Complete schema with transformations and validations
+export const CreateSaleSchema = BaseSaleSchema.transform(data => ({
+  ...data,
+  saleDate:
+    data.saleDate instanceof Date ? data.saleDate : new Date(data.saleDate),
+}))
   .refine(
     data => {
       // Amount paid cannot exceed total amount

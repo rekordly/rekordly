@@ -14,6 +14,24 @@ interface CustomerResult {
   customerEmail: string | null;
   customerPhone: string | null;
   customerRole: 'BUYER' | 'SUPPLIER';
+  customer?: {
+    id: string;
+    name: string;
+    email: string | null;
+    phone: string | null;
+    customerRole: 'BUYER' | 'SUPPLIER';
+    createdAt: Date;
+    updatedAt: Date;
+    _count: {
+      sales: number;
+      purchases: number;
+      invoices: number;
+    };
+    totalSpent?: number;
+    totalOwed?: number;
+    totalRevenue?: number;
+    totalDebt?: number;
+  } | null;
 }
 
 export async function resolveCustomer(
@@ -26,6 +44,7 @@ export async function resolveCustomer(
   let customerEmail: string | null = null;
   let customerPhone: string | null = null;
   let customerRole: 'BUYER' | 'SUPPLIER' = 'BUYER';
+  let customer: CustomerResult['customer'] = null;
 
   if (!customerData) {
     return {
@@ -34,23 +53,103 @@ export async function resolveCustomer(
       customerEmail,
       customerPhone,
       customerRole,
+      customer,
     };
   }
 
   // Handle existing customer by ID
   if (customerData.id) {
-    const customer = await prisma.customer.findFirst({
+    const existingCustomer = await prisma.customer.findFirst({
       where: {
         id: customerData.id,
         userId: userId,
       },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        customerRole: true,
+        createdAt: true,
+        updatedAt: true,
+        _count: {
+          select: {
+            invoices: true,
+            sales: true,
+            purchases: true,
+          },
+        },
+        sales: {
+          select: {
+            totalAmount: true,
+            amountPaid: true,
+            balance: true,
+            status: true,
+          },
+        },
+        purchases: {
+          select: {
+            totalAmount: true,
+            amountPaid: true,
+            balance: true,
+            status: true,
+          },
+        },
+      },
     });
 
-    if (!customer) {
+    if (!existingCustomer) {
       throw new Error('Customer not found or does not belong to you');
     }
 
-    customerId = customer.id;
+    customerId = existingCustomer.id;
+
+    // Calculate financial stats
+    if (existingCustomer.customerRole === 'BUYER') {
+      const totalSpent = existingCustomer.sales.reduce(
+        (sum, sale) => sum + sale.totalAmount,
+        0
+      );
+      const totalOwed = existingCustomer.sales.reduce(
+        (sum, sale) => sum + sale.balance,
+        0
+      );
+
+      customer = {
+        id: existingCustomer.id,
+        name: existingCustomer.name,
+        email: existingCustomer.email,
+        phone: existingCustomer.phone,
+        customerRole: existingCustomer.customerRole,
+        createdAt: existingCustomer.createdAt,
+        updatedAt: existingCustomer.updatedAt,
+        _count: existingCustomer._count,
+        totalSpent,
+        totalOwed,
+      };
+    } else {
+      const totalRevenue = existingCustomer.purchases.reduce(
+        (sum, purchase) => sum + purchase.totalAmount,
+        0
+      );
+      const totalDebt = existingCustomer.purchases.reduce(
+        (sum, purchase) => sum + purchase.balance,
+        0
+      );
+
+      customer = {
+        id: existingCustomer.id,
+        name: existingCustomer.name,
+        email: existingCustomer.email,
+        phone: existingCustomer.phone,
+        customerRole: existingCustomer.customerRole,
+        createdAt: existingCustomer.createdAt,
+        updatedAt: existingCustomer.updatedAt,
+        _count: existingCustomer._count,
+        totalRevenue,
+        totalDebt,
+      };
+    }
   }
   // Handle adding as new customer
   else if (addAsNewCustomer) {
@@ -62,6 +161,7 @@ export async function resolveCustomer(
         customerEmail,
         customerPhone,
         customerRole,
+        customer,
       };
     }
 
@@ -73,6 +173,38 @@ export async function resolveCustomer(
         userId,
         name: customerData.name,
         customerRole: role,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        customerRole: true,
+        createdAt: true,
+        updatedAt: true,
+        _count: {
+          select: {
+            invoices: true,
+            sales: true,
+            purchases: true,
+          },
+        },
+        sales: {
+          select: {
+            totalAmount: true,
+            amountPaid: true,
+            balance: true,
+            status: true,
+          },
+        },
+        purchases: {
+          select: {
+            totalAmount: true,
+            amountPaid: true,
+            balance: true,
+            status: true,
+          },
+        },
       },
     });
 
@@ -101,7 +233,7 @@ export async function resolveCustomer(
 
     if (shouldCreate) {
       // Create new customer
-      const customer = await prisma.customer.create({
+      const newCustomer = await prisma.customer.create({
         data: {
           userId,
           name: customerData.name,
@@ -109,11 +241,83 @@ export async function resolveCustomer(
           phone: customerData.phone || null,
           customerRole: role,
         },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          customerRole: true,
+          createdAt: true,
+          updatedAt: true,
+          _count: {
+            select: {
+              invoices: true,
+              sales: true,
+              purchases: true,
+            },
+          },
+        },
       });
-      customerId = customer.id;
+
+      customerId = newCustomer.id;
+
+      // New customer has no transactions yet
+      customer = {
+        ...newCustomer,
+        ...(role === 'BUYER'
+          ? { totalSpent: 0, totalOwed: 0 }
+          : { totalRevenue: 0, totalDebt: 0 }),
+      };
     } else if (existingCustomer) {
       // Use existing customer
       customerId = existingCustomer.id;
+
+      // Calculate financial stats for existing customer
+      if (existingCustomer.customerRole === 'BUYER') {
+        const totalSpent = existingCustomer.sales.reduce(
+          (sum, sale) => sum + sale.totalAmount,
+          0
+        );
+        const totalOwed = existingCustomer.sales.reduce(
+          (sum, sale) => sum + sale.balance,
+          0
+        );
+
+        customer = {
+          id: existingCustomer.id,
+          name: existingCustomer.name,
+          email: existingCustomer.email,
+          phone: existingCustomer.phone,
+          customerRole: existingCustomer.customerRole,
+          createdAt: existingCustomer.createdAt,
+          updatedAt: existingCustomer.updatedAt,
+          _count: existingCustomer._count,
+          totalSpent,
+          totalOwed,
+        };
+      } else {
+        const totalRevenue = existingCustomer.purchases.reduce(
+          (sum, purchase) => sum + purchase.totalAmount,
+          0
+        );
+        const totalDebt = existingCustomer.purchases.reduce(
+          (sum, purchase) => sum + purchase.balance,
+          0
+        );
+
+        customer = {
+          id: existingCustomer.id,
+          name: existingCustomer.name,
+          email: existingCustomer.email,
+          phone: existingCustomer.phone,
+          customerRole: existingCustomer.customerRole,
+          createdAt: existingCustomer.createdAt,
+          updatedAt: existingCustomer.updatedAt,
+          _count: existingCustomer._count,
+          totalRevenue,
+          totalDebt,
+        };
+      }
     }
   }
   // Handle loose customer data (not adding as new customer)
@@ -130,5 +334,6 @@ export async function resolveCustomer(
     customerEmail,
     customerPhone,
     customerRole,
+    customer,
   };
 }

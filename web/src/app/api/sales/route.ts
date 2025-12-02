@@ -11,22 +11,9 @@ export async function POST(request: NextRequest) {
   try {
     const { userId } = await getAuthUser(request);
 
-    const body = await request.json();
-    const validationResult = CreateSaleSchema.safeParse(body);
-
-    if (!validationResult.success) {
-      return NextResponse.json(
-        {
-          error: 'Validation failed',
-          message: validationResult.error.flatten().fieldErrors,
-        },
-        { status: 400 }
-      );
-    }
-
     const data = await validateRequest(request, CreateSaleSchema);
 
-    const { customerId, customerName, customerEmail, customerPhone } =
+    const { customerId, customerName, customerEmail, customerPhone, customer } =
       await resolveCustomer(userId, data.customer, data.addAsNewCustomer);
 
     // Generate unique receipt number
@@ -142,26 +129,14 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      const { customer } = sale;
-      const customerResponse = customer
-        ? {
-            id: customer.id,
-            userId: customer.userId,
-            name: customer.name,
-            email: customer.email,
-            phone: customer.phone,
-            customerRole: customer.customerRole,
-          }
-        : null;
-
-      return { sale, payment, customerResponse };
+      return { sale, payment };
     });
 
     return NextResponse.json(
       {
         message: 'Sale created successfully',
         success: true,
-        customer: result.customerResponse,
+        customer,
         sale: result.sale,
         payment: result.payment,
       },

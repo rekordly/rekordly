@@ -4,6 +4,8 @@ import { z } from 'zod';
 
 import { getAuthUser } from '@/lib/utils/server';
 import { baseQuotationSchema } from '@/lib/validations/quotations';
+import { validateRequest } from '@/lib/utils/validation';
+import { resolveCustomer } from '@/lib/utils/customer';
 
 export async function GET(
   request: NextRequest,
@@ -76,22 +78,8 @@ export async function PATCH(
       );
     }
 
-    const body = await request.json();
-
     const updateSchema = baseQuotationSchema.partial();
-    const validationResult = updateSchema.safeParse(body);
-
-    if (!validationResult.success) {
-      return NextResponse.json(
-        {
-          message: 'Validation failed',
-          errors: validationResult.error.flatten().fieldErrors,
-        },
-        { status: 400 }
-      );
-    }
-
-    const data = validationResult.data;
+    const data = await validateRequest(request, updateSchema);
 
     if (data.customer?.id) {
       const customer = await prisma.customer.findFirst({
@@ -107,6 +95,17 @@ export async function PATCH(
           { status: 404 }
         );
       }
+    }
+
+    let customer = null;
+
+    if (data.customer?.customerRole) {
+      const resolvedCustomer = await resolveCustomer(
+        userId,
+        data.customer,
+        data.addAsNewCustomer
+      );
+      customer = resolvedCustomer.customer;
     }
 
     const quotation = await prisma.quotation.update({
@@ -161,21 +160,17 @@ export async function PATCH(
         message: 'Quotation updated successfully',
         success: true,
         quotation,
+        customer,
       },
       { status: 200 }
     );
   } catch (error) {
     console.error('Update quotation error:', error);
 
+    if (error instanceof NextResponse) return error;
+
     if (error instanceof Error && error.message.includes('Unauthorized')) {
       return NextResponse.json({ message: error.message }, { status: 401 });
-    }
-
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { message: 'Validation error', errors: error.flatten().fieldErrors },
-        { status: 400 }
-      );
     }
 
     return NextResponse.json(

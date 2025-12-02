@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
-
 import { prisma } from '@/lib/prisma';
 import { getAuthUser } from '@/lib/utils/server';
 import { baseInvoiceSchema } from '@/lib/validations/invoices';
+import { validateRequest } from '@/lib/utils/validation';
+import { resolveCustomer } from '@/lib/utils/customer';
 
 // GET Single Invoice
 export async function GET(
@@ -99,24 +99,9 @@ export async function PATCH(
       );
     }
 
-    // Parse and validate request body
-    const body = await request.json();
-
-    // Partial validation schema
     const updateSchema = baseInvoiceSchema.partial();
-    const validationResult = updateSchema.safeParse(body);
 
-    if (!validationResult.success) {
-      return NextResponse.json(
-        {
-          message: 'Validation failed',
-          errors: validationResult.error.flatten().fieldErrors,
-        },
-        { status: 400 }
-      );
-    }
-
-    const data = validationResult.data;
+    const data = await validateRequest(request, updateSchema);
 
     // If customer is being updated, verify it exists
     if (data.customer?.id) {
@@ -133,6 +118,17 @@ export async function PATCH(
           { status: 404 }
         );
       }
+    }
+
+    let customer = null;
+
+    if (data.customer?.customerRole) {
+      const resolvedCustomer = await resolveCustomer(
+        userId,
+        data.customer,
+        data.addAsNewCustomer
+      );
+      customer = resolvedCustomer.customer;
     }
 
     // Update invoice
@@ -167,21 +163,17 @@ export async function PATCH(
         message: 'Invoice updated successfully',
         success: true,
         invoice,
+        customer,
       },
       { status: 200 }
     );
   } catch (error) {
     console.error('Update invoice error:', error);
 
+    if (error instanceof NextResponse) return error;
+
     if (error instanceof Error && error.message.includes('Unauthorized')) {
       return NextResponse.json({ message: error.message }, { status: 401 });
-    }
-
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { message: 'Validation error', errors: error.flatten().fieldErrors },
-        { status: 400 }
-      );
     }
 
     return NextResponse.json(
