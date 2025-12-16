@@ -145,8 +145,10 @@ export function NumberInput<T extends FieldValues>({
 }
 
 // ✅ Fixed Autocomplete - removed problematic onInputChange logic
-interface AutocompleteInputProps<T extends FieldValues, I = any>
-  extends BaseInputProps<T> {
+interface AutocompleteInputProps<
+  T extends FieldValues,
+  I = any,
+> extends BaseInputProps<T> {
   items: I[];
   getOptionLabel?: (item: I) => string;
   getOptionValue?: (item: I) => string;

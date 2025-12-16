@@ -5,8 +5,7 @@ function cn(...classes: (string | boolean | undefined)[]) {
   return classes.filter(Boolean).join(' ');
 }
 
-interface SpotlightBackgroundProps
-  extends React.HTMLAttributes<HTMLDivElement> {
+interface SpotlightBackgroundProps extends React.HTMLAttributes<HTMLDivElement> {
   children: ReactNode;
   showRadialGradient?: boolean;
 }
