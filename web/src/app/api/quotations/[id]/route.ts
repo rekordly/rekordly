@@ -27,6 +27,22 @@ export async function GET(
             phone: true,
           },
         },
+        payments: {
+          select: {
+            id: true,
+            saleId: true,
+            amount: true,
+            paymentDate: true,
+            paymentMethod: true,
+            category: true,
+            payableType: true,
+            reference: true,
+            notes: true,
+          },
+          orderBy: {
+            paymentDate: 'desc',
+          },
+        },
       },
     });
 

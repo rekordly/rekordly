@@ -149,27 +149,27 @@ export const menuItems: MenuItem[] = [
   },
 
   // Assets Section
-  {
-    name: 'Assets',
-    icon: Building2,
-    subItems: [
-      {
-        name: 'Fixed Assets',
-        href: '/dashboard/assets/fixed',
-        icon: Building2,
-      },
-      {
-        name: 'Digital Assets',
-        href: '/dashboard/assets/digital',
-        icon: HardDrive,
-      },
-      {
-        name: 'Investments',
-        href: '/dashboard/assets/investments',
-        icon: LineChart,
-      },
-    ],
-  },
+  // {
+  //   name: 'Assets',
+  //   icon: Building2,
+  //   subItems: [
+  //     {
+  //       name: 'Fixed Assets',
+  //       href: '/dashboard/assets/fixed',
+  //       icon: Building2,
+  //     },
+  //     {
+  //       name: 'Digital Assets',
+  //       href: '/dashboard/assets/digital',
+  //       icon: HardDrive,
+  //     },
+  //     {
+  //       name: 'Investments',
+  //       href: '/dashboard/assets/investments',
+  //       icon: LineChart,
+  //     },
+  //   ],
+  // },
 
   // Reports Section
   {

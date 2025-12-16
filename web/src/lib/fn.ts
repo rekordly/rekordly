@@ -283,6 +283,26 @@ export function generatePurchaseNumber(userId: string): string {
   return `PUR-${year}${month}${day}${hours}${minutes}${seconds}-${userIdPart}-${random}`;
 }
 
+export function generateLoanNumber(userId: string): string {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+
+  const userIdPart = userId.slice(-4).toUpperCase();
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let random = '';
+
+  for (let i = 0; i < 4; i++) {
+    random += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+
+  return `LOAN-${year}${month}${day}${hours}${minutes}${seconds}-${userIdPart}-${random}`;
+}
+
 // ============================================================================
 // FORMATTING UTILITIES
 // ============================================================================

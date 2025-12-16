@@ -79,6 +79,7 @@ export interface QuotationStore {
   filteredQuotations: Quotation[];
   isInitialLoading: boolean;
   isPaginating: boolean;
+  isDeleting: boolean;
   error: string | null;
   searchQuery: string;
   displayCount: number;

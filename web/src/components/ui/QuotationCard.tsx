@@ -58,7 +58,7 @@ export function QuotationCard({
   return (
     <>
       <div
-        className="group relative bg-white dark:bg-background rounded-2xl p-4 mb-3 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer border border-transparent hover:border-primary/20"
+        className="group relative bg-white dark:bg-[#010601] dark:border-primary/20 dark:border  rounded-2xl p-4 mb-3 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer border border-transparent hover:border-primary/20"
         onClick={() => router.push(`/dashboard/quotations/${quotationNumber}`)}
       >
         {/* Top Row: Icon, Quotation Number & Title */}

@@ -6,17 +6,15 @@ import { Button, Skeleton, addToast } from '@heroui/react';
 import { ArrowLeft, FileX } from '@phosphor-icons/react';
 
 import { useSaleStore } from '@/store/saleStore';
-import { SaleHeader } from '@/components/dashboard/sales/single/SaleHeader';
 import { SaleInfoSection } from '@/components/dashboard/sales/single/SaleInfoSection';
 import { SaleItemsSection } from '@/components/dashboard/sales/single/SaleItemsSection';
-import { SaleCustomerSection } from '@/components/dashboard/sales/single/SaleCustomerSection';
-import { SalePaymentSection } from '@/components/dashboard/sales/single/SalePaymentSection';
 import { AddSalePayment } from '@/components/dashboard/sales/single/AddSalePayment';
 import { RefundModal } from '@/components/modals/RefundModal';
 import { PaymentSection } from '@/components/dashboard/PaymentSection';
 import { EditPaymentModal } from '@/components/modals/EditPaymentModal';
 import { CustomerInfoSection } from '@/components/dashboard/CustomerInfoSection';
 import { RefundInfoSection } from '@/components/dashboard/RefundInfoSection';
+import { EntityHeader } from '@/components/dashboard/EntityHeader';
 
 export default function SingleSale() {
   const params = useParams();
@@ -66,6 +64,7 @@ export default function SingleSale() {
     };
 
     loadSale();
+    console.log(sale);
   }, [receiptNumber, fetchSales]);
 
   const handleShare = async () => {
@@ -166,10 +165,11 @@ export default function SingleSale() {
     sale.status === 'REFUNDED' || sale.status === 'PARTIALLY_REFUNDED';
   return (
     <div className="max-w-7xl mx-auto">
-      <SaleHeader
-        onDownloadImage={handleDownloadImage}
-        onDownloadPDF={handleDownloadPDF}
+      <EntityHeader
+        entity="sales"
         onShare={handleShare}
+        onDownloadPDF={handleDownloadPDF}
+        onDownloadImage={handleDownloadImage}
       />
 
       <div className="lg:grid lg:grid-cols-3 lg:gap-6 mt-6 lg:mt-0">

@@ -16,6 +16,13 @@ model User {
   password      String?
   image         String?
   onboarded     Boolean         @default(false)
+  
+  // Package/Subscription
+  activePackageId String?
+  packageStartDate DateTime?
+  packageEndDate   DateTime?
+  packageStatus    PackageStatus @default(TRIAL)
+  
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
   
@@ -34,13 +41,42 @@ model User {
   incomeRecords IncomeRecord[]
   expenses      Expense[]
   payments      Payment[]
+  loans         Loan[]
+  ownerEquity   OwnerEquity[]
   
   // Assets
   fixedAssets   FixedAsset[]
   digitalAssets DigitalAsset[]
   securities    Security[]
   
+  package       Package? @relation(fields: [activePackageId], references: [id])
+  
   @@index([email])
+}
+
+enum PackageStatus {
+  TRIAL
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+model Package {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  displayName String
+  description String?
+  price       Float
+  duration    Int      // in days
+  features    Json     // Array of features
+  limits      Json     // Usage limits (invoices, customers, etc)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  users       User[]
+  
+  @@index([isActive])
 }
 
 model Account {
@@ -100,6 +136,10 @@ model OnboardingData {
   startDate            DateTime
   notificationsEnabled Boolean  @default(false)
   termsAccepted        Boolean  @default(true)
+  
+  // Bank details as JSON array
+  bankDetails          Json?    // Array of {id, bankName, accountNumber, accountName, isDefault}
+  
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
   user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -353,7 +393,7 @@ model Purchase {
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
   
-    payments Payment[]
+  payments Payment[]
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -382,6 +422,7 @@ model Payment {
   purchaseId    String?
   incomeId      String?
   expensesId    String?
+  loanId        String?
   
   amount        Float
   paymentDate   DateTime      @default(now())
@@ -392,17 +433,19 @@ model Payment {
   notes         String?
   createdAt     DateTime @default(now())
 
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  sale      Sale?      @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  quotation Quotation? @relation(fields: [quotationId], references: [id], onDelete: Cascade)
-  purchase  Purchase?  @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
-  income  IncomeRecord?  @relation(fields: [incomeId], references: [id], onDelete: Cascade)
-  expenses  Expense?  @relation(fields: [expensesId], references: [id], onDelete: Cascade)
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sale      Sale?         @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  quotation Quotation?    @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  purchase  Purchase?     @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  income    IncomeRecord? @relation(fields: [incomeId], references: [id], onDelete: Cascade)
+  expenses  Expense?      @relation(fields: [expensesId], references: [id], onDelete: Cascade)
+  loan      Loan?         @relation(fields: [loanId], references: [id], onDelete: Cascade)
   
   @@index([userId, payableType])
   @@index([userId, saleId])
   @@index([userId, quotationId])
   @@index([userId, purchaseId])
+  @@index([userId, loanId])
   @@index([userId, paymentDate])
 }
 
@@ -412,6 +455,7 @@ enum PayableType {
   PURCHASE
   OTHER_INCOME
   OTHER_EXPENSES
+  LOAN
 }
 
 enum PaymentCategory {
@@ -437,7 +481,10 @@ model IncomeRecord {
   customSubCategory String?
   
   grossAmount   Float  
-  taxablePercentage Float?  // Added to store the taxable percentage
+  taxablePercentage Float?
+  
+  // Link to loan for interest income
+  linkedLoanId String?
   
   description String?
   date        DateTime @default(now())
@@ -460,17 +507,18 @@ model IncomeRecord {
   @@index([userId, subCategory])
   @@index([userId, mainCategory, date])
   @@index([userId, isRefund])
+  @@index([userId, linkedLoanId])
 }
 
 enum IncomeMainCategory {
   BUSINESS_PROFIT
-EMPLOYMENT_INCOME
-INVESTMENT_INCOME
-PROPERTY_INCOME
-DIGITAL_ASSETS
-TRUST_ESTATE_INCOME
-OTHER_INCOME
-EXEMPT_INCOME 
+  EMPLOYMENT_INCOME
+  INVESTMENT_INCOME
+  PROPERTY_INCOME
+  DIGITAL_ASSETS
+  TRUST_ESTATE_INCOME
+  OTHER_INCOME
+  EXEMPT_INCOME 
 }
 
 enum IncomeSubCategory {
@@ -516,11 +564,9 @@ enum IncomeSubCategory {
   COMPENSATION
   INSURANCE_PROCEEDS
   INHERITANCE
-  LOAN_FORGIVENESS
   CUSTOM
 
   RETURN_OF_CAPITAL
-  LOAN_RECEIVED
   SPECIFIC_EXEMPTIONS
 }
 
@@ -544,6 +590,9 @@ model Expense {
   customerId String?
   customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
   
+  // Link to loan for interest expense
+  linkedLoanId String?
+  
   isReturn         Boolean @default(false)
   returnReason     String?
   returnDate    DateTime?
@@ -565,6 +614,7 @@ model Expense {
   @@index([userId, category, date])
   @@index([userId, isReturn])
   @@index([userId, customerId])
+  @@index([userId, linkedLoanId])
 }
 
 enum ExpenseCategory {
@@ -606,7 +656,128 @@ enum ExpenseCategory {
   OTHER
 }
 
+// ============================================
+// LOAN MODEL
+// ============================================
 
+model Loan {
+  id             String   @id @default(nanoid(12))
+  userId         String
+  loanNumber     String   @unique
+  loanType       LoanType
+
+  // Party details (borrower OR lender depending on loan type)
+  partyName  String
+  partyEmail String?
+  partyPhone String?
+
+  principalAmount Float
+  interestRate    Float // Annual interest rate percentage
+
+  // Loan charges/fees
+  processingFee  Float @default(0)
+  managementFee  Float @default(0)
+  insuranceFee   Float @default(0)
+  otherCharges   Float @default(0)
+  totalCharges   Float @default(0)
+
+  startDate DateTime
+  endDate   DateTime? // Calculated field based on startDate + term + termUnit
+  term      Int? // Duration number (e.g., 12)
+  termUnit  TermUnit @default(MONTHS) // Unit for the term (days, months, years)
+
+  paymentFrequency PaymentFrequency
+
+  currentBalance     Float
+  totalPaid          Float @default(0)
+  totalInterestPaid  Float @default(0)
+
+  status LoanStatus @default(ACTIVE)
+
+  purpose    String?
+  collateral String?
+  notes      String?
+
+  attachments Json?
+
+  payments Payment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, loanType])
+  @@index([userId, status])
+  @@index([userId, startDate])
+}
+
+enum LoanType {
+  RECEIVABLE 
+  PAYABLE 
+}
+
+enum PaymentFrequency {
+  DAILY
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+  QUARTERLY
+  ANNUALLY
+  ONE_TIME
+}
+
+enum TermUnit {
+  DAYS
+  MONTHS
+  YEARS
+}
+
+enum LoanStatus {
+  ACTIVE
+  PAID_OFF
+  DEFAULTED
+  RESTRUCTURED
+  WRITTEN_OFF
+}
+
+// ============================================
+// OWNER EQUITY MODEL (For Ltd/PLC only)
+// ============================================
+
+model OwnerEquity {
+  id              String @id @default(ulid())
+  userId          String
+  
+  type            EquityType
+  amount          Float
+  date            DateTime @default(now())
+  
+  shareholderName String?  // For companies with multiple shareholders
+  description     String?
+  reference       String?
+  
+  notes           String?
+  attachments     Json?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId, type])
+  @@index([userId, date])
+}
+
+enum EquityType {
+  CAPITAL_INJECTION  // Money put into the business
+  OWNER_DRAWING      // Money taken out by owner
+  DIVIDEND           // Profit distribution to shareholders
+}
+
+// ============================================
+// ASSETS
+// ============================================
 
 model FixedAsset {
   id          String @id @default(nanoid(12))
@@ -625,7 +796,7 @@ model FixedAsset {
   
   disposalDate     DateTime?
   disposalProceeds Float?
-  capitalGain      Float?  // Calculated: disposalProceeds - currentValue
+  capitalGain      Float?
   
   description String?
   status      AssetStatus @default(ACTIVE)
@@ -670,7 +841,7 @@ model DigitalAsset {
   averageCost  Float
   currentValue Float
   
-  transactions Json[]  // Array of buy/sell transactions
+  transactions Json[]
   
   totalGains  Float @default(0)
   totalLosses Float @default(0)
@@ -710,7 +881,7 @@ model Security {
   averageCost  Float
   currentValue Float
   
-  transactions Json[]  // Array of buy/sell transactions
+  transactions Json[]
   
   dividendsReceived Float @default(0)
   interestReceived  Float @default(0)

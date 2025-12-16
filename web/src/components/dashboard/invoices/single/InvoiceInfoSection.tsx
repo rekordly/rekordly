@@ -44,7 +44,7 @@ export default function InvoiceInfoSection({
       </Card>
 
       {/* Dates Card */}
-      <Card className="w-full rounded-xl" shadow="none">
+      <Card className="w-full bg-brand-background rounded-xl" shadow="none">
         <CardBody className="p-4">
           <div className="flex items-center justify-between gap-3">
             <div className="flex-1">
@@ -74,7 +74,7 @@ export default function InvoiceInfoSection({
 
       {/* Title & Description Card */}
       {(invoice.title || invoice.description) && (
-        <Card className="w-full rounded-xl" shadow="none">
+        <Card className="w-full bg-brand-background rounded-xl" shadow="none">
           <CardBody className="p-4 space-y-2">
             {invoice.title && (
               <div>

@@ -34,7 +34,22 @@ export async function GET(
             amountPaid: true,
             balance: true,
             status: true,
-            payments: true,
+            payments: {
+              select: {
+                id: true,
+                purchaseId: true,
+                amount: true,
+                paymentDate: true,
+                paymentMethod: true,
+                category: true,
+                payableType: true,
+                reference: true,
+                notes: true,
+              },
+              orderBy: {
+                paymentDate: 'desc',
+              },
+            },
           },
         },
       },

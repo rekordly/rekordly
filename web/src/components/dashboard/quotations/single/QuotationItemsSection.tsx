@@ -20,7 +20,7 @@ export default function QuotationItemsSection({
     : [];
 
   return (
-    <Card className="w-full rounded-3xl p-4" shadow="none">
+    <Card className="w-full bg-brand-background rounded-3xl p-4" shadow="none">
       <CardBody className="p-0 space-y-4">
         {/* Materials Section */}
         {materials.length > 0 && (

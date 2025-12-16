@@ -15,7 +15,7 @@ export default function InvoiceItemsSection({
   const items = Array.isArray(invoice.items) ? invoice.items : [];
 
   return (
-    <Card className="w-full rounded-3xl p-4" shadow="none">
+    <Card className="w-full bg-brand-background rounded-3xl p-4" shadow="none">
       <CardBody className="p-0">
         {items.length > 0 ? (
           <div className="overflow-x-auto">

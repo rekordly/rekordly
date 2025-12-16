@@ -16,6 +16,7 @@ import InvoicePaymentSection from '@/components/dashboard/invoices/single/Invoic
 import ConvertToSales from '@/components/dashboard/invoices/single/ConvertToSales';
 import { CustomerInfoSection } from '@/components/dashboard/CustomerInfoSection';
 import { PaymentSection } from '@/components/dashboard/PaymentSection';
+import { EntityHeader } from '@/components/dashboard/EntityHeader';
 
 export default function SingleInvoice() {
   const params = useParams();
@@ -200,8 +201,8 @@ export default function SingleInvoice() {
 
   return (
     <div className="max-w-7xl mx-auto">
-      <InvoiceHeader
-        isDownloading={isDownloading}
+      <EntityHeader
+        entity="invoices"
         onDownloadImage={handleDownloadImage}
         onDownloadPDF={handleDownloadPDF}
         onShare={handleShare}

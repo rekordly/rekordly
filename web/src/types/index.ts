@@ -9,6 +9,7 @@ import {
   RefundSchema,
   PaymentMethodSchema,
 } from '@/lib/validations/general';
+import { PayableType } from '@prisma/client';
 
 export interface SessionUser {
   user: {
@@ -52,7 +53,7 @@ export interface PaymentRecord {
   paymentDate: string;
   paymentMethod: PaymentMethod;
   category: 'INCOME' | 'EXPENSE';
-  payableType: 'SALE' | 'QUOTATION' | 'PURCHASE';
+  payableType: PayableType;
   reference?: string | null;
   notes?: string | null;
 }

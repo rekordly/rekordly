@@ -16,6 +16,7 @@ export const useQuotationStore = create<QuotationStore>()(
       filteredQuotations: [],
       isInitialLoading: false,
       isPaginating: false,
+      isDeleting: false,
       error: null,
       searchQuery: '',
       displayCount: RENDER_LIMIT,
@@ -208,15 +209,23 @@ export const useQuotationStore = create<QuotationStore>()(
       },
 
       deleteQuotation: async (id: string) => {
-        await api.delete(`/quotations/${id}`);
-        const { allQuotations } = get();
-        const updatedQuotations = allQuotations.filter(quot => quot.id !== id);
+        set({ isDeleting: true });
+        try {
+          await api.delete(`/quotations/${id}`);
+          const { allQuotations } = get();
+          const updatedQuotations = allQuotations.filter(
+            quot => quot.id !== id
+          );
 
-        set({
-          allQuotations: updatedQuotations,
-          lastFetchTime: Date.now(),
-        });
-        get().applyFilters();
+          set({
+            allQuotations: updatedQuotations,
+            lastFetchTime: Date.now(),
+          });
+          get().applyFilters();
+        } catch (error) {
+          set({ isDeleting: false });
+          throw error;
+        }
       },
 
       clearSearch: () => {

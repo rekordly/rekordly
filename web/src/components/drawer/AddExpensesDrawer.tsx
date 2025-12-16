@@ -9,9 +9,8 @@ import {
   DrawerBody,
   DrawerFooter,
   addToast,
-  Chip,
 } from '@heroui/react';
-import { TrendingDown, Info } from 'lucide-react';
+import { TrendingDown } from 'lucide-react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { FormProvider, useForm } from 'react-hook-form';
 import type { Resolver } from 'react-hook-form';
@@ -24,7 +23,7 @@ import {
   DropdownInput,
 } from '@/components/ui/Input';
 import { formatCurrency } from '@/lib/fn';
-import { useApi } from '@/hooks/useApi';
+import { api } from '@/lib/axios';
 import { addExpenseSchema } from '@/lib/validations/expenses';
 import {
   ExpenseCategory,
@@ -32,20 +31,21 @@ import {
   AddExpenseType,
 } from '@/types/expenses';
 import { paymentMethods } from '@/config/constant';
+import { useExpenseStore } from '@/store/expense-store';
 
 interface AddExpensesDrawerProps {
   isOpen: boolean;
   onClose: () => void;
+  expenseId?: string | null;
   prefilledType?: string;
-  apiEndpoint?: string;
   onSuccess?: (data: any) => void;
 }
 
 export function AddExpensesDrawer({
   isOpen,
   onClose,
+  expenseId,
   prefilledType,
-  apiEndpoint = '/expenses',
   onSuccess,
 }: AddExpensesDrawerProps) {
   const [selectedCategory, setSelectedCategory] = useState<ExpenseCategory>(
@@ -54,6 +54,10 @@ export function AddExpensesDrawer({
   const [selectedSubCategory, setSelectedSubCategory] = useState<string>('');
   const [categoryDescription, setCategoryDescription] = useState<string>('');
   const [categoryNote, setCategoryNote] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const { allExpense } = useExpenseStore();
+  const isEditMode = !!expenseId;
 
   const methods = useForm<AddExpenseType>({
     resolver: zodResolver(addExpenseSchema) as Resolver<AddExpenseType>,
@@ -73,7 +77,7 @@ export function AddExpensesDrawer({
 
   const {
     handleSubmit,
-    formState: { isSubmitting },
+    formState: { errors },
     reset,
     watch,
     setValue,
@@ -87,7 +91,11 @@ export function AddExpensesDrawer({
   useEffect(() => {
     if (watchCategory) {
       setSelectedCategory(watchCategory as ExpenseCategory);
-      setValue('subCategory', '');
+
+      // Don't clear subcategory in edit mode on initial load
+      if (!isEditMode) {
+        setValue('subCategory', '');
+      }
 
       // Update category description and default deduction percentage
       const category = expensesCategories.find(
@@ -99,7 +107,7 @@ export function AddExpensesDrawer({
         setValue('deductionPercentage', category.defaultDeductionPercentage);
       }
     }
-  }, [watchCategory, setValue]);
+  }, [watchCategory, setValue, isEditMode]);
 
   useEffect(() => {
     if (watchSubCategory) {
@@ -107,8 +115,34 @@ export function AddExpensesDrawer({
     }
   }, [watchSubCategory]);
 
+  // Load expense data for editing
   useEffect(() => {
-    if (isOpen && prefilledType) {
+    if (isOpen && isEditMode && expenseId) {
+      const expense = allExpense.find(e => e.id === expenseId);
+      console.log('Editing expense:', expense);
+
+      if (expense) {
+        reset({
+          category: expense.category as ExpenseCategory,
+          subCategory: expense.subCategory || '',
+          amount: expense.amount,
+          isDeductible: expense.isDeductible,
+          deductionPercentage: expense.deductionPercentage,
+          description: expense.sourceDescription || '',
+          date: expense.date
+            ? new Date(expense.date).toISOString().slice(0, 16)
+            : new Date().toISOString().slice(0, 16),
+          vendorName: expense.vendorName || '',
+          receipt: expense.receipt || '',
+          paymentMethod: expense.paymentMethod || 'BANK_TRANSFER',
+          reference: expense.reference || '',
+          // note: expense.note || '',
+        });
+
+        setSelectedCategory(expense.category as ExpenseCategory);
+        setSelectedSubCategory(expense.subCategory || '');
+      }
+    } else if (isOpen && prefilledType) {
       const typeMapping: Record<string, ExpenseCategory> = {
         'office-supplies': ExpenseCategory.OFFICE_SUPPLIES,
         rent: ExpenseCategory.RENT_RATES,
@@ -123,12 +157,7 @@ export function AddExpensesDrawer({
         setValue('category', prefill);
         setSelectedCategory(prefill);
       }
-    }
-  }, [isOpen, prefilledType, setValue]);
-
-  // Reset form when Drawer opens
-  useEffect(() => {
-    if (isOpen && !prefilledType) {
+    } else if (isOpen && !isEditMode && !prefilledType) {
       reset({
         category: ExpenseCategory.OTHER,
         subCategory: '',
@@ -144,20 +173,59 @@ export function AddExpensesDrawer({
       setCategoryDescription('');
       setCategoryNote('');
     }
-  }, [isOpen, prefilledType, reset]);
-
-  const { post, isLoading } = useApi({
-    addToast,
-    showSuccessToast: true,
-    successMessage: 'Expense record added successfully',
-    onSuccess: data => {
-      if (onSuccess) onSuccess(data);
-      handleClose();
-    },
-  });
+  }, [
+    isOpen,
+    expenseId,
+    isEditMode,
+    allExpense,
+    prefilledType,
+    reset,
+    setValue,
+  ]);
 
   const onSubmit = async (data: AddExpenseType) => {
-    await post(apiEndpoint, data);
+    setIsSubmitting(true);
+    try {
+      if (isEditMode && expenseId) {
+        // Update existing expense
+        const response = await api.patch(`/expenses/${expenseId}`, data);
+
+        addToast({
+          title: 'Success!',
+          description: 'Expense record updated successfully',
+          color: 'success',
+        });
+
+        if (onSuccess) {
+          await onSuccess(response.data);
+        }
+      } else {
+        // Create new expense
+        const response = await api.post('/expenses', data);
+
+        addToast({
+          title: 'Success!',
+          description: 'Expense record added successfully',
+          color: 'success',
+        });
+
+        if (onSuccess) {
+          await onSuccess(response.data);
+        }
+      }
+
+      handleClose();
+    } catch (error: any) {
+      console.error('Error saving expense:', error);
+      addToast({
+        title: 'Error',
+        description:
+          error?.response?.data?.message || 'Failed to save expense record',
+        color: 'danger',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleClose = () => {
@@ -186,15 +254,12 @@ export function AddExpensesDrawer({
 
   // Function to get subcategory label for display
   const getSubCategoryLabel = (value: string) => {
-    // Check if it's a predefined subcategory
     const predefinedSubcategory = availableSubCategories.find(
       sub => sub.value === value
     );
     if (predefinedSubcategory) {
       return predefinedSubcategory.label;
     }
-
-    // If not found, it's a custom value - return as is
     return value;
   };
 
@@ -213,10 +278,14 @@ export function AddExpensesDrawer({
             <DrawerHeader className="flex flex-col gap-1 font-heading tracking-tight">
               <div className="flex items-center gap-2">
                 <TrendingDown className="text-primary" size={24} />
-                <span>Add Expense Record</span>
+                <span>
+                  {isEditMode ? 'Edit Expense Record' : 'Add Expense Record'}
+                </span>
               </div>
               <p className="text-xs text-default-500 mt-1">
-                Record expenses from various categories
+                {isEditMode
+                  ? 'Update expense information'
+                  : 'Record expenses from various categories'}
               </p>
             </DrawerHeader>
 
@@ -358,7 +427,7 @@ export function AddExpensesDrawer({
 
             <DrawerFooter>
               <Button
-                isDisabled={isSubmitting || isLoading}
+                isDisabled={isSubmitting}
                 variant="light"
                 onPress={handleClose}
               >
@@ -366,11 +435,11 @@ export function AddExpensesDrawer({
               </Button>
               <Button
                 color="primary"
-                isDisabled={isSubmitting || isLoading}
-                isLoading={isSubmitting || isLoading}
+                isDisabled={isSubmitting}
+                isLoading={isSubmitting}
                 type="submit"
               >
-                Add Expense
+                {isEditMode ? 'Update Expense' : 'Add Expense'}
               </Button>
             </DrawerFooter>
           </DrawerContent>

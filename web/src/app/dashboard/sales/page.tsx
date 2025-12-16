@@ -158,7 +158,7 @@ export default function SalePage() {
 
           {/* Sales List Section */}
           <div className="w-full lg:w-8/12 space-y-6">
-            <Card className="rounded-3xl px-2" shadow="none">
+            <Card className="rounded-3xl bg-transparent px-0" shadow="none">
               <CardHeader className="flex items-center justify-between py-6">
                 <div className="flex items-center gap-2">
                   <div>

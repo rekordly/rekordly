@@ -46,7 +46,7 @@ export function ViewCustomerModal({
       size="2xl"
       onClose={onClose}
     >
-      <ModalContent>
+      <ModalContent className="bg-brand-background">
         {() => (
           <>
             <ModalHeader className="flex flex-col gap-2 font-heading tracking-tight border-b border-default-200">

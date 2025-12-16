@@ -109,6 +109,8 @@ export async function POST(
                 amount: true,
                 paymentDate: true,
                 paymentMethod: true,
+                category: true,
+                payableType: true,
                 reference: true,
                 notes: true,
               },

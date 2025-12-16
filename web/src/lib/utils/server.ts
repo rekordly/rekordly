@@ -9,6 +9,7 @@ interface AuthResult {
   userId: string;
   userEmail: string;
   workTypes: string[];
+  registrationType: string | null | undefined;
 }
 
 export async function getAuthUser(request: NextRequest): Promise<AuthResult> {
@@ -41,6 +42,7 @@ export async function getAuthUser(request: NextRequest): Promise<AuthResult> {
     userId: token.sub,
     userEmail: token.email,
     workTypes: token.onboarding?.workTypes,
+    registrationType: token.onboarding?.registrationType,
   };
 
   // try {

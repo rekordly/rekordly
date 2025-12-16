@@ -32,7 +32,10 @@ export function FormSkeleton() {
       </Card>
 
       {/* Invoice heading & notes */}
-      <Card className="w-full rounded-3xl p-4" shadow="none">
+      <Card
+        className="w-full bg-brand-background rounded-3xl p-4"
+        shadow="none"
+      >
         <CardBody>
           <div className="space-y-4">
             <div className="flex items-center gap-2">
@@ -49,7 +52,10 @@ export function FormSkeleton() {
       </Card>
 
       {/* Add Item Section */}
-      <Card className="w-full rounded-3xl p-4" shadow="none">
+      <Card
+        className="w-full bg-brand-background rounded-3xl p-4"
+        shadow="none"
+      >
         <CardBody>
           <div className="space-y-4">
             <Skeleton className="h-5 w-40 rounded-lg" />
@@ -85,7 +91,10 @@ export function FormSkeleton() {
       </Card>
 
       {/* Items list + totals */}
-      <Card className="w-full rounded-3xl p-4" shadow="none">
+      <Card
+        className="w-full bg-brand-background rounded-3xl p-4"
+        shadow="none"
+      >
         <CardBody>
           <div className="space-y-4">
             <Skeleton className="h-5 w-32 rounded-lg" />

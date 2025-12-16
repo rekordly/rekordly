@@ -202,6 +202,8 @@ export async function GET(request: NextRequest) {
               amount: true,
               paymentDate: true,
               paymentMethod: true,
+              category: true,
+              payableType: true,
               reference: true,
               notes: true,
             },

@@ -1,7 +1,137 @@
 import { z } from 'zod';
 import { addExpenseSchema } from '@/lib/validations/expenses';
+import { PaymentMethod } from '@/types/index';
+import { IncomeStatusType } from '@/types/income';
 
 export type AddExpenseType = z.infer<typeof addExpenseSchema>;
+
+export type ExpenseSourceType = 'PURCHASE' | 'OTHER_EXPENSES';
+
+export interface Expense {
+  id: string;
+  date: string;
+  amount: number;
+  paymentMethod: PaymentMethod;
+  reference: string | null;
+  notes: string | null;
+  sourceType: ExpenseSourceType;
+  sourceId: string | null;
+  sourceNumber: string | null;
+  sourceTitle: string | null;
+  sourceDescription: string | null;
+  sourceTotalAmount: number | null;
+  sourceAmountPaid: number | null;
+  sourceBalance: number | null;
+  sourceStatus: IncomeStatusType | null;
+  refundAmount: number | null;
+  refundDate: string | null;
+  refundReason: string | null;
+  vendorName: string | null;
+  vendorEmail: string | null;
+  vendorPhone: string | null;
+  customerName?: string | null;
+  receipt: string | null;
+  // note: string | null;
+  category: ExpenseCategory | string;
+  subCategory: string | null;
+  isDeductible: boolean;
+  deductionPercentage: number;
+  isReturn?: boolean;
+  returnDate: string | null;
+  returnReason: string | null;
+  includesVAT: boolean;
+  vatAmount: number | null;
+}
+
+export interface ExpenseSummary {
+  grossExpenses: number;
+  totalPurchaseRefunds: number;
+  netExpenses: number;
+  totalPaid: number;
+  balance: number;
+  averagePerMonth: number;
+  topCategory: string;
+  totalDeductible: number;
+  totalNonDeductible: number;
+  deductiblePercentage: number;
+
+  // totalRefundsGiven: number;
+  byCategory: Record<string, number>; // Changed from bySource
+  byPaymentMethod: Record<string, number>;
+}
+
+export interface CategoryBreakdown {
+  name: string;
+  value: number;
+  percentage: number;
+  deductible: boolean;
+}
+
+export interface ExpenseChartData {
+  monthly: Array<{
+    month: string;
+    amount: number;
+    count: number;
+  }>;
+  byCategory: CategoryBreakdown[]; // Changed from bySource
+}
+
+export interface ExpenseMeta {
+  type: 'expense';
+  range: string;
+  startDate: string;
+  endDate: string;
+  totalRecords: number;
+  validExpenseRecords: number;
+  saleRefundRecords: number;
+  quotationRefundRecords: number;
+  currency: string;
+}
+
+export interface ExpenseResponse {
+  success: boolean;
+  meta: ExpenseMeta;
+  summary: ExpenseSummary;
+  chartData: ExpenseChartData;
+  data: Expense[];
+}
+
+export interface ExpenseStore {
+  allExpense: Expense[];
+  displayedExpenses: Expense[];
+  filteredExpenses: Expense[];
+  summary: ExpenseSummary | null;
+  chartData: ExpenseChartData | null;
+  meta: ExpenseMeta | null;
+  isInitialLoading: boolean;
+  isPaginating: boolean;
+  isDeleting: boolean;
+  error: string | null;
+  searchQuery: string;
+  displayCount: number;
+  sourceFilter: ExpenseSourceType | 'ALL';
+  dateFilter: {
+    start: any;
+    end: any;
+  } | null;
+  lastFetchTime: number | null;
+
+  // Actions
+  fetchExpenses: (forceRefresh?: boolean) => Promise<void>;
+  loadMoreDisplayed: () => void;
+  searchExpenses: (query: string) => void;
+  setSourceFilter: (source: ExpenseSourceType | 'ALL') => void;
+  setDateFilter: (dateRange: { start: any; end: any } | null) => void;
+  applyFilters: () => void;
+  deleteExpense: (
+    id: string,
+    sourceType: ExpenseSourceType,
+    sourceId: string | null
+  ) => Promise<void>;
+  clearSearch: () => void;
+  refreshExpense: () => Promise<void>;
+  reset: () => void;
+}
 
 export enum ExpenseCategory {
   // Fully Deductible Business Expenses
@@ -19,7 +149,7 @@ export enum ExpenseCategory {
   BANK_CHARGES = 'BANK_CHARGES',
   TRAINING = 'TRAINING',
 
-  // Partially Deductible Business Expenses = "// Partially Deductible Business Expenses",
+  // Partially Deductible Business Expenses
   INTEREST_ON_DEBT = 'INTEREST_ON_DEBT',
   BAD_DEBTS = 'BAD_DEBTS',
   DONATIONS = 'DONATIONS',
@@ -27,18 +157,19 @@ export enum ExpenseCategory {
   RESEARCH_DEVELOPMENT = 'RESEARCH_DEVELOPMENT',
   ENTERTAINMENT = 'ENTERTAINMENT',
 
-  // Individual/Employee Expenses = "// Individual/Employee Expenses",
+  // Individual/Employee Expenses
   PERSONAL_EXPENSES = 'PERSONAL_EXPENSES',
   RESIDENTIAL_RENT = 'RESIDENTIAL_RENT',
   TRANSPORTATION = 'TRANSPORTATION',
 
-  // Non-Deductible Expenses = "// Non-Deductible Expenses",
+  // Non-Deductible Expenses
   FINES_PENALTIES = 'FINES_PENALTIES',
   BENEFITS_IN_KIND = 'BENEFITS_IN_KIND',
   NON_APPROVED_PENSION = 'NON_APPROVED_PENSION',
   PERSONAL_LIVING_EXPENSES = 'PERSONAL_LIVING_EXPENSES',
 
-  // Other Expenses = "// Other Expenses",
+  // Refunds
+  // Other Expenses
   OTHER = 'OTHER',
 }
 

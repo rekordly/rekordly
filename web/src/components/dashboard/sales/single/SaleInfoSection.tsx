@@ -17,7 +17,7 @@ export function SaleInfoSection({ sale }: SaleInfoSectionProps) {
     <div className="space-y-3">
       {/* Receipt Number & Status Card */}
       <Card
-        className="w-full rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 dark:from-primary-600 dark:to-primary-700"
+        className="w-full rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 dark:from-primary-600 dark:to-primary-800"
         shadow="sm"
       >
         <CardBody className="p-4">
@@ -31,7 +31,7 @@ export function SaleInfoSection({ sale }: SaleInfoSectionProps) {
               </p>
             </div>
             <Chip
-              className="font-semibold bg-white/20 text-white backdrop-blur-sm"
+              className="font-semibold backdrop-blur-sm"
               color={statusConfig.chipColor}
               variant="flat"
             >
@@ -42,7 +42,7 @@ export function SaleInfoSection({ sale }: SaleInfoSectionProps) {
       </Card>
 
       {/* Sale Date & Source Card */}
-      <Card className="w-full rounded-xl" shadow="none">
+      <Card className="w-full bg-brand-background rounded-xl" shadow="none">
         <CardBody className="p-4">
           <div className="flex items-center justify-between gap-3">
             <div className="flex-1">
@@ -74,7 +74,7 @@ export function SaleInfoSection({ sale }: SaleInfoSectionProps) {
 
       {/* Title & Description Card */}
       {(sale.title || sale.description) && (
-        <Card className="w-full rounded-xl" shadow="none">
+        <Card className="w-full bg-brand-background rounded-xl" shadow="none">
           <CardBody className="p-4 space-y-2">
             {sale.title && (
               <div>

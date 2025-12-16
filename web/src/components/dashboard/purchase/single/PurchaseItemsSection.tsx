@@ -17,7 +17,7 @@ export function PurchaseItemsSection({ purchase }: PurchaseItemsSectionProps) {
     : [];
 
   return (
-    <Card className="w-full rounded-3xl p-4" shadow="none">
+    <Card className="w-full bg-brand-background rounded-3xl p-4" shadow="none">
       <CardBody className="p-0 space-y-4">
         <div className="flex items-center gap-2 mb-6">
           <Package className="w-5 h-5 text-primary" />

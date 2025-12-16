@@ -19,7 +19,7 @@ export default function QuotationPaymentSection({
   const hasBalance = quotation.balance > 0;
 
   return (
-    <Card className="w-full rounded-xl" shadow="none">
+    <Card className="w-full bg-brand-background rounded-xl" shadow="none">
       <CardBody className="p-4">
         <div className="flex items-center justify-between mb-3">
           <p className="text-xs md:text-sm text-default-500 uppercase tracking-wider flex items-center gap-1.5">

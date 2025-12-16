@@ -6,6 +6,7 @@ import { getAuthUser } from '@/lib/utils/server';
 import { toTwoDecimals } from '@/lib/fn';
 import { prisma } from '@/lib/prisma';
 import { addPaymentSchema } from '@/lib/validations/general';
+import { validateRequest } from '@/lib/utils/validation';
 
 export async function POST(
   request: NextRequest,
@@ -15,20 +16,8 @@ export async function POST(
     const params = await props.params;
     const { userId } = await getAuthUser(request);
 
-    const body = await request.json();
-    const validationResult = addPaymentSchema.safeParse(body);
-
-    if (!validationResult.success) {
-      return NextResponse.json(
-        {
-          message: 'Validation failed',
-          errors: validationResult.error.flatten().fieldErrors,
-        },
-        { status: 400 }
-      );
-    }
-
-    const data = validationResult.data;
+    const updateSchema = addPaymentSchema;
+    const data = await validateRequest(request, updateSchema);
     const paymentAmount = toTwoDecimals(data.amountPaid);
 
     const quotation = await prisma.quotation.findFirst({
@@ -161,6 +150,8 @@ export async function POST(
             amount: true,
             paymentDate: true,
             paymentMethod: true,
+            category: true,
+            payableType: true,
             reference: true,
             notes: true,
           },
@@ -182,15 +173,10 @@ export async function POST(
   } catch (error) {
     console.error('Add quotation payment error:', error);
 
+    if (error instanceof NextResponse) return error;
+
     if (error instanceof Error && error.message.includes('Unauthorized')) {
       return NextResponse.json({ message: error.message }, { status: 401 });
-    }
-
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { message: 'Validation error', errors: error.flatten().fieldErrors },
-        { status: 400 }
-      );
     }
 
     return NextResponse.json(

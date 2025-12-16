@@ -15,6 +15,7 @@ import { PaymentSection } from '@/components/dashboard/PaymentSection';
 import { AddPaymentModal } from '@/components/modals/AddPaymentModal';
 import { CustomerInfoSection } from '@/components/dashboard/CustomerInfoSection';
 import { RefundInfoSection } from '@/components/dashboard/RefundInfoSection';
+import { EntityHeader } from '@/components/dashboard/EntityHeader';
 
 export default function SinglePurchase() {
   const params = useParams();
@@ -180,12 +181,12 @@ export default function SinglePurchase() {
 
   return (
     <div className="max-w-7xl mx-auto">
-      <PurchaseHeader
-        onDownloadImage={handleDownloadImage}
-        onDownloadPDF={handleDownloadPDF}
+      <EntityHeader
+        entity="purchases"
         onShare={handleShare}
+        onDownloadPDF={handleDownloadPDF}
+        onDownloadImage={handleDownloadImage}
       />
-
       <div className="lg:grid lg:grid-cols-3 lg:gap-6 mt-6 lg:mt-0">
         <div className="lg:col-span-2 space-y-6">
           <PurchaseInfoSection purchase={purchase} />

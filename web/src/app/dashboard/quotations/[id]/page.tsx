@@ -19,6 +19,7 @@ import { AddPaymentModal } from '@/components/modals/AddPaymentModal';
 import { RefundModal } from '@/components/modals/RefundModal';
 import { CustomerInfoSection } from '@/components/dashboard/CustomerInfoSection';
 import { RefundInfoSection } from '@/components/dashboard/RefundInfoSection';
+import { EntityHeader } from '@/components/dashboard/EntityHeader';
 
 export default function SingleQuotation() {
   const params = useParams();
@@ -191,11 +192,12 @@ export default function SingleQuotation() {
 
   return (
     <div className="max-w-7xl mx-auto">
-      <QuotationHeader
+      <EntityHeader
+        entity="quotations"
         isDownloading={isDownloading}
-        onDownloadImage={handleDownloadImage}
-        onDownloadPDF={handleDownloadPDF}
         onShare={handleShare}
+        onDownloadPDF={handleDownloadPDF}
+        onDownloadImage={handleDownloadImage}
       />
 
       <div className="lg:grid lg:grid-cols-3 lg:gap-6 mt-6 lg:mt-0">

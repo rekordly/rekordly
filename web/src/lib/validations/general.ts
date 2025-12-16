@@ -31,6 +31,25 @@ export const customerSchema = z.object({
   customerRole: z.enum(['BUYER', 'SUPPLIER']).optional(),
 });
 
+export const reportQuerySchema = z.object({
+  range: z
+    .enum([
+      'today',
+      'thisWeek',
+      'thisMonth',
+      'past3Months',
+      'past6Months',
+      'thisYear',
+      'lastYear',
+      'all',
+      'custom',
+    ])
+    .default('thisYear'),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+  openingBalance: z.string().optional(),
+});
+
 // lib/validations/general.ts
 
 export const RefundSchema = z

@@ -1,7 +1,137 @@
 import { addIncomeSchema } from '@/lib/validations/income';
 import z from 'zod';
+import { PaymentMethod } from '@/types/index';
 
-// @/types/income.ts
+// types/income.ts
+
+export type IncomeSourceType =
+  | 'QUOTATION'
+  | 'SALE'
+  | 'OTHER_INCOME'
+  | 'PURCHASE_REFUND';
+
+export type IncomeStatusType =
+  | 'PAID'
+  | 'PARTIALLY_PAID'
+  | 'REFUNDED'
+  | 'PARTIALLY_REFUNDED';
+
+export interface Income {
+  id: string;
+  date: string;
+  amount: number;
+  paymentMethod: PaymentMethod;
+  reference: string | null;
+  notes: string | null;
+  sourceType: IncomeSourceType;
+  sourceId: string | null;
+  sourceNumber: string | null;
+  sourceTitle: string | null;
+  sourceDescription: string | null;
+  sourceTotalAmount: number | null;
+  sourceAmountPaid: number | null;
+  sourceBalance: number | null;
+  sourceStatus: IncomeStatusType | null;
+  refundAmount: number | null;
+  refundDate: string | null;
+  refundReason: string | null;
+  customerName: string | null;
+  customerEmail: string | null;
+  customerPhone: string | null;
+  vendorName?: string | null;
+  includesVAT: boolean;
+  vatAmount: number | null;
+  taxablePercentage: number | null;
+  // Other income specific fields
+  incomeMainCategory?: string;
+  incomeSubCategory?: string;
+  customSubCategory?: string;
+}
+
+export interface IncomeSummary {
+  grossRevenue: number;
+  totalRefunds: number;
+  refundsBySource: {
+    SALE: number;
+    QUOTATION: number;
+  };
+  netIncome: number;
+  totalReceived: number;
+  outstandingBalance: number;
+  averagePerMonth: number;
+  topSource: string;
+  bySource: Record<string, number>;
+  byPaymentMethod: Record<string, number>;
+}
+
+export interface IncomeChartData {
+  monthly: Array<{
+    month: string;
+    amount: number;
+    count: number;
+  }>;
+  bySource: Array<{
+    name: string;
+    value: number;
+    percentage: number;
+  }>;
+}
+
+export interface IncomeMeta {
+  type: 'income';
+  range: string;
+  startDate: string;
+  endDate: string;
+  totalRecords: number;
+  validIncomeRecords: number;
+  purchaseRefundRecords: number;
+  currency: string;
+}
+
+export interface IncomeResponse {
+  success: boolean;
+  meta: IncomeMeta;
+  summary: IncomeSummary;
+  chartData: IncomeChartData;
+  data: Income[];
+}
+
+export interface IncomeStore {
+  allIncome: Income[];
+  displayedIncome: Income[];
+  filteredIncome: Income[];
+  summary: IncomeSummary | null;
+  chartData: IncomeChartData | null;
+  meta: IncomeMeta | null;
+  isInitialLoading: boolean;
+  isPaginating: boolean;
+  isDeleting: boolean;
+  error: string | null;
+  searchQuery: string;
+  displayCount: number;
+  sourceFilter: IncomeSourceType | 'ALL';
+  dateFilter: {
+    start: any;
+    end: any;
+  } | null;
+  lastFetchTime: number | null;
+
+  // Actions
+  fetchIncome: (forceRefresh?: boolean) => Promise<void>;
+  loadMoreDisplayed: () => void;
+  searchIncome: (query: string) => void;
+  setSourceFilter: (source: IncomeSourceType | 'ALL') => void;
+  setDateFilter: (dateRange: { start: any; end: any } | null) => void;
+  applyFilters: () => void;
+  deleteIncome: (
+    id: string,
+    sourceType: IncomeSourceType,
+    sourceId: string | null
+  ) => Promise<void>;
+  clearSearch: () => void;
+  refreshIncome: () => Promise<void>;
+  reset: () => void;
+}
 
 export enum IncomeMainCategory {
   BUSINESS_PROFIT = 'BUSINESS_PROFIT',
@@ -64,12 +194,12 @@ export enum IncomeSubCategory {
   COMPENSATION = 'COMPENSATION',
   INSURANCE_PROCEEDS = 'INSURANCE_PROCEEDS',
   INHERITANCE = 'INHERITANCE',
-  LOAN_FORGIVENESS = 'LOAN_FORGIVENESS',
+  // LOAN_FORGIVENESS = 'LOAN_FORGIVENESS',
 
   CUSTOM = 'CUSTOM', // H. Exempt Income
 
   RETURN_OF_CAPITAL = 'RETURN_OF_CAPITAL',
-  LOAN_RECEIVED = 'LOAN_RECEIVED',
+  // LOAN_RECEIVED = 'LOAN_RECEIVED',
   SPECIFIC_EXEMPTIONS = 'SPECIFIC_EXEMPTIONS',
 }
 
@@ -221,7 +351,7 @@ export const incomeCategories = [
         label: 'Insurance Proceeds',
       },
       { value: IncomeSubCategory.INHERITANCE, label: 'Inheritance' },
-      { value: IncomeSubCategory.LOAN_FORGIVENESS, label: 'Loan Forgiveness' },
+      // { value: IncomeSubCategory.LOAN_FORGIVENESS, label: 'Loan Forgiveness' },
       { value: IncomeSubCategory.CUSTOM, label: 'Custom' },
     ],
     taxablePercentage: 100,
@@ -237,7 +367,7 @@ export const incomeCategories = [
         value: IncomeSubCategory.RETURN_OF_CAPITAL,
         label: 'Return of Capital',
       },
-      { value: IncomeSubCategory.LOAN_RECEIVED, label: 'Loan Received' },
+      // { value: IncomeSubCategory.LOAN_RECEIVED, label: 'Loan Received' },
       {
         value: IncomeSubCategory.SPECIFIC_EXEMPTIONS,
         label: 'Specific Statutory Exemptions',

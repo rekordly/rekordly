@@ -154,7 +154,7 @@ export function AddEditCustomerModal({
       size="lg"
       onClose={handleClose}
     >
-      <ModalContent>
+      <ModalContent className="bg-brand-background">
         {() => (
           <FormProvider {...methods}>
             <form onSubmit={handleSubmit(onSubmit)}>

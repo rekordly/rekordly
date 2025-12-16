@@ -29,7 +29,7 @@ export default function QuotationCustomerSection({
   };
 
   return (
-    <Card className="w-full rounded-xl" shadow="none">
+    <Card className="w-full bg-brand-background rounded-xl" shadow="none">
       <CardBody className="p-4">
         <p className="text-xs md:text-sm text-default-400 uppercase tracking-wider mb-3">
           Billed To

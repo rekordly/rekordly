@@ -62,7 +62,7 @@ export function DeleteCustomerModal({
       size="sm"
       onClose={onClose}
     >
-      <ModalContent>
+      <ModalContent className="bg-brand-background">
         {() => (
           <>
             <ModalHeader className="flex flex-col gap-1 font-heading tracking-tight">

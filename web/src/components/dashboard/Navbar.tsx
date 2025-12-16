@@ -21,6 +21,8 @@ import { ThemeToggle } from '../theme-toggle';
 import { MenuItemLink } from './MenuItemLinkProps';
 import { AddIncomeDrawer } from '@/components/drawer/AddIncomeDrawer';
 import { AddExpensesDrawer } from '@/components/drawer/AddExpensesDrawer';
+import { Image } from '@heroui/react';
+import NextImage from 'next/image';
 
 import { SessionUser } from '@/types';
 import { menuItems } from '@/config/menu';
@@ -86,6 +88,15 @@ export default function DashboardNavbar({ user }: SessionUser) {
       >
         <NavbarContent>
           <NavbarBrand>
+            {/* <Image
+              alt="Rekordly Logo"
+              height={40}
+              src="/rekordly-logo.svg"
+              as={NextImage}
+              // width={'100%'}
+              // className="h-full w-full"
+              width={110}
+            /> */}
             <div className="size-6 md:size-8 bg-gradient-to-br from-primary-400 to-primary-600 rounded-lg flex items-center justify-center">
               <Receipt className="size-4 text-white" />
             </div>
@@ -157,7 +168,7 @@ export default function DashboardNavbar({ user }: SessionUser) {
         >
           <DrawerContent>
             {onClose => (
-              <div className="flex flex-col h-full">
+              <div className="flex flex-col bg-brand-background h-full">
                 <DrawerHeader className="flex flex-col gap-1 border-b border-divider">
                   <User
                     avatarProps={{

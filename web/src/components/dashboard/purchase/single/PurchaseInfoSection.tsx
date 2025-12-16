@@ -74,7 +74,7 @@ export function PurchaseInfoSection({ purchase }: PurchaseInfoSectionProps) {
       </Card>
 
       {/* purchase Date & Source Card */}
-      <Card className="w-full rounded-xl" shadow="none">
+      <Card className="w-full bg-brand-background rounded-xl" shadow="none">
         <CardBody className="p-4">
           <div className="grid grid-cols-2 items-center justify-between gap-3">
             <div className="">
@@ -101,7 +101,7 @@ export function PurchaseInfoSection({ purchase }: PurchaseInfoSectionProps) {
 
       {/* Title & Description Card */}
       {(purchase.title || purchase.description) && (
-        <Card className="w-full rounded-xl" shadow="none">
+        <Card className="w-full bg-brand-background rounded-xl" shadow="none">
           <CardBody className="p-4 space-y-2">
             {purchase.title && (
               <div>

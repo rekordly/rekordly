@@ -107,6 +107,7 @@ export async function POST(
         const updatedSale = await tx.sale.update({
           where: { id: saleId },
           data: {
+            amountPaid: existingSale.amountPaid - refundAmount,
             refundAmount: totalRefundAmount,
             refundReason: data.refundReason,
             refundDate,
@@ -122,7 +123,20 @@ export async function POST(
               },
             },
             payments: {
-              orderBy: { paymentDate: 'desc' },
+              select: {
+                id: true,
+                saleId: true,
+                amount: true,
+                paymentDate: true,
+                paymentMethod: true,
+                category: true,
+                payableType: true,
+                reference: true,
+                notes: true,
+              },
+              orderBy: {
+                paymentDate: 'desc',
+              },
             },
           },
         });

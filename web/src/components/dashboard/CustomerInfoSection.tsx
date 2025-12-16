@@ -23,7 +23,7 @@ export function CustomerInfoSection({
   const defaultIcon = <UserIcon className={`w-5 h-5 ${iconColor}`} />;
 
   return (
-    <Card className="rounded-2xl" shadow="none">
+    <Card className="rounded-2xl bg-brand-background" shadow="none">
       <CardBody className="p-6">
         <div className="flex items-center gap-2 mb-6">
           {icon || defaultIcon}

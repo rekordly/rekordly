@@ -95,6 +95,7 @@ export async function POST(
         const updatedQuotation = await tx.quotation.update({
           where: { id: quotationId },
           data: {
+            amountPaid: existingQuotation.amountPaid - refundAmount,
             refundAmount: totalRefundAmount,
             refundReason: data.refundReason,
             refundDate,
@@ -110,7 +111,20 @@ export async function POST(
               },
             },
             payments: {
-              orderBy: { paymentDate: 'desc' },
+              select: {
+                id: true,
+                saleId: true,
+                amount: true,
+                paymentDate: true,
+                paymentMethod: true,
+                category: true,
+                payableType: true,
+                reference: true,
+                notes: true,
+              },
+              orderBy: {
+                paymentDate: 'desc',
+              },
             },
           },
         });

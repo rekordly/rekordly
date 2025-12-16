@@ -16,8 +16,8 @@ export function SaleItemsSection({ sale }: SaleItemsSectionProps) {
     : [];
 
   return (
-    <Card className="w-full rounded-3xl p-4" shadow="none">
-      <CardBody className="p-0 space-y-4">
+    <Card className="w-full bg-brand-background rounded-3xl" shadow="none">
+      <CardBody className="p-5 space-y-4">
         {/* Items Section */}
         {items.length > 0 && (
           <div>
@@ -109,7 +109,7 @@ export function SaleItemsSection({ sale }: SaleItemsSectionProps) {
         <div className="pt-4 mt-4 space-y-2.5 border-t border-default-200">
           {/* Subtotal */}
           <div className="flex justify-between text-xs md:text-sm">
-            <span className="text-default-600">Subtotal</span>
+            <span className="text-primary-100">Subtotal</span>
             <span className="font-medium">{formatCurrency(sale.subtotal)}</span>
           </div>
 
@@ -131,7 +131,7 @@ export function SaleItemsSection({ sale }: SaleItemsSectionProps) {
           {/* Discount */}
           {sale.discountAmount > 0 && (
             <div className="flex justify-between text-xs md:text-sm">
-              <span className="text-default-600">
+              <span className="text-primary-100">
                 Discount
                 {sale.discountType === 'PERCENTAGE' && sale.discountValue && (
                   <span className="ml-1">({sale.discountValue}%)</span>
@@ -146,7 +146,7 @@ export function SaleItemsSection({ sale }: SaleItemsSectionProps) {
           {/* Delivery Cost */}
           {sale.deliveryCost > 0 && (
             <div className="flex justify-between text-xs md:text-sm">
-              <span className="text-default-600">Delivery Cost</span>
+              <span className="text-primary-100">Delivery Cost</span>
               <span className="font-medium">
                 {formatCurrency(sale.deliveryCost)}
               </span>
@@ -156,7 +156,7 @@ export function SaleItemsSection({ sale }: SaleItemsSectionProps) {
           {/* Other Expenses Total */}
           {otherExpenses.length > 0 && (
             <div className="flex justify-between text-xs md:text-sm">
-              <span className="text-default-600">Other Expenses</span>
+              <span className="text-primary-100">Other Expenses</span>
               <span className="font-medium">
                 {formatCurrency(sale.totalSaleExpenses - sale.deliveryCost)}
               </span>
@@ -164,8 +164,8 @@ export function SaleItemsSection({ sale }: SaleItemsSectionProps) {
           )}
 
           {/* Grand Total */}
-          <div className="flex justify-between text-sm md:text-base font-bold pt-3 mt-3 border-t border-secondary-200">
-            <span className="text-primary-400">GRAND TOTAL</span>
+          <div className="flex justify-between text-sm md:text-base font-bold pt-3 mt-3 border-t border-default-200">
+            <span className="text-primary-500">GRAND TOTAL</span>
             <span className="text-default-900">
               {formatCurrency(sale.totalAmount)}
             </span>

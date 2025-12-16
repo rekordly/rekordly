@@ -8,9 +8,8 @@ import {
   DrawerBody,
   DrawerFooter,
   addToast,
-  Chip,
 } from '@heroui/react';
-import { TrendingUp, Info } from 'lucide-react';
+import { TrendingUp } from 'lucide-react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { FormProvider, useForm } from 'react-hook-form';
 import type { Resolver } from 'react-hook-form';
@@ -23,30 +22,30 @@ import {
   DropdownInput,
 } from '@/components/ui/Input';
 import { formatCurrency } from '@/lib/fn';
-import { useApi } from '@/hooks/useApi';
+import { api } from '@/lib/axios';
 import { addIncomeSchema } from '@/lib/validations/income';
 import {
   AddIncomeType,
   IncomeMainCategory,
   IncomeSubCategory,
   incomeCategories,
-  getSubCategoryDetails,
 } from '@/types/income';
 import { paymentMethods } from '@/config/constant';
+import { useIncomeStore } from '@/store/income-store';
 
 interface AddIncomeDrawerProps {
   isOpen: boolean;
   onClose: () => void;
+  incomeId?: string | null;
   prefilledType?: string;
-  apiEndpoint?: string;
   onSuccess?: (data: any) => void;
 }
 
 export function AddIncomeDrawer({
   isOpen,
   onClose,
+  incomeId,
   prefilledType,
-  apiEndpoint = '/income',
   onSuccess,
 }: AddIncomeDrawerProps) {
   const [selectedMainCategory, setSelectedMainCategory] =
@@ -57,6 +56,10 @@ export function AddIncomeDrawer({
   const [mainCategoryDescription, setMainCategoryDescription] =
     useState<string>('');
   const [subCategoryNote, setSubCategoryNote] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const { allIncome } = useIncomeStore();
+  const isEditMode = !!incomeId;
 
   const methods = useForm<AddIncomeType>({
     resolver: zodResolver(addIncomeSchema) as Resolver<AddIncomeType>,
@@ -73,7 +76,7 @@ export function AddIncomeDrawer({
 
   const {
     handleSubmit,
-    formState: { isSubmitting },
+    formState: { errors },
     reset,
     watch,
     setValue,
@@ -86,7 +89,11 @@ export function AddIncomeDrawer({
   useEffect(() => {
     if (watchMainCategory) {
       setSelectedMainCategory(watchMainCategory as IncomeMainCategory);
-      setValue('subCategory', '');
+
+      // Don't clear subcategory in edit mode on initial load
+      if (!isEditMode) {
+        setValue('subCategory', '');
+      }
 
       // Update main category description
       const category = incomeCategories.find(
@@ -97,7 +104,7 @@ export function AddIncomeDrawer({
         setValue('taxablePercentage', category.taxablePercentage);
       }
     }
-  }, [watchMainCategory, setValue]);
+  }, [watchMainCategory, setValue, isEditMode]);
 
   useEffect(() => {
     if (watchSubCategory) {
@@ -112,15 +119,41 @@ export function AddIncomeDrawer({
           sub => sub.value === watchSubCategory
         );
         if (subcategory) {
-          // Use note from main category as subcategories don't have individual notes in the new structure
           setSubCategoryNote(category.note);
         }
       }
     }
   }, [watchSubCategory, watchMainCategory]);
 
+  // Load income data for editing
   useEffect(() => {
-    if (isOpen && prefilledType) {
+    if (isOpen && isEditMode && incomeId) {
+      const income = allIncome.find(i => i.id === incomeId);
+      console.log('Editing income:', income);
+
+      if (income) {
+        reset({
+          mainCategory: income.incomeMainCategory as IncomeMainCategory,
+          subCategory:
+            income.customSubCategory || income.incomeSubCategory || '',
+          taxablePercentage: income.taxablePercentage || 100,
+          grossAmount: income.sourceTotalAmount || 0,
+          description: income.sourceDescription || '',
+          date: income.date
+            ? new Date(income.date).toISOString().slice(0, 16)
+            : new Date().toISOString().slice(0, 16),
+          paymentMethod: income.paymentMethod || 'BANK_TRANSFER',
+          reference: income.reference || '',
+        });
+
+        setSelectedMainCategory(
+          income.incomeMainCategory as IncomeMainCategory
+        );
+        setSelectedSubCategory(
+          income.customSubCategory || income.incomeSubCategory || ''
+        );
+      }
+    } else if (isOpen && prefilledType) {
       const typeMapping: Record<
         string,
         {
@@ -152,12 +185,7 @@ export function AddIncomeDrawer({
         setValue('subCategory', prefill.subCategory);
         setSelectedMainCategory(prefill.mainCategory);
       }
-    }
-  }, [isOpen, prefilledType, setValue]);
-
-  // Reset form when Drawer opens
-  useEffect(() => {
-    if (isOpen && !prefilledType) {
+    } else if (isOpen && !isEditMode && !prefilledType) {
       reset({
         mainCategory: IncomeMainCategory.OTHER_INCOME,
         subCategory: '',
@@ -170,20 +198,51 @@ export function AddIncomeDrawer({
       setMainCategoryDescription('');
       setSubCategoryNote('');
     }
-  }, [isOpen, prefilledType, reset]);
-
-  const { post, isLoading } = useApi({
-    addToast,
-    showSuccessToast: true,
-    successMessage: 'Income record added successfully',
-    onSuccess: data => {
-      if (onSuccess) onSuccess(data);
-      handleClose();
-    },
-  });
+  }, [isOpen, incomeId, isEditMode, allIncome, prefilledType, reset, setValue]);
 
   const onSubmit = async (data: AddIncomeType) => {
-    await post(apiEndpoint, data);
+    setIsSubmitting(true);
+    try {
+      if (isEditMode && incomeId) {
+        // Update existing income
+        const response = await api.patch(`/income/${incomeId}`, data);
+
+        addToast({
+          title: 'Success!',
+          description: 'Income record updated successfully',
+          color: 'success',
+        });
+
+        if (onSuccess) {
+          await onSuccess(response.data);
+        }
+      } else {
+        // Create new income
+        const response = await api.post('/income', data);
+
+        addToast({
+          title: 'Success!',
+          description: 'Income record added successfully',
+          color: 'success',
+        });
+
+        if (onSuccess) {
+          await onSuccess(response.data);
+        }
+      }
+
+      handleClose();
+    } catch (error: any) {
+      console.error('Error saving income:', error);
+      addToast({
+        title: 'Error',
+        description:
+          error?.response?.data?.message || 'Failed to save income record',
+        color: 'danger',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleClose = () => {
@@ -209,15 +268,12 @@ export function AddIncomeDrawer({
 
   // Function to get subcategory label for display
   const getSubCategoryLabel = (value: string) => {
-    // Check if it's a predefined subcategory
     const predefinedSubcategory = availableSubCategories.find(
       sub => sub.value === value
     );
     if (predefinedSubcategory) {
       return predefinedSubcategory.label;
     }
-
-    // If not found, it's a custom value - return as is
     return value;
   };
 
@@ -236,10 +292,14 @@ export function AddIncomeDrawer({
             <DrawerHeader className="flex flex-col gap-1 font-heading tracking-tight">
               <div className="flex items-center gap-2">
                 <TrendingUp className="text-primary" size={24} />
-                <span>Add Income Record</span>
+                <span>
+                  {isEditMode ? 'Edit Income Record' : 'Add Income Record'}
+                </span>
               </div>
               <p className="text-xs text-default-500 mt-1">
-                Record income from various sources
+                {isEditMode
+                  ? 'Update income information'
+                  : 'Record income from various sources'}
               </p>
             </DrawerHeader>
 
@@ -357,7 +417,7 @@ export function AddIncomeDrawer({
 
             <DrawerFooter>
               <Button
-                isDisabled={isSubmitting || isLoading}
+                isDisabled={isSubmitting}
                 variant="light"
                 onPress={handleClose}
               >
@@ -365,11 +425,11 @@ export function AddIncomeDrawer({
               </Button>
               <Button
                 color="primary"
-                isDisabled={isSubmitting || isLoading}
-                isLoading={isSubmitting || isLoading}
+                isDisabled={isSubmitting}
+                isLoading={isSubmitting}
                 type="submit"
               >
-                Add Income
+                {isEditMode ? 'Update Income' : 'Add Income'}
               </Button>
             </DrawerFooter>
           </DrawerContent>

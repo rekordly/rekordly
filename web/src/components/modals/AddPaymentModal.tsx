@@ -24,7 +24,7 @@ import { paymentMethods } from '@/config/constant';
 import { useEffect } from 'react';
 
 interface AddPaymentModalProps {
-  entityType: 'sale' | 'purchase' | 'quotation';
+  entityType: 'sale' | 'purchase' | 'quotation' | 'loan';
   entityId: string;
   entityNumber: string;
   totalAmount: number;
@@ -109,11 +109,24 @@ export function AddPaymentModal({
   });
 
   const onSubmit = async (data: AddPaymentType) => {
-    console.log({
-      url: `/${entityType}s/${entityId}/payments`,
-    });
+    // Determine the endpoint based on entity type
+    let endpoint = apiEndpoint;
 
-    const endpoint = apiEndpoint || `/${entityType}s/${entityId}/payment`;
+    if (!endpoint) {
+      switch (entityType) {
+        case 'loan':
+          endpoint = `/loans/${entityId}/payment`;
+          break;
+        case 'sale':
+        case 'purchase':
+        case 'quotation':
+          endpoint = `/${entityType}s/${entityId}/payment`;
+          break;
+        default:
+          endpoint = `/${entityType}s/${entityId}/payment`;
+      }
+    }
+
     await post(endpoint, data);
   };
 
@@ -129,10 +142,18 @@ export function AddPaymentModal({
   };
 
   const getEntityLabel = () => {
-    if (entityType === 'sale') return 'Sale';
-    if (entityType === 'purchase') return 'Purchase';
-    if (entityType === 'quotation') return 'Quotation';
-    return 'Transaction';
+    switch (entityType) {
+      case 'sale':
+        return 'Sale';
+      case 'purchase':
+        return 'Purchase';
+      case 'quotation':
+        return 'Quotation';
+      case 'loan':
+        return 'Loan';
+      default:
+        return 'Transaction';
+    }
   };
 
   const getPaymentDescription = () => {
@@ -181,7 +202,6 @@ export function AddPaymentModal({
                 </ModalHeader>
 
                 <ModalBody className="gap-4">
-                  {/* FIX 3 — No HTML validation conflict */}
                   <NumberInput
                     isRequired
                     control={methods.control}
@@ -190,7 +210,7 @@ export function AddPaymentModal({
                     name="amountPaid"
                     placeholder="0.00"
                     step={0.01}
-                    min={0} // no 0 allowed
+                    min={0}
                     startContent={
                       <span className="text-default-400 text-sm">₦</span>
                     }

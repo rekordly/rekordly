@@ -452,7 +452,7 @@ export function CreateInvoiceDrawer({
                     {isSubmitting
                       ? 'Submitting...'
                       : isEditMode
-                        ? 'Update Quotation'
+                        ? 'Update Invoice'
                         : customerEmail && customerEmail.trim() !== ''
                           ? 'Create & Send'
                           : 'Create Inovice'}

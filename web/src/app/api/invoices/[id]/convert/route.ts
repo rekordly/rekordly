@@ -150,6 +150,22 @@ export async function POST(
               id: true,
               amountPaid: true,
               balance: true,
+              payments: {
+                select: {
+                  id: true,
+                  saleId: true,
+                  amount: true,
+                  paymentDate: true,
+                  paymentMethod: true,
+                  category: true,
+                  payableType: true,
+                  reference: true,
+                  notes: true,
+                },
+                orderBy: {
+                  paymentDate: 'desc',
+                },
+              },
             },
           },
         },

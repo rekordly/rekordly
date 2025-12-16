@@ -19,7 +19,7 @@ import { useApi } from '@/hooks/useApi';
 
 interface DeletePaymentModalProps {
   payment: PaymentRecord;
-  entityType: 'sale' | 'purchase' | 'quotation' | 'invoice';
+  entityType: 'sale' | 'purchase' | 'quotation' | 'invoice' | 'loan';
   entityId: string;
   onSuccess?: () => void;
 }
