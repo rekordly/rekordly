@@ -24,6 +24,7 @@ import { FormSkeleton } from '@/components/skeleton/FormSkeleton';
 import { QuotationFormType } from '@/types/quotations';
 import { quotationSchema } from '@/lib/validations/quotations';
 import { useQuotationStore } from '@/store/quotationStore';
+import { useIncomeStore } from '@/store/income-store';
 
 interface CreateQuotationDrawerProps {
   isOpen: boolean;
@@ -72,6 +73,7 @@ export function CreateQuotationDrawer({
   } = useCustomerStore();
 
   const { allQuotations, updateQuotation, addQuotation } = useQuotationStore();
+  const { refreshIncome } = useIncomeStore();
 
   const isEditMode = !!quotationId;
 
@@ -329,16 +331,16 @@ export function CreateQuotationDrawer({
         const response = await api.patch(`/quotations/${quotationId}`, data);
 
         updateQuotation(quotationId, response.data.quotation);
+        if (data.addAsNewCustomer && response.data.customer) {
+          addCustomer(response.data.customer);
+        }
+        await refreshIncome();
 
         addToast({
           title: 'Success!',
           description: 'Quotation updated successfully',
           color: 'success',
         });
-
-        if (data.addAsNewCustomer && response.data.customer) {
-          addCustomer(response.data.customer);
-        }
       } else {
         const hasEmail =
           data.customer?.email && data.customer.email.trim() !== '';
@@ -362,6 +364,9 @@ export function CreateQuotationDrawer({
           addCustomer(response.data.customer);
         }
 
+        await refreshIncome();
+        if (onSuccess) onSuccess();
+
         addToast({
           title: 'Success!',
           description: hasEmail
@@ -371,10 +376,6 @@ export function CreateQuotationDrawer({
         });
       }
       handleClose();
-
-      if (onSuccess) {
-        await onSuccess();
-      }
     } catch (error: any) {
       console.error('Error creating/updating quotation:', error);
       addToast({

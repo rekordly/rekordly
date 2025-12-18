@@ -56,7 +56,7 @@ export function AddExpensesDrawer({
   const [categoryNote, setCategoryNote] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { allExpense } = useExpenseStore();
+  const { allExpense, refreshExpense } = useExpenseStore();
   const isEditMode = !!expenseId;
 
   const methods = useForm<AddExpenseType>({
@@ -187,31 +187,27 @@ export function AddExpensesDrawer({
     setIsSubmitting(true);
     try {
       if (isEditMode && expenseId) {
-        // Update existing expense
         const response = await api.patch(`/expenses/${expenseId}`, data);
+
+        await refreshExpense();
+        if (onSuccess) onSuccess(response.data);
 
         addToast({
           title: 'Success!',
           description: 'Expense record updated successfully',
           color: 'success',
         });
-
-        if (onSuccess) {
-          await onSuccess(response.data);
-        }
       } else {
-        // Create new expense
         const response = await api.post('/expenses', data);
+
+        await refreshExpense();
+        if (onSuccess) onSuccess(response.data);
 
         addToast({
           title: 'Success!',
           description: 'Expense record added successfully',
           color: 'success',
         });
-
-        if (onSuccess) {
-          await onSuccess(response.data);
-        }
       }
 
       handleClose();

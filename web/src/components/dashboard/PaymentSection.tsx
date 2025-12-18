@@ -157,7 +157,7 @@ export function PaymentSection({
                   >
                     {/* Icon based on category */}
                     <div
-                      className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+                      className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
                         payment.category === 'INCOME'
                           ? 'bg-success/10 text-success'
                           : 'bg-danger/10 text-danger'
@@ -181,7 +181,7 @@ export function PaymentSection({
                             {formatDate(payment.paymentDate)}
                           </p>
                         </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
+                        <div className="flex items-center gap-2 shrink-0">
                           <p
                             className={`text-sm font-bold ${
                               payment.category === 'INCOME'

@@ -222,7 +222,7 @@ export function CashFlowCard({ item, onClick }: CashFlowCardProps) {
       {/* Top Row: Icon, Category Badge & Flow Indicator */}
       <div className="flex items-start gap-3 mb-3">
         <div
-          className={`w-10 h-10 rounded-xl ${config.bgColor} flex items-center justify-center flex-shrink-0`}
+          className={`w-10 h-10 rounded-xl ${config.bgColor} flex items-center justify-center shrink-0`}
         >
           <Icon size={18} className={config.iconColor} />
         </div>
@@ -269,7 +269,7 @@ export function CashFlowCard({ item, onClick }: CashFlowCardProps) {
         </p>
 
         <Chip
-          className="h-6 flex-shrink-0"
+          className="h-6 shrink-0"
           color={config.chipColor}
           size="sm"
           variant="flat"
@@ -299,7 +299,7 @@ export function CashFlowCard({ item, onClick }: CashFlowCardProps) {
 
           {/* Payment Method */}
           {item.paymentMethod && (
-            <div className="flex flex-col gap-0.5 flex-shrink-0">
+            <div className="flex flex-col gap-0.5 shrink-0">
               <p className="text-[0.65rem] text-default-400 uppercase tracking-wide font-medium">
                 Method
               </p>
@@ -310,7 +310,7 @@ export function CashFlowCard({ item, onClick }: CashFlowCardProps) {
           )}
 
           {/* Date */}
-          <div className="flex flex-col gap-0.5 flex-shrink-0">
+          <div className="flex flex-col gap-0.5 shrink-0">
             <p className="text-[0.65rem] text-default-400 uppercase tracking-wide font-medium">
               Date
             </p>
@@ -326,7 +326,7 @@ export function CashFlowCard({ item, onClick }: CashFlowCardProps) {
             <Link
               href={route}
               onClick={e => e.stopPropagation()}
-              className="flex items-center gap-1 text-primary text-xs font-medium hover:underline flex-shrink-0 ml-2"
+              className="flex items-center gap-1 text-primary text-xs font-medium hover:underline shrink-0 ml-2"
             >
               <ExternalLink size={14} />
             </Link>

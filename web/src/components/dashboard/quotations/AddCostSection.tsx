@@ -251,7 +251,7 @@ export function AddCostSection() {
                             {cost.description}
                           </p>
                         </div>
-                        <div className="flex items-center gap-3 flex-shrink-0">
+                        <div className="flex items-center gap-3 shrink-0">
                           <span className="text-sm font-medium">
                             {formatCurrency(cost.amount)}
                           </span>

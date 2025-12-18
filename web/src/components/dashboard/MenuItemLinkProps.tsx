@@ -67,7 +67,7 @@ export function MenuItemLink({
         <div
           className={`
             overflow-hidden transition-all duration-200 ease-in-out
-            ${isExpanded ? 'max-h-[600px] opacity-100 mt-1' : 'max-h-0 opacity-0'}
+            ${isExpanded ? 'max-h-150 opacity-100 mt-1' : 'max-h-0 opacity-0'}
           `}
         >
           <div className="pl-4 space-y-1">

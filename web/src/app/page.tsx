@@ -475,7 +475,7 @@ export default function RekordlyLanding() {
                     {plan.features.map((feature, featureIdx) => (
                       <div key={featureIdx} className="flex items-start gap-2">
                         <CheckCircle2
-                          className={`w-4 h-4 mt-0.5 flex-shrink-0 ${
+                          className={`w-4 h-4 mt-0.5 shrink-0 ${
                             plan.highlighted ? 'text-white' : 'text-[#6366F1]'
                           }`}
                         />

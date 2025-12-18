@@ -73,6 +73,8 @@ export const authOptions: AuthOptions = {
                   registrationType: true,
                   workTypes: true,
                   startDate: true,
+                  bankDetails: true,
+                  referralCode: true,
                 },
               },
             },
@@ -160,6 +162,8 @@ export const authOptions: AuthOptions = {
                   registrationType: user.onboarding.registrationType,
                   workTypes: user.onboarding.workTypes,
                   startDate: user.onboarding.startDate,
+                  bankDetails: user.onboarding.bankDetails,
+                  referralCode: user.onboarding.referralCode,
                 }
               : undefined,
           };
@@ -309,6 +313,8 @@ export const authOptions: AuthOptions = {
                 registrationType: true,
                 workTypes: true,
                 startDate: true,
+                bankDetails: true,
+                referralCode: true,
               },
             });
 
@@ -318,6 +324,8 @@ export const authOptions: AuthOptions = {
               registrationType: null,
               workTypes: null,
               startDate: null,
+              bankDetails: null,
+              referralCode: null,
             };
           } catch (error) {
             console.error('Error fetching onboarding data in JWT:', error);
@@ -327,6 +335,8 @@ export const authOptions: AuthOptions = {
               registrationType: null,
               workTypes: null,
               startDate: null,
+              bankDetails: null,
+              referralCode: null,
             };
           }
         }
@@ -348,6 +358,8 @@ export const authOptions: AuthOptions = {
                   registrationType: true,
                   workTypes: true,
                   startDate: true,
+                  bankDetails: true,
+                  referralCode: true,
                 },
               },
             },
@@ -365,6 +377,8 @@ export const authOptions: AuthOptions = {
                 updatedUser.onboarding?.registrationType || null,
               workTypes: updatedUser.onboarding?.workTypes || null,
               startDate: updatedUser.onboarding?.startDate || null,
+              bankDetails: updatedUser.onboarding?.bankDetails || null,
+              referralCode: updatedUser.onboarding?.referralCode || null,
             };
           }
         } catch (error) {

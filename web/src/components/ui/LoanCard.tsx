@@ -163,7 +163,7 @@ export function LoanCard({
         {/* Top Row: Type Icon & Loan Number */}
         <div className="flex items-start gap-3 mb-3">
           <Chip
-            className="w-9 h-9 px-0 rounded-xl items-center justify-center flex-shrink-0"
+            className="w-9 h-9 px-0 rounded-xl items-center justify-center shrink-0"
             color={typeConfig.chipColor}
             variant="solid"
           >
@@ -176,7 +176,7 @@ export function LoanCard({
                 {loan.loanNumber}
               </span>
               <Tooltip content={typeConfig.description} size="sm">
-                <div className="flex items-center flex-shrink-0">
+                <div className="flex items-center shrink-0">
                   <Banknote size={12} className="text-default-400" />
                 </div>
               </Tooltip>
@@ -188,7 +188,7 @@ export function LoanCard({
 
           {/* Status Chip */}
           <Chip
-            className="h-6 flex-shrink-0"
+            className="h-6 shrink-0"
             color={statusConfig.chipColor}
             size="sm"
             variant="flat"
@@ -265,7 +265,7 @@ export function LoanCard({
         <div className="flex items-center justify-between pt-3 border-t border-divider">
           <div className="flex items-center gap-4 min-w-0 flex-1">
             {/* Payment Frequency */}
-            <div className="flex flex-col gap-0.5 flex-shrink-0">
+            <div className="flex flex-col gap-0.5 shrink-0">
               <p className="text-[0.65rem] text-default-400 uppercase tracking-wide font-medium">
                 Frequency
               </p>
@@ -275,7 +275,7 @@ export function LoanCard({
             </div>
 
             {/* Start Date */}
-            <div className="flex flex-col gap-0.5 flex-shrink-0">
+            <div className="flex flex-col gap-0.5 shrink-0">
               <p className="text-[0.65rem] text-default-400 uppercase tracking-wide font-medium">
                 Start Date
               </p>
@@ -287,7 +287,7 @@ export function LoanCard({
 
           {/* Edit & Delete Buttons */}
           <div
-            className="flex gap-1 flex-shrink-0 ml-2"
+            className="flex gap-1 shrink-0 ml-2"
             onClick={e => e.stopPropagation()}
           >
             <Button

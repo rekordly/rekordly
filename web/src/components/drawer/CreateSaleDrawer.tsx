@@ -24,6 +24,7 @@ import { FormSkeleton } from '@/components/skeleton/FormSkeleton';
 import { CreateSaleSchema } from '@/lib/validations/sales';
 import { useSaleStore } from '@/store/saleStore';
 import { SaleFormType } from '@/types/sales';
+import { useIncomeStore } from '@/store/income-store';
 
 interface CreateSaleDrawerProps {
   isOpen: boolean;
@@ -71,6 +72,7 @@ export function CreateSaleDrawer({
   } = useCustomerStore();
 
   const { allSales, updateSale, addSale } = useSaleStore();
+  const { refreshIncome } = useIncomeStore();
 
   const isEditMode = !!saleId;
 
@@ -279,15 +281,15 @@ export function CreateSaleDrawer({
 
         updateSale(saleId, response.data.sale);
 
+        if (data.addAsNewCustomer && response.data.customer) {
+          addCustomer(response.data.customer);
+        }
+        await refreshIncome();
         addToast({
           title: 'Success!',
           description: 'Sale updated successfully',
           color: 'success',
         });
-
-        if (data.addAsNewCustomer && response.data.customer) {
-          addCustomer(response.data.customer);
-        }
       } else {
         const response = await api.post('/sales', saleData);
 
@@ -299,6 +301,9 @@ export function CreateSaleDrawer({
           addCustomer(response.data.customer);
         }
 
+        await refreshIncome();
+        if (onSuccess) onSuccess();
+
         addToast({
           title: 'Success!',
           description: 'Sale created successfully',
@@ -307,10 +312,6 @@ export function CreateSaleDrawer({
       }
 
       handleClose();
-
-      if (onSuccess) {
-        await onSuccess();
-      }
     } catch (error: any) {
       console.error('Error creating/updating sale:', error);
       addToast({

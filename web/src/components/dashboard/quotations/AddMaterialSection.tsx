@@ -233,7 +233,7 @@ export function AddMaterialSection() {
                           {material.qty} × {formatCurrency(material.unitPrice)}
                         </p>
                       </div>
-                      <div className="flex items-center gap-3 flex-shrink-0">
+                      <div className="flex items-center gap-3 shrink-0">
                         <span className="text-sm font-medium">
                           {formatCurrency(material.total)}
                         </span>

@@ -64,7 +64,7 @@ export const OnboardingFlow: React.FC<SessionUser> = ({ user }) => {
 
   const methods = useForm<FormData>({
     resolver: zodResolver(getCompleteSchema()) as Resolver<FormData>,
-    mode: 'onBlur',
+    mode: 'all',
     defaultValues: {
       fullName: user.name || '',
       phoneNumber: '',

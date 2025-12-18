@@ -43,11 +43,11 @@ export default function StatCard({
       secondary:
         'bg-gradient-to-b dark:from-secondary-800/40 from-secondary-100/25 dark:to-black to-white from-0% via-50% to-90%',
       warning:
-        'bg-gradient-to-b dark:from-warning-800/40 from-warning-100/25 dark:to-black to-white from-0% via-50% to-90%',
+        'bg-gradient-to-b dark:from-warning-100/40 from-warning-100/25 dark:to-black to-white from-0% via-50% to-90%',
       danger:
-        'bg-gradient-to-b dark:from-danger-800/40 from-danger-100/25 dark:to-black to-white from-0% via-50% to-90%',
+        'bg-gradient-to-b dark:from-danger-100/40 from-danger-100/25 dark:to-black to-white from-0% via-50% to-90%',
       success:
-        'bg-gradient-to-b dark:from-success-800/40 from-success-100/25 dark:to-black to-white from-0% via-50% to-90%',
+        'bg-gradient-to-b dark:from-success-100/40 from-success-100/25 dark:to-black to-white from-0% via-50% to-90%',
     };
 
     return gradientMap[gradientColor];

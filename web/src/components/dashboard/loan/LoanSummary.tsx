@@ -266,7 +266,7 @@ export function LoanSummary() {
 
         {/* Info Alert */}
         <div className="flex items-start gap-2 p-3 bg-primary-50 dark:bg-primary-900/30 rounded-lg">
-          <AlertCircle className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
+          <AlertCircle className="w-4 h-4 text-primary mt-0.5 shrink-0" />
           <div className="text-xs">
             <p className="font-medium text-primary-800 dark:text-primary-200">
               {loanType === 'RECEIVABLE'

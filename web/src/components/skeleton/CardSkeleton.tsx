@@ -29,13 +29,13 @@ function QuotationCardSkeletonItem() {
             <Skeleton className="h-3 w-24 rounded-md" />
           </div>
 
-          <div className="flex flex-col gap-1 flex-shrink-0">
+          <div className="flex flex-col gap-1 shrink-0">
             <Skeleton className="h-2 w-10 rounded-md" />
             <Skeleton className="h-3 w-16 rounded-md" />
           </div>
         </div>
 
-        <Skeleton className="rounded-md w-7 h-7 flex-shrink-0" />
+        <Skeleton className="rounded-md w-7 h-7 shrink-0" />
       </div>
     </div>
   );

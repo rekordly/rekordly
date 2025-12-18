@@ -26,6 +26,7 @@ import { PurchaseHeading } from '../dashboard/purchase/PurchaseHeading';
 import { AddPurchaseItemSection } from '../dashboard/purchase/AddPurchaseItemSection';
 import { PurchaseCostsAndPaymentSection } from '../dashboard/purchase/PurchaseCostsAndPaymentSection';
 import { PurchaseSummary } from '../dashboard/purchase/PurchaseSummary';
+import { useExpenseStore } from '@/store/expense-store';
 
 interface CreatePurchaseDrawerProps {
   isOpen: boolean;
@@ -73,6 +74,7 @@ export function CreatePurchaseDrawer({
   } = useCustomerStore();
 
   const { allPurchases, updatePurchase, addPurchase } = usePurchaseStore();
+  const { refreshExpense } = useExpenseStore();
 
   const isEditMode = !!purchaseId;
 
@@ -282,6 +284,8 @@ export function CreatePurchaseDrawer({
           addCustomer(response.data.customer);
         }
 
+        await refreshExpense();
+
         addToast({
           title: 'Success!',
           description: 'Purchase updated successfully',
@@ -297,6 +301,8 @@ export function CreatePurchaseDrawer({
         if (data.addAsNewCustomer && response.data.customer) {
           addCustomer(response.data.customer);
         }
+
+        await refreshExpense();
 
         addToast({
           title: 'Success!',
@@ -363,19 +369,6 @@ export function CreatePurchaseDrawer({
         return 'Purchase Items';
       case 3:
         return 'Costs & Payment';
-      default:
-        return '';
-    }
-  };
-
-  const getStepDescription = () => {
-    switch (currentStep) {
-      case 1:
-        return 'Enter supplier information and purchase details';
-      case 2:
-        return 'Add items to this purchase';
-      case 3:
-        return 'Add additional costs, VAT and payment information';
       default:
         return '';
     }

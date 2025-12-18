@@ -229,7 +229,7 @@ export function AddItemSection() {
                           {item.quantity} × {formatCurrency(item.rate)}
                         </p>
                       </div>
-                      <div className="flex items-center gap-3 flex-shrink-0">
+                      <div className="flex items-center gap-3 shrink-0">
                         <span className="text-sm font-medium">
                           {formatCurrency(item.amount)}
                         </span>

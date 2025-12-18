@@ -67,6 +67,7 @@
     "@react-aria/ssr": "3.9.10",
     "@react-aria/visually-hidden": "3.8.28",
     "bcryptjs": "^3.0.2",
+    "cloudinary": "^2.8.0",
     "clsx": "2.1.1",
     "framer-motion": "11.18.2",
     "html2canvas": "^1.4.1",

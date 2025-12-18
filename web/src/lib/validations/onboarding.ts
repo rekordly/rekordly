@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { validRegistrationTypes, workTypes } from './general';
 
 // Personal Information Schema (for users WITH password - password is optional)
 export const personalInfoSchema = z.object({
@@ -48,22 +49,9 @@ export const personalInfoSchemaWithPassword = z
 // Work Type Schema
 export const workTypeSchema = z.object({
   workTypes: z
-    .array(
-      z.enum(['self-employed', 'freelancer', 'employed', 'business-owner'])
-    )
+    .array(z.enum(workTypes))
     .min(1, { message: 'Please select at least one work type' }),
 });
-
-// Valid registration types
-const validRegistrationTypes = [
-  'Not yet registered',
-  'Business Name',
-  'Limited Liability Company (Ltd)',
-  'Public Limited Company (PLC)',
-  'Limited by Guarantee',
-  'Unlimited Company',
-  'Limited Liability Partnership (LLP)',
-] as const;
 
 // Final Details Schema
 export const finalSchema = z.object({

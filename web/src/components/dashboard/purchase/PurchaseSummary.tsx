@@ -107,7 +107,7 @@ export function PurchaseSummary() {
         {/* Alert for outstanding balance */}
         {balance > 0 && (
           <div className="flex items-start gap-2 p-3 bg-warning-50 rounded-lg">
-            <AlertCircle className="w-4 h-4 text-warning mt-0.5 flex-shrink-0" />
+            <AlertCircle className="w-4 h-4 text-warning mt-0.5 shrink-0" />
             <div className="text-xs">
               <p className="font-medium text-warning-800">
                 Outstanding Balance
@@ -122,7 +122,7 @@ export function PurchaseSummary() {
         {/* Success message for fully paid */}
         {balance === 0 && amountPaid > 0 && (
           <div className="flex items-start gap-2 p-3 bg-success-50 rounded-lg">
-            <TrendingUp className="w-4 h-4 text-success mt-0.5 flex-shrink-0" />
+            <TrendingUp className="w-4 h-4 text-success mt-0.5 shrink-0" />
             <div className="text-xs">
               <p className="font-medium text-success-800">Fully Paid</p>
               <p className="text-success-700">

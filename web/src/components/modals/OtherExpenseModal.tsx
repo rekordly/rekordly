@@ -95,7 +95,7 @@ export function OtherExpenseModal({
               <div className="space-y-4">
                 {/* Date */}
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-default-100 dark:bg-default-50 flex items-center justify-center flex-shrink-0">
+                  <div className="w-10 h-10 rounded-lg bg-default-100 dark:bg-default-50 flex items-center justify-center shrink-0">
                     <Calendar size={18} className="text-default-600" />
                   </div>
                   <div className="flex-1">
@@ -108,7 +108,7 @@ export function OtherExpenseModal({
 
                 {/* Payment Method */}
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-default-100 dark:bg-default-50 flex items-center justify-center flex-shrink-0">
+                  <div className="w-10 h-10 rounded-lg bg-default-100 dark:bg-default-50 flex items-center justify-center shrink-0">
                     <CreditCard size={18} className="text-default-600" />
                   </div>
                   <div className="flex-1">
@@ -122,7 +122,7 @@ export function OtherExpenseModal({
                 {/* Category & Subcategory */}
                 {(expense.category || expense.subCategory) && (
                   <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-default-100 dark:bg-default-50 flex items-center justify-center flex-shrink-0">
+                    <div className="w-10 h-10 rounded-lg bg-default-100 dark:bg-default-50 flex items-center justify-center shrink-0">
                       <Tag size={18} className="text-default-600" />
                     </div>
                     <div className="flex-1">
@@ -143,7 +143,7 @@ export function OtherExpenseModal({
                 {/* Vendor */}
                 {expense.vendorName && (
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-default-100 dark:bg-default-50 flex items-center justify-center flex-shrink-0">
+                    <div className="w-10 h-10 rounded-lg bg-default-100 dark:bg-default-50 flex items-center justify-center shrink-0">
                       <User size={18} className="text-default-600" />
                     </div>
                     <div className="flex-1">
@@ -158,7 +158,7 @@ export function OtherExpenseModal({
                 {/* Reference */}
                 {expense.reference && (
                   <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-default-100 dark:bg-default-50 flex items-center justify-center flex-shrink-0">
+                    <div className="w-10 h-10 rounded-lg bg-default-100 dark:bg-default-50 flex items-center justify-center shrink-0">
                       <Tag size={18} className="text-default-600" />
                     </div>
                     <div className="flex-1">

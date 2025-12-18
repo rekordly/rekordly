@@ -7,6 +7,25 @@ export const heardFromOptions = [
   'Other',
 ];
 
+export const validRegistrationTypes = [
+  { label: 'Not yet registered', value: 'Not yet registered' },
+  { label: 'Business Name', value: 'Business Name' },
+  {
+    label: 'Limited Liability Company (Ltd)',
+    value: 'Limited Liability Company (Ltd)',
+  },
+  {
+    label: 'Public Limited Company (PLC)',
+    value: 'Public Limited Company (PLC)',
+  },
+  { label: 'Limited by Guarantee', value: 'Limited by Guarantee' },
+  { label: 'Unlimited Company', value: 'Unlimited Company' },
+  {
+    label: 'Limited Liability Partnership (LLP)',
+    value: 'Limited Liability Partnership (LLP)',
+  },
+];
+
 export const workTypes = [
   {
     value: 'self-employed',

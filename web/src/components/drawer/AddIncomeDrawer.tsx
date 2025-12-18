@@ -58,7 +58,7 @@ export function AddIncomeDrawer({
   const [subCategoryNote, setSubCategoryNote] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { allIncome } = useIncomeStore();
+  const { allIncome, refreshIncome } = useIncomeStore();
   const isEditMode = !!incomeId;
 
   const methods = useForm<AddIncomeType>({
@@ -207,28 +207,25 @@ export function AddIncomeDrawer({
         // Update existing income
         const response = await api.patch(`/income/${incomeId}`, data);
 
+        await refreshIncome();
+        if (onSuccess) onSuccess(response.data);
+
         addToast({
           title: 'Success!',
           description: 'Income record updated successfully',
           color: 'success',
         });
-
-        if (onSuccess) {
-          await onSuccess(response.data);
-        }
       } else {
-        // Create new income
         const response = await api.post('/income', data);
+
+        await refreshIncome();
+        if (onSuccess) onSuccess(response.data);
 
         addToast({
           title: 'Success!',
           description: 'Income record added successfully',
           color: 'success',
         });
-
-        if (onSuccess) {
-          await onSuccess(response.data);
-        }
       }
 
       handleClose();

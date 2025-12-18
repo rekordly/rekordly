@@ -9,6 +9,23 @@ export const PaymentMethodSchema = z.enum([
   'OTHER',
 ]);
 
+export const validRegistrationTypes = [
+  'Not yet registered',
+  'Business Name',
+  'Limited Liability Company (Ltd)',
+  'Public Limited Company (PLC)',
+  'Limited by Guarantee',
+  'Unlimited Company',
+  'Limited Liability Partnership (LLP)',
+] as const;
+
+export const workTypes = [
+  'self-employed',
+  'freelancer',
+  'employed',
+  'business-owner',
+] as const;
+
 export const addPaymentSchema = z.object({
   amountPaid: z.number().nonnegative('Amount cannot be negative'),
   paymentMethod: PaymentMethodSchema,

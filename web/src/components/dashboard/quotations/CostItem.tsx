@@ -17,7 +17,7 @@ export function CostItem({ cost, onRemove }: CostItemProps) {
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium truncate">{cost.description}</p>
       </div>
-      <div className="flex items-center gap-3 flex-shrink-0">
+      <div className="flex items-center gap-3 shrink-0">
         <p className="text-sm font-semibold">{formatCurrency(cost.amount)}</p>
         <Button
           isIconOnly

@@ -262,7 +262,7 @@ export function PurchaseCostsAndPaymentSection() {
                             {cost.description}
                           </p>
                         </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
+                        <div className="flex items-center gap-2 shrink-0">
                           <span className="text-sm font-medium">
                             {formatCurrency(cost.amount)}
                           </span>

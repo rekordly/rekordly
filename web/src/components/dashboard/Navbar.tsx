@@ -27,6 +27,7 @@ import NextImage from 'next/image';
 import { SessionUser } from '@/types';
 import { menuItems } from '@/config/menu';
 import { handleSignOut } from '@/lib/auth/logout';
+import { Link } from '@heroui/link';
 
 export default function DashboardNavbar({ user }: SessionUser) {
   const [expandedItem, setExpandedItem] = useState<string | null>(null);
@@ -108,14 +109,16 @@ export default function DashboardNavbar({ user }: SessionUser) {
           {/* Mobile Toggle with user */}
           <NavbarContent className="sm:hidden gap-0" justify="end">
             <ThemeToggle />
-            <User
-              avatarProps={{
-                src: userImage,
-                size: 'sm',
-              }}
-              description=""
-              name=""
-            />
+            <Link color="foreground" href="/dashboard/profile">
+              <User
+                avatarProps={{
+                  src: userImage,
+                  size: 'sm',
+                }}
+                description=""
+                name=""
+              />
+            </Link>
 
             <Button
               isIconOnly
@@ -131,13 +134,15 @@ export default function DashboardNavbar({ user }: SessionUser) {
           {/* Desktop */}
           <NavbarContent className="hidden sm:flex gap-2" justify="end">
             <ThemeToggle />
-            <User
-              avatarProps={{
-                src: userImage,
-              }}
-              description={user?.email || ''}
-              name={userName}
-            />
+            <Link color="foreground" href="/dashboard/profile">
+              <User
+                avatarProps={{
+                  src: userImage,
+                }}
+                description={user?.email || ''}
+                name={userName}
+              />
+            </Link>
           </NavbarContent>
         </NavbarContent>
 

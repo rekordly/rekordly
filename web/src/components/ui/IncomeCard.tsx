@@ -128,7 +128,7 @@ export function IncomeCard({
         {/* Top Row: Icon, ID & Title */}
         <div className="flex items-start gap-3 mb-3">
           <Chip
-            className="w-9 h-9 px-0 rounded-xl items-center justify-center flex-shrink-0"
+            className="w-9 h-9 px-0 rounded-xl items-center justify-center shrink-0"
             color={config.chipColor}
             variant="solid"
           >
@@ -160,7 +160,7 @@ export function IncomeCard({
           </p>
 
           <Chip
-            className="h-6 flex-shrink-0"
+            className="h-6 shrink-0"
             color={config.chipColor}
             size="sm"
             variant="flat"
@@ -183,7 +183,7 @@ export function IncomeCard({
               </p>
             </div>
 
-            <div className="flex flex-col gap-0.5 flex-shrink-0">
+            <div className="flex flex-col gap-0.5 shrink-0">
               <p className="text-[0.65rem] text-default-400 uppercase tracking-wide font-medium">
                 Date
               </p>
@@ -195,7 +195,7 @@ export function IncomeCard({
 
           {/* Edit & Delete Buttons */}
           <div
-            className="flex gap-1 flex-shrink-0 ml-2"
+            className="flex gap-1 shrink-0 ml-2"
             onClick={e => e.stopPropagation()}
           >
             <Button

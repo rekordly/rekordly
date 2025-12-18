@@ -13,6 +13,8 @@ declare module 'next-auth' {
         registrationType: string | null;
         workTypes: Array | null;
         startDate: string | Date | null;
+        bankDetails?: Array | null;
+        referralCode?: string | null;
       };
     } & DefaultSession['user'];
   }
@@ -32,6 +34,8 @@ declare module 'next-auth' {
       registrationType: string | null;
       workTypes: Array | null;
       startDate: string | Date | null;
+      bankDetails?: Array | null;
+      referralCode?: string | null;
     };
   }
 }
@@ -48,6 +52,8 @@ declare module 'next-auth/jwt' {
       registrationType: string | null;
       workTypes: Array | null;
       startDate: string | Date | null;
+      bankDetails?: Array | null;
+      referralCode?: string | null;
     };
   }
 }

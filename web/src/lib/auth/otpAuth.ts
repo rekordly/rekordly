@@ -36,6 +36,8 @@ export const OTPProvider: Provider = {
               registrationType: true,
               workTypes: true,
               startDate: true,
+              bankDetails: true,
+              referralCode: true,
             },
           },
         },
@@ -78,6 +80,8 @@ export const OTPProvider: Provider = {
               registrationType: user.onboarding.registrationType,
               workTypes: user.onboarding.workTypes,
               startDate: user.onboarding.startDate,
+              bankDetails: user.onboarding.bankDetails,
+              referralCode: user.onboarding.referralCode,
             }
           : undefined,
       };

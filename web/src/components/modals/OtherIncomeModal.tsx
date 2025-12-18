@@ -182,7 +182,7 @@ export function OtherIncomeModal({
                       <div className="h-px bg-divider" />
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex items-center gap-2">
-                          <Tag className="w-4 h-4 text-default-400 flex-shrink-0" />
+                          <Tag className="w-4 h-4 text-default-400 shrink-0" />
                           <span className="text-sm text-default-600">
                             Reference
                           </span>

@@ -34,7 +34,7 @@ export function SaleCustomerSection({ sale }: SaleCustomerSectionProps) {
 
         <div className="flex items-start gap-3">
           <Avatar
-            className="bg-gradient-to-br from-secondary-400 to-secondary-600 text-white font-semibold flex-shrink-0"
+            className="bg-gradient-to-br from-secondary-400 to-secondary-600 text-white font-semibold shrink-0"
             name={getInitials(customerName)}
             size="md"
           />
@@ -47,17 +47,14 @@ export function SaleCustomerSection({ sale }: SaleCustomerSectionProps) {
             <div className="space-y-1.5">
               {customerEmail && (
                 <div className="flex items-center gap-2 text-xs md:text-sm text-default-600">
-                  <Envelope
-                    className="text-default-400 flex-shrink-0"
-                    size={14}
-                  />
+                  <Envelope className="text-default-400 shrink-0" size={14} />
                   <span className="truncate">{customerEmail}</span>
                 </div>
               )}
 
               {customerPhone && (
                 <div className="flex items-center gap-2 text-xs md:text-sm text-default-600">
-                  <Phone className="text-default-400 flex-shrink-0" size={14} />
+                  <Phone className="text-default-400 shrink-0" size={14} />
                   <span>{customerPhone}</span>
                 </div>
               )}
