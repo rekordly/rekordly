@@ -1,3 +1,4 @@
+// app/api/expenses/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -6,7 +7,7 @@ import { getAuthUser } from '@/lib/utils/server';
 import { toTwoDecimals } from '@/lib/fn';
 import { validateRequest } from '@/lib/utils/validation';
 import { addExpenseSchema } from '@/lib/validations/expenses';
-import { ExpenseCategory } from '@/types/expenses';
+import { ExpenseCategory, ExpenseStatus } from '@/types/expenses';
 import { PaymentMethod } from '@/types/index';
 
 // PATCH - Update expense record
@@ -34,6 +35,7 @@ export async function PATCH(
     }
 
     const expenseData = await validateRequest(request, addExpenseSchema);
+    const expenseAmount = toTwoDecimals(expenseData.amount);
 
     const result = await prisma.$transaction(
       async tx => {
@@ -43,12 +45,14 @@ export async function PATCH(
           data: {
             category: expenseData.category as ExpenseCategory,
             subCategory: expenseData.subCategory,
-            amount: toTwoDecimals(expenseData.amount),
+            amount: expenseAmount,
+            amountPaid: expenseAmount, // Update paid amount to match new amount
+            balance: 0, // Recalculate balance
+            status: ExpenseStatus.PAID, // Maintain paid status
             description: expenseData.description,
             date: expenseData.date ? new Date(expenseData.date) : new Date(),
             isDeductible: expenseData.isDeductible ?? true,
             deductionPercentage: expenseData.deductionPercentage ?? 100,
-            // note: expenseData.note,
             vendorName: expenseData.vendorName,
             receipt: expenseData.receipt,
             reference: expenseData.reference,
@@ -56,21 +60,21 @@ export async function PATCH(
         });
 
         // Update the associated payment
-        const payment = existingExpense.payments[0]; // Should only have one payment
+        const payment = existingExpense.payments[0];
         if (payment) {
           await tx.payment.update({
             where: { id: payment.id },
             data: {
-              amount: toTwoDecimals(expenseData.amount),
+              amount: expenseAmount,
               paymentDate: expenseData.date
                 ? new Date(expenseData.date)
                 : new Date(),
               paymentMethod: (expenseData.paymentMethod ||
                 'BANK_TRANSFER') as PaymentMethod,
               reference: expenseData.reference || null,
-              notes: expenseData.description
-                ? expenseData.description
-                : `Payment for ${expenseData.category}`,
+              notes:
+                expenseData.description ||
+                `Payment for ${expenseData.category}`,
             },
           });
         }

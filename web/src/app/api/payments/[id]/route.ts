@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { getAuthUser } from '@/lib/utils/server';
 import { addPaymentSchema } from '@/lib/validations/general';
 import { formatCurrency, toTwoDecimals } from '@/lib/fn';
+import { PaymentMethod } from '@prisma/client';
 
 // Helper for formatting currency in error messages
 
@@ -125,7 +126,7 @@ export async function PATCH(
           where: { id: paymentId },
           data: {
             amount: newAmount,
-            paymentMethod: data.paymentMethod,
+            paymentMethod: data.paymentMethod as PaymentMethod,
             paymentDate: new Date(data.paymentDate),
             reference: data.reference || null,
             notes: data.notes || null,

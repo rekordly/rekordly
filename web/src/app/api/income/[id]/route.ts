@@ -1,3 +1,4 @@
+// app/api/income/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -9,6 +10,7 @@ import { addIncomeSchema } from '@/lib/validations/income';
 import {
   formatCustomSubCategory,
   IncomeMainCategory,
+  IncomeRecordStatus,
   IncomeSubCategory,
   normalizeIncomeSubCategory,
 } from '@/types/income';
@@ -58,6 +60,8 @@ export async function PATCH(
       true
     );
 
+    const grossAmount = toTwoDecimals(incomeData.grossAmount);
+
     const result = await prisma.$transaction(
       async tx => {
         // Update income record
@@ -67,7 +71,10 @@ export async function PATCH(
             mainCategory: incomeData.mainCategory as IncomeMainCategory,
             subCategory: subCategory as IncomeSubCategory,
             customSubCategory: customSubCategory,
-            grossAmount: toTwoDecimals(incomeData.grossAmount),
+            grossAmount: grossAmount,
+            amountPaid: grossAmount, // Update paid amount to match new amount
+            balance: 0, // Recalculate balance
+            status: IncomeRecordStatus.PAID, // Maintain paid status
             taxablePercentage: incomeData.taxablePercentage,
             description: incomeData.description,
             date: incomeData.date ? new Date(incomeData.date) : new Date(),
@@ -75,21 +82,21 @@ export async function PATCH(
         });
 
         // Update the associated payment
-        const payment = existingIncome.payments[0]; // Should only have one payment
+        const payment = existingIncome.payments[0];
         if (payment) {
           await tx.payment.update({
             where: { id: payment.id },
             data: {
-              amount: toTwoDecimals(incomeData.grossAmount),
+              amount: grossAmount,
               paymentDate: incomeData.date
                 ? new Date(incomeData.date)
                 : new Date(),
               paymentMethod: (incomeData.paymentMethod ||
                 'BANK_TRANSFER') as PaymentMethod,
               reference: incomeData.reference || null,
-              notes: incomeData.description
-                ? incomeData.description
-                : `Payment for ${incomeData.subCategory}`,
+              notes:
+                incomeData.description ||
+                `Payment for ${incomeData.subCategory}`,
             },
           });
         }
@@ -156,6 +163,7 @@ export async function DELETE(
       );
     }
 
+    // Delete income record (payments will be cascade deleted)
     await prisma.incomeRecord.delete({
       where: { id },
     });

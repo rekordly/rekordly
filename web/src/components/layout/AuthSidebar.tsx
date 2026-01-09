@@ -18,7 +18,7 @@ const teamMembers: TeamMember[] = [
 
 export const AuthSidebar = () => {
   return (
-    <div className="w-full h-screen bg-gradient-to-br from-brand-900 via-brand-800 to-brand-900 p-8 flex flex-col relative overflow-hidden">
+    <div className="w-full h-screen bg-linear-to-br from-brand-900 via-brand-800 to-brand-900 p-8 flex flex-col relative overflow-hidden">
       {/* Decorative Pattern */}
       <div className="absolute bottom-0 right-0 w-64 h-64 opacity-20">
         <div
@@ -107,7 +107,7 @@ export const AuthSidebar = () => {
                 className="flex items-center justify-between py-2 px-2 hover:bg-gray-50 rounded-lg transition-colors"
               >
                 <div className="flex items-center gap-3 flex-1">
-                  <div className="w-8 h-8 bg-gradient-to-br from-brand-400 to-brand-600 rounded-full flex items-center justify-center text-white text-xs font-semibold">
+                  <div className="w-8 h-8 bg-linear-to-br from-brand-400 to-brand-600 rounded-full flex items-center justify-center text-white text-xs font-semibold">
                     {member.avatar}
                   </div>
                   <span className="text-sm font-medium text-gray-900">

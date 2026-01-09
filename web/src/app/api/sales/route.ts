@@ -3,15 +3,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getAuthUser } from '@/lib/utils/server';
 import { resolveCustomer } from '@/lib/utils/customer';
-import { CreateSaleSchema } from '@/lib/validations/sales';
+import { CreateSaleSchema, SaleItemSchema } from '@/lib/validations/sales';
 import { generateReceiptNumber, toTwoDecimals } from '@/lib/fn';
 import { validateRequest } from '@/lib/utils/validation';
+import { PaymentMethod } from '@prisma/client';
 
 export async function POST(request: NextRequest) {
   try {
     const { userId } = await getAuthUser(request);
 
     const data = await validateRequest(request, CreateSaleSchema);
+    console.log(JSON.stringify(data, null, 2));
 
     const { customerId, customerName, customerEmail, customerPhone, customer } =
       await resolveCustomer(userId, data.customer, data.addAsNewCustomer);
@@ -40,13 +42,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Process items with proper decimal conversion
-    const items = data.items.map(item => ({
-      ...item,
-      rate: toTwoDecimals(item.rate),
-      amount: toTwoDecimals(item.amount),
-    }));
-
     // Process other expenses with proper decimal conversion
     const otherSaleExpenses = (data.otherSaleExpenses || []).map(expense => ({
       ...expense,
@@ -74,9 +69,9 @@ export async function POST(request: NextRequest) {
     // Use sale date or current time
     const saleDate = data.saleDate ? new Date(data.saleDate) : new Date();
 
-    // Create sale with transaction to ensure payment is created if amount paid
+    // Create sale with transaction for atomic inventory updates
     const result = await prisma.$transaction(async tx => {
-      // Create the sale
+      // Create sale without items first
       const sale = await tx.sale.create({
         data: {
           receiptNumber,
@@ -89,7 +84,6 @@ export async function POST(request: NextRequest) {
           customerPhone,
           title: data.title,
           description: data.description || null,
-          items,
           subtotal: toTwoDecimals(data.subtotal),
           discountType: data.discountType || null,
           discountValue: data.discountValue
@@ -112,6 +106,109 @@ export async function POST(request: NextRequest) {
         },
       });
 
+      // Process items and create SaleItem records
+      const saleItems = [];
+      for (const item of data.items) {
+        let costPrice = 0;
+        let totalCost = 0;
+        let profit = 0;
+
+        // Handle inventory-linked items
+        if (item.inventoryItemId) {
+          const inventoryItem = await tx.inventoryItem.findFirst({
+            where: {
+              id: item.inventoryItemId,
+              userId,
+            },
+          });
+
+          if (!inventoryItem) {
+            throw new Error(
+              `Inventory item not found: ${item.inventoryItemId}`
+            );
+          }
+
+          // Check inventory tracking and availability
+          if (inventoryItem.trackInventory) {
+            if (inventoryItem.quantityOnHand < item.quantity) {
+              throw new Error(
+                `Insufficient stock for ${inventoryItem.name}. Available: ${inventoryItem.quantityOnHand}, Requested: ${item.quantity}`
+              );
+            }
+
+            // Deduct from inventory
+            await tx.inventoryItem.update({
+              where: { id: inventoryItem.id },
+              data: {
+                quantityOnHand: toTwoDecimals(
+                  inventoryItem.quantityOnHand - item.quantity
+                ),
+              },
+            });
+          }
+
+          // Use average cost from inventory
+          costPrice = inventoryItem.averageCost || 0;
+        } else if (item.productionId) {
+          // Handle production-linked items
+          const production = await tx.production.findFirst({
+            where: {
+              id: item.productionId,
+              userId,
+            },
+          });
+
+          if (!production) {
+            throw new Error(`Production not found: ${item.productionId}`);
+          }
+
+          // Use unit cost from production
+          costPrice = production.unitCost || 0;
+        } else {
+          // Non-inventory item (service or one-time) - use provided cost price
+          costPrice = item.costPrice || 0;
+        }
+
+        // Calculate cost and profit
+        totalCost = toTwoDecimals(costPrice * item.quantity);
+        profit = toTwoDecimals(item.amount - totalCost);
+
+        // Create SaleItem record
+        const saleItem = await tx.saleItem.create({
+          data: {
+            saleId: sale.id,
+            inventoryItemId: item.inventoryItemId || null,
+            productionId: item.productionId || null,
+            itemName: item.itemName || 'Unnamed Item',
+            description: item.description,
+            quantity: toTwoDecimals(item.quantity),
+            unitPrice: toTwoDecimals(item.unitPrice),
+            amount: toTwoDecimals(item.amount),
+            costPrice: toTwoDecimals(costPrice),
+            totalCost: toTwoDecimals(totalCost),
+            profit: toTwoDecimals(profit),
+          },
+          include: {
+            inventoryItem: {
+              select: {
+                id: true,
+                name: true,
+                sku: true,
+                itemType: true,
+              },
+            },
+            production: {
+              select: {
+                id: true,
+                productionNumber: true,
+              },
+            },
+          },
+        });
+
+        saleItems.push(saleItem);
+      }
+
       // Create payment record if amount was paid
       let payment = null;
       if (amountPaid > 0) {
@@ -122,14 +219,15 @@ export async function POST(request: NextRequest) {
             saleId: sale.id,
             amount: amountPaid,
             paymentDate: saleDate,
-            paymentMethod: data.paymentMethod || 'BANK_TRANSFER',
+            paymentMethod:
+              (data.paymentMethod as PaymentMethod) || 'BANK_TRANSFER',
             category: 'INCOME',
             notes: `Payment for sale ${receiptNumber}`,
           },
         });
       }
 
-      return { sale, payment };
+      return { sale, saleItems, payment };
     });
 
     return NextResponse.json(
@@ -137,7 +235,10 @@ export async function POST(request: NextRequest) {
         message: 'Sale created successfully',
         success: true,
         customer,
-        sale: result.sale,
+        sale: {
+          ...result.sale,
+          saleItems: result.saleItems,
+        },
         payment: result.payment,
       },
       { status: 201 }
@@ -149,6 +250,27 @@ export async function POST(request: NextRequest) {
 
     if (error instanceof Error && error.message.includes('Unauthorized')) {
       return NextResponse.json({ message: error.message }, { status: 401 });
+    }
+
+    if (
+      error instanceof Error &&
+      error.message.includes('Insufficient stock')
+    ) {
+      return NextResponse.json({ message: error.message }, { status: 400 });
+    }
+
+    if (
+      error instanceof Error &&
+      error.message.includes('Inventory item not found')
+    ) {
+      return NextResponse.json({ message: error.message }, { status: 404 });
+    }
+
+    if (
+      error instanceof Error &&
+      error.message.includes('Production not found')
+    ) {
+      return NextResponse.json({ message: error.message }, { status: 404 });
     }
 
     return NextResponse.json(
@@ -195,6 +317,24 @@ export async function GET(request: NextRequest) {
               invoiceNumber: true,
             },
           },
+          saleItems: {
+            include: {
+              inventoryItem: {
+                select: {
+                  id: true,
+                  name: true,
+                  sku: true,
+                  itemType: true,
+                },
+              },
+              production: {
+                select: {
+                  id: true,
+                  productionNumber: true,
+                },
+              },
+            },
+          },
           payments: {
             select: {
               id: true,
@@ -218,6 +358,8 @@ export async function GET(request: NextRequest) {
       }),
       prisma.sale.count({ where }),
     ]);
+
+    console.log(JSON.stringify(sales, null, 2));
 
     return NextResponse.json(
       {

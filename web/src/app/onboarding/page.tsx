@@ -25,7 +25,7 @@ export default async function OnboardingPage() {
     <Suspense fallback={<OnboardingLoadingSkeleton />}>
       <div className="min-h-screen flex">
         {/* Left Side - Gradient/Image (hidden on mobile) */}
-        <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-blue-600 via-purple-600 to-pink-500 items-center justify-center p-12 relative">
+        <div className="hidden lg:flex lg:w-1/2 bg-linear-to-br from-blue-600 via-purple-600 to-pink-500 items-center justify-center p-12 relative">
           <div className="text-white text-center max-w-lg">
             <h1 className="text-5xl font-bold mb-6">Welcome to rekordly</h1>
             <p className="text-xl mb-8 opacity-90">

@@ -1,474 +1,335 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useEffect } from 'react';
+import { Card, CardBody, CardHeader } from '@heroui/card';
+import { TrendingUp, TrendingDown, DollarSign, Activity } from 'lucide-react';
 import {
-  Input,
-  Button,
-  Dropdown,
-  DropdownTrigger,
-  DropdownMenu,
-  DropdownItem,
-  Card,
-  CardBody,
-  addToast,
-} from '@heroui/react';
-import {
-  Search,
-  RefreshCw,
-  ChevronDown,
-  Filter,
-  TrendingUp,
-  Plus,
-  Wallet,
-} from 'lucide-react';
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+  PieChart,
+  Pie,
+  Cell,
+} from 'recharts';
 import { useIncomeStore } from '@/store/income-store';
-import { Income } from '@/types/income';
-import { IncomeCard } from '@/components/ui/IncomeCard';
-import { OtherIncomeModal } from '@/components/modals/OtherIncomeModal';
-import { AddIncomeDrawer } from '@/components/drawer/AddIncomeDrawer';
-import { CreateQuotationDrawer } from '@/components/drawer/CreateQuotationDrawer';
-import { CreateSaleDrawer } from '@/components/drawer/CreateSaleDrawer';
-import StatCard from '@/components/ui/StatCard';
 import { formatCurrency } from '@/lib/fn';
+import StatCard from '@/components/ui/StatCard';
+import UniversalListSkeleton from '@/components/skeleton/UniversalListSkeleton';
 
-const SOURCE_FILTERS = [
-  { label: 'All Sources', value: 'ALL' },
-  { label: 'Sales', value: 'SALE' },
-  { label: 'Quotations', value: 'QUOTATION' },
-  { label: 'Other Income', value: 'OTHER_INCOME' },
-];
+const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'];
 
-export default function IncomeList() {
-  const [filterValue, setFilterValue] = useState('');
-  const [sourceFilter, setSourceFilter] = useState('ALL');
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [selectedIncome, setSelectedIncome] = useState<Income | null>(null);
-  const [isIncomeDrawerOpen, setIsIncomeDrawerOpen] = useState(false);
-  const [editQuotationId, setEditQuotationId] = useState<string | null>(null);
-  const [editSaleId, setEditSaleId] = useState<string | null>(null);
-  const [editIncomeId, setEditIncomeId] = useState<string | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
-
+export default function IncomeStatementPage() {
   const {
-    displayedIncome,
-    filteredIncome,
-    isInitialLoading,
-    isPaginating,
-    isDeleting,
-    summary,
-    fetchIncome,
-    loadMoreDisplayed,
-    searchIncome,
-    setSourceFilter: setStoreSourceFilter,
-    deleteIncome,
-    clearSearch,
+    incomeStatement,
+    incomeStatementChartData,
+    isLoadingStatement,
+    fetchIncomeStatement,
   } = useIncomeStore();
 
   useEffect(() => {
-    fetchIncome();
-  }, [fetchIncome]);
+    fetchIncomeStatement();
+  }, [fetchIncomeStatement]);
 
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
+  if (isLoadingStatement || !incomeStatement) {
+    return <UniversalListSkeleton gridConfig={{ default: 1, md: 1 }} />;
+  }
 
-  const handleManualRefresh = async () => {
-    setIsRefreshing(true);
-    await fetchIncome(true);
-    setIsRefreshing(false);
-  };
+  const { revenue, directCosts, grossProfit, operatingExpenses, netIncome } =
+    incomeStatement;
 
-  const handleIncomeDrawerClose = () => {
-    setIsIncomeDrawerOpen(false);
-    setEditIncomeId(null);
-  };
+  // Prepare chart data
+  const comparisonData = incomeStatementChartData
+    ? [
+        {
+          name: 'Revenue',
+          Accrual: incomeStatementChartData.comparison.revenue.accrual,
+          Cash: incomeStatementChartData.comparison.revenue.cash,
+        },
+        {
+          name: 'Direct Costs',
+          Accrual: -incomeStatementChartData.comparison.directCosts.accrual,
+          Cash: -incomeStatementChartData.comparison.directCosts.cash,
+        },
+        {
+          name: 'Operating Exp.',
+          Accrual:
+            -incomeStatementChartData.comparison.operatingExpenses.accrual,
+          Cash: -incomeStatementChartData.comparison.operatingExpenses.cash,
+        },
+        {
+          name: 'Net Income',
+          Accrual: incomeStatementChartData.comparison.netIncome.accrual,
+          Cash: incomeStatementChartData.comparison.netIncome.cash,
+        },
+      ]
+    : [];
 
-  const handleModalClose = () => {
-    setIsModalOpen(false);
-    setEditQuotationId(null);
-    setEditSaleId(null);
-    handleManualRefresh();
-  };
-
-  const handleEdit = (income: Income) => {
-    if (income.sourceType === 'OTHER_INCOME') {
-      setEditIncomeId(income.sourceId);
-      setIsIncomeDrawerOpen(true);
-    } else if (income.sourceType === 'SALE' && income.sourceId) {
-      setEditSaleId(income.sourceId);
-      setIsModalOpen(true);
-    } else if (income.sourceType === 'QUOTATION' && income.sourceId) {
-      setEditQuotationId(income.sourceId);
-      setIsModalOpen(true);
-    }
-  };
-
-  const handleDelete = async (
-    id: string,
-    sourceType: string,
-    sourceId: string | null
-  ) => {
-    try {
-      await deleteIncome(id, sourceType as any, sourceId);
-      addToast({
-        title: 'Success',
-        description: 'Income deleted successfully',
-        color: 'success',
-      });
-    } catch (error: any) {
-      //   addToast({
-      //     title: 'Error',
-      //     description:
-      //       error?.response?.data?.message || 'Failed to delete income',
-      //     color: 'danger',
-      //   });
-    }
-  };
-
-  const onSearchChange = useCallback(
-    (value: string) => {
-      setFilterValue(value);
-      searchIncome(value);
-    },
-    [searchIncome]
-  );
-
-  const handleSourceFilterChange = (source: string) => {
-    setSourceFilter(source);
-    setStoreSourceFilter(source as any);
-  };
-
-  useEffect(() => {
-    const handleScroll = () => {
-      const scrollPosition = window.innerHeight + window.scrollY;
-      const documentHeight = document.documentElement.scrollHeight;
-      const bottom = documentHeight - scrollPosition <= 100;
-
-      if (
-        bottom &&
-        !isPaginating &&
-        displayedIncome.length < filteredIncome.length
-      ) {
-        loadMoreDisplayed();
-      }
-    };
-
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, [
-    isPaginating,
-    displayedIncome.length,
-    filteredIncome.length,
-    loadMoreDisplayed,
-  ]);
-
-  // Get top sources for description
-  const getTopSourcesDescription = () => {
-    if (!summary) return '';
-
-    const sortedSources = Object.entries(summary.bySource)
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, 3);
-
-    if (sortedSources.length === 0) return 'No income sources yet';
-
-    const topSourceName = sortedSources[0][0].replace('_', ' ').toLowerCase();
-    const topSourceAmount = formatCurrency(sortedSources[0][1]);
-
-    if (sortedSources.length === 1) {
-      return `Your primary income source is ${topSourceName} generating ${topSourceAmount} in total revenue`;
-    }
-
-    const otherSources = sortedSources
-      .slice(1)
-      .map(([name]) => name.replace('_', ' ').toLowerCase())
-      .join(' and ');
-
-    return `Leading with ${topSourceName} at ${topSourceAmount}, followed by ${otherSources} as secondary income streams`;
-  };
-
-  const topContent = (
-    <div className="flex flex-col gap-4">
-      {/* Mobile: Single row with search and filters */}
-      <div className="flex gap-2 items-center md:hidden">
-        <Input
-          isClearable
-          classNames={{
-            base: 'flex-1 min-w-0',
-            inputWrapper: 'border-1 h-9 rounded-xl',
-          }}
-          placeholder="Search..."
-          size="sm"
-          startContent={<Search className="w-4 h-4 text-default-300" />}
-          value={filterValue}
-          variant="bordered"
-          onClear={() => {
-            setFilterValue('');
-            clearSearch();
-          }}
-          onValueChange={onSearchChange}
-        />
-
-        <Dropdown>
-          <DropdownTrigger>
-            <Button isIconOnly size="sm" variant="flat" className="h-9 w-9">
-              <Filter className="w-4 h-4" />
-            </Button>
-          </DropdownTrigger>
-          <DropdownMenu aria-label="Filters">
-            <DropdownItem key="filters" isReadOnly className="cursor-default">
-              <div className="flex flex-col gap-3 py-2">
-                <div>
-                  <p className="text-xs md:text-sm font-semibold mb-2">
-                    Source
-                  </p>
-                  <div className="flex flex-col gap-1">
-                    {SOURCE_FILTERS.map(filter => (
-                      <Button
-                        key={filter.value}
-                        size="sm"
-                        variant={
-                          sourceFilter === filter.value ? 'flat' : 'light'
-                        }
-                        className="justify-start"
-                        onPress={() => handleSourceFilterChange(filter.value)}
-                      >
-                        {filter.label}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </DropdownItem>
-          </DropdownMenu>
-        </Dropdown>
-
-        <Button
-          isIconOnly
-          className={isRefreshing ? 'animate-spin' : ''}
-          size="sm"
-          variant="bordered"
-          isDisabled={isRefreshing}
-          onPress={handleManualRefresh}
-        >
-          <RefreshCw className="w-4 h-4" />
-        </Button>
-
-        <Button
-          isIconOnly
-          size="sm"
-          color="primary"
-          onPress={() => setIsIncomeDrawerOpen(true)}
-        >
-          <Plus className="w-4 h-4" />
-        </Button>
-      </div>
-
-      {/* Desktop: Full layout */}
-      <div className="hidden md:flex justify-between gap-3 items-end">
-        <Input
-          isClearable
-          classNames={{
-            base: 'w-full sm:max-w-[44%]',
-            inputWrapper: 'border-1 h-10 rounded-xl',
-          }}
-          placeholder="Search by customer, title, or amount..."
-          size="sm"
-          startContent={<Search className="w-4 h-4 text-default-300" />}
-          value={filterValue}
-          variant="bordered"
-          onClear={() => {
-            setFilterValue('');
-            clearSearch();
-          }}
-          onValueChange={onSearchChange}
-        />
-        <div className="flex gap-3">
-          <Button
-            isIconOnly
-            className={isRefreshing ? 'animate-spin' : ''}
-            size="sm"
-            variant="bordered"
-            isDisabled={isRefreshing}
-            onPress={handleManualRefresh}
-          >
-            <RefreshCw className="w-4 h-4" />
-          </Button>
-
-          <Dropdown>
-            <DropdownTrigger>
-              <Button
-                endContent={<ChevronDown className="w-4 h-4" />}
-                size="sm"
-                variant="bordered"
-              >
-                {SOURCE_FILTERS.find(f => f.value === sourceFilter)?.label ||
-                  'Source'}
-              </Button>
-            </DropdownTrigger>
-            <DropdownMenu
-              disallowEmptySelection
-              aria-label="Source filter"
-              selectedKeys={new Set([sourceFilter])}
-              selectionMode="single"
-              onSelectionChange={keys => {
-                const selected = Array.from(keys)[0] as string;
-                handleSourceFilterChange(selected);
-              }}
-            >
-              {SOURCE_FILTERS.map(filter => (
-                <DropdownItem key={filter.value}>{filter.label}</DropdownItem>
-              ))}
-            </DropdownMenu>
-          </Dropdown>
-
-          <Button
-            size="sm"
-            color="primary"
-            startContent={<Plus className="w-4 h-4" />}
-            onPress={() => setIsIncomeDrawerOpen(true)}
-          >
-            Add Income
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
+  const revenueBreakdownData = revenue.breakdown.map((item, index) => ({
+    name: item.name,
+    value: item.accrual,
+    color: COLORS[index % COLORS.length],
+  }));
 
   return (
-    <>
+    <div className="space-y-6">
       {/* Summary Stats */}
-      {summary && (
-        <div className="grid md:grid-cols-3 gap-4 mb-6">
-          <StatCard
-            gradient
-            description={`Your business recorded a gross revenue of ${formatCurrency(summary.grossRevenue)}. After ${formatCurrency(summary.totalRefunds)} in refunds, your net income is ${formatCurrency(summary.netIncome)}   with ${formatCurrency(summary.outstandingBalance)} still outstanding from customers.`}
-            gradientColor="success"
-            tag="Net Income"
-            tagColor="success"
-            title={formatCurrency(summary.netIncome)}
-            icon={<Wallet size={24} />}
-          />
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <StatCard
+          gradient
+          description={`Accrual: ${formatCurrency(revenue.total.accrual)} | Cash: ${formatCurrency(revenue.total.cash)}`}
+          gradientColor="success"
+          tag="Total Revenue"
+          tagColor="success"
+          title={formatCurrency(revenue.total.accrual)}
+          icon={<DollarSign size={24} />}
+        />
 
-          <StatCard
-            gradient
-            description={`Consistent monthly earnings of ${formatCurrency(summary.averagePerMonth)} generated from ${Object.keys(summary.bySource).length} diverse revenue streams, demonstrating stable business performance and balanced income distribution`}
-            gradientColor="primary"
-            tag="Average Income/Month"
-            tagColor="primary"
-            title={formatCurrency(summary.averagePerMonth)}
-            icon={<TrendingUp size={24} />}
-          />
+        <StatCard
+          gradient
+          description={`Margin: ${grossProfit.marginAccrual.toFixed(1)}% | After COGS & direct costs`}
+          gradientColor="primary"
+          tag="Gross Profit"
+          tagColor="primary"
+          title={formatCurrency(grossProfit.accrual)}
+          icon={<TrendingUp size={24} />}
+        />
 
-          <StatCard
-            gradient
-            description={getTopSourcesDescription()}
-            gradientColor="warning"
-            tag="Top Source"
-            tagColor="warning"
-            title={summary.topSource.replace('_', ' ')}
-            icon={<Filter size={24} />}
-          />
-        </div>
-      )}
+        <StatCard
+          gradient
+          description={`All operating expenses including salaries, rent, utilities`}
+          gradientColor="warning"
+          tag="Operating Expenses"
+          tagColor="warning"
+          title={formatCurrency(operatingExpenses.total)}
+          icon={<Activity size={24} />}
+        />
 
-      <Card className="rounded-3xl bg-transparent" shadow="none">
+        <StatCard
+          gradient
+          description={`Margin: ${netIncome.marginAccrual.toFixed(1)}% | Avg: ${formatCurrency(netIncome.averagePerMonth.accrual)}/mo`}
+          gradientColor={netIncome.accrual >= 0 ? 'success' : 'danger'}
+          tag="Net Income (Profit)"
+          tagColor={netIncome.accrual >= 0 ? 'success' : 'danger'}
+          title={formatCurrency(netIncome.accrual)}
+          icon={
+            netIncome.accrual >= 0 ? (
+              <TrendingUp size={24} />
+            ) : (
+              <TrendingDown size={24} />
+            )
+          }
+        />
+      </div>
+
+      {/* Income Statement Breakdown */}
+      <Card className="rounded-3xl" shadow="none">
+        <CardHeader className="pb-0 pt-6 px-6">
+          <div>
+            <h3 className="text-lg font-semibold">
+              Income Statement Breakdown
+            </h3>
+            <p className="text-sm text-default-500">
+              Detailed profit & loss analysis
+            </p>
+          </div>
+        </CardHeader>
         <CardBody className="py-6">
-          {topContent}
-
-          {/* Income Grid */}
-          <div className="mt-6">
-            {isInitialLoading ? (
-              <div className="py-20">
-                <div className="flex flex-col items-center gap-3">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                  <p className="text-sm text-default-500">Loading income...</p>
+          <div className="space-y-6">
+            {/* Revenue Section */}
+            <div className="space-y-3">
+              <h4 className="font-semibold text-sm">Revenue</h4>
+              {revenue.breakdown.map((item, index) => (
+                <div
+                  key={index}
+                  className="flex justify-between items-center pl-4"
+                >
+                  <span className="text-sm text-default-600">{item.name}</span>
+                  <div className="text-right">
+                    <p className="text-sm font-medium">
+                      {formatCurrency(item.accrual)}
+                    </p>
+                    <p className="text-xs text-default-400">
+                      Cash: {formatCurrency(item.cash)}
+                    </p>
+                  </div>
+                </div>
+              ))}
+              <div className="flex justify-between items-center font-semibold pt-2 border-t">
+                <span className="text-sm">Total Revenue</span>
+                <div className="text-right">
+                  <p className="text-sm">
+                    {formatCurrency(revenue.total.accrual)}
+                  </p>
+                  <p className="text-xs text-default-400">
+                    Cash: {formatCurrency(revenue.total.cash)}
+                  </p>
                 </div>
               </div>
-            ) : displayedIncome.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-sm text-default-500">
-                  {filterValue || sourceFilter !== 'ALL'
-                    ? 'No income found'
-                    : 'No income records yet.'}
+            </div>
+
+            {/* Direct Costs Section */}
+            <div className="space-y-3">
+              <h4 className="font-semibold text-sm">Direct Costs</h4>
+              <div className="flex justify-between items-center pl-4">
+                <span className="text-sm text-default-600">
+                  Cost of Goods Sold
+                </span>
+                <span className="text-sm font-medium text-danger">
+                  ({formatCurrency(directCosts.costOfGoodsSold)})
+                </span>
+              </div>
+              <div className="flex justify-between items-center pl-4">
+                <span className="text-sm text-default-600">
+                  Discounts Given
+                </span>
+                <span className="text-sm font-medium text-danger">
+                  ({formatCurrency(directCosts.discounts)})
+                </span>
+              </div>
+              <div className="flex justify-between items-center pl-4">
+                <span className="text-sm text-default-600">Delivery Costs</span>
+                <span className="text-sm font-medium text-danger">
+                  ({formatCurrency(directCosts.deliveryCosts)})
+                </span>
+              </div>
+              <div className="flex justify-between items-center pl-4">
+                <span className="text-sm text-default-600">
+                  Other Sale Expenses
+                </span>
+                <span className="text-sm font-medium text-danger">
+                  ({formatCurrency(directCosts.otherSaleExpenses)})
+                </span>
+              </div>
+              <div className="flex justify-between items-center font-semibold pt-2 border-t">
+                <span className="text-sm">Total Direct Costs</span>
+                <span className="text-sm text-danger">
+                  ({formatCurrency(directCosts.total)})
+                </span>
+              </div>
+            </div>
+
+            {/* Gross Profit */}
+            <div className="flex justify-between items-center font-bold text-base pt-2 border-t-2">
+              <span>Gross Profit</span>
+              <div className="text-right">
+                <p>{formatCurrency(grossProfit.accrual)}</p>
+                <p className="text-xs font-normal text-default-400">
+                  {grossProfit.marginAccrual.toFixed(1)}% margin
                 </p>
               </div>
-            ) : (
-              <>
-                <div className="grid grid-cols-1 gap-3">
-                  {displayedIncome.map(income => (
-                    <IncomeCard
-                      key={income.id}
-                      income={income}
-                      onOtherIncomeClick={setSelectedIncome}
-                      onEdit={handleEdit}
-                      onDelete={id =>
-                        handleDelete(id, income.sourceType, income.sourceId)
-                      }
-                      isDeleting={isDeleting}
-                    />
-                  ))}
-                </div>
+            </div>
 
-                {/* Load More Indicator */}
-                {isPaginating && (
-                  <div className="flex justify-center py-6">
-                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-                  </div>
-                )}
+            {/* Operating Expenses */}
+            <div className="space-y-3">
+              <h4 className="font-semibold text-sm">Operating Expenses</h4>
+              <div className="flex justify-between items-center pl-4">
+                <span className="text-sm text-default-600">
+                  Total Operating Expenses
+                </span>
+                <span className="text-sm font-medium text-danger">
+                  ({formatCurrency(operatingExpenses.total)})
+                </span>
+              </div>
+            </div>
 
-                {/* End of Results */}
-                {displayedIncome.length >= filteredIncome.length &&
-                  filteredIncome.length > 0 && (
-                    <div className="text-center py-6">
-                      <p className="text-xs text-default-400">
-                        Showing all {filteredIncome.length} results
-                      </p>
-                    </div>
-                  )}
-              </>
-            )}
+            {/* Net Income */}
+            <div
+              className={`flex justify-between items-center font-bold text-lg pt-4 border-t-2 ${
+                netIncome.accrual >= 0 ? 'text-success' : 'text-danger'
+              }`}
+            >
+              <span>Net Income (Profit)</span>
+              <div className="text-right">
+                <p>{formatCurrency(netIncome.accrual)}</p>
+                <p className="text-xs font-normal text-default-400">
+                  {netIncome.marginAccrual.toFixed(1)}% margin
+                </p>
+              </div>
+            </div>
+
+            {/* Cash vs Accrual Note */}
+            <div className="bg-default-100 rounded-lg p-4 mt-4">
+              <p className="text-xs text-default-600">
+                <strong>Cash Basis:</strong> Net Income:{' '}
+                {formatCurrency(netIncome.cash)} | Margin:{' '}
+                {netIncome.marginCash.toFixed(1)}%
+              </p>
+            </div>
           </div>
         </CardBody>
       </Card>
 
-      {/* Other Income Modal */}
-      <OtherIncomeModal
-        income={selectedIncome}
-        isOpen={!!selectedIncome}
-        onClose={() => setSelectedIncome(null)}
-      />
+      {/* Charts */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Accrual vs Cash Comparison */}
+        <Card className="rounded-2xl" shadow="none">
+          <CardHeader className="pb-0 pt-4 px-4">
+            <h3 className="text-base font-semibold">Accrual vs Cash Basis</h3>
+          </CardHeader>
+          <CardBody className="py-4">
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={comparisonData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} />
+                <Tooltip
+                  formatter={(value: any) => formatCurrency(value)}
+                  contentStyle={{
+                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '8px',
+                  }}
+                />
+                <Legend wrapperStyle={{ fontSize: '12px' }} />
+                <Bar dataKey="Accrual" fill="#3b82f6" name="Accrual Basis" />
+                <Bar dataKey="Cash" fill="#10b981" name="Cash Basis" />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardBody>
+        </Card>
 
-      {/* Add Income Drawer */}
-      <AddIncomeDrawer
-        isOpen={isIncomeDrawerOpen}
-        onClose={handleIncomeDrawerClose}
-        incomeId={editIncomeId}
-        onSuccess={data => {
-          console.log('Income added:', data);
-          handleManualRefresh();
-        }}
-      />
-
-      {/* Edit Quotation Drawer */}
-      <CreateQuotationDrawer
-        isOpen={isModalOpen && !!editQuotationId}
-        quotationId={editQuotationId}
-        onClose={handleModalClose}
-      />
-
-      {/* Edit Sale Drawer */}
-      <CreateSaleDrawer
-        saleId={editSaleId}
-        isOpen={isModalOpen && !!editSaleId}
-        onClose={handleModalClose}
-      />
-    </>
+        {/* Revenue Breakdown */}
+        <Card className="rounded-2xl" shadow="none">
+          <CardHeader className="pb-0 pt-4 px-4">
+            <h3 className="text-base font-semibold">Revenue Sources</h3>
+          </CardHeader>
+          <CardBody className="py-4">
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={revenueBreakdownData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={entry =>
+                    `${entry.name}: ${((entry.value / revenue.total.accrual) * 100).toFixed(0)}%`
+                  }
+                  outerRadius={80}
+                  fill="#8884d8"
+                  dataKey="value"
+                >
+                  {revenueBreakdownData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  formatter={(value: any) => formatCurrency(value)}
+                  contentStyle={{
+                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '8px',
+                  }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </CardBody>
+        </Card>
+      </div>
+    </div>
   );
 }

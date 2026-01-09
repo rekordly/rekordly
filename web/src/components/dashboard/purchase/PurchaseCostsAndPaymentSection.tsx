@@ -30,7 +30,7 @@ export function PurchaseCostsAndPaymentSection() {
   const totalAmount = watch('totalAmount') || 0;
   const balance = watch('balance') || 0;
 
-  const [editingCostId, setEditingCostId] = useState<number | null>(null);
+  const [editingCostId, setEditingCostId] = useState<string | null>(null);
 
   const {
     control: otherCostControl,
@@ -66,7 +66,7 @@ export function PurchaseCostsAndPaymentSection() {
     if (editingCostId !== null) {
       // Update existing cost
       const updatedCosts = otherCosts.map((cost: OtherCostType) =>
-        cost.id === editingCostId
+        cost.id?.toString() === editingCostId
           ? {
               ...cost,
               description: data.description,
@@ -95,7 +95,7 @@ export function PurchaseCostsAndPaymentSection() {
     } else {
       // Add new cost
       const newCost: OtherCostType = {
-        id: idCounter.current++,
+        id: `temp-${idCounter.current++}`,
         description: data.description,
         amount: data.amount,
       };
@@ -125,7 +125,7 @@ export function PurchaseCostsAndPaymentSection() {
   };
 
   const handleEditCost = (cost: OtherCostType) => {
-    setEditingCostId(cost.id);
+    setEditingCostId(cost.id?.toString() ?? null);
     resetCostForm({
       description: cost.description,
       amount: cost.amount,
@@ -140,9 +140,9 @@ export function PurchaseCostsAndPaymentSection() {
     });
   };
 
-  const removeCost = (id: number) => {
+  const removeCost = (id: string) => {
     const updatedCosts = otherCosts.filter(
-      (cost: OtherCostType) => cost.id !== id
+      (cost: OtherCostType) => cost.id?.toString() !== id
     );
     setValue('otherCosts', updatedCosts, { shouldValidate: true });
 
@@ -176,8 +176,11 @@ export function PurchaseCostsAndPaymentSection() {
   };
 
   return (
-    <Card className="w-full rounded-3xl p-4 px-2" shadow="none">
-      <CardBody>
+    <Card
+      className="w-full rounded-2xl p-3 bg-transparent border border-default-200"
+      shadow="none"
+    >
+      <CardBody className="p-0">
         <Accordion variant="light">
           {/* Other Costs */}
           <AccordionItem
@@ -252,7 +255,7 @@ export function PurchaseCostsAndPaymentSection() {
                       <div
                         key={cost.id}
                         className={`flex items-center justify-between p-3 rounded-lg transition-colors ${
-                          editingCostId === cost.id
+                          editingCostId === cost.id?.toString()
                             ? 'bg-primary-50 border border-primary'
                             : 'bg-default-50 hover:bg-default-100'
                         }`}
@@ -270,7 +273,7 @@ export function PurchaseCostsAndPaymentSection() {
                             <Button
                               isIconOnly
                               color={
-                                editingCostId === cost.id
+                                editingCostId === cost.id?.toString()
                                   ? 'primary'
                                   : 'default'
                               }
@@ -287,7 +290,10 @@ export function PurchaseCostsAndPaymentSection() {
                               size="sm"
                               type="button"
                               variant="light"
-                              onPress={() => removeCost(cost.id)}
+                              onPress={() =>
+                                cost.id !== undefined &&
+                                removeCost(cost.id.toString())
+                              }
                             >
                               <Trash2 className="w-4 h-4" />
                             </Button>

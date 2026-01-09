@@ -19,41 +19,52 @@ import { SaleItemType } from '@/types/sales';
 export function AddSaleItemSection() {
   const { setValue, watch } = useFormContext();
   const items: SaleItemType[] = watch('items') || [];
-  const [editingItemId, setEditingItemId] = useState<number | null>(null);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
 
   const {
     control: itemControl,
     handleSubmit: handleAddItemSubmit,
     watch: watchItem,
     reset: resetItemForm,
+    formState: { errors: itemErrors },
   } = useForm<Omit<SaleItemType, 'id' | 'amount'>>({
     resolver: zodResolver(
       SaleItemSchema.omit({ id: true, amount: true })
     ) as Resolver<Omit<SaleItemType, 'id' | 'amount'>>,
     defaultValues: {
+      itemName: '',
       description: '',
-      // type: 'PRODUCT',
+      quantity: 1,
+      unitPrice: 0,
     },
     mode: 'onChange',
   });
 
   const itemQuantity = watchItem('quantity') ?? 0;
-  const itemRate = watchItem('rate') ?? 0;
+  const itemRate = watchItem('unitPrice') ?? 0;
   const idCounter = useRef(1);
+
+  // Generate unique string ID
+  const generateId = () =>
+    `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
   // Edit item handler
   const handleEditItem = (item: SaleItemType) => {
     setEditingItemId(item.id);
     resetItemForm({
+      itemName: item.itemName,
       description: item.description,
-      // type: item.type,
       quantity: item.quantity,
-      rate: item.rate,
+      unitPrice: item.unitPrice,
+      inventoryItemId: item.inventoryItemId,
+      productionId: item.productionId,
+      costPrice: item.costPrice,
+      profit: item.profit,
     });
   };
 
   // Remove item handler
-  const removeItem = (id: number) => {
+  const removeItem = (id: string) => {
     const updatedItems = items.filter((item: SaleItemType) => item.id !== id);
     setValue('items', updatedItems, { shouldValidate: true });
 
@@ -73,17 +84,24 @@ export function AddSaleItemSection() {
 
   // Add or update item handler
   const onAddItem = (data: Omit<SaleItemType, 'id' | 'amount'>) => {
+    console.log('Form data:', data); // Debug log
+    const amount = data.quantity * data.unitPrice;
+
     if (editingItemId !== null) {
       // Update existing item
       const updatedItems = items.map((item: SaleItemType) =>
         item.id === editingItemId
           ? {
               ...item,
+              itemName: data.itemName,
               description: data.description,
-              // type: data.type,
               quantity: data.quantity,
-              rate: data.rate,
-              amount: data.quantity * data.rate,
+              unitPrice: data.unitPrice,
+              inventoryItemId: data.inventoryItemId,
+              productionId: data.productionId,
+              amount,
+              costPrice: data.costPrice,
+              profit: data.profit,
             }
           : item
       );
@@ -107,13 +125,19 @@ export function AddSaleItemSection() {
     } else {
       // Add new item
       const newItem: SaleItemType = {
-        id: idCounter.current++,
+        id: generateId(),
+        itemName: data.itemName,
         description: data.description,
-        // type: data.type,
         quantity: data.quantity,
-        rate: data.rate,
-        amount: data.quantity * data.rate,
+        unitPrice: data.unitPrice,
+        amount,
+        inventoryItemId: data.inventoryItemId,
+        productionId: data.productionId,
+        costPrice: data.costPrice,
+        profit: data.profit,
       };
+
+      console.log('Complete item:', newItem);
 
       const updatedItems = [...items, newItem];
       setValue('items', updatedItems, { shouldValidate: true });
@@ -134,34 +158,47 @@ export function AddSaleItemSection() {
 
     // Reset the item form
     resetItemForm({
+      itemName: '',
       description: '',
-      // type: 'PRODUCT',
-      quantity: 0,
-      rate: 0,
+      quantity: 1,
+      unitPrice: 0,
+      inventoryItemId: undefined,
+      productionId: undefined,
     });
   };
 
   const handleCancelEdit = () => {
     setEditingItemId(null);
     resetItemForm({
+      itemName: '',
       description: '',
-      // type: 'PRODUCT',
-      quantity: 0,
-      rate: 0,
+      quantity: 1,
+      unitPrice: 0,
+      inventoryItemId: undefined,
+      productionId: undefined,
     });
   };
 
+  // Debug: Log form errors
+  console.log('Item form errors:', itemErrors);
+
   return (
-    <Card className="w-full rounded-3xl p-4 px-2" shadow="none">
-      <CardBody>
-        <div className="space-y-4">
+    <Card
+      className="w-full rounded-2xl p-3 bg-transparent border border-default-200"
+      shadow="none"
+    >
+      <CardBody className="p-0">
+        <div className="space-y-3">
+          <h4 className="text-base font-semibold text-foreground">
+            Sale Items
+          </h4>
           <div className="space-y-4">
             <div className="grid md:grid-cols-2 gap-3">
               <div className="md:col-span-2">
                 <TextInput
                   control={itemControl}
                   label="Item Name"
-                  name="description"
+                  name="itemName"
                   placeholder="e.g. Web Development Service"
                 />
               </div>
@@ -182,7 +219,7 @@ export function AddSaleItemSection() {
                     control={itemControl}
                     label="Unit Price (₦)"
                     min={0}
-                    name="rate"
+                    name="unitPrice"
                     placeholder="0.00"
                     startContent={
                       <span className="text-default-400 text-sm">₦</span>
@@ -252,10 +289,10 @@ export function AddSaleItemSection() {
                     >
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-foreground truncate">
-                          {item.description}
+                          {item.itemName}
                         </p>
                         <p className="text-xs text-default-500">
-                          {item.quantity} × {formatCurrency(item.rate)}
+                          {item.quantity} × {formatCurrency(item.unitPrice)}
                         </p>
                       </div>
                       <div className="flex items-center gap-3 shrink-0">

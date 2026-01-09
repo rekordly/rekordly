@@ -1,3 +1,4 @@
+// @/components/Drawers/AddIncomeDrawer.tsx
 'use client';
 
 import {
@@ -8,8 +9,12 @@ import {
   DrawerBody,
   DrawerFooter,
   addToast,
+  Card,
+  CardBody,
+  Accordion,
+  AccordionItem,
 } from '@heroui/react';
-import { TrendingUp } from 'lucide-react';
+import { TrendingUp, CheckCircle } from 'lucide-react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { FormProvider, useForm } from 'react-hook-form';
 import type { Resolver } from 'react-hook-form';
@@ -70,6 +75,9 @@ export function AddIncomeDrawer({
       grossAmount: undefined,
       description: '',
       date: new Date().toISOString().slice(0, 16),
+      amountPaid: 0,
+      paymentMethod: undefined,
+      reference: '',
     },
     mode: 'all',
   });
@@ -80,22 +88,22 @@ export function AddIncomeDrawer({
     reset,
     watch,
     setValue,
+    control,
   } = methods;
 
   const watchMainCategory = watch('mainCategory');
   const watchSubCategory = watch('subCategory');
   const watchGrossAmount = watch('grossAmount');
+  const amountPaid = watch('amountPaid') || 0;
 
   useEffect(() => {
     if (watchMainCategory) {
       setSelectedMainCategory(watchMainCategory as IncomeMainCategory);
 
-      // Don't clear subcategory in edit mode on initial load
       if (!isEditMode) {
         setValue('subCategory', '');
       }
 
-      // Update main category description
       const category = incomeCategories.find(
         cat => cat.value === watchMainCategory
       );
@@ -110,7 +118,6 @@ export function AddIncomeDrawer({
     if (watchSubCategory) {
       setSelectedSubCategory(watchSubCategory);
 
-      // Update subcategory note
       const category = incomeCategories.find(
         cat => cat.value === watchMainCategory
       );
@@ -129,9 +136,15 @@ export function AddIncomeDrawer({
   useEffect(() => {
     if (isOpen && isEditMode && incomeId) {
       const income = allIncome.find(i => i.id === incomeId);
-      console.log('Editing income:', income);
 
       if (income) {
+        const validPaymentMethod =
+          income.paymentMethod &&
+          income.paymentMethod !== 'UNPAID' &&
+          income.paymentMethod !== 'OTHER'
+            ? (income.paymentMethod as any)
+            : undefined;
+
         reset({
           mainCategory: income.incomeMainCategory as IncomeMainCategory,
           subCategory:
@@ -142,7 +155,8 @@ export function AddIncomeDrawer({
           date: income.date
             ? new Date(income.date).toISOString().slice(0, 16)
             : new Date().toISOString().slice(0, 16),
-          paymentMethod: income.paymentMethod || 'BANK_TRANSFER',
+          amountPaid: income.amountPaid || 0,
+          paymentMethod: validPaymentMethod,
           reference: income.reference || '',
         });
 
@@ -193,6 +207,9 @@ export function AddIncomeDrawer({
         taxablePercentage: 100,
         description: '',
         date: new Date().toISOString().slice(0, 16),
+        amountPaid: 0,
+        paymentMethod: undefined,
+        reference: '',
       });
       setSelectedMainCategory(IncomeMainCategory.OTHER_INCOME);
       setMainCategoryDescription('');
@@ -204,7 +221,6 @@ export function AddIncomeDrawer({
     setIsSubmitting(true);
     try {
       if (isEditMode && incomeId) {
-        // Update existing income
         const response = await api.patch(`/income/${incomeId}`, data);
 
         await refreshIncome();
@@ -250,6 +266,9 @@ export function AddIncomeDrawer({
       taxablePercentage: 100,
       description: '',
       date: new Date().toISOString().slice(0, 16),
+      amountPaid: 0,
+      paymentMethod: undefined,
+      reference: '',
     });
     setSelectedMainCategory(IncomeMainCategory.OTHER_INCOME);
     setMainCategoryDescription('');
@@ -257,13 +276,11 @@ export function AddIncomeDrawer({
     onClose();
   };
 
-  // Get available subcategories for the selected main category
   const selectedCategory = incomeCategories.find(
     cat => cat.value === selectedMainCategory
   );
   const availableSubCategories = selectedCategory?.subcategories || [];
 
-  // Function to get subcategory label for display
   const getSubCategoryLabel = (value: string) => {
     const predefinedSubcategory = availableSubCategories.find(
       sub => sub.value === value
@@ -273,6 +290,8 @@ export function AddIncomeDrawer({
     }
     return value;
   };
+
+  const balance = (watchGrossAmount || 0) - amountPaid;
 
   return (
     <Drawer
@@ -300,115 +319,185 @@ export function AddIncomeDrawer({
               </p>
             </DrawerHeader>
 
-            <DrawerBody className="gap-4">
+            <DrawerBody>
               {/* Main Category Dropdown */}
-              <DropdownInput
-                isRequired
-                control={methods.control}
-                items={incomeCategories}
-                label="Main Category"
-                name="mainCategory"
-                placeholder="Select main income category"
-                description={mainCategoryDescription}
-              />
+              <div className="space-y-4">
+                <DropdownInput
+                  isRequired
+                  control={methods.control}
+                  items={incomeCategories}
+                  label="Main Category"
+                  name="mainCategory"
+                  placeholder="Select main income category"
+                  description={mainCategoryDescription}
+                />
 
-              {/* Sub Category Autocomplete */}
-              <AutocompleteInput
-                isRequired
-                control={methods.control}
-                getOptionLabel={item => item.label}
-                getOptionValue={item => item.value}
-                items={availableSubCategories}
-                description={subCategoryNote}
-                label="Sub Category"
-                name="subCategory"
-                placeholder="Select or type custom sub category"
-                disallowTyping={false}
-              />
+                {/* Sub Category Autocomplete */}
+                <AutocompleteInput
+                  isRequired
+                  control={methods.control}
+                  getOptionLabel={item => item.label}
+                  getOptionValue={item => item.value}
+                  items={availableSubCategories}
+                  description={subCategoryNote}
+                  label="Sub Category"
+                  name="subCategory"
+                  placeholder="Select or type custom sub category"
+                  disallowTyping={false}
+                />
 
-              {/* Amount */}
-              <NumberInput
-                isRequired
-                control={methods.control}
-                description="Enter gross income amount"
-                label="Amount"
-                name="grossAmount"
-                placeholder="0.00"
-                step={1000}
-                startContent={
-                  <span className="text-default-400 text-sm">₦</span>
-                }
-              />
+                {/* Amount */}
+                <NumberInput
+                  isRequired
+                  control={methods.control}
+                  description="Enter gross income amount"
+                  label="Amount"
+                  name="grossAmount"
+                  placeholder="0.00"
+                  step={1000}
+                  startContent={
+                    <span className="text-default-400 text-sm">₦</span>
+                  }
+                />
 
-              {/* Payment Methods */}
-              <DropdownInput
-                isRequired
-                control={methods.control}
-                items={paymentMethods}
-                label="Payment Method"
-                name="paymentMethod"
-                placeholder="Select payment method"
-              />
+                {/* Date */}
+                <TextInput
+                  isRequired
+                  control={methods.control}
+                  label="Date"
+                  name="date"
+                  type="datetime-local"
+                />
 
-              {/* Date */}
-              <TextInput
-                isRequired
-                control={methods.control}
-                label="Date"
-                name="date"
-                type="datetime-local"
-              />
+                {/* Description */}
+                <TextInput
+                  control={methods.control}
+                  label="Description (Optional)"
+                  name="description"
+                  placeholder="Add notes about this income"
+                />
 
-              {/* Description */}
-              <TextInput
-                control={methods.control}
-                label="Description (Optional)"
-                name="description"
-                placeholder="Add notes about this income"
-              />
+                {/* Payment Accordion */}
+                <Card
+                  className="w-full rounded-2xl p-0 px-1 bg-transparent border border-default-200"
+                  shadow="none"
+                >
+                  <CardBody className="p-0">
+                    <Accordion variant="light">
+                      <AccordionItem
+                        key="payment"
+                        aria-label="Payment"
+                        title="Payment"
+                        subtitle="Record payment received"
+                        classNames={{
+                          title: 'font-semibold',
+                          subtitle: 'text-xs',
+                        }}
+                      >
+                        <div className="space-y-4 pb-4">
+                          <div className="grid grid-cols-1 gap-4">
+                            <NumberInput
+                              control={control}
+                              label="Amount Received"
+                              min={0}
+                              max={watchGrossAmount}
+                              name="amountPaid"
+                              placeholder="0.00"
+                              startContent={
+                                <span className="text-default-400 text-sm">
+                                  ₦
+                                </span>
+                              }
+                              step={0.01}
+                              description={`Balance: ${formatCurrency(balance)}`}
+                            />
 
-              {/* Reference */}
-              <TextInput
-                control={methods.control}
-                label="Reference (Optional)"
-                name="reference"
-                placeholder="e.g., TXN123456"
-              />
+                            {amountPaid > 0 && (
+                              <>
+                                <DropdownInput
+                                  isRequired
+                                  control={control}
+                                  items={paymentMethods}
+                                  label="Payment Method"
+                                  name="paymentMethod"
+                                  placeholder="Select method"
+                                />
 
-              {/* Summary */}
-              <div className="bg-primary-50 p-4 rounded-lg border border-primary-200">
-                <p className="text-sm font-medium text-primary-900">
-                  Income Summary
-                </p>
-                <div className="mt-2 space-y-1">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-default-600">Category:</span>
-                    <span className="font-medium">
-                      {incomeCategories.find(c => c.value === watchMainCategory)
-                        ?.label || 'Not selected'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-default-600">Subcategory:</span>
-                    <span className="font-medium">
-                      {watchSubCategory
-                        ? getSubCategoryLabel(watchSubCategory)
-                        : 'Not selected'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-default-600">Taxable:</span>
-                    <span className="font-medium">
-                      {selectedCategory?.taxablePercentage || 0}%
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-default-600">Amount:</span>
-                    <span className="font-medium text-primary">
-                      {formatCurrency(watchGrossAmount || 0)}
-                    </span>
-                  </div>
-                </div>
+                                <TextInput
+                                  control={control}
+                                  label="Reference (Optional)"
+                                  name="reference"
+                                  placeholder="e.g., TXN123456"
+                                />
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </AccordionItem>
+                    </Accordion>
+                  </CardBody>
+                </Card>
+
+                {/* Summary */}
+                <Card
+                  className="bg-linear-to-br from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 border border-green-200 dark:border-green-800"
+                  shadow="none"
+                >
+                  <CardBody className="p-3">
+                    <h4 className="text-base font-semibold flex items-center gap-2">
+                      <CheckCircle className="w-5 h-5 text-green-600" />
+                      Income Summary
+                    </h4>
+                    <div className="mt-2 space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-default-600">Category:</span>
+                        <span className="font-medium">
+                          {incomeCategories.find(
+                            c => c.value === watchMainCategory
+                          )?.label || 'Not selected'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-default-600">Subcategory:</span>
+                        <span className="font-medium">
+                          {watchSubCategory
+                            ? getSubCategoryLabel(watchSubCategory)
+                            : 'Not selected'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-default-600">Taxable:</span>
+                        <span className="font-medium">
+                          {selectedCategory?.taxablePercentage || 0}%
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-default-600">Total Amount:</span>
+                        <span className="font-medium text-primary">
+                          {formatCurrency(watchGrossAmount || 0)}
+                        </span>
+                      </div>
+                      {amountPaid > 0 && (
+                        <>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-default-600">
+                              Amount Received:
+                            </span>
+                            <span className="font-medium text-success">
+                              {formatCurrency(amountPaid)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-default-600">Balance:</span>
+                            <span className="font-medium text-warning">
+                              {formatCurrency(balance)}
+                            </span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </CardBody>
+                </Card>
               </div>
             </DrawerBody>
 

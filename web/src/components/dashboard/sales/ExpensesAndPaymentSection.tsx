@@ -97,8 +97,11 @@ export function ExpensesAndPaymentSection() {
   };
 
   return (
-    <Card className="w-full rounded-3xl p-4 px-2" shadow="none">
-      <CardBody>
+    <Card
+      className="w-full rounded-2xl p-3 bg-transparent border border-default-200"
+      shadow="none"
+    >
+      <CardBody className="p-0">
         <Accordion variant="light">
           {/* Delivery Cost */}
           <AccordionItem
@@ -195,7 +198,9 @@ export function ExpensesAndPaymentSection() {
                             size="sm"
                             type="button"
                             variant="light"
-                            onPress={() => removeCost(cost.id)}
+                            onPress={() =>
+                              cost.id !== undefined && removeCost(cost.id)
+                            }
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>

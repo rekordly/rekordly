@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 
 import { getAuthUser } from '@/lib/utils/server';
@@ -7,20 +6,7 @@ import { addPaymentSchema } from '@/lib/validations/general';
 import { generateReceiptNumber, toTwoDecimals } from '@/lib/fn';
 import { prisma } from '@/lib/prisma';
 import { validateRequest } from '@/lib/utils/validation';
-
-const processItems = (items: any): Prisma.InputJsonValue => {
-  if (!items) return items;
-
-  if (Array.isArray(items)) {
-    return items.map((item: any) => ({
-      ...item,
-      price: toTwoDecimals(item.price || 0),
-      amount: toTwoDecimals(item.amount || 0),
-    }));
-  }
-
-  return items;
-};
+import { PaymentMethod } from '@prisma/client';
 
 export async function POST(
   request: NextRequest,
@@ -107,7 +93,7 @@ export async function POST(
               category: 'INCOME',
               saleId: invoice.sale!.id,
               amount: amountPaid,
-              paymentMethod: data.paymentMethod,
+              paymentMethod: data.paymentMethod as PaymentMethod,
               reference: data.reference || null,
               notes: data.notes || null,
               paymentDate,
@@ -146,10 +132,25 @@ export async function POST(
         include: {
           customer: true,
           sale: {
-            select: {
-              id: true,
-              amountPaid: true,
-              balance: true,
+            include: {
+              saleItems: {
+                include: {
+                  inventoryItem: {
+                    select: {
+                      id: true,
+                      name: true,
+                      sku: true,
+                      itemType: true,
+                    },
+                  },
+                  production: {
+                    select: {
+                      id: true,
+                      productionNumber: true,
+                    },
+                  },
+                },
+              },
               payments: {
                 select: {
                   id: true,
@@ -213,7 +214,6 @@ export async function POST(
           ? 'PARTIALLY_PAID'
           : 'UNPAID';
 
-    const processedItems = processItems(invoice.items);
     const invoiceSubtotal = toTwoDecimals(invoice.amount);
     const invoiceVatAmount = toTwoDecimals(invoice.vatAmount || 0);
     const invoiceTotal = toTwoDecimals(invoice.totalAmount);
@@ -221,10 +221,13 @@ export async function POST(
       ? new Date(data.paymentDate)
       : new Date();
 
+    // Parse invoice items
+    const invoiceItems = (invoice.items as any[]) || [];
+
     // ✅ Optimized transaction with increased timeout
-    const saleId = await prisma.$transaction(
+    const result = await prisma.$transaction(
       async tx => {
-        // Create sale
+        // Create sale without items first
         const sale = await tx.sale.create({
           data: {
             receiptNumber,
@@ -237,9 +240,8 @@ export async function POST(
             customerPhone: invoice.customerId ? null : invoice.customerPhone,
             title: invoice.title,
             description: invoice.description,
-            includeVAT: invoice.includeVAT,
-            items: processedItems,
             subtotal: invoiceSubtotal,
+            includeVAT: invoice.includeVAT,
             vatAmount: invoiceVatAmount,
             totalAmount: invoiceTotal,
             amountPaid: amountPaid,
@@ -249,15 +251,115 @@ export async function POST(
           },
         });
 
+        // Create SaleItem records for each invoice item
+        const saleItems = [];
+        for (const item of invoiceItems) {
+          let costPrice = 0;
+          let totalCost = 0;
+          let profit = 0;
+
+          // Handle inventory-linked items
+          if (item.inventoryItemId) {
+            const inventoryItem = await tx.inventoryItem.findFirst({
+              where: {
+                id: item.inventoryItemId,
+                userId,
+              },
+            });
+
+            if (inventoryItem) {
+              // Check inventory tracking and availability
+              if (inventoryItem.trackInventory) {
+                if (inventoryItem.quantityOnHand < item.quantity) {
+                  throw new Error(
+                    `Insufficient stock for ${inventoryItem.name}. Available: ${inventoryItem.quantityOnHand}, Requested: ${item.quantity}`
+                  );
+                }
+
+                // Deduct from inventory
+                await tx.inventoryItem.update({
+                  where: { id: inventoryItem.id },
+                  data: {
+                    quantityOnHand: toTwoDecimals(
+                      inventoryItem.quantityOnHand - item.quantity
+                    ),
+                  },
+                });
+              }
+
+              // Use average cost from inventory
+              costPrice = inventoryItem.averageCost || 0;
+            }
+          } else if (item.productionId) {
+            // Handle production-linked items
+            const production = await tx.production.findFirst({
+              where: {
+                id: item.productionId,
+                userId,
+              },
+            });
+
+            if (production) {
+              // Use unit cost from production
+              costPrice = production.unitCost || 0;
+            }
+          }
+
+          // Calculate cost and profit
+          const itemQuantity = toTwoDecimals(item.quantity || 0);
+          const itemUnitPrice = toTwoDecimals(item.price || 0);
+          const itemAmount = toTwoDecimals(
+            item.amount || itemQuantity * itemUnitPrice
+          );
+
+          totalCost = toTwoDecimals(costPrice * itemQuantity);
+          profit = toTwoDecimals(itemAmount - totalCost);
+
+          // Create SaleItem record
+          const saleItem = await tx.saleItem.create({
+            data: {
+              saleId: sale.id,
+              inventoryItemId: item.inventoryItemId || null,
+              productionId: item.productionId || null,
+              itemName: item.description || item.name || 'Unnamed Item',
+              description: item.description || null,
+              quantity: itemQuantity,
+              unitPrice: itemUnitPrice,
+              amount: itemAmount,
+              costPrice: toTwoDecimals(costPrice),
+              totalCost: toTwoDecimals(totalCost),
+              profit: toTwoDecimals(profit),
+            },
+            include: {
+              inventoryItem: {
+                select: {
+                  id: true,
+                  name: true,
+                  sku: true,
+                  itemType: true,
+                },
+              },
+              production: {
+                select: {
+                  id: true,
+                  productionNumber: true,
+                },
+              },
+            },
+          });
+
+          saleItems.push(saleItem);
+        }
+
         // Create payment record
-        await tx.payment.create({
+        const payment = await tx.payment.create({
           data: {
             userId,
             payableType: 'SALE',
             category: 'INCOME',
             saleId: sale.id,
             amount: amountPaid,
-            paymentMethod: data.paymentMethod,
+            paymentMethod: data.paymentMethod as PaymentMethod,
             reference: data.reference || null,
             notes: data.notes || null,
             paymentDate,
@@ -273,7 +375,7 @@ export async function POST(
           },
         });
 
-        return sale.id;
+        return { sale, saleItems, payment };
       },
       {
         maxWait: 10000, // 10 seconds
@@ -287,10 +389,41 @@ export async function POST(
       include: {
         customer: true,
         sale: {
-          select: {
-            id: true,
-            amountPaid: true,
-            balance: true,
+          include: {
+            saleItems: {
+              include: {
+                inventoryItem: {
+                  select: {
+                    id: true,
+                    name: true,
+                    sku: true,
+                    itemType: true,
+                  },
+                },
+                production: {
+                  select: {
+                    id: true,
+                    productionNumber: true,
+                  },
+                },
+              },
+            },
+            payments: {
+              select: {
+                id: true,
+                saleId: true,
+                amount: true,
+                paymentDate: true,
+                paymentMethod: true,
+                category: true,
+                payableType: true,
+                reference: true,
+                notes: true,
+              },
+              orderBy: {
+                paymentDate: 'desc',
+              },
+            },
           },
         },
       },
@@ -301,6 +434,11 @@ export async function POST(
         message: 'Invoice converted to sale successfully',
         success: true,
         invoice: updatedInvoice,
+        sale: {
+          ...result.sale,
+          saleItems: result.saleItems,
+        },
+        payment: result.payment,
       },
       { status: 201 }
     );
@@ -313,9 +451,19 @@ export async function POST(
       return NextResponse.json({ message: error.message }, { status: 401 });
     }
 
-    if (error instanceof z.ZodError) {
+    if (
+      error instanceof Error &&
+      error.message.includes('Insufficient stock')
+    ) {
+      return NextResponse.json({ message: error.message }, { status: 400 });
+    }
+
+    if (z.ZodError) {
       return NextResponse.json(
-        { message: 'Validation error', errors: error.flatten().fieldErrors },
+        {
+          message: 'Validation error',
+          errors: (error as z.ZodError).flatten().fieldErrors,
+        },
         { status: 400 }
       );
     }

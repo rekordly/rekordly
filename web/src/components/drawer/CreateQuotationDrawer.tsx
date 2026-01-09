@@ -21,10 +21,11 @@ import { AddCostSection } from '@/components/dashboard/quotations/AddCostSection
 import { useCustomerStore } from '@/store/customerStore';
 import { api } from '@/lib/axios';
 import { FormSkeleton } from '@/components/skeleton/FormSkeleton';
-import { QuotationFormType } from '@/types/quotations';
-import { quotationSchema } from '@/lib/validations/quotations';
+import { CreateQuotationInput, QuotationFormInput } from '@/types/quotations';
+import { CreateQuotationSchema } from '@/lib/validations/quotations';
 import { useQuotationStore } from '@/store/quotationStore';
-import { useIncomeStore } from '@/store/income-store';
+// import { useIncomeStore } from '@/store/income-store';
+import { PaymentMethod } from '@/types/index';
 
 interface CreateQuotationDrawerProps {
   isOpen: boolean;
@@ -40,7 +41,6 @@ export function CreateQuotationDrawer({
   quotationId,
 }: CreateQuotationDrawerProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSavingDraft, setIsSavingDraft] = useState(false);
 
   const TOTAL_STEPS = 3;
   const [currentStep, setCurrentStep] = useState(1);
@@ -73,35 +73,50 @@ export function CreateQuotationDrawer({
   } = useCustomerStore();
 
   const { allQuotations, updateQuotation, addQuotation } = useQuotationStore();
-  const { refreshIncome } = useIncomeStore();
+  // const { refreshIncome } = useIncomeStore();
 
   const isEditMode = !!quotationId;
 
-  const methods = useForm<QuotationFormType>({
-    resolver: zodResolver(quotationSchema) as Resolver<QuotationFormType>,
+  // Use the correct form input type
+  const methods = useForm<CreateQuotationInput>({
+    resolver: zodResolver(
+      CreateQuotationSchema
+    ) as Resolver<CreateQuotationInput>,
     defaultValues: {
-      customer: { id: '', name: '', phone: undefined, email: '' },
+      customer: {
+        id: '',
+        name: '',
+        phone: '',
+        email: '',
+        customerRole: 'BUYER' as const,
+      },
       addAsNewCustomer: false,
-      quotationTitle: '',
-      quotationDescription: '',
-      materials: [],
-      materialsTotal: 0,
-      workmanship: 0,
+      title: '',
+      description: '',
+      lineItems: [],
+      subtotal: 0,
+      discountType: undefined,
+      discountValue: 0,
+      discountAmount: 0,
       otherCosts: [],
-      otherCostsTotal: 0,
       includeVAT: false,
       vatAmount: 0,
       totalAmount: 0,
+      amountPaid: 0,
       balance: 0,
       issueDate: new Date(),
+      validUntil: undefined,
       status: 'DRAFT',
+      paymentMethod: 'BANK_TRANSFER' as const,
+      reference: '',
+      notes: '',
     },
     mode: 'onChange',
   });
 
   const { handleSubmit, watch, reset, trigger, formState } = methods;
   const customerEmail = watch('customer.email');
-  const materials = watch('materials');
+  const lineItems = watch('lineItems');
 
   useEffect(() => {
     if (isOpen) {
@@ -112,62 +127,94 @@ export function CreateQuotationDrawer({
         const quotation = allQuotations.find(quo => quo.id === quotationId);
 
         if (quotation) {
-          reset({
-            customer: quotation.customerId
-              ? {
-                  id: quotation.customerId,
-                  name: quotation.customer?.name || '',
-                  phone: quotation.customer?.phone || '',
-                  email: quotation.customer?.email || '',
-                }
-              : {
-                  id: '',
-                  name: quotation.customerName || '',
-                  phone: quotation.customerPhone || '',
-                  email: quotation.customerEmail || '',
-                },
+          // Prepare form data from quotation
+          const formData: CreateQuotationInput = {
+            customer: {
+              id: quotation.customerId || '',
+              name: quotation.customer?.name || quotation.customerName || '',
+              phone: quotation.customer?.phone || quotation.customerPhone || '',
+              email: quotation.customer?.email || quotation.customerEmail || '',
+              customerRole: 'BUYER' as const,
+            },
             addAsNewCustomer: false,
-            quotationTitle: quotation.title || '',
-            quotationDescription: quotation.description || '',
-            materials: quotation.materials || [],
-            materialsTotal: quotation.materialsTotal || 0,
-            workmanship: quotation.workmanship || 0,
+            title: quotation.title || '',
+            description: quotation.description || '',
+            lineItems: quotation.lineItems || [],
+            subtotal: quotation.subtotal || 0,
+            discountType: quotation.discountType || undefined,
+            discountValue: quotation.discountValue || 0,
+            discountAmount: quotation.discountAmount || 0,
             otherCosts: quotation.otherCosts || [],
-            otherCostsTotal: quotation.otherCostsTotal || 0,
-            includeVAT: quotation.includeVAT,
+            includeVAT: quotation.includeVAT || false,
             vatAmount: quotation.vatAmount || 0,
             totalAmount: quotation.totalAmount || 0,
+            amountPaid: quotation.amountPaid || 0,
             balance: quotation.balance || 0,
             issueDate: quotation.issueDate
               ? new Date(quotation.issueDate)
-              : undefined,
+              : new Date(),
             validUntil: quotation.validUntil
               ? new Date(quotation.validUntil)
               : undefined,
-            status: quotation.status,
-          });
+            status: quotation.status || 'DRAFT',
+            paymentMethod: (quotation.payments?.[0]?.paymentMethod ||
+              'BANK_TRANSFER') as PaymentMethod,
+            reference: quotation.payments?.[0]?.reference || '',
+            notes: quotation.payments?.[0]?.notes || '',
+          };
+
+          reset(formData);
         }
       } else {
         reset({
-          customer: { id: '', name: '', phone: '', email: '' },
+          customer: {
+            id: '',
+            name: '',
+            phone: '',
+            email: '',
+            customerRole: 'BUYER' as const,
+          },
           addAsNewCustomer: false,
-          quotationTitle: '',
-          quotationDescription: '',
-          materials: [],
-          materialsTotal: 0,
-          workmanship: 0,
+          title: '',
+          description: '',
+          lineItems: [],
+          subtotal: 0,
+          discountType: undefined,
+          discountValue: 0,
+          discountAmount: 0,
           otherCosts: [],
-          otherCostsTotal: 0,
           includeVAT: false,
           vatAmount: 0,
           totalAmount: 0,
+          amountPaid: 0,
           balance: 0,
           issueDate: new Date(),
+          validUntil: undefined,
           status: 'DRAFT',
+          paymentMethod: 'BANK_TRANSFER' as const,
+          reference: '',
+          notes: '',
         });
       }
     }
   }, [isOpen, quotationId, isEditMode, allQuotations, fetchCustomers, reset]);
+
+  const totalAmount = watch('totalAmount');
+  const amountPaid = watch('amountPaid');
+
+  useEffect(() => {
+    // Auto-calculate balance whenever totalAmount or amountPaid changes
+    const calculatedBalance = totalAmount - amountPaid;
+    const currentBalance = watch('balance');
+
+    // Only update if different to avoid infinite loops
+    if (Math.abs(calculatedBalance - currentBalance) > 0.01) {
+      methods.setValue('balance', calculatedBalance, {
+        shouldValidate: true,
+        shouldDirty: true,
+      });
+    }
+  }, [totalAmount, amountPaid, methods, watch]);
 
   const handleClose = () => {
     onClose();
@@ -184,21 +231,21 @@ export function CreateQuotationDrawer({
       if (customerErrors.email) return customerErrors.email.message;
     }
 
-    if (errors.quotationTitle) {
-      return errors.quotationTitle.message;
+    if (errors.title) {
+      return errors.title.message;
     }
 
     if (errors.issueDate) {
       return errors.issueDate.message;
     }
 
-    if (errors.materials) {
-      const materialsError = errors.materials as any;
-      if (materialsError.message) return materialsError.message;
-      if (Array.isArray(materialsError)) {
-        const firstMaterialError = materialsError[0];
-        if (firstMaterialError) {
-          const firstFieldError = Object.values(firstMaterialError)[0] as any;
+    if (errors.lineItems) {
+      const lineItemsError = errors.lineItems as any;
+      if (lineItemsError.message) return lineItemsError.message;
+      if (Array.isArray(lineItemsError)) {
+        const firstItemError = lineItemsError[0];
+        if (firstItemError) {
+          const firstFieldError = Object.values(firstItemError)[0] as any;
           return firstFieldError?.message;
         }
       }
@@ -226,37 +273,42 @@ export function CreateQuotationDrawer({
   };
 
   const validateStep = async (step: number): Promise<boolean> => {
-    let fieldsToValidate: (keyof QuotationFormType)[] = [];
+    let fieldsToValidate: (keyof CreateQuotationInput)[] = [];
     let isValid = true;
 
     switch (step) {
       case 1:
-        // Step 1: Materials validation
-        fieldsToValidate = ['materials', 'materialsTotal'];
+        // Step 1: Line Items validation
+        fieldsToValidate = ['lineItems', 'subtotal'];
 
-        // Check if materials array is not empty
-        if (!materials || materials.length === 0) {
+        // Check if lineItems array is not empty
+        if (!lineItems || lineItems.length === 0) {
           addToast({
             title: 'Validation Error',
-            description: 'Please add at least one material before proceeding',
+            description: 'Please add at least one line item before proceeding',
             color: 'danger',
           });
           return false;
         }
 
-        // Validate material fields
+        // Validate line item fields
         isValid = await trigger(fieldsToValidate);
         break;
 
       case 2:
         // Step 2: Customer and Quotation Details validation
-        fieldsToValidate = ['customer', 'quotationTitle', 'issueDate'];
+        fieldsToValidate = ['customer', 'title', 'issueDate'];
         isValid = await trigger(fieldsToValidate);
         break;
 
       case 3:
         // Step 3: Additional Costs and Summary validation
-        fieldsToValidate = ['otherCosts', 'totalAmount', 'workmanship'];
+        fieldsToValidate = [
+          'otherCosts',
+          'totalAmount',
+          'discountAmount',
+          'balance',
+        ];
         isValid = await trigger(fieldsToValidate);
         break;
     }
@@ -273,68 +325,49 @@ export function CreateQuotationDrawer({
     return isValid;
   };
 
-  const handleSaveDraft = async () => {
-    setIsSavingDraft(true);
-    try {
-      const formData = methods.getValues();
-      const draftData = {
-        ...formData,
-        status: 'DRAFT' as const,
-        issueDate:
-          formData.issueDate instanceof Date
-            ? formData.issueDate
-            : new Date(formData.issueDate),
-      };
-
-      const response = await api.post('/quotations', draftData);
-
-      if (response.data.quotation) {
-        addQuotation(response.data.quotation);
-      }
-
-      if (draftData.addAsNewCustomer && response.data.customer) {
-        addCustomer(response.data.customer);
-      }
-
-      addToast({
-        title: 'Success!',
-        description: 'Draft saved successfully',
-        color: 'success',
-      });
-
-      handleClose();
-
-      if (onSuccess) {
-        await onSuccess();
-      }
-    } catch (error: any) {
-      addToast({
-        title: 'Error',
-        description: 'Failed to save draft',
-        color: 'danger',
-      });
-    } finally {
-      setIsSavingDraft(false);
+  const onSubmit = async (data: CreateQuotationInput) => {
+    if (stepRef.current !== TOTAL_STEPS) {
+      return;
     }
-  };
-
-  const onSubmit = async (data: QuotationFormType) => {
-    if (stepRef.current !== TOTAL_STEPS) return;
 
     // Final validation before submission
+
     const isValid = await validateStep(3);
-    if (!isValid) return;
+    if (!isValid) {
+      return;
+    }
 
     setIsSubmitting(true);
     try {
+      // Determine status based on whether email is provided
+      const hasEmail =
+        data.customer?.email && data.customer.email.trim() !== '';
+      const finalStatus = hasEmail ? 'SENT' : 'DRAFT';
+
+      const submissionData: CreateQuotationInput = {
+        ...data,
+        status: finalStatus,
+        issueDate:
+          data.issueDate instanceof Date
+            ? data.issueDate
+            : new Date(data.issueDate),
+        validUntil: data.validUntil
+          ? data.validUntil instanceof Date
+            ? data.validUntil
+            : new Date(data.validUntil)
+          : undefined,
+      };
+
       if (isEditMode && quotationId) {
-        const response = await api.patch(`/quotations/${quotationId}`, data);
+        const response = await api.patch(
+          `/quotations/${quotationId}`,
+          submissionData
+        );
 
         updateQuotation(quotationId, response.data.quotation);
         if (data.addAsNewCustomer && response.data.customer) {
           addCustomer(response.data.customer);
         }
-        await refreshIncome();
 
         addToast({
           title: 'Success!',
@@ -342,19 +375,7 @@ export function CreateQuotationDrawer({
           color: 'success',
         });
       } else {
-        const hasEmail =
-          data.customer?.email && data.customer.email.trim() !== '';
-
-        const quotationData = {
-          ...data,
-          status: hasEmail ? ('SENT' as const) : ('DRAFT' as const),
-          issueDate:
-            data.issueDate instanceof Date
-              ? data.issueDate
-              : new Date(data.issueDate),
-        };
-
-        const response = await api.post('/quotations', quotationData);
+        const response = await api.post('/quotations', submissionData);
 
         if (response.data.quotation) {
           addQuotation(response.data.quotation);
@@ -364,9 +385,6 @@ export function CreateQuotationDrawer({
           addCustomer(response.data.customer);
         }
 
-        await refreshIncome();
-        if (onSuccess) onSuccess();
-
         addToast({
           title: 'Success!',
           description: hasEmail
@@ -374,10 +392,14 @@ export function CreateQuotationDrawer({
             : 'Quotation created successfully',
           color: 'success',
         });
+
+        if (onSuccess) {
+          await onSuccess();
+        }
       }
+
       handleClose();
     } catch (error: any) {
-      console.error('Error creating/updating quotation:', error);
       addToast({
         title: 'Error',
         description:
@@ -400,7 +422,7 @@ export function CreateQuotationDrawer({
       case 2:
         return (
           <div className="space-y-4">
-            <CustomerDetails customers={customersByRole.BUYER} />
+            <CustomerDetails customers={customersByRole.BUYER} role="BUYER" />
             <QuotationHeading />
           </div>
         );
@@ -419,7 +441,7 @@ export function CreateQuotationDrawer({
   const getStepTitle = () => {
     switch (currentStep) {
       case 1:
-        return 'Materials';
+        return 'Line Items';
       case 2:
         return 'Customer & Quotation Details';
       case 3:
@@ -475,16 +497,7 @@ export function CreateQuotationDrawer({
               )}
             </DrawerBody>
             <DrawerFooter>
-              <div
-                className={`grid gap-2 w-full ${
-                  currentStep === 3
-                    ? 'grid-cols-[auto_1fr_1fr]'
-                    : currentStep > 1
-                      ? 'grid-cols-[auto_1fr_auto_auto]'
-                      : 'grid-cols-[1fr_auto_auto]'
-                }`}
-              >
-                {/* Back button - first column */}
+              <div className="flex gap-3 justify-between w-full">
                 {currentStep > 1 && (
                   <Button
                     type="button"
@@ -497,62 +510,48 @@ export function CreateQuotationDrawer({
                   </Button>
                 )}
 
-                {/* Step 3 - Save as Draft */}
-                {currentStep === 3 && !isEditMode && (
+                <div className="flex gap-3 flex-1 justify-end">
                   <Button
-                    color="warning"
+                    className="px-6"
+                    color="default"
                     isDisabled={isSubmitting}
-                    isLoading={isSavingDraft}
                     type="button"
-                    variant="flat"
-                    onPress={handleSaveDraft}
+                    variant="light"
+                    onPress={handleClose}
                   >
-                    Save as Draft
+                    Cancel
                   </Button>
-                )}
 
-                {/* Step 3 - Submit button */}
-                {currentStep === 3 && (
-                  <Button
-                    type="submit"
-                    color="primary"
-                    isLoading={isSubmitting}
-                    isDisabled={isSavingDraft}
-                  >
-                    {isSubmitting
-                      ? 'Submitting...'
-                      : isEditMode
-                        ? 'Update Quotation'
-                        : customerEmail && customerEmail.trim() !== ''
-                          ? 'Create & Send'
-                          : 'Create '}
-                  </Button>
-                )}
+                  <div>
+                    {currentStep < TOTAL_STEPS && (
+                      <Button
+                        type="button"
+                        onClick={goNext}
+                        className="px-6"
+                        color="primary"
+                      >
+                        Next
+                      </Button>
+                    )}
 
-                {/* Next button - steps 1-2 */}
-                {currentStep < TOTAL_STEPS && (
-                  <Button type="button" onClick={goNext} color="primary">
-                    Next
-                  </Button>
-                )}
-
-                {/* Final submit for other steps */}
-                {currentStep === TOTAL_STEPS && currentStep !== 3 && (
-                  <Button
-                    type="submit"
-                    color="primary"
-                    isLoading={isSubmitting}
-                    isDisabled={isSavingDraft}
-                  >
-                    {isSubmitting
-                      ? 'Submitting...'
-                      : isEditMode
-                        ? 'Update Quotation'
-                        : customerEmail && customerEmail.trim() !== ''
-                          ? 'Create & Send'
-                          : 'Create '}
-                  </Button>
-                )}
+                    {currentStep === TOTAL_STEPS && (
+                      <Button
+                        type="submit"
+                        className="px-6"
+                        color="primary"
+                        isLoading={isSubmitting}
+                      >
+                        {isSubmitting
+                          ? 'Submitting...'
+                          : isEditMode
+                            ? 'Update Quotation'
+                            : customerEmail?.trim()
+                              ? 'Create & Send'
+                              : 'Create Quotation'}
+                      </Button>
+                    )}
+                  </div>
+                </div>
               </div>
             </DrawerFooter>
           </DrawerContent>

@@ -193,19 +193,24 @@ export function CustomerDetails({
   ]);
 
   return (
-    <Card className="w-full rounded-2xl " shadow="none">
-      <CardBody>
-        <div className="space-y-4 py-2">
-          <div className="space-y-2 px-2 ">
+    <Card
+      className="w-full rounded-2xl p-3 bg-transparent border border-default-200"
+      shadow="none"
+    >
+      <CardBody className="p-0">
+        <div className="space-y-3 py-2">
+          <div className="space-y-0.5 px-2 ">
             <div className="flex items-center gap-2">
-              <h4 className="text-sm font-semibold text-foreground">
+              <h4 className="text-base font-semibold text-foreground">
                 {getRoleTitle()}
               </h4>
               {optional && (
                 <span className="text-xs text-default-400">(Optional)</span>
               )}
             </div>
-            <Divider />
+            <p className="text-xs text-default-400">
+              💡 Tip: Include a name, phone or email to save as new customer
+            </p>
           </div>
 
           <div className="grid md:grid-cols-2 gap-4">

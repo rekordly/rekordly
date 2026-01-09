@@ -209,7 +209,7 @@ export const OnboardingFlow: React.FC<SessionUser> = ({ user }) => {
 
                 {currentStep < 3 ? (
                   <Button
-                    className="flex-1 h-12 rounded-xl bg-gradient-to-r from-primary-800 to-primary-600"
+                    className="flex-1 h-12 rounded-xl bg-linear-to-r from-primary-800 to-primary-600"
                     color="primary"
                     type="button"
                     onPress={handleNext}
@@ -218,7 +218,7 @@ export const OnboardingFlow: React.FC<SessionUser> = ({ user }) => {
                   </Button>
                 ) : (
                   <Button
-                    className="flex-1 h-12 rounded-xl bg-gradient-to-r from-primary-800 to-primary-600"
+                    className="flex-1 h-12 rounded-xl bg-linear-to-r from-primary-800 to-primary-600"
                     color="primary"
                     isLoading={isSubmitting}
                     type="submit"

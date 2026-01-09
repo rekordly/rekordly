@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { prisma } from '@/lib/prisma';
 import { getAuthUser } from '@/lib/utils/server';
-import { RefundSchema } from '@/lib/validations/general';
+import { SaleRefundSchema } from '@/lib/validations/general';
 import { toTwoDecimals } from '@/lib/fn';
 import { PaymentMethod, StatusType } from '@/types/index';
 import { validateRequest } from '@/lib/utils/validation';
@@ -20,6 +20,14 @@ export async function POST(
     // Check if sale exists and belongs to user
     const existingSale = await prisma.sale.findFirst({
       where: { id: saleId, userId },
+      include: {
+        saleItems: {
+          include: {
+            inventoryItem: true,
+            production: true,
+          },
+        },
+      },
     });
 
     if (!existingSale) {
@@ -29,20 +37,7 @@ export async function POST(
       );
     }
 
-    const body = await request.json();
-    const validationResult = RefundSchema.safeParse(body);
-
-    if (!validationResult.success) {
-      return NextResponse.json(
-        {
-          error: 'Validation failed',
-          message: validationResult.error.flatten().fieldErrors,
-        },
-        { status: 400 }
-      );
-    }
-
-    const data = await validateRequest(request, RefundSchema);
+    const data = await validateRequest(request, SaleRefundSchema);
 
     // Validate refund conditions
     if (existingSale.amountPaid === 0) {
@@ -80,7 +75,7 @@ export async function POST(
     if (totalRefundAmount === existingSale.amountPaid) {
       status = 'REFUNDED';
     } else {
-      status = 'PARTIALLY_REFUNDED'; // Has been partially refunded
+      status = 'PARTIALLY_REFUNDED';
     }
 
     const refundDate = data.refundDate ? new Date(data.refundDate) : new Date();
@@ -104,6 +99,50 @@ export async function POST(
           },
         });
 
+        // Handle inventory restoration on refund
+        // Only restore inventory if it's a full refund or if restoreInventory flag is set
+        const restoreInventory = data.restoreInventory !== false; // Default to true
+
+        if (restoreInventory && status === 'REFUNDED') {
+          // Full refund - restore all inventory items
+          for (const saleItem of existingSale.saleItems) {
+            if (
+              saleItem.inventoryItemId &&
+              saleItem.inventoryItem?.trackInventory
+            ) {
+              await tx.inventoryItem.update({
+                where: { id: saleItem.inventoryItemId },
+                data: {
+                  quantityOnHand: toTwoDecimals(
+                    saleItem.inventoryItem.quantityOnHand + saleItem.quantity
+                  ),
+                },
+              });
+            }
+          }
+        } else if (restoreInventory && data.refundItems) {
+          // Partial refund with specific items - restore only those items
+          for (const refundItem of data.refundItems) {
+            const saleItem = existingSale.saleItems.find(
+              si => si.id === refundItem.saleItemId
+            );
+
+            if (
+              saleItem?.inventoryItemId &&
+              saleItem.inventoryItem?.trackInventory
+            ) {
+              await tx.inventoryItem.update({
+                where: { id: saleItem.inventoryItemId },
+                data: {
+                  quantityOnHand: toTwoDecimals(
+                    saleItem.inventoryItem.quantityOnHand + refundItem.quantity
+                  ),
+                },
+              });
+            }
+          }
+        }
+
         const updatedSale = await tx.sale.update({
           where: { id: saleId },
           data: {
@@ -120,6 +159,24 @@ export async function POST(
                 name: true,
                 email: true,
                 phone: true,
+              },
+            },
+            saleItems: {
+              include: {
+                inventoryItem: {
+                  select: {
+                    id: true,
+                    name: true,
+                    sku: true,
+                    itemType: true,
+                  },
+                },
+                production: {
+                  select: {
+                    id: true,
+                    productionNumber: true,
+                  },
+                },
               },
             },
             payments: {

@@ -1,7 +1,7 @@
 'use client';
 
 import { Button } from '@heroui/react';
-import { LogOut } from 'lucide-react';
+import { SignOut } from '@phosphor-icons/react/dist/ssr';
 import { useState } from 'react';
 
 import { MenuItemLink } from '../MenuItemLinkProps';
@@ -31,21 +31,18 @@ export function Sidebar({
   };
 
   const handleAction = (actionType: string) => {
-    const incomeTypes = ['salary', 'commission', 'dividend', 'other-income'];
-    const expenseTypes = [
-      'salary-expense',
-      'rent',
-      'utilities',
-      'fuel',
-      'professional-fees',
-      'subscriptions',
-    ];
+    const incomeTypes = ['income'];
+    const expenseTypes = ['salary-expense', 'rent', 'utilities', 'fuel'];
+    const salaryTypes = ['salary-payment'];
 
     if (incomeTypes.includes(actionType)) {
       setIncomeType(actionType);
       setIsIncomeModalOpen(true);
     } else if (expenseTypes.includes(actionType)) {
       setExpenseType(actionType);
+      setIsExpensesModalOpen(true);
+    } else if (salaryTypes.includes(actionType)) {
+      setExpenseType('salary');
       setIsExpensesModalOpen(true);
     }
   };
@@ -62,27 +59,28 @@ export function Sidebar({
 
   return (
     <>
-      <aside className="w-64 h-[calc(100vh-64px)] flex flex-col">
+      <aside className="hidden lg:flex flex-col h-screen w-56 border-r border-divider/50 bg-linear-to-b from-background to-default-50/30">
         {/* Scrollable navigation area */}
-        <nav className="flex-1 overflow-y-auto p-4 pt-8">
-          <div className="flex flex-col gap-1">
-            {menuItems.map(item => (
+        <div className="flex-1 overflow-y-auto px-3 py-4 scrollbar-hide">
+          <nav className="flex flex-col gap-0.5">
+            {menuItems.map((item, index) => (
               <MenuItemLink
-                key={item.name}
-                item={item}
+                key={index}
                 expandedItem={expandedItem}
+                item={item}
                 onToggle={handleToggle}
                 onAction={handleAction}
               />
             ))}
-          </div>
-        </nav>
+          </nav>
+        </div>
 
-        <div className="flex-none p-4 border-t border-primary-200/40">
+        {/* Footer with Sign Out button */}
+        <div className="p-4 border-t border-divider/50">
           <Button
-            className="w-full"
+            className="w-full font-semibold"
             color="danger"
-            startContent={<LogOut className="w-4 h-4" />}
+            startContent={<SignOut weight="bold" className="w-5 h-5" />}
             variant="flat"
             onPress={handleSignOut}
           >

@@ -34,7 +34,7 @@ export function SaleCustomerSection({ sale }: SaleCustomerSectionProps) {
 
         <div className="flex items-start gap-3">
           <Avatar
-            className="bg-gradient-to-br from-secondary-400 to-secondary-600 text-white font-semibold shrink-0"
+            className="bg-linear-to-br from-secondary-400 to-secondary-600 text-white font-semibold shrink-0"
             name={getInitials(customerName)}
             size="md"
           />

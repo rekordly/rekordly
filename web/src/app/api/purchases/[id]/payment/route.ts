@@ -23,6 +23,13 @@ export async function POST(
         id,
         userId,
       },
+      include: {
+        items: {
+          include: {
+            inventoryItem: true,
+          },
+        },
+      },
     });
 
     if (!purchase) {
@@ -38,6 +45,7 @@ export async function POST(
         { status: 400 }
       );
     }
+
     // Validate payment amount
     const newAmountPaid = toTwoDecimals(
       purchase.amountPaid + paymentData.amountPaid
@@ -58,6 +66,7 @@ export async function POST(
       | 'PAID'
       | 'REFUNDED'
       | 'PARTIALLY_REFUNDED' = purchase.status;
+
     if (newAmountPaid >= totalAmount) {
       newStatus = 'PAID';
     } else if (newAmountPaid > 0) {
@@ -102,6 +111,27 @@ export async function POST(
                 phone: true,
               },
             },
+            items: {
+              include: {
+                inventoryItem: {
+                  select: {
+                    id: true,
+                    name: true,
+                    sku: true,
+                    category: true,
+                  },
+                },
+              },
+              orderBy: {
+                createdAt: 'asc',
+              },
+            },
+            sourceQuotation: {
+              select: {
+                id: true,
+                quotationNumber: true,
+              },
+            },
             payments: {
               select: {
                 id: true,
@@ -109,8 +139,6 @@ export async function POST(
                 amount: true,
                 paymentDate: true,
                 paymentMethod: true,
-                category: true,
-                payableType: true,
                 reference: true,
                 notes: true,
               },

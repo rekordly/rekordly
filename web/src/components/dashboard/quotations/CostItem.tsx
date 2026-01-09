@@ -24,7 +24,7 @@ export function CostItem({ cost, onRemove }: CostItemProps) {
           color="danger"
           size="sm"
           variant="light"
-          onPress={() => onRemove(cost.id)}
+          onPress={() => cost.id !== undefined && onRemove(cost.id)}
         >
           <Trash2 size={16} />
         </Button>

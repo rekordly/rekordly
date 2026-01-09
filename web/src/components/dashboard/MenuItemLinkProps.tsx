@@ -2,7 +2,7 @@
 
 import { Link } from '@heroui/react';
 import { usePathname } from 'next/navigation';
-import { ChevronDown } from 'lucide-react';
+import { CaretDown } from '@phosphor-icons/react/dist/ssr';
 
 import { MenuItem, SubMenuItem, hasAction } from '@/config/menu';
 
@@ -31,6 +31,32 @@ export function MenuItemLink({
   );
   const isExpanded = expandedItem === item.name;
 
+  // Check if this is an action item (for top-level action items like Income)
+  const isTopLevelAction = hasAction(item);
+
+  // Handle top-level action items
+  if (isTopLevelAction) {
+    return (
+      <button
+        className={`
+          flex items-center gap-2.5 px-3 py-3 rounded-lg transition-all w-full
+          text-default-700 hover:bg-default-100/70 active:scale-[0.98] group
+        `}
+        onClick={() => {
+          onAction?.(item.actionType, item.action);
+          onClose?.();
+        }}
+      >
+        <Icon
+          weight="duotone"
+          className="w-6 h-6 shrink-0"
+          style={{ color: item.iconColor }}
+        />
+        <span className="text-base">{item.name}</span>
+      </button>
+    );
+  }
+
   // If item has subitems, it's a parent menu
   if (item.subItems && item.subItems.length > 0) {
     return (
@@ -38,26 +64,26 @@ export function MenuItemLink({
         {/* Parent Menu Item */}
         <button
           className={`
-            flex items-center justify-between w-full px-4 py-3 rounded-lg transition-all
+            flex items-center justify-between w-full px-3 py-3 rounded-lg transition-all group
             ${
               hasActiveSubItem
                 ? 'bg-primary/10 text-primary'
-                : 'text-foreground hover:bg-default-100'
+                : 'text-default-700 hover:bg-default-100/70'
             }
           `}
           onClick={() => onToggle?.(item.name)}
         >
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <Icon
-              className="w-5 h-5"
-              strokeWidth={hasActiveSubItem ? 2.5 : 2}
+              weight={hasActiveSubItem ? 'fill' : 'duotone'}
+              className="w-6 h-6 shrink-0"
+              style={{ color: item.iconColor }}
             />
-            <span className={hasActiveSubItem ? 'font-medium' : ''}>
-              {item.name}
-            </span>
+            <span className="text-base">{item.name}</span>
           </div>
-          <ChevronDown
-            className={`w-4 h-4 transition-transform duration-200 ${
+          <CaretDown
+            weight="bold"
+            className={`w-3.5 h-3.5 shrink-0 transition-transform duration-300 ${
               isExpanded ? 'rotate-180' : ''
             }`}
           />
@@ -66,11 +92,11 @@ export function MenuItemLink({
         {/* Submenu Items */}
         <div
           className={`
-            overflow-hidden transition-all duration-200 ease-in-out
-            ${isExpanded ? 'max-h-150 opacity-100 mt-1' : 'max-h-0 opacity-0'}
+            overflow-hidden transition-all duration-300 ease-in-out
+            ${isExpanded ? 'max-h-150 opacity-100 mt-0.5' : 'max-h-0 opacity-0'}
           `}
         >
-          <div className="pl-4 space-y-1">
+          <div className="pl-3 space-y-0.5 pt-0.5">
             {item.subItems.map((subItem, index) => (
               <SubMenuItemLink
                 key={subItem.href || `action-${index}`}
@@ -89,18 +115,22 @@ export function MenuItemLink({
   return (
     <Link
       className={`
-        flex items-center gap-3 px-4 py-3 rounded-lg transition-all w-full
+        flex items-center gap-2.5 px-3 py-3 rounded-lg transition-all w-full active:scale-[0.98] group
         ${
           isActive
-            ? 'bg-primary text-white font-medium shadow-sm'
-            : 'text-foreground hover:bg-default-100'
+            ? 'bg-primary text-white'
+            : 'text-default-700 hover:bg-default-100/70'
         }
       `}
       href={item.href!}
       onClick={onClose}
     >
-      <Icon className="w-5 h-5" strokeWidth={isActive ? 2.5 : 2} />
-      <span>{item.name}</span>
+      <Icon
+        weight={isActive ? 'fill' : 'duotone'}
+        className="w-6 h-6 shrink-0"
+        style={{ color: isActive ? '#ffffff' : item.iconColor }}
+      />
+      <span className="text-base">{item.name}</span>
     </Link>
   );
 }
@@ -124,16 +154,20 @@ function SubMenuItemLink({ subItem, onClose, onAction }: SubMenuItemLinkProps) {
     return (
       <button
         className={`
-          flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all w-full text-sm
-          text-default-600 hover:bg-default-100 hover:text-foreground
+          flex items-center gap-2.5 px-3 py-1.5 rounded-md transition-all w-full
+          text-default-600 hover:bg-default-100/60 active:scale-[0.98] group
         `}
         onClick={() => {
           onAction?.(subItem.actionType, subItem.action);
           onClose?.();
         }}
       >
-        <SubIcon className="w-4 h-4" strokeWidth={2} />
-        <span>{subItem.name}</span>
+        <SubIcon
+          weight="duotone"
+          className="w-4 h-4 shrink-0"
+          style={{ color: subItem.iconColor }}
+        />
+        <span className="text-sm">{subItem.name}</span>
       </button>
     );
   }
@@ -142,18 +176,22 @@ function SubMenuItemLink({ subItem, onClose, onAction }: SubMenuItemLinkProps) {
   return (
     <Link
       className={`
-        flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all w-full text-sm
+        flex items-center gap-2.5 px-3 py-1.5 rounded-md transition-all w-full active:scale-[0.98] group
         ${
           isActive
-            ? 'bg-primary text-white font-medium shadow-sm'
-            : 'text-default-600 hover:bg-default-100 hover:text-foreground'
+            ? 'bg-primary/90 text-white'
+            : 'text-default-600 hover:bg-default-100/60'
         }
       `}
       href={subItem.href!}
       onClick={onClose}
     >
-      <SubIcon className="w-4 h-4" strokeWidth={isActive ? 2.5 : 2} />
-      <span>{subItem.name}</span>
+      <SubIcon
+        weight={isActive ? 'fill' : 'duotone'}
+        className="w-4 h-4 shrink-0"
+        style={{ color: isActive ? '#ffffff' : subItem.iconColor }}
+      />
+      <span className="text-sm">{subItem.name}</span>
     </Link>
   );
 }

@@ -22,7 +22,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({ step }) => {
                 <div
                   className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold transition-colors ${
                     step >= s.number
-                      ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white'
+                      ? 'bg-linear-to-r from-blue-600 to-purple-600 text-white'
                       : 'bg-default-200 text-default-400'
                   }`}
                 >
@@ -35,7 +35,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({ step }) => {
                   <div
                     className={`h-full rounded transition-all duration-300 ${
                       step > s.number
-                        ? 'bg-gradient-to-r from-blue-600 to-purple-600 w-full'
+                        ? 'bg-linear-to-r from-blue-600 to-purple-600 w-full'
                         : 'w-0'
                     }`}
                   />
@@ -55,7 +55,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({ step }) => {
                 <div
                   className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-colors ${
                     step >= s.number
-                      ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white'
+                      ? 'bg-linear-to-r from-blue-600 to-purple-600 text-white'
                       : 'bg-default-200 text-default-400'
                   }`}
                 >
@@ -68,7 +68,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({ step }) => {
                   <div
                     className={`h-full rounded transition-all duration-300 ${
                       step > s.number
-                        ? 'bg-gradient-to-r from-blue-600 to-purple-600 w-full'
+                        ? 'bg-linear-to-r from-blue-600 to-purple-600 w-full'
                         : 'w-0'
                     }`}
                   />

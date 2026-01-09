@@ -18,6 +18,7 @@ interface BaseInputProps<T extends FieldValues> {
   placeholder?: string;
   description?: string;
   isRequired?: boolean;
+  isDisabled?: boolean;
 }
 
 interface TextInputProps<T extends FieldValues> extends BaseInputProps<T> {
@@ -111,6 +112,7 @@ export function NumberInput<T extends FieldValues>({
   startContent,
   endContent,
   isRequired = false,
+  isDisabled = false,
 }: TextInputProps<T> & { min?: number; max?: number; step?: number }) {
   return (
     <Controller
@@ -119,10 +121,19 @@ export function NumberInput<T extends FieldValues>({
       render={({ field, fieldState: { error } }) => (
         <Input
           {...field}
+          // FIX: Convert value to string, handle undefined/null/NaN
+          value={
+            field.value === undefined ||
+            field.value === null ||
+            Number.isNaN(field.value)
+              ? ''
+              : String(field.value)
+          }
           classNames={{
             inputWrapper: 'border-1 h-14 border-default-300 rounded-2xl',
             label: 'font-light text-default-400',
           }}
+          isDisabled={isDisabled}
           color="primary"
           description={description}
           endContent={endContent}
@@ -137,7 +148,16 @@ export function NumberInput<T extends FieldValues>({
           step={step}
           type="number"
           variant="bordered"
-          onChange={e => field.onChange(parseFloat(e.target.value))}
+          onChange={e => {
+            const value = e.target.value;
+            // FIX: Handle empty string and invalid numbers
+            if (value === '' || value === '-') {
+              field.onChange(0);
+            } else {
+              const parsed = parseFloat(value);
+              field.onChange(Number.isNaN(parsed) ? 0 : parsed);
+            }
+          }}
         />
       )}
     />
@@ -284,6 +304,7 @@ export function DropdownInput<T extends FieldValues>({
   placeholder,
   description,
   items,
+  isDisabled = false,
   isRequired = false,
 }: BaseInputProps<T> & { items: { value: string; label: string }[] }) {
   return (
@@ -302,6 +323,7 @@ export function DropdownInput<T extends FieldValues>({
           errorMessage={error?.message}
           isInvalid={!!error}
           isRequired={isRequired}
+          isDisabled={isDisabled}
           label={label}
           placeholder={placeholder}
           selectedKeys={field.value ? [field.value] : []}

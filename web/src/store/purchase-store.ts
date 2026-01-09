@@ -9,9 +9,10 @@ import {
   PurchaseStatusType,
   DateFilterType,
 } from '@/types/purchases';
+import { PurchaseType } from '@prisma/client';
 
 const RENDER_LIMIT = 20;
-const CACHE_DURATION = 5 * 60 * 1000;
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 // Helper function to convert DateValue to Date
 const dateValueToDate = (dateValue: any): Date => {
@@ -32,18 +33,19 @@ const dateValueToDate = (dateValue: any): Date => {
 export const usePurchaseStore = create<PurchaseStore>()(
   persist(
     (set, get) => ({
-      allPurchases: [],
-      displayedPurchases: [],
-      filteredPurchases: [],
+      allPurchases: [] as Purchase[],
+      displayedPurchases: [] as Purchase[],
+      filteredPurchases: [] as Purchase[],
       isInitialLoading: false,
       isPaginating: false,
       isDeleting: false,
-      error: null,
+      error: null as string | null,
       searchQuery: '',
       displayCount: RENDER_LIMIT,
-      statusFilter: 'ALL',
-      dateFilter: null,
-      lastFetchTime: null,
+      statusFilter: 'ALL' as PurchaseStatusType | 'ALL',
+      purchaseTypeFilter: 'ALL' as PurchaseType | 'ALL', // ADDED
+      dateFilter: null as DateFilterType | null,
+      lastFetchTime: null as number | null,
 
       fetchPurchases: async (forceRefresh = false) => {
         const { lastFetchTime, allPurchases } = get();
@@ -113,8 +115,48 @@ export const usePurchaseStore = create<PurchaseStore>()(
         get().applyFilters();
       },
 
+      searchPurchasesInDB: async (query: string) => {
+        const { filteredPurchases } = get();
+
+        if (filteredPurchases.length > 0 || !query.trim()) {
+          return;
+        }
+
+        set({ isPaginating: true });
+
+        try {
+          const response = await api.get(
+            `/purchases/search?q=${encodeURIComponent(query)}`
+          );
+          const results = response.data.purchases || [];
+
+          const { allPurchases } = get();
+          const existingIds = new Set(
+            allPurchases.map(purchase => purchase.id)
+          );
+          const newPurchases = results.filter(
+            (purchase: any) => !existingIds.has(purchase.id)
+          );
+
+          set({
+            allPurchases: [...allPurchases, ...newPurchases],
+            isPaginating: false,
+          });
+
+          get().applyFilters();
+        } catch {
+          set({ isPaginating: false });
+        }
+      },
+
       setStatusFilter: (status: PurchaseStatusType | 'ALL') => {
         set({ statusFilter: status, displayCount: RENDER_LIMIT });
+        get().applyFilters();
+      },
+
+      setPurchaseTypeFilter: (type: PurchaseType | 'ALL') => {
+        // ADDED
+        set({ purchaseTypeFilter: type, displayCount: RENDER_LIMIT });
         get().applyFilters();
       },
 
@@ -128,6 +170,7 @@ export const usePurchaseStore = create<PurchaseStore>()(
           allPurchases,
           searchQuery,
           statusFilter,
+          purchaseTypeFilter, // ADDED
           dateFilter,
           displayCount,
         } = get();
@@ -141,12 +184,20 @@ export const usePurchaseStore = create<PurchaseStore>()(
           );
         }
 
+        // Apply purchase type filter
+        if (purchaseTypeFilter !== 'ALL') {
+          filtered = filtered.filter(
+            purchase => purchase.purchaseType === purchaseTypeFilter
+          );
+        }
+
         // Apply date filter
         if (dateFilter && (dateFilter.start || dateFilter.end)) {
           filtered = filtered.filter(purchase => {
-            const purchaseDate = new Date(purchase.purchaseDate);
+            const purchaseDate = new Date(
+              purchase.purchaseDate as string | Date
+            );
 
-            // Convert DateValue to Date
             const startDate = dateFilter.start
               ? dateValueToDate(dateFilter.start)
               : null;
@@ -156,7 +207,6 @@ export const usePurchaseStore = create<PurchaseStore>()(
 
             if (startDate && purchaseDate < startDate) return false;
             if (endDate && purchaseDate > endDate) return false;
-
             return true;
           });
         }
@@ -196,47 +246,27 @@ export const usePurchaseStore = create<PurchaseStore>()(
         });
       },
 
-      searchPurchasesInDB: async (query: string) => {
-        const { filteredPurchases } = get();
-
-        if (filteredPurchases.length > 0 || !query.trim()) {
-          return;
-        }
-
-        set({ isPaginating: true });
-
-        try {
-          const response = await api.get(
-            `/purchases/search?q=${encodeURIComponent(query)}`
-          );
-          const results = response.data.purchases || [];
-
-          const { allPurchases } = get();
-          const existingIds = new Set(
-            allPurchases.map(purchase => purchase.id)
-          );
-          const newPurchases = results.filter(
-            (purchase: any) => !existingIds.has(purchase.id)
-          );
-
-          set({
-            allPurchases: [...allPurchases, ...newPurchases],
-            isPaginating: false,
-          });
-
-          get().applyFilters();
-        } catch {
-          set({ isPaginating: false });
-        }
-      },
-
       getPurchaseByPurchaseNumber: (
         purchaseNumber: string
       ): Purchase | undefined => {
         const { allPurchases } = get();
-
         return allPurchases.find(
           purchase => purchase.purchaseNumber === purchaseNumber
+        );
+      },
+
+      // Helper: Calculate total from purchaseItems
+      getPurchaseItemsTotal: (purchaseId: string): number => {
+        const { allPurchases } = get();
+        const purchase = allPurchases.find(p => p.id === purchaseId);
+
+        if (!purchase || !purchase.items || purchase.items.length === 0) {
+          return 0;
+        }
+
+        return purchase.items.reduce(
+          (sum: number, item: any) => sum + (item.amount || 0),
+          0
         );
       },
 
@@ -258,15 +288,16 @@ export const usePurchaseStore = create<PurchaseStore>()(
 
       addPurchase: (purchase: Purchase) => {
         const { allPurchases } = get();
-
         set({ allPurchases: [...allPurchases, purchase] });
         get().applyFilters();
       },
 
       deletePurchase: async (id: string) => {
         set({ isDeleting: true });
+
         try {
           await api.delete(`/purchases/${id}`);
+
           const { allPurchases } = get();
           const updatedPurchases = allPurchases.filter(
             purchase => purchase.id !== id
@@ -277,6 +308,7 @@ export const usePurchaseStore = create<PurchaseStore>()(
             lastFetchTime: Date.now(),
             isDeleting: false,
           });
+
           get().applyFilters();
         } catch (error) {
           set({ isDeleting: false });
@@ -290,9 +322,7 @@ export const usePurchaseStore = create<PurchaseStore>()(
           paymentData
         );
         const updatedPurchase = response.data.purchase;
-
         get().updatePurchase(purchaseId, updatedPurchase);
-
         return updatedPurchase;
       },
 
@@ -317,6 +347,7 @@ export const usePurchaseStore = create<PurchaseStore>()(
           searchQuery: '',
           displayCount: RENDER_LIMIT,
           statusFilter: 'ALL',
+          purchaseTypeFilter: 'ALL', // ADDED
           dateFilter: null,
           lastFetchTime: null,
         });

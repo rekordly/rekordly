@@ -41,7 +41,7 @@ export function LoanPaymentSchedule({ loan }: LoanPaymentScheduleProps) {
           <Progress
             aria-label="Repayment progress"
             classNames={{
-              indicator: 'bg-gradient-to-r from-primary-400 to-primary-600',
+              indicator: 'bg-linear-to-r from-primary-400 to-primary-600',
             }}
             value={repaymentProgress}
           />
@@ -87,7 +87,7 @@ export function LoanPaymentSchedule({ loan }: LoanPaymentScheduleProps) {
 
         {/* Outstanding Balance */}
         <div className="pt-4 border-t border-default-200">
-          <div className="bg-gradient-to-br from-danger-50 to-danger-100 dark:from-danger-900/20 dark:to-danger-800/20 rounded-2xl p-4">
+          <div className="bg-linear-to-br from-danger-50 to-danger-100 dark:from-danger-900/20 dark:to-danger-800/20 rounded-2xl p-4">
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-xs text-danger-700 dark:text-danger-300 font-medium mb-1">

@@ -264,6 +264,8 @@ export function PaymentSection({
           payment={editingPayment}
           totalAmount={totalAmount}
           currentTotalPaid={amountPaid}
+          isOpen={!!editingPayment}
+          onClose={() => setEditingPayment(null)}
           onSuccess={handleEditSuccess}
         />
       )}
@@ -274,6 +276,8 @@ export function PaymentSection({
           entityId={entityId}
           entityType={entityType}
           payment={deletingPayment}
+          isOpen={!!deletingPayment}
+          onClose={() => setDeletingPayment(null)}
           onSuccess={handleDeleteSuccess}
         />
       )}

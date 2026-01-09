@@ -1,11 +1,12 @@
+// app/api/loans/[id]/payment/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { prisma } from '@/lib/prisma';
 import { getAuthUser } from '@/lib/utils/server';
-// import { recordLoanPaymentSchema } from '@/lib/validations/loan';
 import { toTwoDecimals } from '@/lib/fn';
 import { addPaymentSchema } from '@/lib/validations/general';
+import { PaymentMethod } from '@prisma/client';
 
 export async function POST(
   request: NextRequest,
@@ -17,7 +18,6 @@ export async function POST(
     const { userId } = await getAuthUser(request);
     const loanId = id;
 
-    // Check if loan exists and belongs to user
     const existingLoan = await prisma.loan.findFirst({
       where: { id: loanId, userId },
     });
@@ -44,7 +44,6 @@ export async function POST(
 
     const data = validationResult.data;
 
-    // Check if loan is already paid off
     if (existingLoan.status === 'PAID_OFF') {
       return NextResponse.json(
         { message: 'Loan is already paid off' },
@@ -52,7 +51,6 @@ export async function POST(
       );
     }
 
-    // Check if loan is written off or defaulted
     if (
       existingLoan.status === 'WRITTEN_OFF' ||
       existingLoan.status === 'DEFAULTED'
@@ -68,28 +66,22 @@ export async function POST(
     const paymentAmount = toTwoDecimals(data.amountPaid);
     const existingBalance = existingLoan.currentBalance;
 
-    // SIMPLIFIED LOGIC: Auto-calculate principal vs interest
     let principalAmount = 0;
     let interestAmount = 0;
 
     if (existingBalance > 0) {
-      // Still have principal to pay
       if (paymentAmount <= existingBalance) {
-        // Payment goes entirely to principal
         principalAmount = paymentAmount;
         interestAmount = 0;
       } else {
-        // Payment covers remaining principal + interest
         principalAmount = existingBalance;
         interestAmount = paymentAmount - existingBalance;
       }
     } else {
-      // Principal fully paid, all payment is interest
       principalAmount = 0;
       interestAmount = paymentAmount;
     }
 
-    // Use transaction to create payment, update loan, and create income/expense records
     const result = await prisma.$transaction(async tx => {
       // 1. Create payment record
       const payment = await tx.payment.create({
@@ -101,7 +93,7 @@ export async function POST(
           paymentDate: data.paymentDate
             ? new Date(data.paymentDate)
             : new Date(),
-          paymentMethod: data.paymentMethod,
+          paymentMethod: data.paymentMethod as PaymentMethod,
           category:
             existingLoan.loanType === 'RECEIVABLE' ? 'INCOME' : 'EXPENSE',
           reference: data.reference || null,
@@ -120,7 +112,6 @@ export async function POST(
         existingLoan.currentBalance - principalAmount
       );
 
-      // Determine new status
       let newStatus = existingLoan.status;
       if (newCurrentBalance <= 0) {
         newStatus = 'PAID_OFF';
@@ -131,7 +122,7 @@ export async function POST(
         data: {
           totalPaid: newTotalPaid,
           totalInterestPaid: newTotalInterestPaid,
-          currentBalance: Math.max(0, newCurrentBalance), // Ensure balance doesn't go negative
+          currentBalance: Math.max(0, newCurrentBalance),
           status: newStatus,
         },
         include: {
@@ -154,12 +145,11 @@ export async function POST(
         },
       });
 
-      // 3. Create or UPDATE single interest income/expense record
+      // 3. Create or UPDATE interest income/expense record
       let interestRecord = null;
       if (interestAmount > 0) {
         if (existingLoan.loanType === 'RECEIVABLE') {
           // Interest income from loan you gave
-          // Check if interest record already exists for this loan
           const existingInterestRecord = await tx.incomeRecord.findFirst({
             where: {
               userId,
@@ -170,12 +160,26 @@ export async function POST(
 
           if (existingInterestRecord) {
             // UPDATE existing interest record
+            const newGrossAmount = toTwoDecimals(
+              existingInterestRecord.grossAmount + interestAmount
+            );
+            const newAmountPaid = toTwoDecimals(
+              existingInterestRecord.amountPaid + interestAmount
+            );
+            const newBalance = toTwoDecimals(newGrossAmount - newAmountPaid);
+
             interestRecord = await tx.incomeRecord.update({
               where: { id: existingInterestRecord.id },
               data: {
-                grossAmount: toTwoDecimals(
-                  existingInterestRecord.grossAmount + interestAmount
-                ),
+                grossAmount: newGrossAmount,
+                amountPaid: newAmountPaid,
+                balance: newBalance,
+                status:
+                  newBalance <= 0
+                    ? 'PAID'
+                    : newBalance < newGrossAmount
+                      ? 'PARTIALLY_PAID'
+                      : 'UNPAID',
               },
             });
           } else {
@@ -186,6 +190,9 @@ export async function POST(
                 mainCategory: 'INVESTMENT_INCOME',
                 subCategory: 'INTEREST_INCOME',
                 grossAmount: interestAmount,
+                amountPaid: interestAmount,
+                balance: 0,
+                status: 'PAID',
                 taxablePercentage: 100,
                 description: `Interest earned on loan to ${existingLoan.partyName || 'borrower'} - ${existingLoan.loanNumber}`,
                 date: data.paymentDate
@@ -206,7 +213,7 @@ export async function POST(
               paymentDate: data.paymentDate
                 ? new Date(data.paymentDate)
                 : new Date(),
-              paymentMethod: data.paymentMethod,
+              paymentMethod: data.paymentMethod as PaymentMethod,
               category: 'INCOME',
               reference: data.reference || null,
               notes: `Interest payment for loan ${existingLoan.loanNumber}`,
@@ -214,7 +221,6 @@ export async function POST(
           });
         } else {
           // Interest expense on loan you received
-          // Check if interest record already exists for this loan
           const existingInterestRecord = await tx.expense.findFirst({
             where: {
               userId,
@@ -225,12 +231,26 @@ export async function POST(
 
           if (existingInterestRecord) {
             // UPDATE existing interest record
+            const newAmount = toTwoDecimals(
+              existingInterestRecord.amount + interestAmount
+            );
+            const newAmountPaid = toTwoDecimals(
+              existingInterestRecord.amountPaid + interestAmount
+            );
+            const newBalance = toTwoDecimals(newAmount - newAmountPaid);
+
             interestRecord = await tx.expense.update({
               where: { id: existingInterestRecord.id },
               data: {
-                amount: toTwoDecimals(
-                  existingInterestRecord.amount + interestAmount
-                ),
+                amount: newAmount,
+                amountPaid: newAmountPaid,
+                balance: newBalance,
+                status:
+                  newBalance <= 0
+                    ? 'PAID'
+                    : newBalance < newAmount
+                      ? 'PARTIALLY_PAID'
+                      : 'UNPAID',
               },
             });
           } else {
@@ -240,6 +260,9 @@ export async function POST(
                 userId,
                 category: 'INTEREST_ON_DEBT',
                 amount: interestAmount,
+                amountPaid: interestAmount,
+                balance: 0,
+                status: 'PAID',
                 description: `Interest paid on loan from ${existingLoan.partyName || 'lender'} - ${existingLoan.loanNumber}`,
                 date: data.paymentDate
                   ? new Date(data.paymentDate)
@@ -261,7 +284,7 @@ export async function POST(
               paymentDate: data.paymentDate
                 ? new Date(data.paymentDate)
                 : new Date(),
-              paymentMethod: data.paymentMethod,
+              paymentMethod: data.paymentMethod as PaymentMethod,
               category: 'EXPENSE',
               reference: data.reference || null,
               notes: `Interest payment for loan ${existingLoan.loanNumber}`,

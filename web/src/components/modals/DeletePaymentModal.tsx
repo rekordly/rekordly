@@ -7,7 +7,6 @@ import {
   ModalHeader,
   ModalBody,
   ModalFooter,
-  useDisclosure,
   addToast,
 } from '@heroui/react';
 import { Trash } from '@phosphor-icons/react';
@@ -21,6 +20,8 @@ interface DeletePaymentModalProps {
   payment: PaymentRecord;
   entityType: 'sale' | 'purchase' | 'quotation' | 'invoice' | 'loan';
   entityId: string;
+  isOpen: boolean;
+  onClose: () => void;
   onSuccess?: () => void;
 }
 
@@ -28,10 +29,10 @@ export function DeletePaymentModal({
   payment,
   entityType,
   entityId,
+  isOpen,
+  onClose,
   onSuccess,
 }: DeletePaymentModalProps) {
-  const { isOpen, onOpen, onClose } = useDisclosure();
-
   // Get the appropriate store based on entity type
   const { updateSale } = useSaleStore();
   const { updatePurchase } = usePurchaseStore();
@@ -74,65 +75,57 @@ export function DeletePaymentModal({
   };
 
   return (
-    <>
-      <Button
-        isIconOnly
-        aria-label="Delete payment"
-        className="min-w-unit-7 w-unit-7 h-unit-7"
-        color="danger"
-        size="sm"
-        variant="light"
-        onPress={onOpen}
-      >
-        <Trash size={16} />
-      </Button>
-
-      {/* Delete Confirmation Modal */}
-      <Modal
-        backdrop="blur"
-        isOpen={isOpen}
-        placement="center"
-        size="xs"
-        onClose={handleClose}
-      >
-        <ModalContent>
-          {() => (
-            <>
-              <ModalHeader className="flex flex-col gap-1 font-heading tracking-tight">
-                Delete Payment
-              </ModalHeader>
-              <ModalBody>
-                <p className="text-sm">
-                  Are you sure you want to delete this payment? This action
-                  cannot be undone.
+    <Modal
+      backdrop="blur"
+      isOpen={isOpen}
+      placement="center"
+      size="xs"
+      onClose={handleClose}
+    >
+      <ModalContent>
+        {() => (
+          <>
+            <ModalHeader className="flex flex-col gap-1">
+              <div className="flex items-center gap-2">
+                <Trash className="text-danger" size={20} />
+                <span className="text-base">Delete Payment</span>
+              </div>
+            </ModalHeader>
+            <ModalBody className="py-4">
+              <p className="text-sm">
+                Are you sure you want to delete this payment? This action cannot
+                be undone.
+              </p>
+              <div className="mt-2 p-2.5 bg-danger-50 dark:bg-danger-900/20 rounded-lg text-xs">
+                <p className="text-danger-800 dark:text-danger-200">
+                  <span className="font-medium">Amount:</span> ₦
+                  {payment.amount.toLocaleString()}
                 </p>
-                <div className="mt-2 p-2 bg-default-100 rounded-lg text-xs">
-                  <p>
-                    <span className="font-medium">Amount:</span> ₦
-                    {payment.amount.toLocaleString()}
-                  </p>
-                </div>
-              </ModalBody>
-              <ModalFooter>
-                <Button
-                  isDisabled={isLoading}
-                  variant="light"
-                  onPress={handleClose}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  color="danger"
-                  isLoading={isLoading}
-                  onPress={handleDeleteConfirm}
-                >
-                  {isLoading ? 'Deleting' : 'Delete'}
-                </Button>
-              </ModalFooter>
-            </>
-          )}
-        </ModalContent>
-      </Modal>
-    </>
+                <p className="text-danger-700 dark:text-danger-300 mt-1">
+                  <span className="font-medium">Method:</span>{' '}
+                  {payment.paymentMethod.replace(/_/g, ' ')}
+                </p>
+              </div>
+            </ModalBody>
+            <ModalFooter>
+              <Button
+                isDisabled={isLoading}
+                variant="light"
+                onPress={handleClose}
+              >
+                Cancel
+              </Button>
+              <Button
+                color="danger"
+                isLoading={isLoading}
+                onPress={handleDeleteConfirm}
+              >
+                {isLoading ? 'Deleting...' : 'Delete'}
+              </Button>
+            </ModalFooter>
+          </>
+        )}
+      </ModalContent>
+    </Modal>
   );
 }

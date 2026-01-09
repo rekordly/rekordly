@@ -21,7 +21,7 @@ import {
   Tooltip,
   addToast,
 } from '@heroui/react';
-import { Income } from '@/types/income';
+import { Income, IncomeRecordStatus } from '@/types/income';
 import { formatCurrency, formatDate } from '@/lib/fn';
 
 interface IncomeCardProps {
@@ -67,6 +67,41 @@ const getSourceConfig = (sourceType: string) => {
   }
 };
 
+const getStatusConfig = (status: IncomeRecordStatus) => {
+  switch (status) {
+    case 'PAID':
+      return {
+        color: 'success' as const,
+        label: 'Paid',
+      };
+    case 'PARTIALLY_PAID':
+      return {
+        color: 'warning' as const,
+        label: 'Partial',
+      };
+    case 'UNPAID':
+      return {
+        color: 'danger' as const,
+        label: 'Unpaid',
+      };
+    case 'REFUNDED':
+      return {
+        color: 'default' as const,
+        label: 'Refunded',
+      };
+    case 'PARTIALLY_REFUNDED':
+      return {
+        color: 'secondary' as const,
+        label: 'Partial Refund',
+      };
+    default:
+      return {
+        color: 'default' as const,
+        label: status,
+      };
+  }
+};
+
 export function IncomeCard({
   income,
   onOtherIncomeClick,
@@ -77,6 +112,7 @@ export function IncomeCard({
   const router = useRouter();
   const { isOpen, onOpen, onClose } = useDisclosure();
   const config = getSourceConfig(income.sourceType);
+  const statusConfig = getStatusConfig(income.status);
   const Icon = config.icon;
 
   const handleClick = () => {
@@ -95,7 +131,8 @@ export function IncomeCard({
     }
   };
 
-  const handleEdit = () => {
+  const handleEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
     onEdit(income);
   };
 
@@ -103,12 +140,6 @@ export function IncomeCard({
     try {
       await onDelete(income.id);
       onClose();
-
-      // addToast({
-      //   title: 'Success',
-      //   description: 'Income deleted successfully',
-      //   color: 'success',
-      // });
     } catch (error: any) {
       addToast({
         title: 'Error',
@@ -155,20 +186,30 @@ export function IncomeCard({
 
         {/* Amount & Status Row */}
         <div className="flex items-center justify-between mb-3">
-          <p className="text-lg font-bold text-foreground">
-            {formatCurrency(income.sourceAmountPaid || income.amount)}
-          </p>
+          <div className="flex flex-col gap-1">
+            <p className="text-lg font-bold text-foreground">
+              {formatCurrency(income.amount)}
+            </p>
+            {income.amountPaid > 0 && income.balance > 0 && (
+              <p className="text-xs text-default-500">
+                Paid: {formatCurrency(income.amountPaid)} | Balance:{' '}
+                {formatCurrency(income.balance)}
+              </p>
+            )}
+          </div>
 
-          <Chip
-            className="h-6 shrink-0"
-            color={config.chipColor}
-            size="sm"
-            variant="flat"
-          >
-            <span className="text-[0.65rem] font-medium">
-              {income.incomeMainCategory || config.label}
-            </span>
-          </Chip>
+          <div className=" items-end shrink-0">
+            <Chip
+              className="h-6"
+              color={statusConfig.color}
+              size="sm"
+              variant="flat"
+            >
+              <span className="text-[0.65rem] font-medium">
+                {statusConfig.label}
+              </span>
+            </Chip>
+          </div>
         </div>
 
         {/* Footer Row: Customer/Vendor & Date & Actions */}
@@ -205,7 +246,7 @@ export function IncomeCard({
               size="sm"
               title="Edit income"
               variant="light"
-              onPress={handleEdit}
+              onClick={handleEdit}
               aria-label="Edit income"
             >
               <Edit size={16} />

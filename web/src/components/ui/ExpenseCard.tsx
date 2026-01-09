@@ -260,7 +260,7 @@ export function ExpenseCard({
   const Icon = config.icon;
 
   const handleClick = () => {
-    if (expense.sourceType === 'OTHER_EXPENSES') {
+    if (expense.sourceType === 'EXPENSE') {
       onOtherExpenseClick(expense);
     } else if (expense.sourceNumber) {
       const sourceTypeMap: Record<string, string> = {
@@ -346,10 +346,10 @@ export function ExpenseCard({
           <div className="flex items-center gap-4 min-w-0 flex-1">
             <div className="flex flex-col gap-0.5 min-w-0">
               <p className="text-[0.65rem] text-default-400 uppercase tracking-wide font-medium">
-                {expense.customerName ? 'Customer' : 'Vendor'}
+                {'Vendor'}
               </p>
               <p className="text-xs font-medium text-default-700 truncate">
-                {expense.customerName || expense.vendorName || 'N/A'}
+                {expense.vendorName || 'N/A'}
               </p>
             </div>
 

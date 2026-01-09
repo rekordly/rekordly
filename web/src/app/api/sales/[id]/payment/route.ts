@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma';
 import { getAuthUser } from '@/lib/utils/server';
 import { addPaymentSchema } from '@/lib/validations/general';
 import { toTwoDecimals } from '@/lib/fn';
+import { PaymentMethod } from '@prisma/client';
 
 export async function POST(
   request: NextRequest,
@@ -44,13 +45,6 @@ export async function POST(
     }
 
     const data = validationResult.data;
-
-    if (!existingSale) {
-      return NextResponse.json(
-        { message: 'Sale not found or unauthorized' },
-        { status: 404 }
-      );
-    }
 
     if (
       existingSale.status === 'REFUNDED' ||
@@ -92,7 +86,7 @@ export async function POST(
           paymentDate: data.paymentDate
             ? new Date(data.paymentDate)
             : new Date(),
-          paymentMethod: data.paymentMethod,
+          paymentMethod: data.paymentMethod as PaymentMethod,
           category: 'INCOME',
           reference: data.reference || null,
           notes: data.notes || null,
@@ -129,6 +123,24 @@ export async function POST(
               name: true,
               email: true,
               phone: true,
+            },
+          },
+          saleItems: {
+            include: {
+              inventoryItem: {
+                select: {
+                  id: true,
+                  name: true,
+                  sku: true,
+                  itemType: true,
+                },
+              },
+              production: {
+                select: {
+                  id: true,
+                  productionNumber: true,
+                },
+              },
             },
           },
           payments: {

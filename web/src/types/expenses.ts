@@ -1,63 +1,127 @@
 import { z } from 'zod';
 import { addExpenseSchema } from '@/lib/validations/expenses';
 import { PaymentMethod } from '@/types/index';
-import { IncomeStatusType } from '@/types/income';
+// import { ExpenseCategory } from '@prisma/client';
 
 export type AddExpenseType = z.infer<typeof addExpenseSchema>;
 
-export type ExpenseSourceType = 'PURCHASE' | 'OTHER_EXPENSES';
+export type ExpenseSourceType = 'PURCHASE' | 'EXPENSE';
+
+// ============================================================================
+// EXPENSE STATUS & PAYMENT TRACKING
+// ============================================================================
+
+export enum ExpenseStatus {
+  UNPAID = 'UNPAID',
+  PARTIALLY_PAID = 'PARTIALLY_PAID',
+  PAID = 'PAID',
+  REFUNDED = 'REFUNDED',
+  PARTIALLY_REFUNDED = 'PARTIALLY_REFUNDED',
+}
+
+// ============================================================================
+// EXPENSE LIST TYPES (matching backend /api/expenses GET response)
+// ============================================================================
 
 export interface Expense {
   id: string;
   date: string;
   amount: number;
-  paymentMethod: PaymentMethod;
+
+  // Payment tracking fields
+  amountPaid: number;
+  balance: number;
+  status: ExpenseStatus;
+
+  paymentMethod: PaymentMethod | 'OTHER' | 'UNPAID';
   reference: string | null;
   notes: string | null;
   sourceType: ExpenseSourceType;
-  sourceId: string | null;
+  sourceId: string;
   sourceNumber: string | null;
   sourceTitle: string | null;
   sourceDescription: string | null;
-  sourceTotalAmount: number | null;
+  sourceTotalAmount: number;
   sourceAmountPaid: number | null;
   sourceBalance: number | null;
-  sourceStatus: IncomeStatusType | null;
+  sourceStatus: string | null;
   refundAmount: number | null;
   refundDate: string | null;
   refundReason: string | null;
   vendorName: string | null;
-  vendorEmail: string | null;
-  vendorPhone: string | null;
-  customerName?: string | null;
-  receipt: string | null;
-  // note: string | null;
-  category: ExpenseCategory | string;
+  vendorEmail?: string | null;
+  vendorPhone?: string | null;
+  category: string;
   subCategory: string | null;
   isDeductible: boolean;
   deductionPercentage: number;
-  isReturn?: boolean;
-  returnDate: string | null;
-  returnReason: string | null;
   includesVAT: boolean;
   vatAmount: number | null;
+  hasPayment: boolean;
+  receipt?: string | null;
+  isReturn?: boolean;
+  returnDate?: string | null;
+  returnReason?: string | null;
+
+  // Related payments
+  payments?: ExpensePayment[];
+}
+
+export interface ExpensePayment {
+  id: string;
+  amount: number;
+  paymentDate: string;
+  paymentMethod: PaymentMethod;
+  reference: string | null;
+  notes: string | null;
+}
+
+export interface ExpenseByType {
+  purchases: {
+    total: number;
+    refunds: number;
+    net: number;
+    cashPaid: number;
+    outstanding: number;
+    breakdown: Record<string, number>;
+  };
+  expenses: {
+    total: number;
+    cashPaid: number;
+    outstanding: number;
+    breakdown: Record<string, number>;
+  };
 }
 
 export interface ExpenseSummary {
+  // Accrual basis
   grossExpenses: number;
   totalPurchaseRefunds: number;
   netExpenses: number;
+
+  // Cash basis
   totalPaid: number;
   balance: number;
+
+  // Payment status breakdown
+  unpaidAmount: number;
+  partiallyPaidAmount: number;
+  paidAmount: number;
+
+  // Averages
   averagePerMonth: number;
   topCategory: string;
+
+  // Tax deductibility
   totalDeductible: number;
   totalNonDeductible: number;
   deductiblePercentage: number;
 
-  // totalRefundsGiven: number;
-  byCategory: Record<string, number>; // Changed from bySource
+  // Breakdown
+  byCategory: Record<string, number>;
   byPaymentMethod: Record<string, number>;
+  byStatus: Record<ExpenseStatus, number>;
+  breakdown: ExpenseByType;
 }
 
 export interface CategoryBreakdown {
@@ -65,6 +129,7 @@ export interface CategoryBreakdown {
   value: number;
   percentage: number;
   deductible: boolean;
+  refundAmount: number;
 }
 
 export interface ExpenseChartData {
@@ -72,8 +137,15 @@ export interface ExpenseChartData {
     month: string;
     amount: number;
     count: number;
+    paid: number;
+    unpaid: number;
   }>;
-  byCategory: CategoryBreakdown[]; // Changed from bySource
+  byCategory: CategoryBreakdown[];
+  byStatus: Array<{
+    status: ExpenseStatus;
+    value: number;
+    percentage: number;
+  }>;
 }
 
 export interface ExpenseMeta {
@@ -82,9 +154,8 @@ export interface ExpenseMeta {
   startDate: string;
   endDate: string;
   totalRecords: number;
-  validExpenseRecords: number;
-  saleRefundRecords: number;
-  quotationRefundRecords: number;
+  purchaseRecords: number;
+  expenseRecords: number;
   currency: string;
 }
 
@@ -96,8 +167,12 @@ export interface ExpenseResponse {
   data: Expense[];
 }
 
+// ============================================================================
+// STORE INTERFACE
+// ============================================================================
+
 export interface ExpenseStore {
-  allExpense: Expense[];
+  allExpenses: Expense[];
   displayedExpenses: Expense[];
   filteredExpenses: Expense[];
   summary: ExpenseSummary | null;
@@ -110,6 +185,7 @@ export interface ExpenseStore {
   searchQuery: string;
   displayCount: number;
   sourceFilter: ExpenseSourceType | 'ALL';
+  statusFilter: ExpenseStatus | 'ALL';
   dateFilter: {
     start: any;
     end: any;
@@ -121,6 +197,7 @@ export interface ExpenseStore {
   loadMoreDisplayed: () => void;
   searchExpenses: (query: string) => void;
   setSourceFilter: (source: ExpenseSourceType | 'ALL') => void;
+  setStatusFilter: (status: ExpenseStatus | 'ALL') => void;
   setDateFilter: (dateRange: { start: any; end: any } | null) => void;
   applyFilters: () => void;
   deleteExpense: (
@@ -129,12 +206,15 @@ export interface ExpenseStore {
     sourceId: string | null
   ) => Promise<void>;
   clearSearch: () => void;
-  refreshExpense: () => Promise<void>;
+  refreshExpenses: () => Promise<void>;
   reset: () => void;
 }
 
+// ============================================================================
+// EXPENSE CATEGORIES (Keep existing)
+// ============================================================================
+
 export enum ExpenseCategory {
-  // Fully Deductible Business Expenses
   COST_OF_GOODS = 'COST_OF_GOODS',
   RENT_RATES = 'RENT_RATES',
   UTILITIES = 'UTILITIES',
@@ -148,37 +228,23 @@ export enum ExpenseCategory {
   ADVERTISING = 'ADVERTISING',
   BANK_CHARGES = 'BANK_CHARGES',
   TRAINING = 'TRAINING',
-
-  // Partially Deductible Business Expenses
   INTEREST_ON_DEBT = 'INTEREST_ON_DEBT',
   BAD_DEBTS = 'BAD_DEBTS',
   DONATIONS = 'DONATIONS',
   DEPRECIATION = 'DEPRECIATION',
   RESEARCH_DEVELOPMENT = 'RESEARCH_DEVELOPMENT',
   ENTERTAINMENT = 'ENTERTAINMENT',
-
-  // Individual/Employee Expenses
   PERSONAL_EXPENSES = 'PERSONAL_EXPENSES',
   RESIDENTIAL_RENT = 'RESIDENTIAL_RENT',
   TRANSPORTATION = 'TRANSPORTATION',
-
-  // Non-Deductible Expenses
   FINES_PENALTIES = 'FINES_PENALTIES',
   BENEFITS_IN_KIND = 'BENEFITS_IN_KIND',
   NON_APPROVED_PENSION = 'NON_APPROVED_PENSION',
   PERSONAL_LIVING_EXPENSES = 'PERSONAL_LIVING_EXPENSES',
-
-  // Refunds
-  // Other Expenses
   OTHER = 'OTHER',
 }
 
-// ============================================================================
-// EXPENSE CATEGORIES WITH EMBEDDED TAX PROPERTIES
-// ============================================================================
-
 export const expensesCategories = [
-  // Fully Deductible Business Expenses
   {
     value: ExpenseCategory.COST_OF_GOODS,
     label: 'Cost of Goods Sold',
@@ -387,8 +453,6 @@ export const expensesCategories = [
     description: 'Training and development expenses',
     note: 'Fully deductible when directly related to business operations',
   },
-
-  // Partially Deductible Business Expenses
   {
     value: ExpenseCategory.INTEREST_ON_DEBT,
     label: 'Interest on Debt',
@@ -474,8 +538,6 @@ export const expensesCategories = [
     description: 'Entertainment expenses',
     note: 'Often 50% or less deductible as per Section 21 of the Tax Act',
   },
-
-  // Individual/Employee Expenses
   {
     value: ExpenseCategory.PERSONAL_EXPENSES,
     label: 'Personal Expenses',
@@ -524,8 +586,6 @@ export const expensesCategories = [
     description: 'Business transportation and travel expenses',
     note: 'For employed individuals, only work-related transportation is deductible',
   },
-
-  // Non-Deductible Expenses
   {
     value: ExpenseCategory.FINES_PENALTIES,
     label: 'Fines & Penalties',
@@ -582,8 +642,6 @@ export const expensesCategories = [
     description: 'Personal living expenses (non-deductible)',
     note: 'Explicitly non-deductible as per Section 21 of the Tax Act',
   },
-
-  // Other Expenses
   {
     value: ExpenseCategory.OTHER,
     label: 'Other Expenses',

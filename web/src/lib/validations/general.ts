@@ -1,13 +1,17 @@
+import {
+  PaymentMethod,
+  PayableType,
+  InvoiceStatus,
+  QuotationStatus,
+  SaleSourceType,
+  SaleStatus,
+  PurchaseStatus,
+  PaymentCategory,
+  IncomeMainCategory,
+} from '@prisma/client';
 import { z } from 'zod';
 
-export const PaymentMethodSchema = z.enum([
-  'CASH',
-  'BANK_TRANSFER',
-  'CARD',
-  'MOBILE_MONEY',
-  'CHEQUE',
-  'OTHER',
-]);
+export const PaymentMethodSchema = z.nativeEnum(PaymentMethod);
 
 export const validRegistrationTypes = [
   'Not yet registered',
@@ -67,45 +71,87 @@ export const reportQuerySchema = z.object({
   openingBalance: z.string().optional(),
 });
 
-// lib/validations/general.ts
+// Base refund schema with common fields
+const BaseRefundSchema = z.object({
+  refundAmount: z
+    .number({
+      message: 'Refund amount must be a number',
+    })
+    .positive('Refund amount must be greater than 0')
+    .min(0.01, 'Refund amount must be at least ₦0.01'),
+  refundReason: z
+    .string({
+      message: 'Refund reason is required',
+    })
+    .min(3, 'Refund reason must be at least 3 characters')
+    .max(500, 'Refund reason must not exceed 500 characters'),
+  refundDate: z.union([z.string(), z.date()]).default(() => new Date()),
+  paymentMethod: z
+    .enum(['CASH', 'BANK_TRANSFER', 'CARD', 'MOBILE_MONEY', 'CHEQUE', 'OTHER'])
+    .optional()
+    .default('BANK_TRANSFER'),
+  reference: z.string().optional(),
+  restoreInventory: z.boolean().optional().default(true),
+});
 
-export const RefundSchema = z
-  .object({
-    refundAmount: z
-      .number({
-        message: 'Refund amount must be a number',
-      })
-      .positive('Refund amount must be greater than 0')
-      .min(0.01, 'Refund amount must be at least ₦0.01'),
-    refundReason: z
-      .string({
-        message: 'Refund reason is required',
-      })
-      .min(3, 'Refund reason must be at least 3 characters')
-      .max(500, 'Refund reason must not exceed 500 characters'),
-    refundDate: z.union([z.string(), z.date()]).default(() => new Date()),
-    paymentMethod: z
-      .enum([
-        'CASH',
-        'BANK_TRANSFER',
-        'CARD',
-        'MOBILE_MONEY',
-        'CHEQUE',
-        'OTHER',
-      ])
-      .optional()
-      .default('BANK_TRANSFER'),
-    reference: z.string().optional(),
-  })
-  .transform(data => ({
-    ...data,
-    refundDate:
-      data.refundDate instanceof Date
-        ? data.refundDate
-        : new Date(data.refundDate),
-  }));
+// Sale-specific refund item schema
+export const SaleRefundItemSchema = z.object({
+  saleItemId: z.string(),
+  quantity: z.number().positive(),
+});
 
-export type RefundType = z.infer<typeof RefundSchema>;
+// Purchase-specific refund item schema
+export const PurchaseRefundItemSchema = z.object({
+  purchaseItemId: z.string(),
+  quantity: z.number().positive(),
+});
+
+// Invoice-specific refund item schema (if needed)
+export const InvoiceRefundItemSchema = z.object({
+  invoiceItemId: z.string(),
+  quantity: z.number().positive(),
+});
+
+// Sale Refund Schema
+export const SaleRefundSchema = BaseRefundSchema.extend({
+  refundItems: z.array(SaleRefundItemSchema).optional(),
+}).transform(data => ({
+  ...data,
+  refundDate:
+    data.refundDate instanceof Date
+      ? data.refundDate
+      : new Date(data.refundDate),
+}));
+
+// Purchase Refund Schema
+export const PurchaseRefundSchema = BaseRefundSchema.extend({
+  refundItems: z.array(PurchaseRefundItemSchema).optional(),
+}).transform(data => ({
+  ...data,
+  refundDate:
+    data.refundDate instanceof Date
+      ? data.refundDate
+      : new Date(data.refundDate),
+}));
+
+// Invoice Refund Schema
+export const InvoiceRefundSchema = BaseRefundSchema.extend({
+  refundItems: z.array(InvoiceRefundItemSchema).optional(),
+}).transform(data => ({
+  ...data,
+  refundDate:
+    data.refundDate instanceof Date
+      ? data.refundDate
+      : new Date(data.refundDate),
+}));
+
+// Type exports for use in components/routes
+export type SaleRefundInput = z.infer<typeof SaleRefundSchema>;
+export type PurchaseRefundInput = z.infer<typeof PurchaseRefundSchema>;
+export type InvoiceRefundInput = z.infer<typeof InvoiceRefundSchema>;
+
+// Legacy export for backward compatibility (remove after migration)
+export const RefundSchema = SaleRefundSchema;
 
 // Edit Payment Schema
 
@@ -113,53 +159,17 @@ export type RefundType = z.infer<typeof RefundSchema>;
 // ENUMS
 // ============================================
 
-export const InvoiceStatusSchema = z.enum([
-  'DRAFT',
-  'SENT',
-  'CONVERTED',
-  'OVERDUE',
-  'CANCELLED',
-]);
+export const InvoiceStatusSchema = z.enum(InvoiceStatus);
+export const QuotationStatusSchema = z.enum(QuotationStatus);
+export const PurchaseStatusSchema = z.enum(PurchaseStatus);
 
-export const QuotationStatusSchema = z.enum([
-  'DRAFT',
-  'SENT',
-  'UNPAID',
-  'PARTIALLY_PAID',
-  'PAID',
-  'EXPIRED',
-  'CANCELLED',
-  'REFUNDED',
-  'PARTIALLY_REFUNDED',
-]);
+export const SaleSourceTypeSchema = z.enum(SaleSourceType);
+export const SaleStatusSchema = z.enum(SaleStatus);
 
-export const SaleSourceTypeSchema = z.enum(['DIRECT', 'FROM_INVOICE']);
+export const PayableTypeSchema = z.enum(PayableType);
+export const PaymentCategorySchema = z.enum(PaymentCategory);
 
-export const SaleStatusSchema = z.enum([
-  'UNPAID',
-  'PARTIALLY_PAID',
-  'PAID',
-  'REFUNDED',
-  'PARTIALLY_REFUNDED',
-]);
-
-export const PurchaseStatusSchema = z.enum([
-  'UNPAID',
-  'PARTIALLY_PAID',
-  'PAID',
-  'REFUNDED', // Added
-  'PARTIALLY_REFUNDED', // Added
-]);
-
-export const PayableTypeSchema = z.enum(['QUOTATION', 'SALE', 'PURCHASE']);
-
-export const PaymentCategorySchema = z.enum(['INCOME', 'EXPENSE']);
-
-export const IncomeMainCategorySchema = z.enum([
-  'BUSINESS_PROFIT',
-  'EMPLOYMENT_INCOME',
-  'TRUST_ESTATE_INCOME',
-]);
+export const IncomeMainCategorySchema = z.enum(IncomeMainCategory);
 
 export const IncomeSubCategorySchema = z.enum([
   // A. Business/Trade Income

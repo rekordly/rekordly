@@ -6,22 +6,22 @@ import { SaleStore, Sale } from '@/types/sales';
 import { SaleStatusType } from '@/types';
 
 const RENDER_LIMIT = 20;
-const CACHE_DURATION = 5 * 60 * 1000;
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 export const useSaleStore = create<SaleStore>()(
   persist(
     (set, get) => ({
-      allSales: [],
-      displayedSales: [],
-      filteredSales: [],
+      allSales: [] as Sale[],
+      displayedSales: [] as Sale[],
+      filteredSales: [] as Sale[],
       isInitialLoading: false,
       isPaginating: false,
       isDeleting: false,
-      error: null,
+      error: null as string | null,
       searchQuery: '',
       displayCount: RENDER_LIMIT,
-      statusFilter: 'ALL',
-      lastFetchTime: null,
+      statusFilter: 'ALL' as SaleStatusType | 'ALL',
+      lastFetchTime: null as number | null,
 
       fetchSales: async (forceRefresh = false) => {
         const { lastFetchTime, allSales } = get();
@@ -91,6 +91,38 @@ export const useSaleStore = create<SaleStore>()(
         get().applyFilters();
       },
 
+      searchSalesInDB: async (query: string) => {
+        const { filteredSales } = get();
+
+        if (filteredSales.length > 0 || !query.trim()) {
+          return;
+        }
+
+        set({ isPaginating: true });
+
+        try {
+          const response = await api.get(
+            `/sales/search?q=${encodeURIComponent(query)}`
+          );
+          const results = response.data.sales || [];
+
+          const { allSales } = get();
+          const existingIds = new Set(allSales.map(sale => sale.id));
+          const newSales = results.filter(
+            (sale: any) => !existingIds.has(sale.id)
+          );
+
+          set({
+            allSales: [...allSales, ...newSales],
+            isPaginating: false,
+          });
+
+          get().applyFilters();
+        } catch {
+          set({ isPaginating: false });
+        }
+      },
+
       setStatusFilter: (status: SaleStatusType | 'ALL') => {
         set({ statusFilter: status, displayCount: RENDER_LIMIT });
         get().applyFilters();
@@ -128,7 +160,8 @@ export const useSaleStore = create<SaleStore>()(
         // Sort by date (newest first)
         filtered.sort(
           (a, b) =>
-            new Date(b.saleDate).getTime() - new Date(a.saleDate).getTime()
+            new Date(b.saleDate as string | Date).getTime() -
+            new Date(a.saleDate as string | Date).getTime()
         );
 
         set({
@@ -137,43 +170,24 @@ export const useSaleStore = create<SaleStore>()(
         });
       },
 
-      searchSalesInDB: async (query: string) => {
-        const { filteredSales } = get();
-
-        if (filteredSales.length > 0 || !query.trim()) {
-          return;
-        }
-
-        set({ isPaginating: true });
-
-        try {
-          const response = await api.get(
-            `/sales/search?q=${encodeURIComponent(query)}`
-          );
-          const results = response.data.sales || [];
-
-          const { allSales } = get();
-          const existingIds = new Set(allSales.map(sale => sale.id));
-          const newSales = results.filter(
-            (sale: any) => !existingIds.has(sale.id)
-          );
-
-          set({
-            allSales: [...allSales, ...newSales],
-            isPaginating: false,
-          });
-
-          get().applyFilters();
-        } catch {
-          set({ isPaginating: false });
-        }
-      },
-
-      // ✅ Get single sale by receipt number
       getSaleByReceiptNumber: (receiptNumber: string): Sale | undefined => {
         const { allSales } = get();
-
         return allSales.find(sale => sale.receiptNumber === receiptNumber);
+      },
+
+      // ✅ Helper: Calculate total from saleItems
+      getSaleItemsTotal: (saleId: string): number => {
+        const { allSales } = get();
+        const sale = allSales.find(s => s.id === saleId);
+
+        if (!sale || !sale.saleItems || sale.saleItems.length === 0) {
+          return 0;
+        }
+
+        return sale.saleItems.reduce(
+          (sum: number, item: any) => sum + (item.amount || 0),
+          0
+        );
       },
 
       updateSale: (saleId: string, updatedData: Partial<Sale>) => {
@@ -192,15 +206,16 @@ export const useSaleStore = create<SaleStore>()(
 
       addSale: (sale: Sale) => {
         const { allSales } = get();
-
         set({ allSales: [...allSales, sale] });
         get().applyFilters();
       },
 
       deleteSale: async (id: string) => {
         set({ isDeleting: true });
+
         try {
           await api.delete(`/sales/${id}`);
+
           const { allSales } = get();
           const updatedSales = allSales.filter(sale => sale.id !== id);
 
@@ -209,6 +224,7 @@ export const useSaleStore = create<SaleStore>()(
             lastFetchTime: Date.now(),
             isDeleting: false,
           });
+
           get().applyFilters();
         } catch (error) {
           set({ isDeleting: false });

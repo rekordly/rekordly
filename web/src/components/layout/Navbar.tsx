@@ -12,6 +12,7 @@ import {
 } from '@heroui/navbar';
 import { Link } from '@heroui/link';
 import { Button } from '@heroui/button';
+import { ThemeToggle } from '@/components/theme-toggle';
 
 interface MenuItem {
   name: string;
@@ -69,6 +70,7 @@ export default function Navbar() {
           aria-label={isMenuOpen ? 'Close menu' : 'Open menu'}
           className="sm:hidden text-brand-foreground"
         />
+        <ThemeToggle />
         <NavbarItem>
           <Button
             className="border-2 bg-brand border-brand text-foreground hover:bg-brand hover:text-brand-foreground transition-all font-medium"

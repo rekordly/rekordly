@@ -8,6 +8,7 @@ import { useEffect } from 'react';
 import { formatCurrency } from '@/lib/fn';
 import { VAT_RATE } from '@/config/constant';
 import { SaleItemType, OtherCostType } from '@/types/sales';
+import { CheckCircle } from 'lucide-react';
 
 export function SaleSummary() {
   const { setValue, watch } = useFormContext();
@@ -74,36 +75,62 @@ export function SaleSummary() {
     discountAmount > 0;
 
   return (
-    <Card className="w-full rounded-3xl p-4 px-2" shadow="none">
-      <CardBody>
-        <div className="space-y-3">
-          <h4 className="text-sm font-medium text-foreground">Sale Summary</h4>
-          <Divider />
+    <Card
+      className="bg-linear-to-br from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 border border-green-200 dark:border-green-800"
+      shadow="none"
+    >
+      <CardBody className="p-3">
+        <div className="space-y-2">
+          <h4 className="text-base font-semibold flex items-center gap-2">
+            <CheckCircle className="w-5 h-5 text-green-600" />
+            Sale Summary
+          </h4>
 
           {!hasItems ? (
             <p className="text-sm text-default-500 text-center py-4">
               No items added yet
             </p>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-1">
+              {/* --- ITEMS LIST SECTION --- */}
+              <div className="space-y-1">
+                {items.map((item, index) => (
+                  <div
+                    key={item.id || index}
+                    className="flex justify-between items-center text-sm"
+                  >
+                    {/* Left Side: Item Name + Qty/Rate */}
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      <span className="font-medium text-foreground truncate">
+                        {item.itemName}
+                      </span>
+                      <span className="text-default-500 whitespace-nowrap">
+                        {item.quantity} x {formatCurrency(item.unitPrice)}
+                      </span>
+                    </div>
+
+                    {/* Right Side: Amount */}
+                    <span className="font-medium text-foreground whitespace-nowrap ml-2">
+                      {formatCurrency(item.amount)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <Divider className="my-2" />
+
               {/* Items Subtotal */}
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-default-600">
-                  Items ({items.length})
-                </span>
-                <span className="text-sm font-medium">
-                  {formatCurrency(subtotal)}
-                </span>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-default-600">Items Subtotal</span>
+                <span className="font-medium">{formatCurrency(subtotal)}</span>
               </div>
 
               {/* Additional Charges/Deductions */}
               {hasAdditions && (
-                <>
+                <div className="space-y-0.5">
                   {includeVAT && (
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-default-600">
-                        VAT (7.5%)
-                      </span>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-default-600">VAT (7.5%)</span>
                       <span className="text-sm font-medium">
                         +{formatCurrency(vatAmount)}
                       </span>
@@ -111,8 +138,8 @@ export function SaleSummary() {
                   )}
 
                   {discountAmount > 0 && (
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-default-600">Discount</span>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-default-600">Discount</span>
                       <span className="text-sm font-medium text-danger">
                         -{formatCurrency(discountAmount)}
                       </span>
@@ -120,8 +147,8 @@ export function SaleSummary() {
                   )}
 
                   {deliveryCost > 0 && (
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-default-600">Delivery</span>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-default-600">Delivery</span>
                       <span className="text-sm font-medium">
                         +{formatCurrency(deliveryCost)}
                       </span>
@@ -129,8 +156,8 @@ export function SaleSummary() {
                   )}
 
                   {otherCostsTotal > 0 && (
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-default-600">
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-default-600">
                         Other Costs ({otherCosts.length})
                       </span>
                       <span className="text-sm font-medium">
@@ -138,10 +165,10 @@ export function SaleSummary() {
                       </span>
                     </div>
                   )}
-
-                  <Divider />
-                </>
+                </div>
               )}
+
+              <Divider className="my-2" />
 
               {/* Total Amount */}
               <div className="flex justify-between items-center pt-1">
@@ -156,17 +183,15 @@ export function SaleSummary() {
               {/* Payment Info */}
               {amountPaid > 0 && (
                 <>
-                  <Divider />
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-default-600">
-                      Amount Paid
-                    </span>
+                  <Divider className="my-2" />
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-default-600">Amount Paid</span>
                     <span className="text-sm font-medium">
                       {formatCurrency(amountPaid)}
                     </span>
                   </div>
 
-                  <div className="flex justify-between items-center">
+                  <div className="flex justify-between items-center text-sm">
                     <span className="text-sm font-medium text-foreground">
                       Balance
                     </span>

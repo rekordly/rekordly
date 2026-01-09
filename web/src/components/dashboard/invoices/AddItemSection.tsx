@@ -118,13 +118,15 @@ export function AddItemSection() {
   };
 
   return (
-    <Card className="w-full rounded-3xl p-4 px-2" shadow="none">
-      <CardBody>
+    <Card
+      className="w-full rounded-2xl p-3 bg-transparent border border-default-200"
+      shadow="none"
+    >
+      <CardBody className="p-0">
         <div className="space-y-4">
-          <h4 className="text-sm font-semibold text-foreground">
+          <h4 className="text-base font-semibold text-foreground">
             Add Invoice Items
           </h4>
-          <Divider />
 
           <div className="space-y-4">
             <div className="grid md:grid-cols-2 gap-3">

@@ -17,7 +17,7 @@ export function SaleInfoSection({ sale }: SaleInfoSectionProps) {
     <div className="space-y-3">
       {/* Receipt Number & Status Card */}
       <Card
-        className="w-full rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 dark:from-primary-600 dark:to-primary-800"
+        className="w-full rounded-xl bg-linear-to-br from-primary-500 to-primary-600 dark:from-primary-600 dark:to-primary-800"
         shadow="sm"
       >
         <CardBody className="p-4">

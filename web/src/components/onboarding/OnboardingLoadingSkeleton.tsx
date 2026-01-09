@@ -6,7 +6,7 @@ export const OnboardingLoadingSkeleton: React.FC = () => {
   return (
     <div className="min-h-screen flex">
       {/* Left Side Skeleton */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-blue-600 via-purple-600 to-pink-500 items-center justify-center p-12">
+      <div className="hidden lg:flex lg:w-1/2 bg-linear-to-br from-blue-600 via-purple-600 to-pink-500 items-center justify-center p-12">
         <div className="text-white text-center max-w-lg space-y-6">
           <Skeleton className="h-12 w-3/4 mx-auto rounded-lg bg-white/20" />
           <Skeleton className="h-6 w-full rounded-lg bg-white/20" />

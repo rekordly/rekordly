@@ -1,120 +1,125 @@
-// lib/cloudinary.ts
-
-import { v2 as cloudinary } from 'cloudinary';
+import { v2 as cloudinary, UploadApiResponse } from 'cloudinary';
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
+  secure: true,
 });
 
 export default cloudinary;
 
-// Helper function to upload image with compression
+export const MAX_IMAGE_SIZE = 100 * 1024;
+
+export function extractPublicIdFromUrl(url: string): string | null {
+  try {
+    const urlParts = url.split('/');
+    const uploadIndex = urlParts.indexOf('upload');
+    if (uploadIndex === -1) return null;
+    const pathParts = urlParts.slice(uploadIndex + 2);
+    const publicIdWithExtension = pathParts.join('/');
+    return publicIdWithExtension.replace(/\.[^/.]+$/, '');
+  } catch {
+    return null;
+  }
+}
+
+interface UploadOptions {
+  folder: string;
+  publicId?: string;
+  maxWidth?: number;
+  maxHeight?: number;
+  gravity?: string;
+  quality?: number | 'auto:low';
+}
+
+async function uploadToCloudinary(
+  file: File,
+  options: UploadOptions,
+  oldImageUrl?: string | null
+): Promise<{ url: string; publicId: string }> {
+  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+  if (!allowedTypes.includes(file.type)) throw new Error('Invalid file type');
+
+  const maxSize = 5 * 1024 * 1024;
+  if (file.size > maxSize) throw new Error('File too large');
+
+  if (oldImageUrl) {
+    const oldPublicId = extractPublicIdFromUrl(oldImageUrl);
+    if (oldPublicId)
+      await cloudinary.uploader.destroy(oldPublicId).catch(console.error);
+  }
+
+  const bytes = await file.arrayBuffer();
+  const buffer = Buffer.from(bytes);
+
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        folder: options.folder,
+        public_id: options.publicId,
+        resource_type: 'image',
+        transformation: [
+          {
+            width: options.maxWidth,
+            height: options.maxHeight,
+            crop: options.gravity ? 'fill' : 'limit',
+            gravity: options.gravity,
+          },
+          { quality: options.quality || 'auto:low', fetch_format: 'webp' },
+        ],
+      },
+      (error, result) => {
+        if (error || !result) reject(error || new Error('Upload failed'));
+        else if (result.bytes > MAX_IMAGE_SIZE)
+          console.warn(
+            `Image size ${(result.bytes / 1024).toFixed(2)}KB exceeds 100KB`
+          );
+        else resolve({ url: result.secure_url, publicId: result.public_id });
+      }
+    );
+    uploadStream.end(buffer);
+  });
+}
+
 export async function uploadProfileImage(
   file: File,
   userId: string,
   oldImageUrl?: string | null
 ): Promise<{ url: string; publicId: string }> {
-  try {
-    // Convert file to base64
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    const base64 = buffer.toString('base64');
-    const dataUri = `data:${file.type};base64,${base64}`;
-
-    // Delete old image if exists
-    if (oldImageUrl) {
-      const publicId = extractPublicIdFromUrl(oldImageUrl);
-      if (publicId) {
-        try {
-          await cloudinary.uploader.destroy(publicId);
-        } catch (error) {
-          console.error('Failed to delete old image:', error);
-        }
-      }
-    }
-
-    // Upload with compression and transformations
-    const result = await cloudinary.uploader.upload(dataUri, {
+  return uploadToCloudinary(
+    file,
+    {
       folder: 'user-profiles',
-      public_id: `profile_${userId}_${Date.now()}`,
-      resource_type: 'image',
-      transformation: [
-        { width: 400, height: 400, crop: 'fill', gravity: 'face' },
-        { quality: 'auto:low', fetch_format: 'auto' },
-      ],
-      format: 'jpg',
-    });
-
-    // Check if compressed size is within limits (50-100kb)
-    const imageSizeKb = result.bytes / 1024;
-
-    if (imageSizeKb > 100) {
-      // Try more aggressive compression
-      const compressedResult = await cloudinary.uploader.upload(dataUri, {
-        folder: 'user-profiles',
-        public_id: `profile_${userId}_${Date.now()}_compressed`,
-        resource_type: 'image',
-        transformation: [
-          { width: 300, height: 300, crop: 'fill', gravity: 'face' },
-          { quality: '60', fetch_format: 'auto' },
-        ],
-        format: 'jpg',
-      });
-
-      const compressedSizeKb = compressedResult.bytes / 1024;
-
-      if (compressedSizeKb > 100) {
-        // Delete the uploaded images
-        await cloudinary.uploader.destroy(result.public_id);
-        await cloudinary.uploader.destroy(compressedResult.public_id);
-        throw new Error(
-          'File too large. Even after compression, the image exceeds 100KB. Please use a smaller image.'
-        );
-      }
-
-      // Delete the first attempt, use compressed version
-      await cloudinary.uploader.destroy(result.public_id);
-
-      return {
-        url: compressedResult.secure_url,
-        publicId: compressedResult.public_id,
-      };
-    }
-
-    return {
-      url: result.secure_url,
-      publicId: result.public_id,
-    };
-  } catch (error: any) {
-    console.error('Cloudinary upload error:', error);
-    throw new Error(error.message || 'Failed to upload image');
-  }
+      publicId: `profile_${userId}_${Date.now()}`,
+      maxWidth: 400,
+      maxHeight: 400,
+      gravity: 'face',
+      quality: 'auto:low',
+    },
+    oldImageUrl
+  );
 }
 
-// Helper to extract public_id from Cloudinary URL
-function extractPublicIdFromUrl(url: string): string | null {
-  try {
-    // Example URL: https://res.cloudinary.com/dz6mwizhh/image/upload/v1234567890/user-profiles/profile_123.jpg
-    const urlParts = url.split('/');
-    const uploadIndex = urlParts.indexOf('upload');
-
-    if (uploadIndex !== -1 && urlParts.length > uploadIndex + 2) {
-      // Get everything after 'upload/v{version}/'
-      const pathParts = urlParts.slice(uploadIndex + 2);
-      const publicIdWithExtension = pathParts.join('/');
-
-      // Remove file extension
-      const publicId = publicIdWithExtension.replace(/\.[^/.]+$/, '');
-      return publicId;
-    }
-
-    return null;
-  } catch (error) {
-    console.error('Failed to extract public_id:', error);
-    return null;
-  }
+export async function uploadInventoryImage(
+  file: File,
+  userId: string,
+  oldImageUrl?: string | null
+): Promise<{ url: string; publicId: string }> {
+  return uploadToCloudinary(
+    file,
+    {
+      folder: `inventory/${userId}`,
+      maxWidth: 800,
+      maxHeight: 800,
+      quality: 60,
+    },
+    oldImageUrl
+  );
 }
 
-export { extractPublicIdFromUrl };
+export async function deleteImage(imageUrl: string): Promise<void> {
+  const publicId = extractPublicIdFromUrl(imageUrl);
+  if (!publicId) throw new Error('Invalid image URL');
+  await cloudinary.uploader.destroy(publicId);
+}

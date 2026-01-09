@@ -1,34 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 
 import { prisma } from '@/lib/prisma';
 import { getAuthUser } from '@/lib/utils/server';
-import { resolveCustomer } from '@/lib/utils/customer';
-import { quotationSchema } from '@/lib/validations/quotations';
+import { CreateQuotationSchema } from '@/lib/validations/quotations';
 import { generateQuotationNumber, toTwoDecimals } from '@/lib/fn';
+import { validateRequest } from '@/lib/utils/validation';
+import { resolveCustomer } from '@/lib/utils/customer';
+import { PaymentMethod } from '@prisma/client';
 
 export async function POST(request: NextRequest) {
   try {
     const { userId } = await getAuthUser(request);
 
-    const body = await request.json();
-    const validationResult = quotationSchema.safeParse(body);
-
-    if (!validationResult.success) {
-      return NextResponse.json(
-        {
-          error: 'Validation failed1',
-          message: validationResult.error.flatten().fieldErrors,
-        },
-        { status: 400 }
-      );
-    }
-
-    const data = validationResult.data;
+    const data = await validateRequest(request, CreateQuotationSchema);
 
     const { customerId, customerName, customerEmail, customerPhone, customer } =
       await resolveCustomer(userId, data.customer, data.addAsNewCustomer);
 
+    // Generate unique quotation number
     let quotationNumber = generateQuotationNumber(userId);
     let attempts = 0;
 
@@ -52,17 +41,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const materials = data.materials.map(item => ({
+    // Process line items with proper decimal conversion
+    const lineItems = data.lineItems.map(item => ({
       ...item,
       unitPrice: toTwoDecimals(item.unitPrice),
-      total: toTwoDecimals(item.total),
-    }));
-
-    const otherCosts = data.otherCosts.map(item => ({
-      ...item,
       amount: toTwoDecimals(item.amount),
     }));
 
+    // Process other costs if provided
+    const otherCosts =
+      data.otherCosts?.map(cost => ({
+        ...cost,
+        amount: toTwoDecimals(cost.amount),
+      })) || [];
+
+    // Store lineItems as JSON in database
     const quotation = await prisma.quotation.create({
       data: {
         quotationNumber,
@@ -71,26 +64,52 @@ export async function POST(request: NextRequest) {
         customerName,
         customerEmail,
         customerPhone,
-        title: data.quotationTitle,
-        description: data.quotationDescription,
-        materials,
-        materialsTotal: toTwoDecimals(data.materialsTotal),
-        workmanship: toTwoDecimals(data.workmanship),
-        otherCosts,
-        otherCostsTotal: toTwoDecimals(data.otherCostsTotal),
+        title: data.title,
+        description: data.description || null,
+
+        // NEW: Universal line items JSON
+        lineItems,
+        subtotal: toTwoDecimals(data.subtotal),
+
+        discountType: data.discountType || null,
+        discountValue: data.discountValue
+          ? toTwoDecimals(data.discountValue)
+          : null,
+        discountAmount: toTwoDecimals(data.discountAmount || 0),
+
         includeVAT: data.includeVAT,
         vatAmount: toTwoDecimals(data.vatAmount || 0),
         totalAmount: toTwoDecimals(data.totalAmount),
-        // amountPaid: toTwoDecimals(data.amountPaid || 0),
-        balance: toTwoDecimals(data.totalAmount),
-        issueDate: new Date(data.issueDate),
-        validUntil: data.validUntil ? new Date(data.validUntil) : null,
+
+        amountPaid: toTwoDecimals(data.amountPaid || 0),
+        balance: toTwoDecimals(data.balance),
+
         status: data.status || 'DRAFT',
+        validUntil: data.validUntil ? new Date(data.validUntil) : null,
+        issueDate: new Date(data.issueDate),
       },
       include: {
         customer: true,
       },
     });
+
+    // Create payment record if amount was paid
+    let payment = null;
+    if (data.amountPaid > 0) {
+      payment = await prisma.payment.create({
+        data: {
+          userId,
+          payableType: 'QUOTATION',
+          quotationId: quotation.id,
+          amount: toTwoDecimals(data.amountPaid),
+          paymentDate: new Date(data.issueDate),
+          paymentMethod:
+            (data.paymentMethod as PaymentMethod) || 'BANK_TRANSFER',
+          category: 'INCOME',
+          notes: `Payment for quotation ${quotationNumber}`,
+        },
+      });
+    }
 
     return NextResponse.json(
       {
@@ -100,6 +119,7 @@ export async function POST(request: NextRequest) {
             : 'Quotation saved as draft',
         success: true,
         quotation,
+        payment,
         customer,
       },
       { status: 201 }
@@ -107,23 +127,16 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Create quotation error:', error);
 
+    if (error instanceof NextResponse) return error;
+
     if (error instanceof Error && error.message.includes('Unauthorized')) {
       return NextResponse.json({ message: error.message }, { status: 401 });
-    }
-
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { message: 'Validation error', errors: error.flatten().fieldErrors },
-        { status: 400 }
-      );
     }
 
     return NextResponse.json(
       { message: 'Internal server error' },
       { status: 500 }
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }
 
@@ -167,6 +180,20 @@ export async function GET(request: NextRequest) {
               payableType: true,
               reference: true,
               notes: true,
+            },
+            orderBy: {
+              paymentDate: 'desc',
+            },
+          },
+          createdPurchases: {
+            select: {
+              id: true,
+              purchaseNumber: true,
+              totalAmount: true,
+              status: true,
+            },
+            orderBy: {
+              createdAt: 'desc',
             },
           },
         },

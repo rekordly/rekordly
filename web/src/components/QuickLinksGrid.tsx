@@ -8,7 +8,7 @@ import { CreateInvoiceDrawer } from '@/components/drawer/CreateInvoiceDrawer';
 import { AddIncomeDrawer } from '@/components/drawer/AddIncomeDrawer';
 import { AddExpensesDrawer } from '@/components/drawer/AddExpensesDrawer';
 import { useInvoiceStore } from '@/store/invoiceStore';
-import { useIncomeStore } from '@/store/income-store';
+// import { useIncomeStore } from '@/store/income-store';
 import { useExpenseStore } from '@/store/expense-store';
 import { CreateSaleDrawer } from './drawer/CreateSaleDrawer';
 import { CreateQuotationDrawer } from './drawer/CreateQuotationDrawer';
@@ -48,7 +48,7 @@ export function QuickLinksGrid({
 
   // Store hooks
   const { refreshInvoices } = useInvoiceStore();
-  const { fetchIncome } = useIncomeStore();
+  // const { fetchIncome } = useIncomeStore();
   const { fetchExpenses } = useExpenseStore();
   const { fetchSales } = useSaleStore();
   const { fetchQuotations } = useQuotationStore();
@@ -194,6 +194,7 @@ export function QuickLinksGrid({
 
       <CreatePurchaseDrawer
         isOpen={showPurchaseDrawer}
+        purchaseType="INVENTORY_RESTOCK"
         onClose={() => setShowPurchaseDrawer(false)}
         onSuccess={async () => {
           onActionComplete?.();

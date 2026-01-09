@@ -39,15 +39,15 @@ export default function StatCard({
 
     const gradientMap = {
       primary:
-        'bg-gradient-to-b dark:from-primary-800/40 from-primary-100/25 dark:to-black to-white from-0% via-50% to-90%',
+        'bg-linear-to-b dark:from-primary-800/40 from-primary-100/25 dark:to-black to-white from-0% via-50% to-90%',
       secondary:
-        'bg-gradient-to-b dark:from-secondary-800/40 from-secondary-100/25 dark:to-black to-white from-0% via-50% to-90%',
+        'bg-linear-to-b dark:from-secondary-800/40 from-secondary-100/25 dark:to-black to-white from-0% via-50% to-90%',
       warning:
-        'bg-gradient-to-b dark:from-warning-100/40 from-warning-100/25 dark:to-black to-white from-0% via-50% to-90%',
+        'bg-linear-to-b dark:from-warning-100/40 from-warning-100/25 dark:to-black to-white from-0% via-50% to-90%',
       danger:
-        'bg-gradient-to-b dark:from-danger-100/40 from-danger-100/25 dark:to-black to-white from-0% via-50% to-90%',
+        'bg-linear-to-b dark:from-danger-100/40 from-danger-100/25 dark:to-black to-white from-0% via-50% to-90%',
       success:
-        'bg-gradient-to-b dark:from-success-100/40 from-success-100/25 dark:to-black to-white from-0% via-50% to-90%',
+        'bg-linear-to-b dark:from-success-100/40 from-success-100/25 dark:to-black to-white from-0% via-50% to-90%',
     };
 
     return gradientMap[gradientColor];
@@ -56,7 +56,7 @@ export default function StatCard({
   return (
     <Card
       className={clsx(
-        'bg-gradient-to-b relative rounded-3xl',
+        'bg-linear-to-b relative rounded-3xl',
         compact ? 'p-2' : 'p-3',
         gradient ? getGradientClasses() : '',
         border && 'border-2 border-default-200',

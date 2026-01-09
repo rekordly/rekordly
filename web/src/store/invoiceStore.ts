@@ -29,11 +29,14 @@ export const useInvoiceStore = create<InvoiceStore>()(
           get().applyFilters();
         }
 
+        console.log('Last fetch time:', lastFetchTime);
         const shouldFetch =
           forceRefresh ||
           allInvoices.length === 0 ||
           !lastFetchTime ||
           now - lastFetchTime > CACHE_DURATION;
+
+        console.log('Should Fetch:', shouldFetch);
 
         if (!shouldFetch) {
           return;

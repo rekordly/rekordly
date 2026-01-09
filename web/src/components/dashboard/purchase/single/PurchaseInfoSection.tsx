@@ -49,7 +49,7 @@ export function PurchaseInfoSection({ purchase }: PurchaseInfoSectionProps) {
     <div className="space-y-3">
       {/* Receipt Number & Status Card */}
       <Card
-        className="w-full rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 dark:from-primary-600 dark:to-primary-700"
+        className="w-full rounded-xl bg-linear-to-br from-primary-500 to-primary-600 dark:from-primary-600 dark:to-primary-700"
         shadow="sm"
       >
         <CardBody className="p-4">

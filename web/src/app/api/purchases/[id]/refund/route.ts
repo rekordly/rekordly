@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getAuthUser } from '@/lib/utils/server';
 import { validateRequest } from '@/lib/utils/validation';
-import { RefundSchema } from '@/lib/validations/general';
+import { PurchaseRefundSchema } from '@/lib/validations/general';
 import { toTwoDecimals } from '@/lib/fn';
 import { PaymentMethod, StatusType } from '@/types/index';
 
@@ -20,6 +20,13 @@ export async function POST(
     // Check if purchase exists and belongs to user
     const existingPurchase = await prisma.purchase.findFirst({
       where: { id: purchaseId, userId },
+      include: {
+        items: {
+          include: {
+            inventoryItem: true,
+          },
+        },
+      },
     });
 
     if (!existingPurchase) {
@@ -29,7 +36,7 @@ export async function POST(
       );
     }
 
-    const data = await validateRequest(request, RefundSchema);
+    const data = await validateRequest(request, PurchaseRefundSchema);
 
     // Validate refund conditions
     if (existingPurchase.amountPaid === 0) {
@@ -81,15 +88,104 @@ export async function POST(
             purchaseId: purchaseId,
             amount: refundAmount,
             paymentDate: refundDate,
-            paymentMethod: (data.paymentMethod ||
-              'BANK_TRANSFER') as PaymentMethod,
-            category: 'INCOME',
+            paymentMethod:
+              data.paymentMethod ?? ('BANK_TRANSFER' as PaymentMethod),
+            category: 'INCOME', // Refund is income
             reference: data.reference || null,
             notes: data.refundReason
               ? `Refund for purchase ${existingPurchase.purchaseNumber}: ${data.refundReason}`
               : `Refund for purchase ${existingPurchase.purchaseNumber}`,
           },
         });
+
+        // Handle inventory reversal on refund (only for INVENTORY_RESTOCK)
+        const restoreInventory = data.restoreInventory !== false; // Default to true
+
+        if (
+          restoreInventory &&
+          existingPurchase.purchaseType === 'INVENTORY_RESTOCK'
+        ) {
+          if (status === 'REFUNDED') {
+            // Full refund - reverse all inventory items
+            for (const item of existingPurchase.items) {
+              if (item.inventoryItemId) {
+                const inventoryItem = await tx.inventoryItem.findFirst({
+                  where: { id: item.inventoryItemId, userId },
+                });
+
+                if (inventoryItem) {
+                  const oldQuantity = inventoryItem.quantityOnHand;
+                  const newQuantity = toTwoDecimals(
+                    oldQuantity - item.quantity
+                  );
+
+                  await tx.inventoryItem.update({
+                    where: { id: item.inventoryItemId },
+                    data: {
+                      quantityOnHand: newQuantity >= 0 ? newQuantity : 0,
+                    },
+                  });
+
+                  // Create stock adjustment
+                  await tx.stockAdjustment.create({
+                    data: {
+                      userId,
+                      inventoryItemId: item.inventoryItemId,
+                      adjustmentType: 'RETURN',
+                      quantity: -item.quantity,
+                      oldQuantity,
+                      newQuantity: newQuantity >= 0 ? newQuantity : 0,
+                      reason: `Refund for purchase ${existingPurchase.purchaseNumber}`,
+                      sourcePurchaseId: purchaseId,
+                    },
+                  });
+                }
+              }
+            }
+          } else if (data.refundItems) {
+            // Partial refund with specific items
+            for (const refundItem of data.refundItems) {
+              // Find the purchase item by ID
+              const purchaseItem = existingPurchase.items.find(
+                pi => pi.id === refundItem.purchaseItemId
+              );
+
+              if (purchaseItem?.inventoryItemId) {
+                const inventoryItem = await tx.inventoryItem.findFirst({
+                  where: { id: purchaseItem.inventoryItemId, userId },
+                });
+
+                if (inventoryItem) {
+                  const oldQuantity = inventoryItem.quantityOnHand;
+                  const newQuantity = toTwoDecimals(
+                    oldQuantity - refundItem.quantity
+                  );
+
+                  await tx.inventoryItem.update({
+                    where: { id: purchaseItem.inventoryItemId },
+                    data: {
+                      quantityOnHand: newQuantity >= 0 ? newQuantity : 0,
+                    },
+                  });
+
+                  // Create stock adjustment
+                  await tx.stockAdjustment.create({
+                    data: {
+                      userId,
+                      inventoryItemId: purchaseItem.inventoryItemId,
+                      adjustmentType: 'RETURN',
+                      quantity: -refundItem.quantity,
+                      oldQuantity,
+                      newQuantity: newQuantity >= 0 ? newQuantity : 0,
+                      reason: `Partial refund for purchase ${existingPurchase.purchaseNumber}`,
+                      sourcePurchaseId: purchaseId,
+                    },
+                  });
+                }
+              }
+            }
+          }
+        }
 
         const updatedPurchase = await tx.purchase.update({
           where: { id: purchaseId },
@@ -109,10 +205,31 @@ export async function POST(
                 phone: true,
               },
             },
+            items: {
+              include: {
+                inventoryItem: {
+                  select: {
+                    id: true,
+                    name: true,
+                    sku: true,
+                    category: true,
+                  },
+                },
+              },
+              orderBy: {
+                createdAt: 'asc',
+              },
+            },
+            sourceQuotation: {
+              select: {
+                id: true,
+                quotationNumber: true,
+              },
+            },
             payments: {
               select: {
                 id: true,
-                saleId: true,
+                purchaseId: true,
                 amount: true,
                 paymentDate: true,
                 paymentMethod: true,

@@ -1,13 +1,9 @@
 'use client';
 
-import { Card, CardBody, Chip } from '@heroui/react';
+import { Card, CardBody, Chip, Divider } from '@heroui/react';
 import { useFormContext } from 'react-hook-form';
-import {
-  Calculator,
-  TrendingUp,
-  TrendingDown,
-  AlertCircle,
-} from 'lucide-react';
+import { TrendingUp, TrendingDown, AlertCircle } from 'lucide-react';
+import { CalculatorIcon } from '@phosphor-icons/react';
 
 import { formatCurrency } from '@/lib/fn';
 
@@ -104,181 +100,178 @@ export function LoanSummary() {
     return (principalAmount * (interestRate / 100)) / 12;
   };
 
-  return (
-    <Card className="rounded-2xl mx-3 bg-gradient-to-br from-primary-50 to-secondary-50 dark:from-primary-900/20 dark:to-secondary-900/20 border border-primary-100 dark:border-primary-800">
-      <CardBody className="space-y-4">
-        <div className="flex items-center gap-2">
-          <Calculator className="w-5 h-5 text-primary" />
-          <h3 className="text-lg font-semibold">Loan Summary</h3>
-        </div>
+  const hasCharges = totalCharges > 0;
+  const hasInterest = totalInterest > 0;
 
-        {/* Loan Type Badge */}
-        <div className="flex items-center gap-2">
+  return (
+    <Card
+      className="bg-linear-to-br from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 border border-green-200 dark:border-green-800"
+      shadow="none"
+    >
+      <CardBody className="p-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <h4 className="text-base font-semibold flex items-center gap-2">
+            <CalculatorIcon className="w-5 h-5 text-primary" />
+            Loan Summary
+          </h4>
+
           {loanType === 'RECEIVABLE' ? (
-            <>
-              <TrendingUp className="w-4 h-4 text-success" />
-              <Chip color="success" size="sm" variant="flat">
-                <span className="text-xs font-medium">Money You Lent</span>
-              </Chip>
-            </>
+            <Chip color="success" size="sm" variant="flat">
+              <div className="flex items-center gap-1">
+                <TrendingUp className="w-3 h-3" />
+                <span className="text-xs font-medium">Money Lent</span>
+              </div>
+            </Chip>
           ) : (
-            <>
-              <TrendingDown className="w-4 h-4 text-danger" />
-              <Chip color="danger" size="sm" variant="flat">
-                <span className="text-xs font-medium">Money You Borrowed</span>
-              </Chip>
-            </>
+            <Chip color="danger" size="sm" variant="flat">
+              <div className="flex items-center gap-1">
+                <TrendingDown className="w-3 h-3" />
+                <span className="text-xs font-medium">Money Borrowed</span>
+              </div>
+            </Chip>
           )}
         </div>
-
-        {/* Party Info */}
-        <div className="space-y-1">
-          <p className="text-xs text-default-500">
-            {loanType === 'RECEIVABLE' ? 'Borrower' : 'Lender'}
-          </p>
-          <p className="text-sm font-medium">{partyName}</p>
-        </div>
-
-        {/* Purpose */}
-        {purpose && (
-          <div className="space-y-1">
-            <p className="text-xs text-default-500">Purpose</p>
-            <p className="text-sm font-medium">{purpose}</p>
-          </div>
-        )}
 
         {/* Amount Breakdown */}
-        <div className="space-y-2 pt-3 border-t border-divider">
-          <div className="flex justify-between text-sm">
-            <span className="text-default-600">Principal Amount:</span>
-            <span className="font-semibold">
-              {formatCurrency(principalAmount)}
-            </span>
-          </div>
-
-          {totalCharges > 0 && (
-            <>
-              {processingFee > 0 && (
-                <div className="flex justify-between text-xs">
-                  <span className="text-default-500">Processing Fee:</span>
-                  <span>{formatCurrency(processingFee)}</span>
-                </div>
-              )}
-              {managementFee > 0 && (
-                <div className="flex justify-between text-xs">
-                  <span className="text-default-500">Management Fee:</span>
-                  <span>{formatCurrency(managementFee)}</span>
-                </div>
-              )}
-              {insuranceFee > 0 && (
-                <div className="flex justify-between text-xs">
-                  <span className="text-default-500">Insurance Fee:</span>
-                  <span>{formatCurrency(insuranceFee)}</span>
-                </div>
-              )}
-              {otherCharges > 0 && (
-                <div className="flex justify-between text-xs">
-                  <span className="text-default-500">Other Charges:</span>
-                  <span>{formatCurrency(otherCharges)}</span>
-                </div>
-              )}
-
-              <div className="flex justify-between text-xs pt-2 border-t border-divider/50">
-                <span className="text-default-500">Total Charges:</span>
+        <div className="space-y-2 pt-3">
+          {!principalAmount ? (
+            <p className="text-sm text-default-500 text-center py-4">
+              No loan amount specified
+            </p>
+          ) : (
+            <div className="space-y-1">
+              {/* Principal Amount */}
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-default-600">Principal Amount</span>
                 <span className="font-medium">
-                  {formatCurrency(totalCharges)}
+                  {formatCurrency(principalAmount)}
                 </span>
               </div>
-            </>
-          )}
 
-          {totalInterest > 0 && (
-            <div className="flex justify-between text-sm">
-              <span className="text-default-600">
-                Total Interest ({interestRate}%):
-              </span>
-              <span className="font-medium text-warning-600">
-                {formatCurrency(totalInterest)}
-              </span>
+              {/* Charges Breakdown */}
+              {hasCharges && (
+                <div className="space-y-0.5">
+                  {processingFee > 0 && (
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-default-600">Processing Fee</span>
+                      <span className="text-sm font-medium">
+                        +{formatCurrency(processingFee)}
+                      </span>
+                    </div>
+                  )}
+
+                  {managementFee > 0 && (
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-default-600">Management Fee</span>
+                      <span className="text-sm font-medium">
+                        +{formatCurrency(managementFee)}
+                      </span>
+                    </div>
+                  )}
+
+                  {insuranceFee > 0 && (
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-default-600">Insurance Fee</span>
+                      <span className="text-sm font-medium">
+                        +{formatCurrency(insuranceFee)}
+                      </span>
+                    </div>
+                  )}
+
+                  {otherCharges > 0 && (
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-default-600">Other Charges</span>
+                      <span className="text-sm font-medium">
+                        +{formatCurrency(otherCharges)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Interest */}
+              {hasInterest && (
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-default-600">
+                    Total Interest ({interestRate}%)
+                  </span>
+                  <span className="text-sm font-medium text-warning-600">
+                    +{formatCurrency(totalInterest)}
+                  </span>
+                </div>
+              )}
+
+              <Divider className="mt-2" />
+
+              {/* Total Amount Due */}
+              <div className="flex justify-between items-center pt-1">
+                <span className="text-base font-semibold text-foreground">
+                  Total Amount Due
+                </span>
+                <span className="text-base font-semibold text-foreground">
+                  {formatCurrency(totalAmountDue)}
+                </span>
+              </div>
+
+              {/* Loan Terms */}
+              {(paymentFrequency || term || startDate) && (
+                <>
+                  <Divider className="my-2" />
+
+                  {interestRate > 0 && (
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-default-600">Interest Rate</span>
+                      <span className="text-sm font-medium">
+                        {interestRate}% p.a.
+                      </span>
+                    </div>
+                  )}
+
+                  {paymentFrequency && (
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-default-600">
+                        Payment Frequency
+                      </span>
+                      <span className="text-sm font-medium">
+                        {getFrequencyLabel(paymentFrequency)}
+                      </span>
+                    </div>
+                  )}
+
+                  {term && (
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-default-600">Loan Term</span>
+                      <span className="text-sm font-medium">
+                        {term} {getTermUnitLabel(termUnit)}
+                      </span>
+                    </div>
+                  )}
+
+                  {startDate && (
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-default-600">Start Date</span>
+                      <span className="text-sm font-medium">
+                        {new Date(startDate).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                        })}
+                      </span>
+                    </div>
+                  )}
+
+                  {getEndDate() && (
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-default-600">Maturity Date</span>
+                      <span className="text-sm font-medium">
+                        {getEndDate()}
+                      </span>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )}
-
-          <div className="flex justify-between pt-2 border-t border-divider">
-            <span className="font-medium">Total Amount Due:</span>
-            <span className="font-bold text-lg">
-              {formatCurrency(totalAmountDue)}
-            </span>
-          </div>
-        </div>
-
-        {/* Interest & Terms */}
-        <div className="space-y-2 pt-3 border-t border-divider">
-          <div className="flex justify-between text-sm">
-            <span className="text-default-600">Interest Rate:</span>
-            <span className="font-medium">{interestRate}% per annum</span>
-          </div>
-
-          {interestRate > 0 && (
-            <div className="flex justify-between text-xs">
-              <span className="text-default-500">Est. Monthly Interest:</span>
-              <span className="text-warning-600 font-medium">
-                ~{formatCurrency(estimateMonthlyInterest())}
-              </span>
-            </div>
-          )}
-
-          <div className="flex justify-between text-sm">
-            <span className="text-default-600">Payment Frequency:</span>
-            <span className="font-medium">
-              {getFrequencyLabel(paymentFrequency)}
-            </span>
-          </div>
-
-          {term && (
-            <div className="flex justify-between text-sm">
-              <span className="text-default-600">Term:</span>
-              <span className="font-medium">
-                {term} {getTermUnitLabel(termUnit)}
-              </span>
-            </div>
-          )}
-
-          {startDate && (
-            <div className="flex justify-between text-sm">
-              <span className="text-default-600">Start Date:</span>
-              <span className="font-medium">
-                {new Date(startDate).toLocaleDateString('en-US', {
-                  year: 'numeric',
-                  month: 'short',
-                  day: 'numeric',
-                })}
-              </span>
-            </div>
-          )}
-
-          {getEndDate() && (
-            <div className="flex justify-between text-sm">
-              <span className="text-default-600">End Date:</span>
-              <span className="font-medium">{getEndDate()}</span>
-            </div>
-          )}
-        </div>
-
-        {/* Info Alert */}
-        <div className="flex items-start gap-2 p-3 bg-primary-50 dark:bg-primary-900/30 rounded-lg">
-          <AlertCircle className="w-4 h-4 text-primary mt-0.5 shrink-0" />
-          <div className="text-xs">
-            <p className="font-medium text-primary-800 dark:text-primary-200">
-              {loanType === 'RECEIVABLE'
-                ? 'Loan to be Collected'
-                : 'Loan to be Repaid'}
-            </p>
-            <p className="text-primary-700 dark:text-primary-300">
-              {loanType === 'RECEIVABLE'
-                ? `You lent ${formatCurrency(principalAmount)} to ${partyName}. Total to collect: ${formatCurrency(totalAmountDue)} (including ${formatCurrency(totalInterest)} interest).`
-                : `You borrowed ${formatCurrency(principalAmount)} from ${partyName}. Total to repay: ${formatCurrency(totalAmountDue)} (including ${formatCurrency(totalInterest)} interest).`}
-            </p>
-          </div>
         </div>
       </CardBody>
     </Card>

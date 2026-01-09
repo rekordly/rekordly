@@ -12,6 +12,7 @@ import {
 } from '@heroui/react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { FormProvider, Resolver, useForm } from 'react-hook-form';
+import { PurchaseType } from '@prisma/client';
 
 import { useCustomerStore } from '@/store/customerStore';
 import { api } from '@/lib/axios';
@@ -20,7 +21,7 @@ import { CreatePurchaseSchema } from '@/lib/validations/purchases';
 import { usePurchaseStore } from '@/store/purchase-store';
 import { PurchaseFormType } from '@/types/purchases';
 
-// Import components (we'll create these next)
+// Import components
 import { CustomerDetails } from '@/components/dashboard/layout/CustomerDetails';
 import { PurchaseHeading } from '../dashboard/purchase/PurchaseHeading';
 import { AddPurchaseItemSection } from '../dashboard/purchase/AddPurchaseItemSection';
@@ -31,6 +32,7 @@ import { useExpenseStore } from '@/store/expense-store';
 interface CreatePurchaseDrawerProps {
   isOpen: boolean;
   onClose: () => void;
+  purchaseType: PurchaseType; // REQUIRED: Determines what type of purchase this is
   onSuccess?: () => void | Promise<void>;
   purchaseId?: string | null;
 }
@@ -38,6 +40,7 @@ interface CreatePurchaseDrawerProps {
 export function CreatePurchaseDrawer({
   isOpen,
   onClose,
+  purchaseType,
   onSuccess,
   purchaseId,
 }: CreatePurchaseDrawerProps) {
@@ -74,13 +77,14 @@ export function CreatePurchaseDrawer({
   } = useCustomerStore();
 
   const { allPurchases, updatePurchase, addPurchase } = usePurchaseStore();
-  const { refreshExpense } = useExpenseStore();
+  const { refreshExpenses } = useExpenseStore();
 
   const isEditMode = !!purchaseId;
 
   const methods = useForm<PurchaseFormType>({
     resolver: zodResolver(CreatePurchaseSchema) as Resolver<PurchaseFormType>,
     defaultValues: {
+      purchaseType, // Set the purchase type from props
       customer: {
         id: '',
         name: '',
@@ -107,7 +111,7 @@ export function CreatePurchaseDrawer({
     mode: 'onChange',
   });
 
-  const { handleSubmit, watch, reset, trigger, formState } = methods;
+  const { handleSubmit, watch, reset, trigger, formState, setValue } = methods;
 
   useEffect(() => {
     if (isOpen) {
@@ -118,12 +122,38 @@ export function CreatePurchaseDrawer({
         const purchase = allPurchases.find(p => p.id === purchaseId);
         console.log('Editing purchase:', purchase);
         if (purchase) {
+          // Map items to ensure all required fields have values
+          const mappedItems = (purchase.items || []).map((item: any) => ({
+            id: item.id,
+            itemName: item.itemName,
+            description: item.description,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            amount: item.amount,
+            unit: item.unit || 'unit', // Default to 'unit' if undefined
+            inventoryItemId: item.inventoryItemId,
+            sku: item.sku,
+            category: item.category,
+            reorderLevel: item.reorderLevel,
+            sellingPrice: item.sellingPrice,
+            addToInventory: item.addToInventory ?? false,
+            expenseCategory: item.expenseCategory,
+            isDeductible: item.isDeductible ?? true,
+            deductionPercentage: item.deductionPercentage ?? 100,
+            assetCategory: item.assetCategory,
+            depreciationRate: item.depreciationRate,
+            residualValue: item.residualValue,
+            acquisitionDate: item.acquisitionDate,
+          }));
+
           reset({
+            purchaseType: purchase.purchaseType,
             customer: {
               id: purchase.customerId || '',
               name: purchase.vendorName || '',
               email: purchase.vendorEmail || '',
               phone: purchase.vendorPhone || '',
+              customerRole: 'SUPPLIER',
             },
             addAsNewCustomer: false,
             title: purchase.title || '',
@@ -131,7 +161,7 @@ export function CreatePurchaseDrawer({
             purchaseDate: purchase.purchaseDate
               ? new Date(purchase.purchaseDate)
               : new Date(),
-            items: purchase.items || [],
+            items: mappedItems, // Use mapped items with defaults
             subtotal: purchase.subtotal || 0,
             otherCosts: purchase.otherCosts || [],
             otherCostsTotal: purchase.otherCostsTotal || 0,
@@ -144,34 +174,18 @@ export function CreatePurchaseDrawer({
             paymentMethod: 'BANK_TRANSFER',
           });
         }
-      } else {
-        reset({
-          customer: {
-            id: '',
-            name: '',
-            email: '',
-            phone: '',
-            customerRole: 'SUPPLIER',
-          },
-          addAsNewCustomer: false,
-          title: '',
-          description: '',
-          purchaseDate: new Date(),
-          items: [],
-          subtotal: 0,
-          otherCosts: [],
-          otherCostsTotal: 0,
-          includeVAT: false,
-          vatAmount: 0,
-          totalAmount: 0,
-          amountPaid: 0,
-          balance: 0,
-          status: 'UNPAID',
-          paymentMethod: 'BANK_TRANSFER',
-        });
       }
     }
-  }, [isOpen, purchaseId, isEditMode, allPurchases, fetchCustomers, reset]);
+  }, [
+    isOpen,
+    purchaseId,
+    isEditMode,
+    allPurchases,
+    fetchCustomers,
+    reset,
+    purchaseType,
+    setValue,
+  ]);
 
   const handleClose = () => {
     onClose();
@@ -221,7 +235,12 @@ export function CreatePurchaseDrawer({
 
     switch (step) {
       case 1:
-        fieldsToValidate = ['customer', 'title', 'purchaseDate'];
+        fieldsToValidate = [
+          'customer',
+          'title',
+          'purchaseDate',
+          'purchaseType',
+        ];
         break;
       case 2:
         fieldsToValidate = ['items', 'subtotal'];
@@ -264,12 +283,12 @@ export function CreatePurchaseDrawer({
 
       const purchaseData = {
         ...data,
+        purchaseType, // Ensure purchase type is included
         status,
         purchaseDate:
           data.purchaseDate instanceof Date
             ? data.purchaseDate.toISOString()
             : new Date(data.purchaseDate).toISOString(),
-        createExpense: true,
       };
 
       if (isEditMode && purchaseId) {
@@ -284,7 +303,7 @@ export function CreatePurchaseDrawer({
           addCustomer(response.data.customer);
         }
 
-        await refreshExpense();
+        await refreshExpenses();
 
         addToast({
           title: 'Success!',
@@ -302,11 +321,11 @@ export function CreatePurchaseDrawer({
           addCustomer(response.data.customer);
         }
 
-        await refreshExpense();
+        await refreshExpenses();
 
         addToast({
           title: 'Success!',
-          description: 'Purchase created successfully',
+          description: `${getPurchaseTypeLabel(purchaseType)} created successfully`,
           color: 'success',
         });
       }
@@ -329,6 +348,26 @@ export function CreatePurchaseDrawer({
     }
   };
 
+  const getPurchaseTypeLabel = (type: PurchaseType): string => {
+    switch (type) {
+      case 'INVENTORY_RESTOCK':
+        return 'Inventory Purchase';
+      case 'BUSINESS_EXPENSE':
+        return 'Business Expense';
+      case 'ASSET_PURCHASE':
+        return 'Asset Purchase';
+      case 'PERSONAL_EXPENSE':
+        return 'Personal Expense';
+      default:
+        return 'Purchase';
+    }
+  };
+
+  const getDrawerTitle = (): string => {
+    if (isEditMode) return `Edit ${getPurchaseTypeLabel(purchaseType)}`;
+    return `Create ${getPurchaseTypeLabel(purchaseType)}`;
+  };
+
   const renderStepContent = () => {
     switch (currentStep) {
       case 1:
@@ -340,20 +379,20 @@ export function CreatePurchaseDrawer({
               title="Supplier Details"
               optional={false}
             />
-            <PurchaseHeading />
+            <PurchaseHeading purchaseType={purchaseType} />
           </div>
         );
       case 2:
         return (
           <div className="space-y-4">
-            <AddPurchaseItemSection />
+            <AddPurchaseItemSection purchaseType={purchaseType} />
           </div>
         );
       case 3:
         return (
           <div className="space-y-4">
             <PurchaseCostsAndPaymentSection />
-            <PurchaseSummary />
+            <PurchaseSummary purchaseType={purchaseType} />
           </div>
         );
       default:
@@ -366,7 +405,11 @@ export function CreatePurchaseDrawer({
       case 1:
         return 'Supplier & Purchase Details';
       case 2:
-        return 'Purchase Items';
+        return getPurchaseTypeLabel(purchaseType) === 'Inventory Purchase'
+          ? 'Inventory Items'
+          : getPurchaseTypeLabel(purchaseType) === 'Asset Purchase'
+            ? 'Asset Items'
+            : 'Expense Items';
       case 3:
         return 'Costs & Payment';
       default:
@@ -388,7 +431,7 @@ export function CreatePurchaseDrawer({
           <DrawerContent>
             <DrawerHeader className="flex-col items-start">
               <h3 className="text-lg font-semibold text-foreground">
-                {isEditMode ? 'Edit Purchase' : 'Create New Purchase'}
+                {getDrawerTitle()}
               </h3>
               <div className="flex items-center justify-between w-full mt-2">
                 <p className="text-xs text-default-500">

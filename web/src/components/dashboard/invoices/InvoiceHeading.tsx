@@ -10,15 +10,17 @@ export function InvoiceHeading() {
   const { control } = useFormContext();
 
   return (
-    <Card className="w-full rounded-3xl p-4 px-2" shadow="none">
-      <CardBody>
+    <Card
+      className="w-full rounded-2xl p-3 bg-transparent border border-default-200"
+      shadow="none"
+    >
+      <CardBody className="p-0">
         <div className="space-y-4">
           <div className="flex items-center gap-2">
-            <h4 className="text-sm font-semibold text-foreground">
+            <h4 className="text-base font-semibold text-foreground">
               Invoice Details
             </h4>
           </div>
-          <Divider />
 
           <div className="grid md:grid-cols-2 gap-4">
             <TextInput

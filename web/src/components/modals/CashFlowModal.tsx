@@ -114,13 +114,14 @@ export function CashFlowModal({ item, isOpen, onClose }: CashFlowModalProps) {
       isOpen={isOpen}
       size="lg"
       onClose={onClose}
+      scrollBehavior="inside"
       classNames={{
         base: 'max-h-[90vh]',
         body: 'py-6',
       }}
     >
       <ModalContent>
-        {onClose => (
+        {() => (
           <>
             {/* Header */}
             <ModalHeader className="flex items-center justify-between pb-4 border-b border-divider">
@@ -158,20 +159,11 @@ export function CashFlowModal({ item, isOpen, onClose }: CashFlowModalProps) {
                   </p>
                 )}
               </div>
-              <Button
-                isIconOnly
-                size="sm"
-                variant="light"
-                onPress={onClose}
-                className="min-w-unit-8 w-unit-8 h-unit-8"
-              >
-                <X size={18} />
-              </Button>
             </ModalHeader>
 
             <ModalBody>
               {/* Amount */}
-              <div className="mb-6">
+              <div className="mb-4">
                 <p className="text-sm text-default-500 mb-1">Amount</p>
                 <p
                   className={`text-3xl font-bold ${isInflow ? 'text-success-600' : 'text-danger-600'}`}
@@ -181,7 +173,7 @@ export function CashFlowModal({ item, isOpen, onClose }: CashFlowModalProps) {
                 </p>
               </div>
 
-              <Divider className="my-4" />
+              <Divider className="mb-4" />
 
               {/* Details Grid */}
               <div className="space-y-4">

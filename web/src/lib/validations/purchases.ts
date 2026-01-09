@@ -1,32 +1,65 @@
 import { z } from 'zod';
 import {
   customerSchema,
-  PaymentMethodSchema,
   PurchaseStatusSchema,
+  PaymentMethodSchema,
 } from '@/lib/validations/general';
+import { PaymentMethod, PurchaseType } from '@prisma/client';
+
+export const PurchaseTypeSchema = z.enum(PurchaseType);
 
 // Base schemas
 export const OtherCostSchema = z.object({
-  id: z.number(),
+  id: z.string().optional(),
   description: z.string().min(1, 'Description is required'),
   amount: z.number().nonnegative('Amount must be non-negative'),
 });
 
+// Purchase Item Schema - Now includes fields for different purchase types
 export const PurchaseItemSchema = z.object({
-  id: z.number().optional(),
-  description: z.string().min(1, 'Item description is required'),
+  id: z.string().optional(),
+
+  // Common fields
+  itemName: z.string().min(1, 'Item name is required'),
+  description: z.string().optional(),
   quantity: z.number().positive('Quantity must be positive'),
-  unitPrice: z.number().nonnegative('Unit price must be non-negative'),
-  total: z.number().min(0, 'Total must be a positive number'),
+  unitPrice: z.number().min(0, 'Unit price must be non-negative'),
+  amount: z.number().min(0, 'Amount must be non-negative'),
+
+  // For INVENTORY_RESTOCK
+  inventoryItemId: z.string().optional(), // Link to existing inventory
+  sku: z.string().optional(),
+  category: z.string().optional(),
+  unit: z.string().optional().default('unit'),
+  reorderLevel: z.number().optional(),
+  sellingPrice: z.number().optional(),
+  addToInventory: z.boolean().optional().default(false), // Create new inventory item?
+  showOnStorefront: z.boolean().optional().default(false),
+
+  // For BUSINESS_EXPENSE
+  expenseCategory: z.string().optional(), // e.g., 'OFFICE_SUPPLIES', 'UTILITIES'
+  isDeductible: z.boolean().optional().default(true),
+  deductionPercentage: z.number().min(0).max(100).optional().default(100),
+
+  // For ASSET_PURCHASE
+  assetCategory: z.string().optional(), // e.g., 'VEHICLE', 'EQUIPMENT'
+  depreciationRate: z.number().optional(),
+  residualValue: z.number().optional(),
+  acquisitionDate: z.date().optional(),
 });
 
-// Step 1: Customer and Purchase Details
+// Step 1: Vendor and Purchase Details
 export const VendorAndPurchaseDetailsSchema = z.object({
+  purchaseType: PurchaseTypeSchema, // REQUIRED: Determines backend logic
+
   customer: customerSchema,
-  addAsNewCustomer: z.boolean().default(false),
+  addAsNewCustomer: z.boolean().optional().default(false),
+
   title: z.string().min(1, 'Purchase title is required'),
   description: z.string().optional().or(z.literal('')),
   purchaseDate: z.coerce.date().default(() => new Date()),
+
+  sourceQuotationId: z.string().optional(),
 });
 
 // Step 2: Items and Costs
@@ -45,12 +78,26 @@ export const PaymentInformationSchema = z.object({
   amountPaid: z.number().nonnegative().default(0),
   balance: z.number().nonnegative().default(0),
   status: PurchaseStatusSchema.default('UNPAID'),
-  paymentMethod: PaymentMethodSchema.default('BANK_TRANSFER'),
+  paymentMethod: PaymentMethodSchema.default(PaymentMethod.BANK_TRANSFER),
   reference: z.string().optional().or(z.literal('')),
   notes: z.string().optional().or(z.literal('')),
+
+  // Attachments (receipts, invoices)
+  attachments: z
+    .array(
+      z.object({
+        id: z.string().optional(),
+        name: z.string(),
+        url: z.string().url(),
+        type: z.string(),
+        size: z.number().optional(),
+      })
+    )
+    .optional()
+    .default([]),
 });
 
-// Complete schema with transformations and validations
+// Complete schema with validations based on purchase type
 export const CreatePurchaseSchema = VendorAndPurchaseDetailsSchema.merge(
   ItemsAndCostsSchema
 )
@@ -62,6 +109,49 @@ export const CreatePurchaseSchema = VendorAndPurchaseDetailsSchema.merge(
         ? data.purchaseDate
         : new Date(data.purchaseDate),
   }))
+  // Validate based on purchase type
+  .refine(
+    data => {
+      if (data.purchaseType === 'INVENTORY_RESTOCK') {
+        // For inventory, at least one item must have inventory-related fields
+        return data.items.some(
+          item => item.inventoryItemId || item.addToInventory === true
+        );
+      }
+      return true;
+    },
+    {
+      message:
+        'For inventory restock, items must be linked to inventory or marked to be added',
+      path: ['items'],
+    }
+  )
+  .refine(
+    data => {
+      if (data.purchaseType === 'BUSINESS_EXPENSE') {
+        // For expenses, items should have expense category
+        return data.items.every(item => item.expenseCategory);
+      }
+      return true;
+    },
+    {
+      message: 'For business expenses, all items must have an expense category',
+      path: ['items'],
+    }
+  )
+  .refine(
+    data => {
+      if (data.purchaseType === 'ASSET_PURCHASE') {
+        // For assets, items should have asset category
+        return data.items.every(item => item.assetCategory);
+      }
+      return true;
+    },
+    {
+      message: 'For asset purchases, all items must have an asset category',
+      path: ['items'],
+    }
+  )
   .refine(
     data => {
       // Amount paid cannot exceed total amount
@@ -117,7 +207,7 @@ export const CreatePurchaseSchema = VendorAndPurchaseDetailsSchema.merge(
       // Validate item calculations
       return data.items.every(item => {
         const expectedTotal = item.quantity * item.unitPrice;
-        return Math.abs(item.total - expectedTotal) < 0.01;
+        return Math.abs(item.amount - expectedTotal) < 0.01;
       });
     },
     {
@@ -130,7 +220,7 @@ export const CreatePurchaseSchema = VendorAndPurchaseDetailsSchema.merge(
       // Validate subtotal matches sum of item totals
       const itemsSubtotal = data.items.reduce(
         (sum: number, item: z.infer<typeof PurchaseItemSchema>) =>
-          sum + item.total,
+          sum + item.amount,
         0
       );
       return Math.abs(data.subtotal - itemsSubtotal) < 0.01;
@@ -143,6 +233,7 @@ export const CreatePurchaseSchema = VendorAndPurchaseDetailsSchema.merge(
 
 // Update schema (partial)
 export const UpdatePurchaseSchema = z.object({
+  purchaseType: PurchaseTypeSchema.optional(),
   customer: customerSchema.optional(),
   addAsNewCustomer: z.boolean().optional(),
   title: z.string().optional(),
@@ -161,6 +252,18 @@ export const UpdatePurchaseSchema = z.object({
   paymentMethod: PaymentMethodSchema.optional(),
   reference: z.string().optional(),
   notes: z.string().optional(),
+  sourceQuotationId: z.string().optional(),
+  attachments: z
+    .array(
+      z.object({
+        id: z.string().optional(),
+        name: z.string(),
+        url: z.string().url(),
+        type: z.string(),
+        size: z.number().optional(),
+      })
+    )
+    .optional(),
 });
 
 // Payment recording schema
@@ -174,6 +277,15 @@ export const RecordPaymentSchema = z.object({
 // Search filters schema
 export const PurchaseFiltersSchema = z.object({
   query: z.string().optional(),
+  purchaseType: z
+    .enum([
+      'ALL',
+      'INVENTORY_RESTOCK',
+      'BUSINESS_EXPENSE',
+      'ASSET_PURCHASE',
+      'PERSONAL_EXPENSE',
+    ])
+    .optional(),
   status: z
     .enum([
       'ALL',
@@ -191,3 +303,10 @@ export const PurchaseFiltersSchema = z.object({
     })
     .optional(),
 });
+
+// Type exports for TypeScript
+// export type PurchaseType = z.infer<typeof PurchaseTypeSchema>;
+// export type PurchaseItem = z.infer<typeof PurchaseItemSchema>;
+// export type CreatePurchaseInput = z.infer<typeof CreatePurchaseSchema>;
+// export type UpdatePurchaseInput = z.infer<typeof UpdatePurchaseSchema>;
+// export type PurchaseFilters = z.infer<typeof PurchaseFiltersSchema>;

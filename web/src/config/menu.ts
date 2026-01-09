@@ -1,44 +1,50 @@
-import { LucideIcon } from 'lucide-react';
+import { Icon } from '@phosphor-icons/react';
 import {
   House,
   FileText,
   ShoppingCart,
   Receipt,
   Users,
-  TrendingDown,
-  TrendingUp,
+  TrendDown,
+  TrendUp,
   Wallet,
-  Building2,
-  HardDrive,
-  LineChart,
+  Buildings,
   ChartLine,
-  Landmark,
+  Bank,
   Shield,
   Bell,
   User,
-  DollarSign,
-  Banknote,
-  CreditCard,
-  Briefcase,
+  CurrencyDollar,
+  Money,
   UserCheck,
-  HandCoins,
-  Gift,
-  PiggyBank,
-} from 'lucide-react';
+  Package,
+  Wrench,
+  Storefront,
+  CreditCard,
+  GasPump,
+  Plugs,
+  Briefcase,
+  ArrowCircleUp,
+  ArrowCircleDown,
+} from '@phosphor-icons/react/dist/ssr';
 
 export interface SubMenuItem {
   name: string;
   href?: string;
-  icon: LucideIcon;
-  action?: 'modal' | 'drawer'; // For items that open modals/drawers
-  actionType?: string; // Type identifier for the action
+  icon: Icon;
+  iconColor?: string;
+  action?: 'modal' | 'drawer';
+  actionType?: string;
 }
 
 export interface MenuItem {
   name: string;
   href?: string;
-  icon: LucideIcon;
+  icon: Icon;
+  iconColor?: string;
   subItems?: SubMenuItem[];
+  action?: 'modal' | 'drawer';
+  actionType?: string;
 }
 
 export const menuItems: MenuItem[] = [
@@ -47,169 +53,184 @@ export const menuItems: MenuItem[] = [
     name: 'Dashboard',
     href: '/dashboard',
     icon: House,
+    iconColor: '#3b82f6', // blue
   },
 
-  // Income Section
+  // Income - Now a drawer action
+  // {
+  //   name: 'Income',
+  //   icon: ArrowCircleUp,
+  //   iconColor: '#10b981', // green
+  //   action: 'drawer',
+  //   actionType: 'income',
+  // },
   {
     name: 'Income',
-    icon: TrendingUp,
-    subItems: [
-      // Regular income tracking pages
-      {
-        name: 'Quotations',
-        href: '/dashboard/quotations',
-        icon: FileText,
-      },
-      { name: 'Invoices', href: '/dashboard/invoices', icon: Receipt },
-      { name: 'Sales', href: '/dashboard/sales', icon: DollarSign },
+    href: '/dashboard/income',
+    icon: ArrowCircleUp,
+    iconColor: '#10b981',
+  },
 
-      // Quick entry modals/drawers for common income types
+  // Single menu items (previously under Income)
+  {
+    name: 'Sales',
+    href: '/dashboard/sales',
+    icon: CurrencyDollar,
+    iconColor: '#8b5cf6', // purple
+  },
+  {
+    name: 'Invoices',
+    href: '/dashboard/invoices',
+    icon: Receipt,
+    iconColor: '#f59e0b', // amber
+  },
+  {
+    name: 'Quotations',
+    href: '/dashboard/quotations',
+    icon: FileText,
+    iconColor: '#06b6d4', // cyan
+  },
+
+  // Production submenu
+  {
+    name: 'Production',
+    icon: Wrench,
+    iconColor: '#f97316', // orange
+    subItems: [
       {
-        name: 'Salary Payment',
-        icon: Banknote,
-        action: 'drawer',
-        actionType: 'salary',
+        name: 'Product Templates',
+        href: '/dashboard/productions/templates',
+        icon: Package,
+        iconColor: '#f97316',
       },
       {
-        name: 'Commission',
-        icon: HandCoins,
-        action: 'drawer',
-        actionType: 'commission',
-      },
-      {
-        name: 'Dividend Income',
-        icon: PiggyBank,
-        action: 'drawer',
-        actionType: 'dividend',
-      },
-      {
-        name: 'Other Income',
-        icon: Wallet,
-        action: 'drawer',
-        actionType: 'other-income',
+        name: 'Production Orders',
+        href: '/dashboard/productions/',
+        icon: Wrench,
+        iconColor: '#ea580c',
       },
     ],
   },
 
-  // Expenses Section
+  // Expenses submenu (excluding Purchase)
   {
     name: 'Expenses',
-    icon: TrendingDown,
+    icon: ArrowCircleDown,
+    iconColor: '#ef4444', // red
     subItems: [
-      // Purchases moved under expenses
-      {
-        name: 'Purchases',
-        href: '/dashboard/purchases',
-        icon: ShoppingCart,
-      },
-      {
-        name: 'Expenses',
-        href: '/dashboard/expenses/records',
-        icon: TrendingDown,
-      },
-
-      // Quick entry modals/drawers for common expense types
       {
         name: 'Salaries',
         icon: UserCheck,
+        iconColor: '#ec4899', // pink
         action: 'drawer',
-        actionType: 'salary',
+        actionType: 'salary-expense',
       },
       {
         name: 'Rent Payment',
-        icon: Building2,
+        icon: Buildings,
+        iconColor: '#8b5cf6', // purple
         action: 'drawer',
         actionType: 'rent',
       },
       {
         name: 'Utilities',
-        icon: Banknote,
+        icon: Plugs,
+        iconColor: '#eab308', // yellow
         action: 'drawer',
         actionType: 'utilities',
       },
       {
         name: 'Fuel',
-        icon: CreditCard,
+        icon: GasPump,
+        iconColor: '#f97316', // orange
         action: 'drawer',
         actionType: 'fuel',
-      },
-      {
-        name: 'Professional Fees',
-        icon: Briefcase,
-        action: 'drawer',
-        actionType: 'professional-fees',
-      },
-      {
-        name: 'Subscriptions',
-        icon: Receipt,
-        action: 'drawer',
-        actionType: 'subscriptions',
       },
     ],
   },
 
-  // Assets Section
+  // Single menu items
+  {
+    name: 'Purchases',
+    href: '/dashboard/purchases',
+    icon: ShoppingCart,
+    iconColor: '#a855f7', // purple
+  },
+  {
+    name: 'Inventory',
+    href: '/dashboard/inventory',
+    icon: Package,
+    iconColor: '#14b8a6', // teal
+  },
+  {
+    name: 'Storefront',
+    href: '/dashboard/storefront',
+    icon: Storefront,
+    iconColor: '#6366f1', // indigo
+  },
+  {
+    name: 'Loans',
+    href: '/dashboard/loans',
+    icon: Wallet,
+    iconColor: '#84cc16', // lime
+  },
+
+  // Salary Payment
   // {
-  //   name: 'Assets',
-  //   icon: Building2,
-  //   subItems: [
-  //     {
-  //       name: 'Fixed Assets',
-  //       href: '/dashboard/assets/fixed',
-  //       icon: Building2,
-  //     },
-  //     {
-  //       name: 'Digital Assets',
-  //       href: '/dashboard/assets/digital',
-  //       icon: HardDrive,
-  //     },
-  //     {
-  //       name: 'Investments',
-  //       href: '/dashboard/assets/investments',
-  //       icon: LineChart,
-  //     },
-  //   ],
+  //   name: 'Salary Payment',
+  //   icon: Money,
+  //   iconColor: '#22c55e', // green
+  //   action: 'drawer',
+  //   actionType: 'salary-payment',
   // },
 
   // Reports Section
   {
     name: 'Reports',
     icon: ChartLine,
+    iconColor: '#0ea5e9', // sky
     subItems: [
       {
         name: 'Profit & Loss',
         href: '/dashboard/reports/pnl',
-        icon: TrendingUp,
+        icon: TrendUp,
+        iconColor: '#10b981',
       },
       {
         name: 'Balance Sheet',
         href: '/dashboard/reports/balance-sheet',
-        icon: Landmark,
+        icon: Bank,
+        iconColor: '#3b82f6',
       },
       {
         name: 'Cash Flow',
         href: '/dashboard/reports/cashflow',
-        icon: LineChart,
+        icon: ChartLine,
+        iconColor: '#06b6d4',
       },
       {
-        name: 'Income Report',
-        href: '/dashboard/reports/income',
-        icon: TrendingUp,
+        name: 'Revenue',
+        href: '/dashboard/reports/revenue',
+        icon: TrendUp,
+        iconColor: '#10b981',
       },
       {
         name: 'Expense Report',
         href: '/dashboard/reports/expenses',
-        icon: TrendingDown,
+        icon: TrendDown,
+        iconColor: '#ef4444',
       },
       {
         name: 'Asset Report',
         href: '/dashboard/reports/assets',
-        icon: Building2,
+        icon: Buildings,
+        iconColor: '#8b5cf6',
       },
       {
         name: 'Tax Report',
         href: '/dashboard/reports/tax',
         icon: FileText,
+        iconColor: '#f59e0b',
       },
     ],
   },
@@ -219,27 +240,30 @@ export const menuItems: MenuItem[] = [
     name: 'Customers',
     href: '/dashboard/customers',
     icon: Users,
+    iconColor: '#ec4899', // pink
   },
 
-  // Account Section
+  // Profile (single item instead of Account submenu)
   {
-    name: 'Account',
+    name: 'Profile',
+    href: '/dashboard/profile',
     icon: User,
-    subItems: [
-      { name: 'Profile', href: '/dashboard/account/profile', icon: User },
-      { name: 'Security', href: '/dashboard/account/security', icon: Shield },
-      {
-        name: 'Notifications',
-        href: '/dashboard/account/notifications',
-        icon: Bell,
-      },
-    ],
+    iconColor: '#64748b', // slate
   },
 ];
 
 // Type guard to check if a menu item has an action
-export function hasAction(
-  item: SubMenuItem
-): item is SubMenuItem & { action: 'modal' | 'drawer'; actionType: string } {
-  return item.action !== undefined && item.actionType !== undefined;
+export function hasAction(item: SubMenuItem | MenuItem): item is (
+  | SubMenuItem
+  | MenuItem
+) & {
+  action: 'modal' | 'drawer';
+  actionType: string;
+} {
+  return (
+    'action' in item &&
+    item.action !== undefined &&
+    'actionType' in item &&
+    item.actionType !== undefined
+  );
 }

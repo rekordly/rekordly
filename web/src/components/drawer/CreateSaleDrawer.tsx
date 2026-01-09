@@ -24,13 +24,16 @@ import { FormSkeleton } from '@/components/skeleton/FormSkeleton';
 import { CreateSaleSchema } from '@/lib/validations/sales';
 import { useSaleStore } from '@/store/saleStore';
 import { SaleFormType } from '@/types/sales';
-import { useIncomeStore } from '@/store/income-store';
+// import { useIncomeStore } from '@/store/income-store';
+import { CartItem } from '@/app/dashboard/storefront/page';
 
 interface CreateSaleDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void | Promise<void>;
   saleId?: string | null;
+  isStorefront?: boolean;
+  initialItems?: CartItem[];
 }
 
 export function CreateSaleDrawer({
@@ -38,24 +41,29 @@ export function CreateSaleDrawer({
   onClose,
   onSuccess,
   saleId,
+  isStorefront = false,
+  initialItems = [],
 }: CreateSaleDrawerProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const TOTAL_STEPS = 3;
-  const [currentStep, setCurrentStep] = useState(1);
-  const stepRef = React.useRef(1);
+  // If storefront, skip step 1 (items) and start from step 2
+  const TOTAL_STEPS = isStorefront ? 2 : 3;
+  const [currentStep, setCurrentStep] = useState(isStorefront ? 2 : 1);
+  const stepRef = React.useRef(isStorefront ? 2 : 1);
 
   const goNext = async () => {
     const isValid = await validateStep(stepRef.current);
     if (!isValid) return;
 
-    if (stepRef.current < TOTAL_STEPS) {
+    const maxStep = isStorefront ? 3 : TOTAL_STEPS;
+    if (stepRef.current < maxStep) {
       setCurrentStep(prev => prev + 1);
     }
   };
 
   const goBack = () => {
-    if (stepRef.current > 1) {
+    const minStep = isStorefront ? 2 : 1;
+    if (stepRef.current > minStep) {
       setCurrentStep(prev => prev - 1);
     }
   };
@@ -72,7 +80,7 @@ export function CreateSaleDrawer({
   } = useCustomerStore();
 
   const { allSales, updateSale, addSale } = useSaleStore();
-  const { refreshIncome } = useIncomeStore();
+  // const { refreshIncome } = useIncomeStore();
 
   const isEditMode = !!saleId;
 
@@ -105,19 +113,44 @@ export function CreateSaleDrawer({
     mode: 'onChange',
   });
 
-  const { handleSubmit, watch, reset, trigger, formState } = methods;
+  const { handleSubmit, watch, reset, trigger, formState, setValue } = methods;
+
+  // Set initial items from storefront cart
+  useEffect(() => {
+    if (isOpen && isStorefront && initialItems.length > 0) {
+      const subtotal = initialItems.reduce((sum, item) => sum + item.amount, 0);
+      setValue('items', initialItems as any);
+      setValue('subtotal', subtotal);
+      setValue('totalAmount', subtotal);
+      setValue('balance', subtotal);
+    }
+  }, [isOpen, isStorefront, initialItems, setValue]);
 
   useEffect(() => {
     if (isOpen) {
       fetchCustomers();
-      setCurrentStep(1);
+      setCurrentStep(isStorefront ? 2 : 1);
 
       if (isEditMode && saleId) {
         const sale = allSales.find(s => s.id === saleId);
 
         if (sale) {
+          // Transform saleItems to match form structure
+          const formItems = (sale.saleItems || []).map(item => ({
+            id: item.id,
+            itemName: item.itemName || '',
+            description: item.description || '',
+            quantity: item.quantity || 0,
+            unitPrice: item.unitPrice || 0,
+            amount: item.amount || 0,
+            inventoryItemId: item.inventoryItemId || undefined,
+            productionId: item.productionId || undefined,
+            costPrice: item.costPrice || 0,
+            profit: item.profit || 0,
+          }));
+
           reset({
-            sourceType: sale.sourceType,
+            sourceType: sale.sourceType || 'DIRECT',
             invoiceId: sale.invoiceId || '',
             customer: sale.customerId
               ? {
@@ -136,9 +169,9 @@ export function CreateSaleDrawer({
             title: sale.title || '',
             description: sale.description || '',
             saleDate: sale.saleDate ? new Date(sale.saleDate) : new Date(),
-            items: sale.items || [],
+            items: formItems,
             subtotal: sale.subtotal || 0,
-            includeVAT: sale.includeVAT,
+            includeVAT: sale.includeVAT || false,
             vatAmount: sale.vatAmount || 0,
             discountType: sale.discountType || undefined,
             discountValue: sale.discountValue || 0,
@@ -149,10 +182,10 @@ export function CreateSaleDrawer({
             totalAmount: sale.totalAmount || 0,
             amountPaid: sale.amountPaid || 0,
             balance: sale.balance || 0,
-            status: sale.status,
+            status: sale.status || 'UNPAID',
           });
         }
-      } else {
+      } else if (!isStorefront) {
         reset({
           sourceType: 'DIRECT',
           invoiceId: '',
@@ -179,17 +212,24 @@ export function CreateSaleDrawer({
         });
       }
     }
-  }, [isOpen, saleId, isEditMode, allSales, fetchCustomers, reset]);
+  }, [
+    isOpen,
+    saleId,
+    isEditMode,
+    allSales,
+    fetchCustomers,
+    reset,
+    isStorefront,
+  ]);
 
   const handleClose = () => {
     onClose();
-    setCurrentStep(1);
+    setCurrentStep(isStorefront ? 2 : 1);
   };
 
   const getFirstError = () => {
     const errors = formState.errors;
 
-    // Check for nested errors
     if (errors.customer) {
       const customerErrors = errors.customer as any;
       if (customerErrors.name) return customerErrors.name.message;
@@ -209,7 +249,6 @@ export function CreateSaleDrawer({
       }
     }
 
-    // Check other fields
     const errorFields = Object.keys(errors) as (keyof typeof errors)[];
     if (errorFields.length > 0) {
       const firstField = errorFields[0];
@@ -223,21 +262,37 @@ export function CreateSaleDrawer({
   const validateStep = async (step: number): Promise<boolean> => {
     let fieldsToValidate: (keyof SaleFormType)[] = [];
 
-    switch (step) {
-      case 1:
-        fieldsToValidate = ['items', 'subtotal'];
-        break;
-      case 2:
-        fieldsToValidate = ['customer', 'title', 'saleDate'];
-        break;
-      case 3:
-        fieldsToValidate = [
-          'totalAmount',
-          'balance',
-          'amountPaid',
-          'discountAmount',
-        ];
-        break;
+    if (isStorefront) {
+      switch (step) {
+        case 2:
+          fieldsToValidate = ['customer', 'title', 'saleDate'];
+          break;
+        case 3:
+          fieldsToValidate = [
+            'totalAmount',
+            'balance',
+            'amountPaid',
+            'discountAmount',
+          ];
+          break;
+      }
+    } else {
+      switch (step) {
+        case 1:
+          fieldsToValidate = ['items', 'subtotal'];
+          break;
+        case 2:
+          fieldsToValidate = ['customer', 'title', 'saleDate'];
+          break;
+        case 3:
+          fieldsToValidate = [
+            'totalAmount',
+            'balance',
+            'amountPaid',
+            'discountAmount',
+          ];
+          break;
+      }
     }
 
     const result = await trigger(fieldsToValidate);
@@ -255,11 +310,11 @@ export function CreateSaleDrawer({
   };
 
   const onSubmit = async (data: SaleFormType) => {
-    console.log(currentStep);
-    if (stepRef.current !== TOTAL_STEPS) return;
+    const finalStep = isStorefront ? 3 : TOTAL_STEPS;
+    if (stepRef.current !== finalStep) return;
+
     setIsSubmitting(true);
     try {
-      // Determine status based on payment
       const status =
         data.amountPaid >= data.totalAmount
           ? 'PAID'
@@ -267,6 +322,7 @@ export function CreateSaleDrawer({
             ? 'PARTIALLY_PAID'
             : 'UNPAID';
 
+      // Clean up data before sending to backend
       const saleData = {
         ...data,
         status,
@@ -274,17 +330,28 @@ export function CreateSaleDrawer({
           data.saleDate instanceof Date
             ? data.saleDate.toISOString()
             : new Date(data.saleDate).toISOString(),
+        // Clean up nullable fields
+        description: data.description || null,
+        invoiceId: data.invoiceId || null,
+        discountType: data.discountType || null,
+        discountValue: data.discountValue || null,
+        // Clean up items - ensure null for empty inventoryItemId and productionId
+        items: data.items.map(item => ({
+          ...item,
+          description: item.description || '',
+          inventoryItemId: item.inventoryItemId || null,
+          productionId: item.productionId || null,
+        })),
       };
 
       if (isEditMode && saleId) {
         const response = await api.patch(`/sales/${saleId}`, saleData);
-
         updateSale(saleId, response.data.sale);
 
         if (data.addAsNewCustomer && response.data.customer) {
           addCustomer(response.data.customer);
         }
-        await refreshIncome();
+        // await refreshIncome();
         addToast({
           title: 'Success!',
           description: 'Sale updated successfully',
@@ -301,12 +368,14 @@ export function CreateSaleDrawer({
           addCustomer(response.data.customer);
         }
 
-        await refreshIncome();
+        // await refreshIncome();
         if (onSuccess) onSuccess();
 
         addToast({
           title: 'Success!',
-          description: 'Sale created successfully',
+          description: isStorefront
+            ? 'Sale completed successfully'
+            : 'Sale created successfully',
           color: 'success',
         });
       }
@@ -325,56 +394,82 @@ export function CreateSaleDrawer({
   };
 
   const renderStepContent = () => {
-    switch (currentStep) {
-      case 1:
-        return (
-          <div className="space-y-4">
-            <AddSaleItemSection />
-          </div>
-        );
-      case 2:
-        return (
-          <div className="space-y-4">
-            <CustomerDetails customers={customersByRole.BUYER} />
-            <SaleHeading />
-          </div>
-        );
-      case 3:
-        return (
-          <div className="space-y-4">
-            <ExpensesAndPaymentSection />
-            <SaleSummary />
-          </div>
-        );
-      default:
-        return null;
+    if (isStorefront) {
+      switch (currentStep) {
+        case 2:
+          return (
+            <div className="space-y-4">
+              <CustomerDetails customers={customersByRole.BUYER} />
+              <SaleHeading />
+            </div>
+          );
+        case 3:
+          return (
+            <div className="space-y-4">
+              <ExpensesAndPaymentSection />
+              <SaleSummary />
+            </div>
+          );
+        default:
+          return null;
+      }
+    } else {
+      switch (currentStep) {
+        case 1:
+          return (
+            <div className="space-y-4">
+              <AddSaleItemSection />
+            </div>
+          );
+        case 2:
+          return (
+            <div className="space-y-4">
+              <CustomerDetails customers={customersByRole.BUYER} />
+              <SaleHeading />
+            </div>
+          );
+        case 3:
+          return (
+            <div className="space-y-4">
+              <ExpensesAndPaymentSection />
+              <SaleSummary />
+            </div>
+          );
+        default:
+          return null;
+      }
     }
   };
 
   const getStepTitle = () => {
-    switch (currentStep) {
-      case 1:
-        return 'Sale Items';
-      case 2:
-        return 'Customer & Sale Details';
-      case 3:
-        return 'Additional Charges & Payment';
-      default:
-        return '';
+    if (isStorefront) {
+      switch (currentStep) {
+        case 2:
+          return 'Customer & Sale Details';
+        case 3:
+          return 'Additional Charges & Payment';
+        default:
+          return '';
+      }
+    } else {
+      switch (currentStep) {
+        case 1:
+          return 'Sale Items';
+        case 2:
+          return 'Customer & Sale Details';
+        case 3:
+          return 'Additional Charges & Payment';
+        default:
+          return '';
+      }
     }
   };
 
-  const getStepDescription = () => {
-    switch (currentStep) {
-      case 1:
-        return 'Add items to this sale';
-      case 2:
-        return 'Enter customer information and sale details';
-      case 3:
-        return 'Add expenses, discounts, VAT and payment';
-      default:
-        return '';
+  const getStepNumber = () => {
+    if (isStorefront) {
+      return currentStep - 1; // Display as 1/2, 2/2
     }
+    return currentStep; // Display as 1/3, 2/3, 3/3
   };
 
   return (
@@ -391,25 +486,48 @@ export function CreateSaleDrawer({
           <DrawerContent>
             <DrawerHeader className="flex-col items-start">
               <h3 className="text-lg font-semibold text-foreground">
-                {isEditMode ? 'Edit Sale' : 'Create New Sale'}
+                {isStorefront
+                  ? 'Complete Checkout'
+                  : isEditMode
+                    ? 'Edit Sale'
+                    : 'Create New Sale'}
               </h3>
               <div className="flex items-center justify-between w-full mt-2">
                 <p className="text-xs text-default-500">
-                  Step {currentStep} of 3: {getStepTitle()}
+                  Step {getStepNumber()} of {TOTAL_STEPS}: {getStepTitle()}
                 </p>
                 <div className="flex gap-1">
-                  {[1, 2, 3].map(step => (
-                    <div
-                      key={step}
-                      className={`w-2 h-2 rounded-full ${
-                        step === currentStep
-                          ? 'bg-primary'
-                          : step < currentStep
-                            ? 'bg-success'
-                            : 'bg-default-300'
-                      }`}
-                    />
-                  ))}
+                  {isStorefront ? (
+                    <>
+                      {[2, 3].map(step => (
+                        <div
+                          key={step}
+                          className={`w-2 h-2 rounded-full ${
+                            step === currentStep
+                              ? 'bg-primary'
+                              : step < currentStep
+                                ? 'bg-success'
+                                : 'bg-default-300'
+                          }`}
+                        />
+                      ))}
+                    </>
+                  ) : (
+                    <>
+                      {[1, 2, 3].map(step => (
+                        <div
+                          key={step}
+                          className={`w-2 h-2 rounded-full ${
+                            step === currentStep
+                              ? 'bg-primary'
+                              : step < currentStep
+                                ? 'bg-success'
+                                : 'bg-default-300'
+                          }`}
+                        />
+                      ))}
+                    </>
+                  )}
                 </div>
               </div>
             </DrawerHeader>
@@ -424,7 +542,7 @@ export function CreateSaleDrawer({
             </DrawerBody>
             <DrawerFooter>
               <div className="flex gap-3 justify-between w-full">
-                {currentStep > 1 && (
+                {currentStep > (isStorefront ? 2 : 1) && (
                   <Button
                     type="button"
                     onClick={goBack}
@@ -437,37 +555,27 @@ export function CreateSaleDrawer({
                 )}
 
                 <div className="flex gap-3 flex-1 justify-end">
-                  <Button
-                    className="px-6"
-                    color="default"
-                    isDisabled={isSubmitting}
-                    type="button"
-                    variant="light"
-                    onPress={handleClose}
-                  >
-                    Cancel
-                  </Button>
                   <div>
-                    {currentStep < TOTAL_STEPS && (
+                    {currentStep < (isStorefront ? 3 : TOTAL_STEPS) && (
                       <Button
                         type="button"
                         onClick={goNext}
                         className="px-6"
                         color="primary"
+                        disabled={loadingCustomers}
                       >
                         Next
                       </Button>
                     )}
 
-                    {currentStep === TOTAL_STEPS && (
+                    {currentStep === (isStorefront ? 3 : TOTAL_STEPS) && (
                       <Button
                         type="submit"
-                        // disabled={isSubmitting}
                         className="px-6"
                         color="primary"
                         isLoading={isSubmitting}
                       >
-                        {isSubmitting ? 'Submitting...' : 'Submit'}
+                        {isSubmitting ? 'Processing...' : 'Complete Sale'}
                       </Button>
                     )}
                   </div>

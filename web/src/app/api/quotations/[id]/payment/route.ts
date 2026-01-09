@@ -1,12 +1,13 @@
 // app/api/quotations/[id]/payment/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 
 import { getAuthUser } from '@/lib/utils/server';
 import { toTwoDecimals } from '@/lib/fn';
 import { prisma } from '@/lib/prisma';
-import { addPaymentSchema } from '@/lib/validations/general';
+// import { addQuotationPaymentSchema } from '@/lib/validations/quotations';
 import { validateRequest } from '@/lib/utils/validation';
+import { addPaymentSchema } from '@/lib/validations/general';
+import { PaymentMethod } from '@prisma/client';
 
 export async function POST(
   request: NextRequest,
@@ -16,8 +17,7 @@ export async function POST(
     const params = await props.params;
     const { userId } = await getAuthUser(request);
 
-    const updateSchema = addPaymentSchema;
-    const data = await validateRequest(request, updateSchema);
+    const data = await validateRequest(request, addPaymentSchema);
     const paymentAmount = toTwoDecimals(data.amountPaid);
 
     const quotation = await prisma.quotation.findFirst({
@@ -35,11 +35,11 @@ export async function POST(
         customerPhone: true,
         title: true,
         description: true,
-        materials: true,
-        materialsTotal: true,
-        workmanship: true,
-        otherCosts: true,
-        otherCostsTotal: true,
+        lineItems: true, // Changed from materials
+        subtotal: true, // Changed from materialsTotal
+        discountType: true,
+        discountValue: true,
+        discountAmount: true,
         includeVAT: true,
         vatAmount: true,
         totalAmount: true,
@@ -47,6 +47,7 @@ export async function POST(
         balance: true,
         status: true,
         issueDate: true,
+        validUntil: true,
         payments: {
           select: {
             id: true,
@@ -107,7 +108,7 @@ export async function POST(
               category: 'INCOME',
               quotationId: quotation.id,
               amount: paymentAmount,
-              paymentMethod: data.paymentMethod,
+              paymentMethod: data.paymentMethod as PaymentMethod,
               reference: data.reference || null,
               notes: data.notes || null,
               paymentDate,
@@ -115,7 +116,7 @@ export async function POST(
           });
         }
 
-        // 2. Update quotation
+        // Update quotation
         await tx.quotation.update({
           where: { id: quotation.id },
           data: {

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 
 import { prisma } from '@/lib/prisma';
 import { getAuthUser } from '@/lib/utils/server';
@@ -7,12 +6,21 @@ import { resolveCustomer } from '@/lib/utils/customer';
 import { CreatePurchaseSchema } from '@/lib/validations/purchases';
 import { generatePurchaseNumber, toTwoDecimals } from '@/lib/fn';
 import { validateRequest } from '@/lib/utils/validation';
+import { PaymentMethod, PurchaseType } from '@prisma/client';
+import {
+  handleInventoryRestock,
+  handleBusinessExpense,
+  handleAssetPurchase,
+  handlePersonalExpense,
+} from '@/lib/handlers/purchase-handlers';
 
 export async function POST(request: NextRequest) {
   try {
     const { userId } = await getAuthUser(request);
 
     const data = await validateRequest(request, CreatePurchaseSchema);
+    console.log(JSON.stringify(data, null, 2));
+
     const { customerId, customerName, customer } = await resolveCustomer(
       userId,
       data.customer,
@@ -43,13 +51,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Process items with proper decimal conversion
-    const items = data.items.map(item => ({
-      ...item,
-      unitPrice: toTwoDecimals(item.unitPrice),
-      total: toTwoDecimals(item.total),
-    }));
-
     // Process other costs with proper decimal conversion
     const otherCosts = (data.otherCosts || []).map(cost => ({
       ...cost,
@@ -77,13 +78,23 @@ export async function POST(request: NextRequest) {
       ? new Date(data.purchaseDate)
       : new Date();
 
+    // Prepare items with proper decimal conversion
+    const processedItems = data.items.map(item => ({
+      ...item,
+      quantity: toTwoDecimals(item.quantity),
+      unitPrice: toTwoDecimals(item.unitPrice),
+      amount: toTwoDecimals(item.amount),
+    }));
+
+    // Create purchase with transaction
     const result = await prisma.$transaction(
       async tx => {
-        // Create purchase
+        // 1. Create purchase record (bookkeeping)
         const purchase = await tx.purchase.create({
           data: {
             purchaseNumber,
             userId,
+            purchaseType: data.purchaseType,
             customerId,
             vendorName:
               data.customer.name || customerName || 'Unnamed Supplier',
@@ -91,10 +102,9 @@ export async function POST(request: NextRequest) {
             vendorPhone: data.customer.phone || null,
             title: data.title,
             description: data.description || null,
-            items,
-            subtotal: toTwoDecimals(data.subtotal),
             otherCosts,
             otherCostsTotal: toTwoDecimals(otherCostsTotal),
+            subtotal: toTwoDecimals(data.subtotal),
             includeVAT: data.includeVAT,
             vatAmount: toTwoDecimals(data.vatAmount || 0),
             totalAmount,
@@ -102,12 +112,82 @@ export async function POST(request: NextRequest) {
             balance,
             status,
             purchaseDate,
+            attachments: data.attachments || [],
+            sourceQuotationId: data.sourceQuotationId || null,
           },
           include: {
             customer: true,
           },
         });
 
+        // 2. Create purchase items
+        const createdItems = await Promise.all(
+          processedItems.map(item =>
+            tx.purchaseItem.create({
+              data: {
+                purchaseId: purchase.id,
+                inventoryItemId: item.inventoryItemId || null,
+                itemName: item.itemName,
+                description: item.description || null,
+                sku: item.sku || null,
+                category: item.category || null,
+                unit: item.unit || 'unit',
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                amount: item.amount,
+              },
+              include: {
+                inventoryItem: true,
+              },
+            })
+          )
+        );
+
+        // 3. Handle based on purchase type
+        let additionalRecords = null;
+
+        switch (data.purchaseType) {
+          case 'INVENTORY_RESTOCK':
+            additionalRecords = await handleInventoryRestock(
+              tx,
+              purchase,
+              processedItems,
+              userId
+            );
+            break;
+
+          case 'BUSINESS_EXPENSE':
+            additionalRecords = await handleBusinessExpense(
+              tx,
+              purchase,
+              processedItems,
+              userId
+            );
+            break;
+
+          case 'ASSET_PURCHASE':
+            additionalRecords = await handleAssetPurchase(
+              tx,
+              purchase,
+              processedItems,
+              userId
+            );
+            break;
+
+          case 'PERSONAL_EXPENSE':
+            additionalRecords = await handlePersonalExpense(
+              tx,
+              purchase,
+              processedItems,
+              userId
+            );
+            break;
+
+          default:
+            throw new Error(`Unknown purchase type: ${data.purchaseType}`);
+        }
+
+        // 4. Create payment record if amount was paid
         let payment = null;
         if (amountPaid > 0) {
           payment = await tx.payment.create({
@@ -117,18 +197,33 @@ export async function POST(request: NextRequest) {
               purchaseId: purchase.id,
               amount: amountPaid,
               paymentDate: purchaseDate,
-              paymentMethod: data.paymentMethod || 'BANK_TRANSFER',
+              paymentMethod:
+                (data.paymentMethod as PaymentMethod) || 'BANK_TRANSFER',
               category: 'EXPENSE',
-              notes: `Payment for purchase ${purchaseNumber}`,
+              reference: data.reference || null,
+              notes: data.notes || `Payment for purchase ${purchaseNumber}`,
             },
           });
         }
 
-        return { purchase, payment };
+        // Fetch complete purchase with items
+        const completePurchase = await tx.purchase.findUnique({
+          where: { id: purchase.id },
+          include: {
+            customer: true,
+            items: {
+              include: {
+                inventoryItem: true,
+              },
+            },
+          },
+        });
+
+        return { purchase: completePurchase, payment, additionalRecords };
       },
       {
-        maxWait: 10000, // 10 seconds
-        timeout: 10000, // 10 seconds
+        maxWait: 10000,
+        timeout: 10000,
       }
     );
 
@@ -139,6 +234,7 @@ export async function POST(request: NextRequest) {
         customer,
         purchase: result.purchase,
         payment: result.payment,
+        additionalRecords: result.additionalRecords,
       },
       { status: 201 }
     );
@@ -149,6 +245,20 @@ export async function POST(request: NextRequest) {
 
     if (error instanceof Error && error.message.includes('Unauthorized')) {
       return NextResponse.json({ message: error.message }, { status: 401 });
+    }
+
+    if (
+      error instanceof Error &&
+      error.message.includes('Inventory item not found')
+    ) {
+      return NextResponse.json({ message: error.message }, { status: 404 });
+    }
+
+    if (
+      error instanceof Error &&
+      error.message.includes('Unknown purchase type')
+    ) {
+      return NextResponse.json({ message: error.message }, { status: 400 });
     }
 
     return NextResponse.json(
@@ -165,6 +275,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
+    const purchaseType = searchParams.get('purchaseType');
     const customerId = searchParams.get('customerId');
     const vendorName = searchParams.get('vendorName');
     const startDate = searchParams.get('startDate');
@@ -176,6 +287,7 @@ export async function GET(request: NextRequest) {
     const where: any = { userId };
 
     if (status) where.status = status;
+    if (purchaseType) where.purchaseType = purchaseType;
     if (customerId) where.customerId = customerId;
     if (vendorName) {
       where.vendorName = {
@@ -200,6 +312,24 @@ export async function GET(request: NextRequest) {
               name: true,
               email: true,
               phone: true,
+            },
+          },
+          items: {
+            include: {
+              inventoryItem: {
+                select: {
+                  id: true,
+                  name: true,
+                  sku: true,
+                  category: true,
+                },
+              },
+            },
+          },
+          sourceQuotation: {
+            select: {
+              id: true,
+              quotationNumber: true,
             },
           },
           payments: {

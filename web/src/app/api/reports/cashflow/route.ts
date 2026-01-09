@@ -1,3 +1,4 @@
+// app/api/reports/cashflow/route.ts (Updated)
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -14,15 +15,6 @@ import { reportQuerySchema } from '@/lib/validations/general';
 export async function GET(request: NextRequest) {
   try {
     const { userId, registrationType } = await getAuthUser(request);
-
-    // Check if user is a limited company type that needs equity tracking
-    const isLimitedCompany = [
-      'Limited Liability Company (Ltd)',
-      'Public Limited Company (PLC)',
-      'Limited by Guarantee',
-      'Unlimited Company',
-      'Limited Liability Partnership (LLP)',
-    ].includes(registrationType || '');
 
     // Parse query params
     const searchParams = request.nextUrl.searchParams;
@@ -43,7 +35,7 @@ export async function GET(request: NextRequest) {
     // FETCH ALL DATA
     // ============================================
 
-    // Fetch all payments (this is the core of cash flow)
+    // Fetch all payments (core of cash flow)
     const allPayments = await prisma.payment.findMany({
       where: {
         userId,
@@ -93,22 +85,19 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    // Fetch owner equity transactions (only for Ltd/PLC)
-    let ownerEquityTransactions: any[] = [];
-    if (isLimitedCompany) {
-      ownerEquityTransactions = await prisma.ownerEquity.findMany({
-        where: {
-          userId,
-          date: {
-            gte: startDate,
-            lte: endDate,
-          },
+    // Fetch ALL owner equity transactions (now universal for all business types)
+    const ownerEquityTransactions = await prisma.ownerEquity.findMany({
+      where: {
+        userId,
+        date: {
+          gte: startDate,
+          lte: endDate,
         },
-        orderBy: {
-          date: 'desc',
-        },
-      });
-    }
+      },
+      orderBy: {
+        date: 'desc',
+      },
+    });
 
     // ============================================
     // TRANSFORM DATA TO CASH FLOW ITEMS
@@ -141,7 +130,7 @@ export async function GET(request: NextRequest) {
 
     const cashFlowItems: CashFlowItem[] = [];
 
-    // Process payments
+    // Process payments (same as before)
     allPayments.forEach(payment => {
       const item: CashFlowItem = {
         id: payment.id,
@@ -158,15 +147,13 @@ export async function GET(request: NextRequest) {
         sourceId: '',
       };
 
-      // Determine cash flow category and type based on payment
       if (payment.category === 'INCOME') {
         item.flowType = 'INFLOW';
         item.flowCategory = 'OPERATING';
 
         if (payment.saleId && payment.sale) {
-          // Check if this is a refund
           if (payment.sale.refundAmount && payment.sale.refundAmount > 0) {
-            item.amount = -Math.abs(payment.amount); // Negative inflow
+            item.amount = -Math.abs(payment.amount);
             item.subCategory = 'REFUND';
             item.description = `Refund - Sale ${payment.sale.receiptNumber}`;
             item.sourceType = 'SALE_REFUND';
@@ -179,12 +166,11 @@ export async function GET(request: NextRequest) {
           item.sourceNumber = payment.sale.receiptNumber;
           item.customerName = payment.sale.customerName || '';
         } else if (payment.quotationId && payment.quotation) {
-          // Check if this is a refund
           if (
             payment.quotation.refundAmount &&
             payment.quotation.refundAmount > 0
           ) {
-            item.amount = -Math.abs(payment.amount); // Negative inflow
+            item.amount = -Math.abs(payment.amount);
             item.subCategory = 'REFUND';
             item.description = `Refund - Quotation ${payment.quotation.quotationNumber}`;
             item.sourceType = 'QUOTATION_REFUND';
@@ -208,7 +194,6 @@ export async function GET(request: NextRequest) {
           payment.loan &&
           payment.loan.loanType === 'RECEIVABLE'
         ) {
-          // Loan repayment received (someone paying us back)
           item.flowCategory = 'FINANCING';
           item.subCategory = 'LOAN_REPAYMENT_RECEIVED';
           item.description = `Loan repayment from ${payment.loan.partyName || 'Borrower'}`;
@@ -221,12 +206,11 @@ export async function GET(request: NextRequest) {
         item.flowCategory = 'OPERATING';
 
         if (payment.purchaseId && payment.purchase) {
-          // Check if this is a refund/return
           if (
             payment.purchase.refundAmount &&
             payment.purchase.refundAmount > 0
           ) {
-            item.flowType = 'INFLOW'; // Returns are inflows
+            item.flowType = 'INFLOW';
             item.subCategory = 'PURCHASE_RETURN';
             item.description = `Return - Purchase ${payment.purchase.purchaseNumber}`;
             item.sourceType = 'PURCHASE_RETURN';
@@ -239,9 +223,8 @@ export async function GET(request: NextRequest) {
           item.sourceNumber = payment.purchase.purchaseNumber;
           item.vendorName = payment.purchase.vendorName;
         } else if (payment.expensesId && payment.expenses) {
-          // Check if this is a return
           if (payment.expenses.isReturn) {
-            item.flowType = 'INFLOW'; // Returns are inflows
+            item.flowType = 'INFLOW';
             item.subCategory = 'EXPENSE_RETURN';
             item.description = `Return - ${payment.expenses.description}`;
             item.sourceType = 'EXPENSE_RETURN';
@@ -258,7 +241,6 @@ export async function GET(request: NextRequest) {
           payment.loan &&
           payment.loan.loanType === 'PAYABLE'
         ) {
-          // Loan repayment made (we're paying back)
           item.flowCategory = 'FINANCING';
           item.subCategory = 'LOAN_REPAYMENT_MADE';
           item.description = `Loan repayment to ${payment.loan.partyName || 'Lender'}`;
@@ -312,28 +294,27 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // Process owner equity transactions (only for Ltd/PLC)
-    if (isLimitedCompany) {
-      ownerEquityTransactions.forEach(equity => {
-        const isInflow = equity.type === 'CAPITAL_INJECTION';
+    // Process owner equity transactions (NOW UNIVERSAL)
+    ownerEquityTransactions.forEach(equity => {
+      const isInflow =
+        equity.type === 'CAPITAL_INJECTION' || equity.type === 'SHARE_ISSUANCE';
 
-        cashFlowItems.push({
-          id: equity.id,
-          date: equity.date,
-          amount: equity.amount,
-          flowType: isInflow ? 'INFLOW' : 'OUTFLOW',
-          flowCategory: 'FINANCING',
-          subCategory: equity.type,
-          description: equity.description || equity.type.replace(/_/g, ' '),
-          sourceType: equity.type,
-          sourceId: equity.id,
-          shareholderName: equity.shareholderName,
-          paymentMethod: null,
-          reference: equity.reference,
-          notes: equity.notes,
-        });
+      cashFlowItems.push({
+        id: equity.id,
+        date: equity.date,
+        amount: equity.amount,
+        flowType: isInflow ? 'INFLOW' : 'OUTFLOW',
+        flowCategory: 'FINANCING',
+        subCategory: equity.type,
+        description: equity.description || equity.type.replace(/_/g, ' '),
+        sourceType: equity.type,
+        sourceId: equity.id,
+        shareholderName: equity.shareholderName,
+        paymentMethod: null,
+        reference: equity.reference,
+        notes: equity.notes,
       });
-    }
+    });
 
     // Sort all items by date (newest first)
     cashFlowItems.sort(
@@ -480,7 +461,7 @@ export async function GET(request: NextRequest) {
           endDate: endDate.toISOString(),
           totalRecords: cashFlowItems.length,
           registrationType,
-          includesOwnerEquity: isLimitedCompany,
+          includesOwnerEquity: true, // Now always true
           currency: 'NGN',
         },
         summary,

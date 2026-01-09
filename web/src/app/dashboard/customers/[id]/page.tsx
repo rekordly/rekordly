@@ -9,8 +9,7 @@ import { useSaleStore } from '@/store/saleStore';
 import { SaleHeader } from '@/components/dashboard/sales/single/SaleHeader';
 import { SaleInfoSection } from '@/components/dashboard/sales/single/SaleInfoSection';
 import { SaleItemsSection } from '@/components/dashboard/sales/single/SaleItemsSection';
-import { SaleCustomerSection } from '@/components/dashboard/sales/single/SaleCustomerSection';
-import { SalePaymentSection } from '@/components/dashboard/sales/single/SalePaymentSection';
+
 import { AddSalePayment } from '@/components/dashboard/sales/single/AddSalePayment';
 import { RefundModal } from '@/components/modals/RefundModal';
 import { PaymentSection } from '@/components/dashboard/PaymentSection';

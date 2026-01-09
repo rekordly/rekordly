@@ -1,146 +1,222 @@
 'use client';
 
-import { Card, CardBody, Button, Checkbox } from '@heroui/react';
-import { Divider } from '@heroui/divider';
+import {
+  Card,
+  CardBody,
+  Checkbox,
+  Divider,
+  Accordion,
+  AccordionItem,
+} from '@heroui/react';
 import { useFormContext, Controller } from 'react-hook-form';
-import { Trash2 } from 'lucide-react';
 import { useEffect } from 'react';
+import { CalculatorIcon } from '@phosphor-icons/react';
 
 import { formatCurrency } from '@/lib/fn';
 import { VAT_RATE } from '@/config/constant';
-import { MaterialItemType, OtherCostType } from '@/types/quotations';
+
+type LineItem = {
+  id?: string;
+  type: 'MATERIAL' | 'SERVICE' | 'PRODUCT' | 'OTHER';
+  name: string;
+  description?: string;
+  quantity: number;
+  unit: string;
+  unitPrice: number;
+  amount: number;
+  inventoryItemId?: string;
+};
+
+type OtherCost = {
+  id?: number;
+  description: string;
+  amount: number;
+};
 
 export function QuotationSummary() {
   const { control, setValue, watch } = useFormContext();
-  const materials = watch('materials') || [];
-  const otherCosts = watch('otherCosts') || [];
-  const workmanship = watch('workmanship') || 0;
+  const lineItems: LineItem[] = watch('lineItems') || [];
+  const otherCosts: OtherCost[] = watch('otherCosts') || [];
   const includeVAT = watch('includeVAT') ?? false;
 
   // Calculate totals
-  const materialsTotal = materials.reduce(
-    (sum: number, material: MaterialItemType) => sum + material.total,
+  const subtotal = lineItems.reduce(
+    (sum: number, item: LineItem) => sum + item.amount,
     0
   );
 
   const otherCostsTotal = otherCosts.reduce(
-    (sum: number, cost: OtherCostType) => sum + cost.amount,
+    (sum: number, cost: OtherCost) => sum + cost.amount,
     0
   );
 
-  const subtotal = materialsTotal + workmanship;
   const vatAmount = includeVAT ? subtotal * VAT_RATE : 0;
   const total = subtotal + vatAmount + otherCostsTotal;
 
   // Update form values when they change
   useEffect(() => {
-    setValue('materialsTotal', materialsTotal);
-    setValue('otherCostsTotal', otherCostsTotal);
+    setValue('subtotal', subtotal);
     setValue('vatAmount', vatAmount);
     setValue('totalAmount', total);
-  }, [materialsTotal, otherCostsTotal, vatAmount, total, setValue]);
+  }, [subtotal, vatAmount, total, setValue]);
 
-  const removeMaterial = (id: number) => {
-    const updatedMaterials = materials.filter(
-      (material: MaterialItemType) => material.id !== id
-    );
-
-    setValue('materials', updatedMaterials);
-  };
-
-  const removeCost = (id: number) => {
-    const updatedCosts = otherCosts.filter(
-      (cost: OtherCostType) => cost.id !== id
-    );
-
-    setValue('otherCosts', updatedCosts);
-  };
-
-  const hasItems =
-    materials.length > 0 || otherCosts.length > 0 || workmanship > 0;
+  const hasItems = lineItems.length > 0;
+  const hasAdditions = includeVAT || otherCostsTotal > 0;
 
   return (
-    <Card className="w-full rounded-3xl p-4 px-2" shadow="none">
-      <CardBody>
-        <div className="space-y-4">
-          <h4 className="text-sm font-semibold text-foreground">
-            Quotation Summary
-          </h4>
-          <Divider />
+    <>
+      <Card
+        className="w-full rounded-2xl p-3 bg-transparent border border-default-200"
+        shadow="none"
+      >
+        <CardBody className="p-0">
+          <div className="space-y-3">
+            <Accordion variant="light">
+              <AccordionItem
+                key="vat"
+                aria-label="VAT"
+                title="VAT (7.5%)"
+                subtitle="Include VAT in sale"
+                classNames={{
+                  title: 'font-semibold',
+                  subtitle: 'text-xs',
+                  trigger: 'py-0',
+                }}
+              >
+                <div className="pb-4">
+                  <Controller
+                    control={control}
+                    name="includeVAT"
+                    render={({ field }) => (
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          checked={field.value}
+                          className="w-4 h-4 text-primary bg-default-100 border-default-300 rounded focus:ring-primary"
+                          type="checkbox"
+                          onChange={field.onChange}
+                        />
+                        <span className="text-sm">
+                          Include VAT (7.5%) in this sale
+                        </span>
+                      </label>
+                    )}
+                  />
+                </div>
+              </AccordionItem>
+            </Accordion>
+          </div>
+        </CardBody>
+      </Card>
 
-          {!hasItems ? (
-            <p className="text-sm text-default-500 text-center">
-              No items added yet.
-            </p>
-          ) : (
-            <>
-              {/* VAT Checkbox */}
-              <div className="pt-2">
-                <Controller
-                  control={control}
-                  name="includeVAT"
-                  render={({ field }) => (
-                    <Checkbox
-                      isSelected={field.value}
-                      onValueChange={field.onChange}
-                    >
-                      <span className="text-sm">Include VAT (7.5%)</span>
-                    </Checkbox>
-                  )}
-                />
-              </div>
+      <Card
+        className="bg-linear-to-br from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 border border-green-200 dark:border-green-800"
+        shadow="none"
+      >
+        <CardBody className="p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <h4 className="text-base font-semibold flex items-center gap-2">
+              <CalculatorIcon className="w-5 h-5 text-primary" />
+              Quotation Summary
+            </h4>
+          </div>
 
-              {/* Totals Breakdown */}
-              <div className="pt-2">
-                <div className="space-y-3">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-default-600">Material Cost:</span>
-                    <span className="font-semibold">
-                      {formatCurrency(materialsTotal)}
-                    </span>
+          {/* Cost Breakdown */}
+          <div className="space-y-2 pt-2">
+            {!hasItems ? (
+              <p className="text-sm text-default-500 text-center py-4">
+                No items added yet
+              </p>
+            ) : (
+              <div className="space-y-1">
+                {/* Line Items List */}
+                {lineItems.length > 0 && (
+                  <div className="space-y-1">
+                    {lineItems.map((item: LineItem) => (
+                      <div
+                        key={item.id}
+                        className="flex justify-between items-center text-sm"
+                      >
+                        {/* Left Side: Item Name + Qty/Rate */}
+                        <div className="flex items-center gap-2 overflow-hidden">
+                          <span className="font-medium text-foreground truncate">
+                            {item.name}
+                          </span>
+                          <span className="text-default-500 whitespace-nowrap">
+                            {item.quantity} x {formatCurrency(item.unitPrice)}
+                          </span>
+                        </div>
+
+                        {/* Right Side: Amount */}
+                        <span className="font-medium text-foreground whitespace-nowrap ml-2">
+                          {formatCurrency(item.amount)}
+                        </span>
+                      </div>
+                    ))}
                   </div>
+                )}
 
-                  {workmanship > 0 && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-default-600">Workmanship:</span>
-                      <span className="font-semibold">
-                        {formatCurrency(workmanship)}
+                {lineItems.length > 0 && (
+                  <>
+                    <Divider className="mt-3 mb-2" />
+
+                    {/* Items Subtotal */}
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-default-600">Items Subtotal</span>
+                      <span className="font-medium">
+                        {formatCurrency(subtotal)}
                       </span>
                     </div>
-                  )}
+                  </>
+                )}
 
-                  {includeVAT && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-default-600">VAT (7.5%):</span>
-                      <span className="font-semibold">
-                        {formatCurrency(vatAmount)}
-                      </span>
-                    </div>
-                  )}
+                {/* Additional Charges */}
+                {hasAdditions && (
+                  <div className="space-y-0.5">
+                    {includeVAT && (
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-default-600">VAT (7.5%)</span>
+                        <span className="text-sm font-medium">
+                          +{formatCurrency(vatAmount)}
+                        </span>
+                      </div>
+                    )}
 
-                  {otherCostsTotal > 0 && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-default-600">Other Costs:</span>
-                      <span className="font-semibold">
-                        {formatCurrency(otherCostsTotal)}
-                      </span>
-                    </div>
-                  )}
-
-                  <Divider />
-
-                  <div className="flex justify-between text-lg font-bold">
-                    <span>Total:</span>
-                    <span className="text-foreground">
-                      {formatCurrency(total)}
-                    </span>
+                    {otherCostsTotal > 0 && (
+                      <>
+                        {otherCosts.map((cost: OtherCost) => (
+                          <div
+                            key={cost.id}
+                            className="flex justify-between items-center text-sm"
+                          >
+                            <span className="text-default-600">
+                              {cost.description || 'Other Cost'}
+                            </span>
+                            <span className="text-sm font-medium">
+                              +{formatCurrency(cost.amount)}
+                            </span>
+                          </div>
+                        ))}
+                      </>
+                    )}
                   </div>
+                )}
+
+                <Divider className="mt-2" />
+
+                {/* Total Amount */}
+                <div className="flex justify-between items-center pt-1">
+                  <span className="text-base font-semibold text-foreground">
+                    Total Amount
+                  </span>
+                  <span className="text-base font-semibold text-foreground">
+                    {formatCurrency(total)}
+                  </span>
                 </div>
               </div>
-            </>
-          )}
-        </div>
-      </CardBody>
-    </Card>
+            )}
+          </div>
+        </CardBody>
+      </Card>
+    </>
   );
 }
