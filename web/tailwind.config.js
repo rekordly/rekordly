@@ -88,6 +88,8 @@ const config = {
           900: '#6E3A00',
           DEFAULT: '#fa8901',
         },
+
+        card: '#121212',
       },
     },
   },
@@ -99,7 +101,7 @@ const config = {
           colors: {
             // Light mode base colors with brand- prefix
             'brand-background': '#FAFFFB',
-            'brand-foreground': '#030f04',
+            'brand-foreground': '#010501',
             'brand-divider': '#E5E7EB',
             'brand-focus': '#fa8901',
             'brand-overlay': 'rgba(0, 0, 0, 0.5)',
@@ -113,7 +115,7 @@ const config = {
         },
         dark: {
           colors: {
-            'brand-background': '#030f04',
+            'brand-background': '#010501',
             'brand-foreground': '#FAFFFB',
             'brand-divider': '#1F1B2E',
             'brand-focus': '#009e10',

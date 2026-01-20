@@ -64,20 +64,11 @@ export interface FinancialOverview {
   metrics: OverviewMetrics;
 }
 
-export interface OverviewComparisonChart {
-  labels: any[];
-  revenue: {
-    accrual: number;
-    cash: number;
-  };
-  expenses: {
-    accrual: number;
-    cash: number;
-  };
-  profit: {
-    accrual: number;
-    cash: number;
-  };
+export interface MonthlyTrendData {
+  month: string;
+  revenue: number;
+  expenses: number;
+  profit: number;
 }
 
 export interface OverviewBreakdown {
@@ -98,7 +89,7 @@ export interface OverviewProfitability {
 }
 
 export interface OverviewChartData {
-  comparison: OverviewComparisonChart;
+  monthlyTrend: MonthlyTrendData[];
   revenueBreakdown: OverviewBreakdown[];
   expenseBreakdown: OverviewBreakdown[];
   profitability: OverviewProfitability;

@@ -1,51 +1,51 @@
 import { InventoryType } from '@prisma/client';
 import {
   Receipt,
-  Shield,
-  FileText,
-  ChartBar,
-  Lock,
-  DeviceMobile,
   XCircle,
   CheckCircle,
+  TrendUp,
+  Package,
+  Users,
+  Storefront,
+  ArrowsDownUp,
 } from '@phosphor-icons/react';
 
 export const features = [
   {
+    icon: Package,
+    title: 'Inventory Management',
+    description:
+      'Track stock levels, set low stock alerts, and manage raw materials for production.',
+  },
+  {
+    icon: TrendUp,
+    title: 'Profit Tracking',
+    description:
+      'See your real-time profitability. Calculate margins and understand your cash flow instantly.',
+  },
+  {
     icon: Receipt,
-    title: 'Double-Entry Bookkeeping',
+    title: 'Invoicing & Receipts',
     description:
-      'Professional accounting system with automatic debit/credit recording and balanced ledgers.',
+      'Create professional invoices and receipts. Track debtors and see who owes you money.',
   },
   {
-    icon: ChartBar,
-    title: 'Financial Statements',
+    icon: Users,
+    title: 'Customer Management',
     description:
-      'Generate Trial Balance, Profit & Loss, and Balance Sheet reports with one click.',
+      'Keep track of your buyers and suppliers. View purchase history and payment status at a glance.',
   },
   {
-    icon: FileText,
-    title: 'Invoice & Receipt Generation',
+    icon: ArrowsDownUp,
+    title: 'Cash Flow Management',
     description:
-      'Create professional invoices and receipts for sales and purchases with Nigerian tax compliance.',
+      'Track money coming in and going out to avoid surprises and plan ahead.',
   },
   {
-    icon: Shield,
-    title: 'Tax Compliance Ready',
+    icon: Storefront,
+    title: 'Production & Recipes',
     description:
-      "Stay ahead of Nigeria's digital tax requirements with FIRS-aligned reports and calculations.",
-  },
-  {
-    icon: Lock,
-    title: 'Bank-Level Security',
-    description:
-      'Your financial data is encrypted and protected with enterprise-grade security standards.',
-  },
-  {
-    icon: DeviceMobile,
-    title: 'Mobile-First Design',
-    description:
-      'Access your accounts anywhere, anytime with our intuitive mobile app for iOS and Android.',
+      'Manage manufacturing batches, define recipes, and calculate unit costs for your products.',
   },
 ];
 
@@ -53,131 +53,106 @@ export const list = [
   {
     id: 1,
     title: 'Set up your account',
-    img: '/images/fruit-1.jpeg',
+    img: '/landing/card2.png',
     description:
-      'Sign up in seconds and select your account type - business, self-employed, employed, or freelancer.',
+      'Sign up in seconds and select your business type - retail, manufacturing, or services.',
   },
   {
     id: 2,
-    title: 'Record Transactions',
-    img: '/images/fruit-2.jpeg',
+    title: 'Track your business',
+    img: '/landing/card1.png',
     description:
-      'Add income, sales, expenses, and purchases. Our system automatically handles double-entry recording.',
+      'Record sales, purchases, and inventory movement. We handle the numbers automatically.',
   },
   {
     id: 3,
-    title: 'Generate Reports',
-    img: '/images/fruit-3.jpeg',
+    title: 'Grow your profit',
+    img: '/landing/card3.png',
     description:
-      'Create ledgers, trial balances, and tax-ready reports whenever you need them.',
+      'View profitability reports, manage debts, and make data-driven decisions.',
   },
 ];
 
-export const overview = [
+export const businessTypes = [
   {
-    id: 1,
-    title: 'General Ledger',
-    img: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800',
-    className: 'md:col-span-6',
+    icon: Storefront,
+    title: 'Retail Stores',
     description:
-      'Complete double-entry bookkeeping system with automatic debit/credit recording.',
+      'Track inventory, manage sales, and keep stock levels perfect. Never lose a sale due to stockouts again.',
   },
   {
-    id: 2,
-    title: 'Trial Balance',
-    img: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=800',
-    className: 'md:col-span-4',
+    icon: Users,
+    title: 'Service Providers',
     description:
-      'Automatically generate balanced trial balances with a single click.',
+      'Track billable hours, invoice clients, and manage expenses. Perfect for freelancers and consultants.',
   },
   {
-    id: 3,
-    title: 'Debtors & Creditors',
-    img: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800',
-    className: 'md:col-span-4',
-    description: 'Track receivables and payables with automated aging reports.',
-  },
-  {
-    id: 4,
-    title: 'Profit & Loss',
-    img: 'https://images.unsplash.com/photo-1579621970563-ebec7560ff3e?w=800',
-    className: 'md:col-span-4',
-    description: 'Generate comprehensive P&L statements for any period.',
-  },
-  {
-    id: 5,
-    title: 'Trusted by 3k+ Businesses',
-    className: 'md:col-span-4',
+    icon: Package,
+    title: 'Manufacturers',
     description:
-      'Join thousands of Nigerian businesses using our platform for accounting.',
-    isSpecial: true,
-    specialDescription: 'Community Stats',
-    bgGradient: 'bg-gradient-to-br from-primary-500/10 to-primary-600/5',
+      'Manage production batches, raw materials, and recipe costs. See exactly how much it costs to make your product.',
   },
   {
-    id: 6,
-    title: 'FIRS-Ready Reports',
-    className: 'md:col-span-4',
-    description: 'Generate tax-compliant reports for Nigerian tax authorities.',
-    isSpecial: true,
-    specialDescription: 'Tax Compliance',
-    bgGradient: 'bg-gradient-to-br from-primary-500/15 to-primary-600/10',
+    icon: TrendUp,
+    title: 'Freelancers',
+    description:
+      'Organize multiple income streams, track expenses, and generate professional financial summaries for your clients.',
   },
 ];
 
 export const testimonials = [
   {
     quote:
-      'Rekordly transformed how I manage my business accounts. The double-entry system is professional yet simple.',
+      'Rekordly transformed how I manage my inventory. I never run out of stock anymore.',
     name: 'Chinedu O.',
     role: 'Retail Business Owner',
     avatar: 'https://i.pravatar.cc/150?img=1',
   },
   {
     quote:
-      'As a freelancer, tracking income and expenses was chaotic. Now everything is organized with proper accounting.',
+      'As a freelancer, tracking multiple clients was hard. Now I know exactly who owes me.',
     name: 'Amina S.',
     role: 'Freelance Consultant',
     avatar: 'https://i.pravatar.cc/150?img=5',
   },
   {
     quote:
-      'The financial statements and tax compliance features alone are worth the subscription. Highly recommended!',
+      'The production tracking feature is a lifesaver. I can calculate exact costs for every batch.',
     name: 'Emeka N.',
-    role: 'SME Owner',
+    role: 'Manufacturing SME Owner',
     avatar: 'https://i.pravatar.cc/150?img=9',
   },
   {
     quote:
-      "It's the only accounting tool I use daily - and it makes bookkeeping feel simple.",
+      "It's the only tool I use daily - it makes running my small business feel manageable.",
     name: 'Funke A.',
     role: 'Self-Employed Professional',
     avatar: 'https://i.pravatar.cc/150?img=12',
   },
   {
     quote:
-      'No more spreadsheet chaos. Just clean, professional accounting records.',
+      'No more spreadsheet chaos. Just clean, clear numbers and profit tracking.',
     name: 'Tunde B.',
     role: 'Startup Founder',
     avatar: 'https://i.pravatar.cc/150?img=15',
   },
   {
     quote:
-      'The trial balance and P&L statements saved me hours of work during tax season.',
+      'The invoicing feature is professional and helped me get paid much faster.',
     name: 'Grace O.',
     role: 'Small Business Owner',
     avatar: 'https://i.pravatar.cc/150?img=20',
   },
   {
     quote:
-      "Finally, an accounting app that doesn't require a degree to understand.",
+      'Finally, an app that understands that I need to see profit, not just accounting ledgers.',
     name: 'David R.',
     role: 'Creative Director',
     avatar: 'https://i.pravatar.cc/150?img=25',
   },
   {
     quote:
-      'Rekordly helped me organize my finances and saved me money on accounting fees.',
+      'Rekordly helped me organize my side hustle and track expenses effortlessly.',
     name: 'Bisi A.',
     role: 'Content Writer',
     avatar: 'https://i.pravatar.cc/150?img=30',
@@ -186,15 +161,15 @@ export const testimonials = [
 
 export const comparisonData = [
   {
-    title: 'Traditional Accounting',
+    title: 'Traditional Spreadsheets',
     accent: 'danger',
     icon: XCircle,
     items: [
-      'Complex software, steep learning curve',
-      'Expensive licenses and hidden fees',
-      'Manual data entry and calculations',
-      'No mobile access or cloud sync',
-      'Generic support, slow responses',
+      'Prone to errors and manual calculation mistakes',
+      'Hard to track stock across multiple items',
+      'No clear view of who owes you money',
+      'Difficult to share with team or accountant',
+      'Time-consuming to create invoices',
     ],
   },
   {
@@ -203,11 +178,11 @@ export const comparisonData = [
     icon: CheckCircle,
     highlight: true,
     items: [
-      'Intuitive interface, professional features',
-      'Simple, transparent pricing',
-      'Automated double-entry bookkeeping',
-      'Mobile-first with cloud synchronization',
-      'Priority support, fast response',
+      'Real-time profit and inventory tracking',
+      'Simple, all-in-one dashboard',
+      'Automated debt and customer tracking',
+      'Generate professional invoices instantly',
+      'Secure cloud access anywhere',
     ],
   },
 ];
@@ -220,7 +195,7 @@ export const pricingPlans = [
     description: 'Perfect for individuals and freelancers',
     features: [
       'Up to 50 transactions/month',
-      'Basic financial reports',
+      'Basic inventory tracking',
       'Invoice & receipt generation',
       'Mobile app access',
       'Email support',
@@ -234,12 +209,12 @@ export const pricingPlans = [
     description: 'Best for growing businesses',
     features: [
       'Unlimited transactions',
-      'Advanced accounting reports',
-      'Custom chart of accounts',
+      'Advanced inventory & production',
+      'Profit & loss reports',
       'Priority support',
       'Team collaboration (up to 3)',
       'Export to Excel & PDF',
-      'Tax estimation tools',
+      'Debt tracking & aging reports',
     ],
     highlighted: true,
   },
@@ -266,21 +241,21 @@ export const testimonial = [
     name: 'Chinedu O.',
     role: 'Retail Business Owner',
     content:
-      'Rekordly transformed how I manage my business accounts. Tax season is no longer stressful!',
+      'Rekordly transformed how I manage my inventory. No more stockouts or chaos.',
     rating: 5,
   },
   {
     name: 'Amina S.',
     role: 'Freelance Consultant',
     content:
-      'As a freelancer, tracking income and expenses was chaotic. Now everything is organized in one place.',
+      'Tracking clients and invoices is now effortless. I get paid faster.',
     rating: 5,
   },
   {
     name: 'Emeka N.',
     role: 'SME Owner',
     content:
-      'The VAT calculation and tax reporting features alone are worth the subscription. Highly recommended!',
+      'The production tracking and inventory features have saved me hours every week.',
     rating: 5,
   },
 ];
@@ -289,32 +264,37 @@ export const faqs = [
   {
     question: 'What types of businesses can use Rekordly?',
     answer:
-      'Rekordly is designed for all types of Nigerian businesses - from freelancers and self-employed professionals to registered companies, SMEs, and larger enterprises.',
+      'Rekordly is designed for all Nigerian businesses - from freelancers and self-employed professionals to retail stores, manufacturers, and service providers.',
   },
   {
-    question: 'Is Rekordly compliant with Nigerian tax regulations?',
-    answer:
-      'Yes! Rekordly is built specifically for the Nigerian market and generates FIRS-compliant reports, calculates VAT correctly, and helps you prepare for tax filing.',
-  },
-  {
-    question: 'Do I need accounting knowledge to use Rekordly?',
+    question: 'Do I need accounting knowledge to use Rekordly',
     answer:
       'Not at all! Rekordly simplifies professional accounting with an intuitive interface. The system handles complex accounting principles behind the scenes.',
   },
   {
-    question: 'Can I import my existing financial data?',
+    question: 'Does Rekordly handle inventory?',
     answer:
-      'Yes, Rekordly supports importing data from Excel/CSV files. Our support team can help you migrate from other accounting systems.',
+      'Yes! We have robust inventory management. You can track stock levels, set low stock alerts, manage raw materials, and even handle production batches and recipes.',
   },
   {
-    question: 'How secure is my financial data?',
+    question: 'Can I use Rekordly on my phone?',
     answer:
-      'We use bank-level encryption, secure servers, and regular backups to ensure your financial data is completely safe and compliant with data protection regulations.',
+      'Yes, Rekordly is mobile-first. Our responsive web app works perfectly on all devices, and a dedicated mobile app is coming soon.',
   },
   {
-    question: 'Can multiple team members use the same account?',
+    question: 'Can I track who owes me money?',
     answer:
-      'Yes! Our Growth and Enterprise plans support team collaboration with role-based access controls, allowing multiple team members to work on the same accounts.',
+      'Absolutely. Rekordly automatically tracks unpaid sales and purchases, giving you a clear list of debtors and creditors with aging reports.',
+  },
+  {
+    question: 'Can multiple users use the same Rekordly account?',
+    answer:
+      'Not yet. Currently, Rekordly supports single-user access per account. However, multi-user support with team collaboration is already planned and will be rolled out in a future update.',
+  },
+  {
+    question: 'How does the pricing work?',
+    answer:
+      'We offer transparent monthly pricing with no hidden fees. Start with our free plan and upgrade anytime as your business grows.',
   },
 ];
 

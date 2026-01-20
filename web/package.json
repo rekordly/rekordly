@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
+    "build:prod": "dotenv -e .env.production -- next build",
     "start": "next start",
     "lint": "next lint",
     "lint:fix": "next lint --fix",
@@ -16,7 +17,17 @@
     "check": "npm run type-check && npm run lint",
     "check:fix": "npm run format && npm run lint:fix && npm run type-check",
     "build:safe": "npm run check:fix && npm run build",
-    "validate": "npm run format:check && npm run type-check && npm run lint"
+    "validate": "npm run format:check && npm run type-check && npm run lint",
+    "db:generate": "prisma generate",
+    "db:studio": "dotenv -e .env -- prisma studio",
+    "db:studio:prod": "dotenv -e .env.production -- prisma studio",
+    "db:migrate:dev": "dotenv -e .env -- prisma migrate dev",
+    "db:migrate:prod": "dotenv -e .env.production -- prisma migrate deploy",
+    "db:push:dev": "dotenv -e .env -- prisma db push",
+    "db:reset:dev": "dotenv -e .env -- prisma migrate reset",
+    "db:status": "dotenv -e .env -- prisma migrate status",
+    "db:status:prod": "dotenv -e .env.production -- prisma migrate status",
+    "db:migrate:create": "dotenv -e .env -- prisma migrate dev --create-only"
   },
   "dependencies": {
     "@heroui/accordion": "2.2.24",
@@ -69,7 +80,7 @@
     "bcryptjs": "^3.0.2",
     "cloudinary": "^2.8.0",
     "clsx": "2.1.1",
-    "framer-motion": "11.18.2",
+    "framer-motion": "^11.18.2",
     "html2canvas": "^1.4.1",
     "intl-messageformat": "10.7.16",
     "jspdf": "^3.0.3",
@@ -104,6 +115,7 @@
     "autoprefixer": "^10.4.21",
     "axios": "^1.12.2",
     "bcrypt": "^6.0.0",
+    "dotenv-cli": "^11.0.0",
     "eslint": "9.25.1",
     "eslint-config-next": "15.3.4",
     "eslint-config-prettier": "9.1.0",

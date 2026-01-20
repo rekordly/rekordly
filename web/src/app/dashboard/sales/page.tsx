@@ -1,13 +1,20 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Receipt, Plus, Wallet } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Receipt, Plus, Wallet, TrendingUp, Calendar } from 'lucide-react';
 import { useSaleStore } from '@/store/saleStore';
 import { SaleCard } from '@/components/ui/SalesCard';
 import { CreateSaleDrawer } from '@/components/drawer/CreateSaleDrawer';
 import { formatCurrency, formatDate } from '@/lib/fn';
 import UniversalListLayout from '@/components/layout/UniversalListLayout';
 import UniversalListSkeleton from '@/components/skeleton/UniversalListSkeleton';
+import {
+  formatTodayDescription,
+  calculateSalesStats,
+  formatRevenueDescription,
+  formatSalesCountDescription,
+  formatProfitDescription,
+} from '@/lib/handlers/fn/salesStats';
 
 type SaleStatus =
   | 'ALL'
@@ -49,6 +56,7 @@ export default function SalePage() {
   const {
     displayedSales,
     filteredSales,
+    allSales,
     isInitialLoading,
     isPaginating,
     searchQuery,
@@ -71,12 +79,10 @@ export default function SalePage() {
     setIsModalOpen(true);
   };
 
-  const totalSales = filteredSales.length;
-  const totalAmount = filteredSales.reduce(
-    (sum, sale) => sum + sale.totalAmount,
-    0
-  );
-  const paidSales = filteredSales.filter(sale => sale.status === 'PAID').length;
+  // Calculate stats from all sales (not filtered)
+  const stats = useMemo(() => {
+    return calculateSalesStats(allSales);
+  }, [allSales]);
 
   if (isInitialLoading) {
     return <UniversalListSkeleton gridConfig={{ default: 1, md: 2, lg: 3 }} />;
@@ -88,28 +94,37 @@ export default function SalePage() {
         stats={[
           {
             gradient: true,
-            description: 'Total Revenue',
+            description: formatRevenueDescription(stats),
             gradientColor: 'primary',
-            tag: 'Amount',
-            title: formatCurrency(totalAmount),
+            tag: 'Net Revenue',
+            title: formatCurrency(stats.netRevenue),
             icon: <Wallet size={24} />,
           },
           {
             gradient: true,
-            description: 'Total Sales',
-            gradientColor: 'secondary',
-            tag: 'All',
-            tagColor: 'secondary',
-            title: totalSales.toString(),
-            icon: <Receipt size={24} />,
+            description: formatTodayDescription(stats),
+            gradientColor: 'danger',
+            tag: 'Today',
+            tagColor: 'danger',
+            title: formatCurrency(stats.todayRevenue),
+            icon: <Calendar size={24} />,
           },
+          // {
+          //   gradient: true,
+          //   description: formatProfitDescription(stats),
+          //   gradientColor: 'success',
+          //   tag: `${stats.profitMargin.toFixed(1)}% Margin`,
+          //   tagColor: 'success',
+          //   title: formatCurrency(stats.totalProfit),
+          //   icon: <TrendingUp size={24} />,
+          // },
           {
             gradient: true,
-            description: 'Paid Sales',
-            gradientColor: 'success',
-            tag: 'Paid',
-            tagColor: 'success',
-            title: paidSales.toString(),
+            description: formatSalesCountDescription(stats),
+            gradientColor: 'secondary',
+            tag: `${stats.paidSales} Paid`,
+            tagColor: 'secondary',
+            title: stats.totalSales.toString(),
             icon: <Receipt size={24} />,
           },
         ]}
@@ -156,7 +171,7 @@ export default function SalePage() {
         hasMore={displayCount < filteredSales.length}
         isPaginating={isPaginating}
         currentCount={displayCount}
-        totalCount={totalSales}
+        totalCount={filteredSales.length}
       />
 
       <CreateSaleDrawer

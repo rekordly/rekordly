@@ -12,7 +12,7 @@ interface StatCardProps {
     | 'danger'
     | 'success'
     | 'default';
-  title: string;
+  title: string | ReactNode;
   description?: string;
   icon?: ReactNode;
   gradient?: boolean;

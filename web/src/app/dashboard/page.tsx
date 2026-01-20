@@ -11,133 +11,120 @@ import {
   PieChart as PieChartIcon,
 } from 'lucide-react';
 import {
-  BarChart,
-  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend,
   PieChart,
   Pie,
   Cell,
   LineChart,
   Line,
+  ReferenceLine,
 } from 'recharts';
 
 import { useOverviewStore } from '@/store/overview-store';
-import { useRevenueStore } from '@/store/revenue-store';
-import { useExpenseStore } from '@/store/expense-store';
 import StatCard from '@/components/ui/StatCard';
 import { formatCurrency } from '@/lib/fn';
-import { QuickLinksGrid } from '@/components/QuickLinksGrid';
 
-const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6'];
+const COLORS = ['#009e10', '#3b82f6', '#fa8901', '#ef4444', '#8b5cf6'];
+
+// All 12 months template
+const ALL_MONTHS = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
 
 export default function Dashboard() {
-  const {
-    overview,
-    chartData: overviewChartData,
-    fetchOverview,
-  } = useOverviewStore();
-
-  const { chartData: revenueChartData, fetchRevenue } = useRevenueStore();
-
-  const { chartData: expenseChartData, fetchExpenses } = useExpenseStore();
+  const { overview, chartData, fetchOverview } = useOverviewStore();
 
   useEffect(() => {
     fetchOverview();
-    fetchRevenue();
-    fetchExpenses();
-  }, [fetchOverview, fetchRevenue, fetchExpenses]);
-
-  // Revenue vs Expenses comparison data
-  const comparisonData = useMemo(() => {
-    if (!overview) return [];
-
-    return [
-      {
-        name: 'Revenue',
-        Accrual: overview.revenue.accrual,
-        Cash: overview.revenue.cash,
-      },
-      {
-        name: 'Expenses',
-        Accrual: overview.expenses.accrual,
-        Cash: overview.expenses.cash,
-      },
-      {
-        name: 'Net Profit',
-        Accrual: overview.income.netIncome.accrual,
-        Cash: overview.income.netIncome.cash,
-      },
-    ];
-  }, [overview]);
+  }, [fetchOverview]);
 
   // Revenue breakdown pie chart
   const revenueBreakdownData = useMemo(() => {
-    if (!overviewChartData?.revenueBreakdown) return [];
-    return overviewChartData.revenueBreakdown.map((item, index) => ({
+    if (!chartData?.revenueBreakdown) return [];
+    return chartData.revenueBreakdown.map((item, index) => ({
       name: item.name,
       value: item.value,
       percentage: item.percentage,
       color: COLORS[index % COLORS.length],
     }));
-  }, [overviewChartData]);
+  }, [chartData]);
 
   // Expense breakdown pie chart
   const expenseBreakdownData = useMemo(() => {
-    if (!overviewChartData?.expenseBreakdown) return [];
-    return overviewChartData.expenseBreakdown.map((item, index) => ({
+    if (!chartData?.expenseBreakdown) return [];
+    return chartData.expenseBreakdown.map((item, index) => ({
       name: item.name,
       value: item.value,
       percentage: item.percentage,
       color: COLORS[index % COLORS.length],
     }));
-  }, [overviewChartData]);
+  }, [chartData]);
 
-  // Monthly revenue vs expenses trend
+  // Monthly trend data - ensure all 12 months are present
   const monthlyTrendData = useMemo(() => {
-    const revenueMonthly = revenueChartData?.monthly || [];
-    const expenseMonthly = expenseChartData?.monthly || [];
+    if (!chartData?.monthlyTrend) {
+      // Return all 12 months with 0 values if no data
+      return ALL_MONTHS.map(month => ({
+        month,
+        revenue: 0,
+        expenses: 0,
+        profit: 0,
+      }));
+    }
 
-    const allMonths = new Set([
-      ...revenueMonthly.map(d => d.month),
-      ...expenseMonthly.map(d => d.month),
-    ]);
+    // Create a map of existing data
+    const dataMap = new Map(
+      chartData.monthlyTrend.map(item => [item.month, item])
+    );
 
-    return Array.from(allMonths)
-      .map(month => {
-        const revenue = revenueMonthly.find(d => d.month === month);
-        const expense = expenseMonthly.find(d => d.month === month);
-
-        return {
+    // Fill in all 12 months
+    return ALL_MONTHS.map(month => {
+      const existingData = dataMap.get(month);
+      return (
+        existingData || {
           month,
-          Revenue: revenue?.amount || 0,
-          Expenses: expense?.amount || 0,
-          Profit: (revenue?.amount || 0) - (expense?.amount || 0),
-        };
-      })
-      .slice(-6); // Last 6 months
-  }, [revenueChartData, expenseChartData]);
+          revenue: 0,
+          expenses: 0,
+          profit: 0,
+        }
+      );
+    });
+  }, [chartData]);
 
-  // Profitability metrics
-  const profitabilityData = useMemo(() => {
-    if (!overviewChartData?.profitability) return [];
-    return [
-      {
-        name: 'Gross Profit Margin',
-        Accrual: overviewChartData.profitability.grossProfitMargin.accrual,
-        Cash: overviewChartData.profitability.grossProfitMargin.cash,
-      },
-      {
-        name: 'Net Profit Margin',
-        Accrual: overviewChartData.profitability.netProfitMargin.accrual,
-        Cash: overviewChartData.profitability.netProfitMargin.cash,
-      },
-    ];
-  }, [overviewChartData]);
+  // Custom tooltip for negative values
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg">
+          <p className="font-semibold mb-2">{label}</p>
+          {payload.map((item: any, index: number) => (
+            <p
+              key={index}
+              className={`text-sm ${item.value < 0 ? 'text-[#ef4444]' : ''}`}
+            >
+              {item.name}: {formatCurrency(item.value)}
+            </p>
+          ))}
+        </div>
+      );
+    }
+    return null;
+  };
 
   if (!overview) {
     return (
@@ -150,15 +137,20 @@ export default function Dashboard() {
     );
   }
 
+  const refunds =
+    overview.revenue.accrual -
+    overview.revenue.cash -
+    overview.revenue.outstanding;
+
   return (
     <div className="space-y-6">
       {/* Key Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <StatCard
           gradient
-          description={`Accrual: ${formatCurrency(overview.revenue.accrual)} | Outstanding: ${formatCurrency(overview.revenue.outstanding)}`}
+          description={`Your business recorded a gross revenue of ${formatCurrency(overview.revenue.accrual)}. After ${formatCurrency(Math.abs(refunds))} in ${refunds < 0 ? 'adjustments' : 'refunds'}, with ${formatCurrency(overview.revenue.outstanding)} still outstanding from customers.`}
           gradientColor="success"
-          tag="Revenue (Cash)"
+          tag="Revenue (Collected)"
           tagColor="success"
           title={formatCurrency(overview.revenue.cash)}
           icon={<Wallet size={24} />}
@@ -166,9 +158,9 @@ export default function Dashboard() {
 
         <StatCard
           gradient
-          description={`Accrual: ${formatCurrency(overview.expenses.accrual)} | Outstanding: ${formatCurrency(overview.expenses.outstanding)}`}
+          description={`Total expenses expected were ${formatCurrency(overview.expenses.accrual)}. You've paid ${formatCurrency(overview.expenses.cash)} with ${formatCurrency(overview.expenses.outstanding)} pending payment to vendors.`}
           gradientColor="danger"
-          tag="Expenses (Cash)"
+          tag="Expenses (Paid)"
           tagColor="danger"
           title={formatCurrency(overview.expenses.cash)}
           icon={<CreditCard size={24} />}
@@ -176,13 +168,21 @@ export default function Dashboard() {
 
         <StatCard
           gradient
-          description={`Profit margin: ${overview.income.profitMargin.net.cash.toFixed(1)}% | Gross profit: ${formatCurrency(overview.income.grossProfit.cash)}`}
+          description={`Your net profit margin is ${overview.income.profitMargin.net.cash >= 0 ? '' : '-'}${Math.abs(overview.income.profitMargin.net.cash).toFixed(1)}% with a gross profit of ${formatCurrency(overview.income.grossProfit.cash)} from collected revenue.`}
           gradientColor={
             overview.income.netIncome.cash >= 0 ? 'success' : 'danger'
           }
-          tag="Net Profit (Cash)"
+          tag="Net Profit (Collected)"
           tagColor={overview.income.netIncome.cash >= 0 ? 'success' : 'danger'}
-          title={formatCurrency(overview.income.netIncome.cash)}
+          title={
+            <span
+              className={
+                overview.income.netIncome.cash < 0 ? 'text-[#ef4444]' : ''
+              }
+            >
+              {formatCurrency(overview.income.netIncome.cash)}
+            </span>
+          }
           icon={
             overview.income.netIncome.cash >= 0 ? (
               <TrendingUp size={24} />
@@ -194,144 +194,52 @@ export default function Dashboard() {
 
         <StatCard
           gradient
-          description={`Receivables: ${formatCurrency(overview.metrics.outstandingReceivables)} | Payables: ${formatCurrency(overview.metrics.outstandingPayables)}`}
+          description={`On average, your monthly profit is ${formatCurrency(overview.metrics.averageMonthlyProfit.cash)}. Outstanding receivables: ${formatCurrency(overview.metrics.outstandingReceivables)}, payables: ${formatCurrency(overview.metrics.outstandingPayables)}.`}
           gradientColor="primary"
           tag="Avg Monthly Profit"
           tagColor="primary"
-          title={formatCurrency(overview.metrics.averageMonthlyProfit.cash)}
+          title={
+            <span
+              className={
+                overview.metrics.averageMonthlyProfit.cash < 0
+                  ? 'text-[#ef4444]'
+                  : ''
+              }
+            >
+              {formatCurrency(overview.metrics.averageMonthlyProfit.cash)}
+            </span>
+          }
           icon={<Activity size={24} />}
         />
       </div>
 
-      {/* Quick Actions */}
-      <Card
-        className="rounded-3xl border dark:border-primary-700/20 border-primary-200/10"
-        shadow="none"
-      >
-        <CardHeader className="py-6 px-6">
-          <div>
-            <h3 className="text-base font-semibold">Quick Actions</h3>
-            <p className="text-xs text-default-500">
-              Quickly add income, expenses, and more
-            </p>
-          </div>
-        </CardHeader>
-        <CardBody>
-          <QuickLinksGrid
-            showSearch={false}
-            columns={{ default: 4, sm: 8, md: 8, lg: 12 }}
-          />
-        </CardBody>
-      </Card>
-
-      {/* Revenue vs Expenses Comparison */}
-      <Card className="rounded-3xl" shadow="none">
-        <CardHeader className="py-6 px-6">
-          <div>
-            <h3 className="text-base font-semibold">Revenue vs Expenses</h3>
-            <p className="text-xs text-default-500">
-              Accrual and cash basis comparison
-            </p>
-          </div>
-        </CardHeader>
-        <CardBody>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={comparisonData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip
-                formatter={(value: any) => formatCurrency(value)}
-                contentStyle={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: '8px',
-                }}
-              />
-              <Legend wrapperStyle={{ fontSize: '12px' }} />
-              <Bar dataKey="Accrual" fill="#3b82f6" name="Accrual Basis" />
-              <Bar dataKey="Cash" fill="#10b981" name="Cash Basis" />
-            </BarChart>
-          </ResponsiveContainer>
-        </CardBody>
-      </Card>
-
-      {/* Monthly Trend */}
-      <Card className="rounded-3xl" shadow="none">
-        <CardHeader className="py-6 px-6">
-          <div>
-            <h3 className="text-base font-semibold">6-Month Trend</h3>
-            <p className="text-xs text-default-500">
-              Revenue, expenses, and profit over time
-            </p>
-          </div>
-        </CardHeader>
-        <CardBody>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={monthlyTrendData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip
-                formatter={(value: any) => formatCurrency(value)}
-                contentStyle={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: '8px',
-                }}
-              />
-              <Legend wrapperStyle={{ fontSize: '12px' }} />
-              <Line
-                type="monotone"
-                dataKey="Revenue"
-                stroke="#10b981"
-                strokeWidth={2}
-                name="Revenue"
-              />
-              <Line
-                type="monotone"
-                dataKey="Expenses"
-                stroke="#ef4444"
-                strokeWidth={2}
-                name="Expenses"
-              />
-              <Line
-                type="monotone"
-                dataKey="Profit"
-                stroke="#3b82f6"
-                strokeWidth={2}
-                name="Profit"
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </CardBody>
-      </Card>
-
-      {/* Revenue & Expense Breakdown */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Revenue Breakdown */}
+      {/* Revenue vs Expenses & Breakdown - New Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Revenue Breakdown - Donut Chart */}
         <Card className="rounded-3xl" shadow="none">
           <CardHeader className="py-6 px-6">
             <div className="flex items-center gap-2">
-              <PieChartIcon size={20} className="text-success" />
+              <PieChartIcon size={20} className="text-[#009e10]" />
               <div>
-                <h3 className="text-base font-semibold">Revenue by Source</h3>
-                <p className="text-xs text-default-500">Income distribution</p>
+                <h3 className="text-base font-semibold">Income by Category</h3>
+                <p className="text-xs text-default-500">Revenue Distribution</p>
               </div>
             </div>
           </CardHeader>
-          <CardBody>
-            <ResponsiveContainer width="100%" height={250}>
+          <CardBody className="flex flex-col items-center">
+            <ResponsiveContainer width="100%" height={240}>
               <PieChart>
                 <Pie
                   data={revenueBreakdownData}
                   cx="50%"
                   cy="50%"
+                  innerRadius={70}
+                  outerRadius={100}
                   labelLine={false}
-                  label={entry => `${entry.name}: ${entry.percent}%`}
-                  outerRadius={80}
                   fill="#8884d8"
                   dataKey="value"
+                  strokeWidth={3}
+                  stroke="#fff"
                 >
                   {revenueBreakdownData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
@@ -347,32 +255,58 @@ export default function Dashboard() {
                 />
               </PieChart>
             </ResponsiveContainer>
+            <div className="mt-4 w-full space-y-1">
+              {revenueBreakdownData.map((entry, index) => (
+                <div
+                  key={index}
+                  className="flex items-center justify-between px-2 rounded-lg hover:bg-default-100 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-3 h-3 rounded-sm"
+                      style={{ backgroundColor: entry.color }}
+                    />
+                    <span className="text-sm font-medium">{entry.name}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-default-600">
+                      {formatCurrency(entry.value)}
+                    </span>
+                    <span className="text-sm font-semibold text-default-500 min-w-11.25 text-right">
+                      {entry.percentage.toFixed(1)}%
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </CardBody>
         </Card>
 
-        {/* Expense Breakdown */}
+        {/* Expense Breakdown - Donut Chart */}
         <Card className="rounded-3xl" shadow="none">
           <CardHeader className="py-6 px-6">
             <div className="flex items-center gap-2">
-              <PieChartIcon size={20} className="text-danger" />
+              <PieChartIcon size={20} className="text-[#fa8901]" />
               <div>
                 <h3 className="text-base font-semibold">Expenses by Type</h3>
-                <p className="text-xs text-default-500">Expense distribution</p>
+                <p className="text-xs text-default-500">Expense Distribution</p>
               </div>
             </div>
           </CardHeader>
-          <CardBody>
-            <ResponsiveContainer width="100%" height={250}>
+          <CardBody className="flex flex-col items-center">
+            <ResponsiveContainer width="100%" height={240}>
               <PieChart>
                 <Pie
                   data={expenseBreakdownData}
                   cx="50%"
                   cy="50%"
+                  innerRadius={70}
+                  outerRadius={100}
                   labelLine={false}
-                  label={entry => `${entry.name}: ${entry.percent}%`}
-                  outerRadius={80}
                   fill="#8884d8"
                   dataKey="value"
+                  strokeWidth={3}
+                  stroke="#fff"
                 >
                   {expenseBreakdownData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
@@ -388,39 +322,123 @@ export default function Dashboard() {
                 />
               </PieChart>
             </ResponsiveContainer>
+            <div className="mt-4 w-full space-y-1">
+              {expenseBreakdownData.map((entry, index) => (
+                <div
+                  key={index}
+                  className="flex items-center justify-between px-2 rounded-lg hover:bg-default-100 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-3 h-3 rounded-sm"
+                      style={{ backgroundColor: entry.color }}
+                    />
+                    <span className="text-sm font-medium">{entry.name}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-default-600">
+                      {formatCurrency(entry.value)}
+                    </span>
+                    <span className="text-sm font-semibold text-default-500 min-w-11.25 text-right">
+                      {entry.percentage.toFixed(1)}%
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </CardBody>
         </Card>
       </div>
 
-      {/* Profitability Margins */}
+      {/* Monthly Trend - Original 3 Lines */}
       <Card className="rounded-3xl" shadow="none">
         <CardHeader className="py-6 px-6">
-          <div>
-            <h3 className="text-base font-semibold">Profit Margins</h3>
-            <p className="text-xs text-default-500">
-              Gross and net profit margins comparison
-            </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-base font-semibold">Revenue Overview</h3>
+              <p className="text-xs text-default-500">
+                Income vs Expenses - 12 Month Trend
+              </p>
+            </div>
           </div>
         </CardHeader>
         <CardBody>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={profitabilityData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} unit="%" />
-              <Tooltip
-                formatter={(value: any) => `${value.toFixed(1)}%`}
-                contentStyle={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: '8px',
-                }}
+          <ResponsiveContainer width="100%" height={350}>
+            <LineChart data={monthlyTrendData}>
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke="#e5e7eb"
+                vertical={false}
               />
-              <Legend wrapperStyle={{ fontSize: '12px' }} />
-              <Bar dataKey="Accrual" fill="#3b82f6" name="Accrual Basis" />
-              <Bar dataKey="Cash" fill="#10b981" name="Cash Basis" />
-            </BarChart>
+              <XAxis
+                dataKey="month"
+                tick={{ fontSize: 11, fill: '#6b7280' }}
+                axisLine={{ stroke: '#e5e7eb' }}
+                tickLine={false}
+              />
+              <YAxis
+                tick={{ fontSize: 11, fill: '#6b7280' }}
+                axisLine={{ stroke: '#e5e7eb' }}
+                tickLine={false}
+              />
+              <Tooltip content={<CustomTooltip />} />
+              <ReferenceLine y={0} stroke="#94a3b8" strokeWidth={1} />
+              <Line
+                type="monotone"
+                dataKey="revenue"
+                stroke="#009e10"
+                strokeWidth={3}
+                name="Revenue"
+                dot={{ fill: '#009e10', r: 5, strokeWidth: 2, stroke: '#fff' }}
+                activeDot={{ r: 7 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="expenses"
+                stroke="#fa8901"
+                strokeWidth={3}
+                name="Expenses"
+                dot={{ fill: '#fa8901', r: 5, strokeWidth: 2, stroke: '#fff' }}
+                activeDot={{ r: 7 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="profit"
+                stroke="#3b82f6"
+                strokeWidth={3}
+                name="Profit"
+                dot={(props: any) => {
+                  const { cx, cy, payload } = props;
+                  return (
+                    <circle
+                      cx={cx}
+                      cy={cy}
+                      r={5}
+                      fill={payload.profit < 0 ? '#ef4444' : '#3b82f6'}
+                      stroke="#fff"
+                      strokeWidth={2}
+                    />
+                  );
+                }}
+                activeDot={{ r: 7 }}
+              />
+            </LineChart>
           </ResponsiveContainer>
+
+          <div className="flex justify-center py-4 items-center gap-4">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-[#009e10]" />
+              <span className="text-xs font-medium">Revenue</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-[#fa8901]" />
+              <span className="text-xs font-medium">Expenses</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-[#3b82f6]" />
+              <span className="text-xs font-medium">Profit</span>
+            </div>
+          </div>
         </CardBody>
       </Card>
     </div>

@@ -1,6 +1,6 @@
-// ============================================
-// DATABASE & GENERATOR
-// ============================================
+generator client {
+  provider = "prisma-client-js"
+}
 
 datasource db {
   provider  = "postgresql"
@@ -8,66 +8,70 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-generator client {
-  provider = "prisma-client-js"
-}
-
-// ============================================
-// AUTH & USER
-// ============================================
-
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
-  emailVerified DateTime?
-  password      String?
-  image         String?
-  onboarded     Boolean   @default(false)
-
+  id               String            @id @default(cuid())
+  name             String?
+  email            String?           @unique
+  emailVerified    DateTime?
+  password         String?
+  image            String?
+  onboarded        Boolean           @default(false)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
   activePackageId  String?
-  packageStartDate DateTime?
   packageEndDate   DateTime?
-  packageStatus    PackageStatus @default(TRIAL)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  accounts   Account[]
-  sessions   Session[]
-  onboarding OnboardingData?
-  customers  Customer[]
-
-  invoices   Invoice[]
-  quotations Quotation[]
-  sales      Sale[]
-  purchases  Purchase[]
-
-  incomeRecords IncomeRecord[]
-  expenses      Expense[]
-  payments      Payment[]
-  loans         Loan[]
-  ownerEquity   OwnerEquity[]
-
-  fixedAssets   FixedAsset[]
-  digitalAssets DigitalAsset[]
-  securities    Security[]
-
+  packageStartDate DateTime?
+  packageStatus    PackageStatus     @default(TRIAL)
+  accounts         Account[]
+  customers        Customer[]
+  digitalAssets    DigitalAsset[]
+  expenses         Expense[]
+  fixedAssets      FixedAsset[]
+  incomeRecords    IncomeRecord[]
   inventoryItems   InventoryItem[]
-  productions      Production[]
+  invoices         Invoice[]
+  loans            Loan[]
+  onboarding       OnboardingData?
+  ownerEquity      OwnerEquity[]
+  payments         Payment[]
   productRecipes   ProductRecipe[]
+  productions      Production[]
+  purchases        Purchase[]
+  quotations       Quotation[]
+  sales            Sale[]
+  securities       Security[]
+  sessions         Session[]
   stockAdjustments StockAdjustment[]
-
-  package Package? @relation(fields: [activePackageId], references: [id])
+  package          Package?          @relation(fields: [activePackageId], references: [id])
 
   @@index([email])
 }
 
-enum PackageStatus {
-  TRIAL
-  ACTIVE
-  EXPIRED
-  CANCELLED
+model Waitlist {
+  id          String   @id @default(nanoid(12))
+  name        String
+  email       String   @unique
+  phoneNumber String?
+  source      String?  // Where they signed up from (e.g., "landing_page", "navbar")
+  referrer    String?  // Referral source
+  userAgent   String?  // Browser info
+  ipAddress   String?  // IP address
+  status      WaitlistStatus @default(PENDING)
+  notified    Boolean        @default(false)
+  notifiedAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([email])
+  @@index([status])
+  @@index([createdAt])
+}
+
+enum WaitlistStatus {
+  PENDING     // Waiting for launch
+  NOTIFIED    // Has been notified about launch
+  CONVERTED   // Signed up for the product
+  UNSUBSCRIBED // Opted out
 }
 
 model Package {
@@ -82,8 +86,7 @@ model Package {
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-
-  users User[]
+  users       User[]
 
   @@index([isActive])
 }
@@ -94,12 +97,12 @@ model Account {
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String? @db.Text
-  access_token      String? @db.Text
+  refresh_token     String?
+  access_token      String?
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String? @db.Text
+  id_token          String?
   session_state     String?
   user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -139,41 +142,33 @@ model OnboardingData {
   phoneNumber          String
   heardFrom            String
   referralCode         String?
-  workTypes            String[]
   registrationType     String
   businessName         String?
   startDate            DateTime
   notificationsEnabled Boolean  @default(false)
   termsAccepted        Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  workTypes            String[]
   bankDetails          Json?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-// ============================================
-// CUSTOMERS
-// ============================================
-
 model Customer {
-  id     String  @id @default(nanoid(12))
-  userId String
-  name   String
-  email  String?
-  phone  String?
-
+  id           String       @id @default(nanoid(12))
+  userId       String
+  name         String
+  email        String?
+  phone        String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
   customerRole CustomerRole @default(BUYER)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  invoices   Invoice[]
-  quotations Quotation[]
-  sales      Sale[]
-  purchases  Purchase[]
-  expenses   Expense[]
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expenses     Expense[]
+  invoices     Invoice[]
+  purchases    Purchase[]
+  quotations   Quotation[]
+  sales        Sale[]
 
   @@unique([userId, email, customerRole])
   @@index([userId])
@@ -181,57 +176,35 @@ model Customer {
   @@index([userId, phone])
 }
 
-enum CustomerRole {
-  BUYER
-  SUPPLIER
-}
-
-// ============================================
-// INVENTORY
-// ============================================
-
 model InventoryItem {
-  id     String @id @default(nanoid(12))
-  userId String
-
-  itemType    InventoryType
-  sku         String?
-  name        String
-  description String?
-  category    String?
-  unit        String        @default("unit")
-
-  trackInventory  Boolean @default(true)
-  quantityOnHand  Float   @default(0)
-  reorderLevel    Float?
-  reorderQuantity Float?
-
-  averageCost      Float  @default(0)
-  lastPurchaseCost Float?
-  sellingPrice     Float?
-
-  showOnStorefront Boolean @default(false)
-  storefrontImage  String?
-
-  isActive Boolean @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  // Sales & Purchases
-  saleItems     SaleItem[]
-  purchaseItems PurchaseItem[]
-
-  // Production relationships
+  id                String             @id @default(nanoid(12))
+  userId            String
+  itemType          InventoryType
+  sku               String?
+  name              String
+  description       String?
+  category          String?
+  unit              String             @default("unit")
+  trackInventory    Boolean            @default(true)
+  quantityOnHand    Float              @default(0)
+  reorderLevel      Float?
+  reorderQuantity   Float?
+  averageCost       Float              @default(0)
+  lastPurchaseCost  Float?
+  sellingPrice      Float?
+  showOnStorefront  Boolean            @default(false)
+  storefrontImage   String?
+  isActive          Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   recipe            ProductRecipe?     @relation("RecipeOutput")
-  recipeIngredients RecipeIngredient[]
-  productionInputs  ProductionInput[]
   productionOutputs Production[]       @relation("ProductionOutput")
-
-  // Stock adjustments
-  stockAdjustments StockAdjustment[]
+  productionInputs  ProductionInput[]
+  purchaseItems     PurchaseItem[]
+  recipeIngredients RecipeIngredient[]
+  saleItems         SaleItem[]
+  stockAdjustments  StockAdjustment[]
 
   @@unique([userId, sku])
   @@index([userId, itemType])
@@ -240,39 +213,24 @@ model InventoryItem {
   @@index([userId, showOnStorefront])
 }
 
-enum InventoryType {
-  RAW_MATERIAL  // Materials used in production (flour, leather, etc.)
-  FINISHED_GOOD // Items bought finished for resale
-  PRODUCED_ITEM // Items you manufacture (cupcakes, shoes, etc.)
-  SERVICE       // Services offered
-  CONSUMABLE    // Supplies, packaging, etc.
-}
-
 model StockAdjustment {
-  id              String @id @default(ulid())
-  userId          String
-  inventoryItemId String
-
-  adjustmentType AdjustmentType
-  quantity       Float
-  reason         String
-
-  oldQuantity Float
-  newQuantity Float
-
-  unitCost  Float?
-  totalCost Float?
-
+  id                 String         @id @default(ulid())
+  userId             String
+  inventoryItemId    String
+  adjustmentType     AdjustmentType
+  quantity           Float
+  reason             String
+  oldQuantity        Float
+  newQuantity        Float
+  unitCost           Float?
+  totalCost          Float?
   sourcePurchaseId   String?
+  adjustmentDate     DateTime       @default(now())
+  notes              String?
+  createdAt          DateTime       @default(now())
   sourceProductionId String?
-
-  adjustmentDate DateTime @default(now())
-  notes          String?
-
-  createdAt DateTime @default(now())
-
-  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  inventoryItem      InventoryItem  @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  user               User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, inventoryItemId])
   @@index([userId, adjustmentDate])
@@ -280,53 +238,24 @@ model StockAdjustment {
   @@index([sourceProductionId])
 }
 
-enum AdjustmentType {
-  RESTOCK    // Manual restock
-  SALE       // Sold to customer
-  DAMAGE     // Damaged goods
-  RETURN     // Customer return
-  CORRECTION // Inventory correction
-  PRODUCTION // Used in or produced from production
-  THEFT      // Stolen
-  FOUND      // Found during audit
-  EXPIRED    // Expired goods
-  USED       // Used/consumed
-  OTHER      // Other reasons
-}
-
-// ============================================
-// PRODUCTION - RECIPE/TEMPLATE SYSTEM
-// ============================================
-
 model ProductRecipe {
-  id     String @id @default(nanoid(12))
-  userId String
-
-  name        String // e.g., "Chocolate Cupcake Template"
-  description String?
-  category    String?
-
-  // Output product - what this template makes
-  outputInventoryItemId String @unique
-  outputQuantity        Float  // Default quantity per batch (can be adjusted during production)
-
-  // Default estimated costs (can be adjusted during production)
-  defaultLaborCost    Float @default(0)
-  defaultOverheadCost Float @default(0)
-
-  // Recipe image (optional)
-  recipeImage String?
-
-  isActive Boolean @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  outputInventory InventoryItem @relation("RecipeOutput", fields: [outputInventoryItemId], references: [id], onDelete: Restrict)
-
-  ingredients RecipeIngredient[]
-  productions Production[]
+  id                    String             @id @default(nanoid(12))
+  userId                String
+  name                  String
+  description           String?
+  category              String?
+  outputInventoryItemId String             @unique
+  outputQuantity        Float
+  defaultLaborCost      Float              @default(0)
+  defaultOverheadCost   Float              @default(0)
+  recipeImage           String?
+  isActive              Boolean            @default(true)
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  outputInventory       InventoryItem      @relation("RecipeOutput", fields: [outputInventoryItemId], references: [id])
+  user                  User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productions           Production[]
+  ingredients           RecipeIngredient[]
 
   @@index([userId, isActive])
   @@index([userId, name])
@@ -334,71 +263,49 @@ model ProductRecipe {
 }
 
 model RecipeIngredient {
-  id              String @id @default(ulid())
+  id              String        @id @default(ulid())
   recipeId        String
   inventoryItemId String
-
-  quantity Float  // Default quantity per batch
-  notes    String?
-
-  recipe        ProductRecipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
-  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+  quantity        Float
+  notes           String?
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  recipe          ProductRecipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
 
   @@unique([recipeId, inventoryItemId])
   @@index([recipeId])
   @@index([inventoryItemId])
 }
 
-// ============================================
-// PRODUCTION
-// ============================================
-
 model Production {
-  id               String @id @default(nanoid(12))
-  userId           String
-  productionNumber String @unique
-
-  // Optional: Link to recipe (null for one-time/ad-hoc productions)
-  recipeId String?
-
-  // Optional: Link to sale if produced for specific order
-  saleId String? @unique
-
-  title          String?
-  description    String?
-  productionDate DateTime @default(now())
-
-  // Output details
-  outputItemName        String // Product name (can differ from inventory item name)
-  outputQuantity        Float  // Actual quantity produced
-  outputSellingPrice    Float? // Selling price per unit
-  outputInventoryItemId String // Which inventory item was produced
-  outputImage           String? // Optional: production batch image
-
-  // Batch multiplier (for recipe-based productions)
-  // e.g., 2.5x means 2.5 times the recipe quantities
-  batchMultiplier Float @default(1)
-
-  // Costs breakdown
-  materialsCost Float @default(0) // Sum of all material inputs
-  laborCost     Float @default(0) // Manual entry
-  overheadCost  Float @default(0) // Manual entry (utilities, rent, etc.)
-  totalCost     Float @default(0) // Sum of all costs
-  unitCost      Float @default(0) // Total cost / output quantity
-
-  status ProductionStatus @default(COMPLETED)
-  notes  String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  recipe          ProductRecipe? @relation(fields: [recipeId], references: [id], onDelete: SetNull)
-  sale            Sale?          @relation(fields: [saleId], references: [id], onDelete: SetNull)
-  outputInventory InventoryItem  @relation("ProductionOutput", fields: [outputInventoryItemId], references: [id], onDelete: Restrict)
-
-  inputs    ProductionInput[]
-  saleItems SaleItem[]
+  id                    String            @id @default(nanoid(12))
+  userId                String
+  productionNumber      String            @unique
+  saleId                String?           @unique
+  title                 String?
+  description           String?
+  productionDate        DateTime          @default(now())
+  outputItemName        String
+  outputQuantity        Float
+  outputSellingPrice    Float?
+  outputInventoryItemId String
+  materialsCost         Float             @default(0)
+  laborCost             Float             @default(0)
+  overheadCost          Float             @default(0)
+  totalCost             Float             @default(0)
+  unitCost              Float             @default(0)
+  status                ProductionStatus  @default(COMPLETED)
+  notes                 String?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  batchMultiplier       Float             @default(1)
+  outputImage           String?
+  recipeId              String?
+  outputInventory       InventoryItem     @relation("ProductionOutput", fields: [outputInventoryItemId], references: [id])
+  recipe                ProductRecipe?    @relation(fields: [recipeId], references: [id])
+  sale                  Sale?             @relation(fields: [saleId], references: [id])
+  user                  User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  inputs                ProductionInput[]
+  saleItems             SaleItem[]
 
   @@index([userId, productionDate])
   @@index([userId, status])
@@ -408,88 +315,500 @@ model Production {
   @@index([productionNumber])
 }
 
-enum ProductionStatus {
-  PLANNED     // Recipe selected, materials planned
-  IN_PROGRESS // Production started
-  COMPLETED   // Finished and added to inventory
-  CANCELLED   // Production cancelled
-}
-
 model ProductionInput {
-  id              String @id @default(ulid())
+  id              String        @id @default(ulid())
   productionId    String
   inventoryItemId String
-
-  quantity  Float  // Actual quantity used
-  unitCost  Float  // Cost per unit at time of production
-  totalCost Float  // quantity * unitCost
-
-  notes String?
-
-  production    Production    @relation(fields: [productionId], references: [id], onDelete: Cascade)
-  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+  quantity        Float
+  unitCost        Float
+  totalCost       Float
+  notes           String?
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  production      Production    @relation(fields: [productionId], references: [id], onDelete: Cascade)
 
   @@index([productionId])
   @@index([inventoryItemId])
 }
 
-// ============================================
-// QUOTATIONS
-// ============================================
-
 model Quotation {
-  id              String @id @default(nanoid(12))
-  quotationNumber String @unique
-  userId          String
-
-  customerId    String?
-  customerName  String?
-  customerEmail String?
-  customerPhone String?
-
-  title       String?
-  description String?
-
-  lineItems Json[]
-
-  subtotal Float
-
-  discountType   DiscountType?
-  discountValue  Float?
-  discountAmount Float         @default(0)
-
-  includeVAT  Boolean @default(false)
-  vatAmount   Float?
-  totalAmount Float
-
-  amountPaid Float @default(0)
-  balance    Float
-
-  status     QuotationStatus @default(DRAFT)
-  validUntil DateTime?
-  issueDate  DateTime        @default(now())
-
-  refundReason String?
-  refundDate   DateTime?
-  refundAmount Float?
-
+  id               String          @id @default(nanoid(12))
+  quotationNumber  String          @unique
+  userId           String
+  customerId       String?
+  customerName     String?
+  customerEmail    String?
+  customerPhone    String?
+  title            String?
+  description      String?
+  includeVAT       Boolean         @default(false)
+  vatAmount        Float?
+  totalAmount      Float
+  amountPaid       Float           @default(0)
+  balance          Float
+  status           QuotationStatus @default(DRAFT)
+  validUntil       DateTime?
+  issueDate        DateTime        @default(now())
+  refundReason     String?
+  refundDate       DateTime?
+  refundAmount     Float?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  discountAmount   Float           @default(0)
+  discountType     DiscountType?
+  discountValue    Float?
+  lineItems        Json
+  subtotal         Float
   payments         Payment[]
   createdPurchases Purchase[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customer         Customer?       @relation(fields: [customerId], references: [id])
+  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([userId, status])
   @@index([userId, issueDate])
 }
 
+model Invoice {
+  id            String        @id @default(nanoid(10))
+  invoiceNumber String        @unique
+  userId        String
+  customerId    String?
+  customerName  String?
+  customerEmail String?
+  customerPhone String?
+  title         String?
+  description   String?
+  includeVAT    Boolean       @default(false)
+  items         Json
+  amount        Float
+  vatAmount     Float?
+  totalAmount   Float
+  status        InvoiceStatus @default(DRAFT)
+  issueDate     DateTime      @default(now())
+  dueDate       DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  saleId        String?       @unique
+  convertedAt   DateTime?
+  customer      Customer?     @relation(fields: [customerId], references: [id])
+  sale          Sale?         @relation(fields: [saleId], references: [id])
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, status])
+  @@index([userId, issueDate])
+}
+
+model Sale {
+  id                String         @id @default(nanoid(10))
+  receiptNumber     String         @unique
+  userId            String
+  invoiceId         String?        @unique
+  customerId        String?
+  customerName      String?
+  customerEmail     String?
+  customerPhone     String?
+  title             String?
+  description       String?
+  includeVAT        Boolean        @default(false)
+  vatAmount         Float?
+  totalAmount       Float
+  amountPaid        Float          @default(0)
+  balance           Float
+  status            SaleStatus     @default(UNPAID)
+  saleDate          DateTime       @default(now())
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  deliveryCost      Float          @default(0)
+  discountAmount    Float          @default(0)
+  discountType      DiscountType?
+  discountValue     Float?
+  otherSaleExpenses Json?
+  refundAmount      Float?
+  refundDate        DateTime?
+  refundReason      String?
+  sourceType        SaleSourceType
+  subtotal          Float
+  totalSaleExpenses Float          @default(0)
+  invoice           Invoice?
+  payments          Payment[]
+  production        Production?
+  customer          Customer?      @relation(fields: [customerId], references: [id])
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  saleItems         SaleItem[]
+
+  @@index([userId])
+  @@index([userId, status])
+  @@index([userId, saleDate])
+}
+
+model SaleItem {
+  id              String         @id @default(ulid())
+  saleId          String
+  inventoryItemId String?
+  productionId    String?
+  itemName        String
+  description     String?
+  quantity        Float
+  unitPrice       Float
+  amount          Float
+  costPrice       Float          @default(0)
+  totalCost       Float          @default(0)
+  profit          Float          @default(0)
+  inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id])
+  production      Production?    @relation(fields: [productionId], references: [id])
+  sale            Sale           @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  @@index([saleId])
+  @@index([inventoryItemId])
+  @@index([productionId])
+}
+
+model Purchase {
+  id                String         @id @default(nanoid(10))
+  purchaseNumber    String         @unique
+  userId            String
+  vendorName        String
+  vendorEmail       String?
+  vendorPhone       String?
+  title             String?
+  description       String?
+  otherCosts        Json?
+  otherCostsTotal   Float          @default(0)
+  subtotal          Float
+  includeVAT        Boolean        @default(false)
+  vatAmount         Float?
+  totalAmount       Float
+  amountPaid        Float          @default(0)
+  balance           Float
+  status            PurchaseStatus @default(UNPAID)
+  purchaseDate      DateTime       @default(now())
+  refundReason      String?
+  refundDate        DateTime?
+  refundAmount      Float?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  customerId        String?
+  attachments       Json?
+  purchaseType      PurchaseType
+  sourceQuotationId String?
+  payments          Payment[]
+  customer          Customer?      @relation(fields: [customerId], references: [id])
+  sourceQuotation   Quotation?     @relation(fields: [sourceQuotationId], references: [id])
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items             PurchaseItem[]
+
+  @@index([userId])
+  @@index([userId, status])
+  @@index([userId, purchaseDate])
+  @@index([userId, customerId])
+  @@index([userId, purchaseType])
+  @@index([sourceQuotationId])
+}
+
+model PurchaseItem {
+  id              String         @id @default(ulid())
+  purchaseId      String
+  inventoryItemId String?
+  itemName        String
+  description     String?
+  quantity        Float
+  unitPrice       Float
+  amount          Float
+  unit            String         @default("unit")
+  sku             String?
+  category        String?
+  notes           String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id])
+  purchase        Purchase       @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseId])
+  @@index([inventoryItemId])
+}
+
+model Payment {
+  id            String          @id @default(ulid())
+  saleId        String?
+  amount        Float
+  paymentDate   DateTime        @default(now())
+  paymentMethod PaymentMethod
+  reference     String?
+  notes         String?
+  createdAt     DateTime        @default(now())
+  category      PaymentCategory
+  payableType   PayableType
+  purchaseId    String?
+  quotationId   String?
+  userId        String
+  incomeId      String?
+  expensesId    String?
+  loanId        String?
+  expenses      Expense?        @relation(fields: [expensesId], references: [id], onDelete: Cascade)
+  income        IncomeRecord?   @relation(fields: [incomeId], references: [id], onDelete: Cascade)
+  loan          Loan?           @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  purchase      Purchase?       @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  quotation     Quotation?      @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  sale          Sale?           @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, payableType])
+  @@index([userId, saleId])
+  @@index([userId, quotationId])
+  @@index([userId, purchaseId])
+  @@index([userId, incomeId])
+  @@index([userId, expensesId])
+  @@index([userId, loanId])
+  @@index([userId, paymentDate])
+}
+
+model IncomeRecord {
+  id                String             @id @default(ulid())
+  userId            String
+  mainCategory      IncomeMainCategory
+  subCategory       IncomeSubCategory
+  grossAmount       Float
+  description       String?
+  date              DateTime           @default(now())
+  isRefund          Boolean            @default(false)
+  refundReason      String?
+  attachments       Json?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  customSubCategory String?
+  refundDate        DateTime?
+  taxablePercentage Float?
+  linkedLoanId      String?
+  amountPaid        Float              @default(0)
+  balance           Float              @default(0)
+  status            IncomeRecordStatus @default(UNPAID)
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payments          Payment[]
+
+  @@index([userId, mainCategory])
+  @@index([userId, date])
+  @@index([userId, subCategory])
+  @@index([userId, mainCategory, date])
+  @@index([userId, isRefund])
+  @@index([userId, linkedLoanId])
+  @@index([userId, status])
+}
+
+model Expense {
+  id                  String          @id @default(ulid())
+  userId              String
+  category            ExpenseCategory
+  subCategory         String?
+  amount              Float
+  description         String
+  date                DateTime        @default(now())
+  isDeductible        Boolean         @default(true)
+  deductionPercentage Int             @default(100)
+  isReturn            Boolean         @default(false)
+  returnReason        String?
+  receipt             String?
+  attachments         Json?
+  reference           String?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  customerId          String?
+  vendorName          String?
+  returnDate          DateTime?
+  note                String?
+  linkedLoanId        String?
+  amountPaid          Float           @default(0)
+  balance             Float           @default(0)
+  status              ExpenseStatus   @default(UNPAID)
+  customer            Customer?       @relation(fields: [customerId], references: [id])
+  user                User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payments            Payment[]
+
+  @@index([userId, category])
+  @@index([userId, date])
+  @@index([userId, isDeductible])
+  @@index([userId, category, date])
+  @@index([userId, isReturn])
+  @@index([userId, customerId])
+  @@index([userId, linkedLoanId])
+  @@index([userId, status])
+}
+
+model Loan {
+  id                String           @id @default(nanoid(12))
+  userId            String
+  loanNumber        String           @unique
+  loanType          LoanType
+  principalAmount   Float
+  interestRate      Float
+  startDate         DateTime
+  endDate           DateTime?
+  term              Int?
+  paymentFrequency  PaymentFrequency
+  currentBalance    Float
+  totalPaid         Float            @default(0)
+  totalInterestPaid Float            @default(0)
+  status            LoanStatus       @default(ACTIVE)
+  purpose           String?
+  collateral        String?
+  notes             String?
+  attachments       Json?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  insuranceFee      Float            @default(0)
+  managementFee     Float            @default(0)
+  otherCharges      Float            @default(0)
+  partyEmail        String?
+  partyName         String
+  partyPhone        String?
+  processingFee     Float            @default(0)
+  totalCharges      Float            @default(0)
+  termUnit          TermUnit         @default(MONTHS)
+  user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payments          Payment[]
+
+  @@index([userId, loanType])
+  @@index([userId, status])
+  @@index([userId, startDate])
+}
+
+model OwnerEquity {
+  id              String     @id @default(ulid())
+  userId          String
+  type            EquityType
+  amount          Float
+  date            DateTime   @default(now())
+  shareholderName String?
+  description     String?
+  reference       String?
+  notes           String?
+  attachments     Json?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@index([userId, date])
+}
+
+model FixedAsset {
+  id               String             @id @default(nanoid(12))
+  userId           String
+  name             String
+  category         FixedAssetCategory
+  acquisitionCost  Float
+  acquisitionDate  DateTime
+  currentValue     Float
+  depreciationRate Float?
+  residualValue    Float              @default(0)
+  valueHistory     Json?
+  disposalDate     DateTime?
+  disposalProceeds Float?
+  capitalGain      Float?
+  description      String?
+  status           AssetStatus        @default(ACTIVE)
+  attachments      Json?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([userId, category])
+  @@index([userId, acquisitionDate])
+}
+
+model DigitalAsset {
+  id           String           @id @default(nanoid(12))
+  userId       String
+  type         DigitalAssetType
+  name         String
+  symbol       String?
+  quantity     Float
+  averageCost  Float
+  currentValue Float
+  transactions Json[]
+  totalGains   Float            @default(0)
+  totalLosses  Float            @default(0)
+  description  String?
+  status       AssetStatus      @default(ACTIVE)
+  attachments  Json?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@index([userId, status])
+}
+
+model Security {
+  id                String       @id @default(nanoid(12))
+  userId            String
+  type              SecurityType
+  symbol            String
+  name              String
+  exchange          String?
+  quantity          Float
+  averageCost       Float
+  currentValue      Float
+  transactions      Json[]
+  dividendsReceived Float        @default(0)
+  interestReceived  Float        @default(0)
+  totalGains        Float        @default(0)
+  totalLosses       Float        @default(0)
+  status            AssetStatus  @default(ACTIVE)
+  description       String?
+  attachments       Json?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@index([userId, status])
+}
+
+enum PackageStatus {
+  TRIAL
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+enum CustomerRole {
+  BUYER
+  SUPPLIER
+}
+
+enum InventoryType {
+  RAW_MATERIAL
+  FINISHED_GOOD
+  PRODUCED_ITEM
+  SERVICE
+  CONSUMABLE
+}
+
+enum AdjustmentType {
+  RESTOCK
+  SALE
+  DAMAGE
+  RETURN
+  CORRECTION
+  PRODUCTION
+  THEFT
+  FOUND
+  EXPIRED
+  USED
+  OTHER
+}
+
+enum ProductionStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
 enum QuotationStatus {
   DRAFT
-  SENT
   UNPAID
   PARTIALLY_PAID
   PAID
@@ -497,52 +816,12 @@ enum QuotationStatus {
   CANCELLED
   REFUNDED
   PARTIALLY_REFUNDED
+  SENT
 }
 
 enum DiscountType {
   PERCENTAGE
   FIXED_AMOUNT
-}
-
-// ============================================
-// INVOICES
-// ============================================
-
-model Invoice {
-  id            String @id @default(nanoid(10))
-  invoiceNumber String @unique
-  userId        String
-
-  customerId    String?
-  customerName  String?
-  customerEmail String?
-  customerPhone String?
-
-  title       String?
-  description String?
-  items       Json
-  amount      Float
-
-  includeVAT  Boolean @default(false)
-  vatAmount   Float?
-  totalAmount Float
-
-  status    InvoiceStatus @default(DRAFT)
-  issueDate DateTime      @default(now())
-  dueDate   DateTime?
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
-
-  saleId      String?   @unique
-  sale        Sale?     @relation(fields: [saleId], references: [id])
-  convertedAt DateTime?
-
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
-
-  @@index([userId])
-  @@index([userId, status])
-  @@index([userId, issueDate])
 }
 
 enum InvoiceStatus {
@@ -551,65 +830,6 @@ enum InvoiceStatus {
   CONVERTED
   OVERDUE
   CANCELLED
-}
-
-// ============================================
-// SALES
-// ============================================
-
-model Sale {
-  id            String @id @default(nanoid(10))
-  receiptNumber String @unique
-  userId        String
-
-  sourceType SaleSourceType
-  invoiceId  String?        @unique
-  invoice    Invoice?
-
-  customerId    String?
-  customerName  String?
-  customerEmail String?
-  customerPhone String?
-
-  title       String?
-  description String?
-
-  subtotal       Float
-  discountType   DiscountType?
-  discountValue  Float?
-  discountAmount Float         @default(0)
-
-  includeVAT  Boolean @default(false)
-  vatAmount   Float?
-  totalAmount Float
-
-  deliveryCost      Float @default(0)
-  otherSaleExpenses Json?
-  totalSaleExpenses Float @default(0)
-
-  amountPaid Float @default(0)
-  balance    Float
-
-  status   SaleStatus @default(UNPAID)
-  saleDate DateTime   @default(now())
-
-  refundReason String?
-  refundDate   DateTime?
-  refundAmount Float?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
-
-  payments   Payment[]
-  saleItems  SaleItem[]
-  production Production?
-
-  @@index([userId])
-  @@index([userId, status])
-  @@index([userId, saleDate])
 }
 
 enum SaleSourceType {
@@ -625,120 +845,6 @@ enum SaleStatus {
   PARTIALLY_REFUNDED
 }
 
-model SaleItem {
-  id              String  @id @default(ulid())
-  saleId          String
-  inventoryItemId String?
-  productionId    String?
-
-  itemName    String
-  description String?
-  quantity    Float
-  unitPrice   Float
-  amount      Float
-
-  costPrice Float @default(0)
-  totalCost Float @default(0)
-  profit    Float @default(0)
-
-  sale          Sale           @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  inventoryItem InventoryItem? @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
-  production    Production?    @relation(fields: [productionId], references: [id], onDelete: SetNull)
-
-  @@index([saleId])
-  @@index([inventoryItemId])
-  @@index([productionId])
-}
-
-// ============================================
-// PURCHASES
-// ============================================
-
-model Purchase {
-  id             String @id @default(nanoid(10))
-  purchaseNumber String @unique
-  userId         String
-
-  purchaseType PurchaseType
-
-  customerId String?
-  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
-
-  vendorName  String
-  vendorEmail String?
-  vendorPhone String?
-
-  title       String?
-  description String?
-
-  items PurchaseItem[]
-
-  otherCosts      Json?
-  otherCostsTotal Float @default(0)
-
-  subtotal    Float
-  includeVAT  Boolean @default(false)
-  vatAmount   Float?
-  totalAmount Float
-
-  amountPaid Float @default(0)
-  balance    Float
-
-  status       PurchaseStatus @default(UNPAID)
-  purchaseDate DateTime       @default(now())
-
-  refundReason String?
-  refundDate   DateTime?
-  refundAmount Float?
-
-  attachments Json?
-
-  sourceQuotationId String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  payments        Payment[]
-  sourceQuotation Quotation? @relation(fields: [sourceQuotationId], references: [id], onDelete: SetNull)
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-
-  @@index([userId])
-  @@index([userId, status])
-  @@index([userId, purchaseDate])
-  @@index([userId, customerId])
-  @@index([userId, purchaseType])
-  @@index([sourceQuotationId])
-}
-
-model PurchaseItem {
-  id              String  @id @default(ulid())
-  purchaseId      String
-  inventoryItemId String?
-
-  itemName    String
-  description String?
-  quantity    Float
-  unitPrice   Float
-  amount      Float
-  unit        String @default("unit")
-
-  // Metadata
-  sku      String?
-  category String?
-  notes    String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  purchase      Purchase       @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
-  inventoryItem InventoryItem? @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
-
-  @@index([purchaseId])
-  @@index([inventoryItemId])
-}
-
 enum PurchaseType {
   INVENTORY_RESTOCK
   BUSINESS_EXPENSE
@@ -752,50 +858,6 @@ enum PurchaseStatus {
   PAID
   REFUNDED
   PARTIALLY_REFUNDED
-}
-
-// ============================================
-// PAYMENTS
-// ============================================
-
-model Payment {
-  id     String @id @default(ulid())
-  userId String
-
-  payableType PayableType
-
-  saleId      String?
-  quotationId String?
-  purchaseId  String?
-  incomeId    String?
-  expensesId  String?
-  loanId      String?
-
-  amount        Float
-  paymentDate   DateTime        @default(now())
-  paymentMethod PaymentMethod
-  category      PaymentCategory
-
-  reference String?
-  notes     String?
-  createdAt DateTime @default(now())
-
-  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  sale      Sale?         @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  quotation Quotation?    @relation(fields: [quotationId], references: [id], onDelete: Cascade)
-  purchase  Purchase?     @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
-  income    IncomeRecord? @relation(fields: [incomeId], references: [id], onDelete: Cascade)
-  expenses  Expense?      @relation(fields: [expensesId], references: [id], onDelete: Cascade)
-  loan      Loan?         @relation(fields: [loanId], references: [id], onDelete: Cascade)
-
-  @@index([userId, payableType])
-  @@index([userId, saleId])
-  @@index([userId, quotationId])
-  @@index([userId, purchaseId])
-  @@index([userId, incomeId])
-  @@index([userId, expensesId])
-  @@index([userId, loanId])
-  @@index([userId, paymentDate])
 }
 
 enum PayableType {
@@ -821,52 +883,6 @@ enum PaymentMethod {
   OTHER
 }
 
-// ============================================
-// INCOME RECORDS
-// ============================================
-
-model IncomeRecord {
-  id     String @id @default(ulid())
-  userId String
-
-  mainCategory      IncomeMainCategory
-  subCategory       IncomeSubCategory
-  customSubCategory String?
-
-  grossAmount       Float
-  taxablePercentage Float?
-
-  amountPaid Float   @default(0)
-  balance    Float  @default(0)
-  status     IncomeRecordStatus @default(UNPAID)
-
-  linkedLoanId String?
-
-  description String?
-  date        DateTime @default(now())
-
-  isRefund     Boolean   @default(false)
-  refundReason String?
-  refundDate   DateTime?
-
-  attachments Json?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  payments Payment[]
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, mainCategory])
-  @@index([userId, date])
-  @@index([userId, subCategory])
-  @@index([userId, mainCategory, date])
-  @@index([userId, isRefund])
-  @@index([userId, linkedLoanId])
-  @@index([userId, status])
-}
-
 enum IncomeRecordStatus {
   UNPAID
   PARTIALLY_PAID
@@ -878,11 +894,11 @@ enum IncomeRecordStatus {
 enum IncomeMainCategory {
   BUSINESS_PROFIT
   EMPLOYMENT_INCOME
+  TRUST_ESTATE_INCOME
+  OTHER_INCOME
   INVESTMENT_INCOME
   PROPERTY_INCOME
   DIGITAL_ASSETS
-  TRUST_ESTATE_INCOME
-  OTHER_INCOME
   EXEMPT_INCOME
 }
 
@@ -897,32 +913,26 @@ enum IncomeSubCategory {
   PRIZES_AWARDS
   REBATES_DISCOUNTS
   OTHER_BUSINESS_INCOME
-
   SALARY
   BONUS
   ALLOWANCES
   BENEFITS_IN_KIND
   PENSION
   SEVERANCE
-
   INVESTMENT_RETURN
   CAPITAL_GAINS
   STOCK_OPTIONS
   MUTUAL_FUNDS
   BONDS
-
   PROPERTY_RENTAL
   PROPERTY_LEASING
   PROPERTY_DISPOSAL
-
   CRYPTOCURRENCY_TRADING
   DIGITAL_ASSET_MINING
   NFT_SALES
   DIGITAL_SERVICES
-
   TRUST_DISTRIBUTION
   ESTATE_DISTRIBUTION
-
   GIFTS_RECEIVED
   DONATIONS_RECEIVED
   GRANTS
@@ -930,65 +940,8 @@ enum IncomeSubCategory {
   INSURANCE_PROCEEDS
   INHERITANCE
   CUSTOM
-
   RETURN_OF_CAPITAL
   SPECIFIC_EXEMPTIONS
-}
-
-// ============================================
-// EXPENSES
-// ============================================
-
-model Expense {
-  id     String @id @default(ulid())
-  userId String
-
-  category    ExpenseCategory
-  subCategory String?
-
-  amount      Float
-  description String
-  date        DateTime @default(now())
-
-  // Payment tracking fields
-  amountPaid Float   @default(0)
-  balance    Float   @default(0)
-  status     ExpenseStatus @default(UNPAID)
-
-  isDeductible        Boolean @default(true)
-  deductionPercentage Int     @default(100)
-  note                String?
-
-  vendorName String?
-
-  customerId String?
-  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
-
-  linkedLoanId String?
-
-  isReturn     Boolean   @default(false)
-  returnReason String?
-  returnDate   DateTime?
-
-  receipt     String?
-  attachments Json?
-
-  reference String?
-  payments  Payment[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, category])
-  @@index([userId, date])
-  @@index([userId, isDeductible])
-  @@index([userId, category, date])
-  @@index([userId, isReturn])
-  @@index([userId, customerId])
-  @@index([userId, linkedLoanId])
-  @@index([userId, status])
 }
 
 enum ExpenseStatus {
@@ -1029,60 +982,6 @@ enum ExpenseCategory {
   OTHER
 }
 
-// ============================================
-// LOANS
-// ============================================
-
-model Loan {
-  id         String   @id @default(nanoid(12))
-  userId     String
-  loanNumber String   @unique
-  loanType   LoanType
-
-  partyName  String
-  partyEmail String?
-  partyPhone String?
-
-  principalAmount Float
-  interestRate    Float
-
-  processingFee Float @default(0)
-  managementFee Float @default(0)
-  insuranceFee  Float @default(0)
-  otherCharges  Float @default(0)
-  totalCharges  Float @default(0)
-
-  startDate DateTime
-  endDate   DateTime?
-  term      Int?
-  termUnit  TermUnit  @default(MONTHS)
-
-  paymentFrequency PaymentFrequency
-
-  currentBalance    Float
-  totalPaid         Float @default(0)
-  totalInterestPaid Float @default(0)
-
-  status LoanStatus @default(ACTIVE)
-
-  purpose    String?
-  collateral String?
-  notes      String?
-
-  attachments Json?
-
-  payments Payment[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, loanType])
-  @@index([userId, status])
-  @@index([userId, startDate])
-}
-
 enum LoanType {
   RECEIVABLE
   PAYABLE
@@ -1112,78 +1011,13 @@ enum LoanStatus {
   WRITTEN_OFF
 }
 
-// ============================================
-// OWNER EQUITY
-// ============================================
-
-model OwnerEquity {
-  id     String @id @default(ulid())
-  userId String
-
-  type   EquityType
-  amount Float
-  date   DateTime   @default(now())
-
-  shareholderName String?
-  description     String?
-  reference       String?
-
-  notes       String?
-  attachments Json?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, type])
-  @@index([userId, date])
-}
-
 enum EquityType {
   CAPITAL_INJECTION
   OWNER_DRAWING
   DIVIDEND
-  SHARE_ISSUANCE     
+  SHARE_ISSUANCE
   SHARE_BUYBACK
   RETAINED_EARNINGS_ADJUSTMENT
-}
-
-// ============================================
-// ASSETS
-// ============================================
-
-model FixedAsset {
-  id     String @id @default(nanoid(12))
-  userId String
-
-  name     String
-  category FixedAssetCategory
-
-  acquisitionCost  Float
-  acquisitionDate  DateTime
-  currentValue     Float
-  depreciationRate Float?
-  residualValue    Float    @default(0)
-
-  valueHistory Json?
-
-  disposalDate     DateTime?
-  disposalProceeds Float?
-  capitalGain      Float?
-
-  description String?
-  status      AssetStatus @default(ACTIVE)
-  attachments Json?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, status])
-  @@index([userId, category])
-  @@index([userId, acquisitionDate])
 }
 
 enum FixedAssetCategory {
@@ -1203,36 +1037,6 @@ enum AssetStatus {
   WRITTEN_OFF
 }
 
-model DigitalAsset {
-  id     String @id @default(nanoid(12))
-  userId String
-
-  type   DigitalAssetType
-  name   String
-  symbol String?
-
-  quantity     Float
-  averageCost  Float
-  currentValue Float
-
-  transactions Json[]
-
-  totalGains  Float @default(0)
-  totalLosses Float @default(0)
-
-  description String?
-  status      AssetStatus @default(ACTIVE)
-  attachments Json?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, type])
-  @@index([userId, status])
-}
-
 enum DigitalAssetType {
   CRYPTOCURRENCY
   NFT
@@ -1240,39 +1044,6 @@ enum DigitalAssetType {
   DIGITAL_ART
   GAME_ASSET
   OTHER
-}
-
-model Security {
-  id     String @id @default(nanoid(12))
-  userId String
-
-  type     SecurityType
-  symbol   String
-  name     String
-  exchange String?
-
-  quantity     Float
-  averageCost  Float
-  currentValue Float
-
-  transactions Json[]
-
-  dividendsReceived Float @default(0)
-  interestReceived  Float @default(0)
-  totalGains        Float @default(0)
-  totalLosses       Float @default(0)
-
-  status      AssetStatus @default(ACTIVE)
-  description String?
-  attachments Json?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, type])
-  @@index([userId, status])
 }
 
 enum SecurityType {

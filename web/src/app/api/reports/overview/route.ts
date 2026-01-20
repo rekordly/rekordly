@@ -1,35 +1,23 @@
 // app/api/reports/overview/route.ts
-import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
-
-import { getAuthUser } from '@/lib/utils/server';
+import { NextRequest } from 'next/server';
 import {
   calculateIncome,
   calculateExpenses,
   calculateRevenue,
 } from '@/lib/handlers/financial-reports';
-import { getDateRange, getMonthCount } from '@/lib/utils/reports';
-import { reportQuerySchema } from '@/lib/validations/general';
+import { getMonthCount, calculateMonthlyData } from '@/lib/utils/reports';
 import { toTwoDecimals } from '@/lib/fn';
+import {
+  parseReportQuery,
+  createReportMeta,
+  apiResponse,
+  handleApiError,
+} from '@/lib/utils/api-helpers';
 
 export async function GET(request: NextRequest) {
   try {
-    const { userId } = await getAuthUser(request);
-
-    // Parse query params
-    const searchParams = request.nextUrl.searchParams;
-    const queryParams = reportQuerySchema.parse({
-      range: searchParams.get('range') || 'thisYear',
-      startDate: searchParams.get('startDate') || undefined,
-      endDate: searchParams.get('endDate') || undefined,
-    });
-
-    // Calculate date range
-    const { startDate, endDate } = getDateRange(
-      queryParams.range,
-      queryParams.startDate,
-      queryParams.endDate
-    );
+    const { userId, queryParams, startDate, endDate } =
+      await parseReportQuery(request);
 
     // Fetch all data in parallel for performance
     const [incomeData, expenseData, revenueData] = await Promise.all([
@@ -142,22 +130,51 @@ export async function GET(request: NextRequest) {
     // CHART DATA
     // ============================================
 
-    // Revenue vs Expenses Over Time (simplified monthly)
-    const comparisonChart = {
-      labels: [], // You can generate month labels based on date range
-      revenue: {
-        accrual: revenueData.summary.netRevenueAccrual,
-        cash: revenueData.summary.totalCashCollected,
-      },
-      expenses: {
-        accrual: expenseData.summary.netExpensesAccrual,
-        cash: expenseData.summary.totalCashPaid,
-      },
-      profit: {
-        accrual: incomeData.netIncome.accrual,
-        cash: incomeData.netIncome.cash,
-      },
-    };
+    // Calculate monthly trend data
+    const revenuePayments = [
+      ...revenueData.rawData.sales.flatMap(s => s.payments),
+      ...revenueData.rawData.quotations.flatMap(q => q.payments),
+      ...revenueData.rawData.otherIncomes.flatMap(i => i.payments),
+    ];
+
+    const expensePayments = [
+      ...expenseData.rawData.purchases.flatMap(p => p.payments),
+      ...expenseData.rawData.expenses.flatMap(e => e.payments),
+    ];
+
+    const revenueMonthly = calculateMonthlyData(
+      revenuePayments,
+      startDate,
+      endDate
+    );
+    const expenseMonthly = calculateMonthlyData(
+      expensePayments,
+      startDate,
+      endDate
+    );
+
+    // Combine revenue and expense monthly data
+    const allMonths = new Set([
+      ...revenueMonthly.map(d => d.month),
+      ...expenseMonthly.map(d => d.month),
+    ]);
+
+    const monthlyTrend = Array.from(allMonths)
+      .map(month => {
+        const revenue = revenueMonthly.find(d => d.month === month);
+        const expense = expenseMonthly.find(d => d.month === month);
+        const revenueAmount = revenue?.amount || 0;
+        const expenseAmount = expense?.amount || 0;
+
+        return {
+          month,
+          revenue: revenueAmount,
+          expenses: expenseAmount,
+          profit: revenueAmount - expenseAmount,
+        };
+      })
+      .sort((a, b) => a.month.localeCompare(b.month))
+      .slice(-12); // Last 12 months
 
     // Revenue Breakdown
     const revenueBreakdown = [
@@ -199,7 +216,7 @@ export async function GET(request: NextRequest) {
       },
     ];
 
-    // Expense Type Breakdown
+    // Expense Breakdown
     const expenseBreakdown = [
       {
         name: 'Purchases',
@@ -227,7 +244,7 @@ export async function GET(request: NextRequest) {
       },
     ];
 
-    // Profitability Trend
+    // Profitability Chart
     const profitabilityChart = {
       grossProfitMargin: {
         accrual:
@@ -261,46 +278,24 @@ export async function GET(request: NextRequest) {
       },
     };
 
-    return NextResponse.json(
-      {
-        success: true,
-        meta: {
-          type: 'financial-overview',
-          range: queryParams.range,
-          startDate: startDate.toISOString(),
-          endDate: endDate.toISOString(),
-          monthCount,
-          currency: 'NGN',
-        },
-        overview,
-        chartData: {
-          comparison: comparisonChart,
-          revenueBreakdown,
-          expenseBreakdown,
-          profitability: profitabilityChart,
-        },
+    return apiResponse({
+      success: true,
+      meta: createReportMeta(
+        'financial-overview',
+        queryParams.range,
+        startDate,
+        endDate,
+        { monthCount }
+      ),
+      overview,
+      chartData: {
+        monthlyTrend,
+        revenueBreakdown,
+        expenseBreakdown,
+        profitability: profitabilityChart,
       },
-      { status: 200 }
-    );
+    });
   } catch (error) {
-    console.error('Get financial overview error:', error);
-
-    if (error instanceof z.ZodError) {
-      const flatErrors = error.flatten().fieldErrors;
-      const message = Object.values(flatErrors).flat()[0] || 'Invalid input';
-      return NextResponse.json(
-        { error: 'Validation failed', message },
-        { status: 400 }
-      );
-    }
-
-    if (error instanceof Error && error.message.includes('Unauthorized')) {
-      return NextResponse.json({ message: error.message }, { status: 401 });
-    }
-
-    return NextResponse.json(
-      { message: 'Internal server error' },
-      { status: 500 }
-    );
+    return handleApiError(error);
   }
 }

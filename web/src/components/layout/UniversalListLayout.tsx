@@ -155,7 +155,7 @@ export default function UniversalListLayout<
 
   // Build grid classes from config
   const getGridClasses = () => {
-    const classes = ['grid', 'gap-3', 'sm:gap-4'];
+    const classes = ['grid', 'gap-3', 'sm:gap-4', 'p-0.5'];
 
     if (gridConfig.default) classes.push(`grid-cols-${gridConfig.default}`);
     if (gridConfig.sm) classes.push(`sm:grid-cols-${gridConfig.sm}`);
@@ -176,7 +176,7 @@ export default function UniversalListLayout<
   return (
     <div className="space-y-6">
       {/* Stats Section - Always 3 cards */}
-      <div className="grid md:grid-cols-3 gap-4">
+      <div className="grid lg:grid-cols-3 gap-4">
         {stats.map((stat, index) => (
           <StatCard key={index} {...stat} />
         ))}
@@ -416,10 +416,10 @@ export default function UniversalListLayout<
             )}
           </div>
 
-          {topContent}
-          {/* Items Container with Max Height and Hidden Scroll */}
-          <div className="max-h-150 overflow-y-auto scrollbar-none hover:scrollbar-thin scrollbar-thumb-default-200 scrollbar-track-transparent py-2">
+          {/* Items Container - ROBUST SCROLLBAR HIDE */}
+          <div className="max-h-150 overflow-y-auto py-2 [&::-webkit-scrollbar]:w-0 [&::-webkit-scrollbar]:h-0 scrollbar-width-none">
             {/* Top Content (e.g., charts) */}
+            {topContent}
 
             {isLoading ? (
               <div className="py-20">

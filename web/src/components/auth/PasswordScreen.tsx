@@ -33,6 +33,7 @@ export function PasswordScreen({
     type: alertType;
     message: string;
   } | null>(null);
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
   const passwordForm = useForm<withPasswordType>({
     resolver: zodResolver(withPasswordSchema),
@@ -53,8 +54,17 @@ export function PasswordScreen({
       });
 
       if (result?.ok) {
-        router.push('/dashboard');
-        router.refresh();
+        setIsRedirecting(true);
+        setAlertMessage({
+          type: 'success',
+          message: 'Successfully signed in! Redirecting to dashboard...',
+        });
+
+        // Give user time to see the success message
+        setTimeout(() => {
+          router.push('/dashboard');
+          router.refresh();
+        }, 1000);
       } else if (result?.error) {
         if (
           result.error.includes('Check your email for the login code') ||
@@ -102,15 +112,17 @@ export function PasswordScreen({
     }
   };
 
+  const isLoading = passwordForm.formState.isSubmitting || isRedirecting;
+
   return (
     <div className="min-h-screen flex items-center justify-center">
       <div className="mx-auto w-full md:max-w-sm px-12 md:px-0 py-20">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-sans font-bold text-heading tracking-tighter text-foreground mb-0.5">
-            Welcome back
+            Welcome
           </h1>
           <p className="text-gray-500 text-sm font-light">
-            Sign in with your password
+            Sign in or create an account with your password
           </p>
         </div>
 
@@ -144,6 +156,7 @@ export function PasswordScreen({
                 color="primary"
                 errorMessage={passwordForm.formState.errors.email?.message}
                 isInvalid={!!passwordForm.formState.errors.email}
+                isDisabled={isLoading}
                 label="Email"
                 placeholder="you@example.com"
                 type="email"
@@ -181,6 +194,7 @@ export function PasswordScreen({
                 }
                 errorMessage={passwordForm.formState.errors.password?.message}
                 isInvalid={!!passwordForm.formState.errors.password}
+                isDisabled={isLoading}
                 label="Password"
                 placeholder="Enter your password"
                 type={isPasswordVisible ? 'text' : 'password'}
@@ -196,11 +210,16 @@ export function PasswordScreen({
           <Button
             className="w-full font-medium rounded-full max-sm:py-6"
             color="primary"
-            isLoading={passwordForm.formState.isSubmitting}
+            isLoading={isLoading}
+            isDisabled={isLoading}
             size="md"
             onPress={() => passwordForm.handleSubmit(onPasswordSubmit)()}
           >
-            Continue
+            {isRedirecting
+              ? 'Redirecting...'
+              : isLoading
+                ? 'Signing in...'
+                : 'Continue'}
           </Button>
         </div>
 
@@ -209,6 +228,7 @@ export function PasswordScreen({
             className="text-default-600 p-0 h-auto min-w-0"
             startContent={<div>←</div>}
             variant="light"
+            isDisabled={isLoading}
             onPress={onBack}
           >
             Back

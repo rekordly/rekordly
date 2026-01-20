@@ -27,6 +27,7 @@ import { SessionUser } from '@/types';
 import { menuItems } from '@/config/menu';
 import { handleSignOut } from '@/lib/auth/logout';
 import { ChartNoAxesGantt } from 'lucide-react';
+import { Image } from '@heroui/image';
 
 export default function DashboardNavbar({ user }: SessionUser) {
   const [expandedItem, setExpandedItem] = useState<string | null>(null);
@@ -85,16 +86,22 @@ export default function DashboardNavbar({ user }: SessionUser) {
       >
         <NavbarContent>
           <NavbarBrand>
-            <div className="w-9 h-9 bg-linear-to-br from-primary to-primary-600 rounded-xl flex items-center justify-center shadow-lg shadow-primary/30">
-              <Receipt weight="duotone" className="w-5 h-5 text-white" />
+            <div>
+              <Image
+                src="logo.png"
+                height={24}
+                width={24}
+                alt="Rekordly Logo"
+                radius="none"
+              />
             </div>
-            <p className="font-heading font-bold md:text-xl text-foreground ms-2.5">
-              Rekordly<span className="text-xs align-super">™</span>
+            <p className="font-semibold tracking-tight mt-1 font-heading text-xl text-foreground ms-2">
+              Rekordly
             </p>
           </NavbarBrand>
 
           {/* Mobile Toggle with user */}
-          <NavbarContent className="sm:hidden gap-0" justify="end">
+          <NavbarContent className="lg:hidden gap-0" justify="end">
             <ThemeToggle />
             <Link color="foreground" href="/dashboard/profile">
               <User
@@ -119,7 +126,7 @@ export default function DashboardNavbar({ user }: SessionUser) {
           </NavbarContent>
 
           {/* Desktop */}
-          <NavbarContent className="hidden sm:flex gap-3" justify="end">
+          <NavbarContent className="hidden lg:flex gap-3" justify="end">
             <ThemeToggle />
             <Link color="foreground" href="/dashboard/profile">
               <User

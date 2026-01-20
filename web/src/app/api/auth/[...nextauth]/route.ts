@@ -1,7 +1,5 @@
 import NextAuth, { AuthOptions } from 'next-auth';
 import GoogleProvider from 'next-auth/providers/google';
-import TwitterProvider from 'next-auth/providers/twitter';
-import AppleProvider from 'next-auth/providers/apple';
 import EmailProvider from 'next-auth/providers/email';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import { PrismaAdapter } from '@next-auth/prisma-adapter';
@@ -38,7 +36,6 @@ export const authOptions: AuthOptions = {
         },
       },
       from: process.env.EMAIL_FROM,
-      // Use custom email template
       sendVerificationRequest,
     }),
 
@@ -80,7 +77,6 @@ export const authOptions: AuthOptions = {
             },
           });
 
-          // User not found - create account and send OTP
           if (!user) {
             try {
               const hashedPassword = await bcrypt.hash(
@@ -110,7 +106,6 @@ export const authOptions: AuthOptions = {
                   'Database connection error. Please try again later.'
                 );
               }
-              // Re-throw if it's our success message
               if (
                 error instanceof Error &&
                 error.message.includes('Account Created Successfully')
@@ -121,7 +116,6 @@ export const authOptions: AuthOptions = {
             }
           }
 
-          // If user has no password (social login only), send OTP
           if (!user.password) {
             await sendOtpCode(credentials.email, 'login_recovery');
             throw new Error(
@@ -129,7 +123,6 @@ export const authOptions: AuthOptions = {
             );
           }
 
-          // If email not verified, send OTP
           if (!user.emailVerified) {
             await sendOtpCode(credentials.email, 'login_recovery');
             throw new Error(
@@ -185,60 +178,50 @@ export const authOptions: AuthOptions = {
       },
     }),
 
-    // Custom OTP provider
     OTPProvider,
 
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-    }),
-
-    TwitterProvider({
-      clientId: process.env.TWITTER_CLIENT_ID!,
-      clientSecret: process.env.TWITTER_CLIENT_SECRET!,
-      version: '2.0',
-    }),
-
-    AppleProvider({
-      clientId: process.env.APPLE_CLIENT_ID!,
-      clientSecret: process.env.APPLE_CLIENT_SECRET!,
+      allowDangerousEmailAccountLinking: true, // Fix for OAuthAccountNotLinked
     }),
   ],
 
   callbacks: {
     async signIn({ user, account, profile }) {
       try {
-        const existingUser = await prisma.user.findUnique({
-          where: { email: user.email! },
-          include: { accounts: true },
-        });
-
-        // Social login
+        // OAuth sign in
         if (account && account.type === 'oauth') {
+          const existingUser = await prisma.user.findUnique({
+            where: { email: user.email! },
+            include: { accounts: true },
+          });
+
           if (existingUser) {
+            // Check if this provider is already linked
             const hasProvider = existingUser.accounts.some(
               acc => acc.provider === account.provider
             );
 
-            if (hasProvider) {
-              return true;
+            if (!hasProvider) {
+              // Link the new provider to existing account
+              await prisma.account.create({
+                data: {
+                  userId: existingUser.id,
+                  provider: account.provider,
+                  providerAccountId: account.providerAccountId,
+                  type: account.type,
+                  access_token: account.access_token,
+                  refresh_token: account.refresh_token,
+                  expires_at: account.expires_at,
+                  token_type: account.token_type,
+                  scope: account.scope,
+                  id_token: account.id_token,
+                },
+              });
             }
 
-            await prisma.account.create({
-              data: {
-                userId: existingUser.id,
-                provider: account.provider,
-                providerAccountId: account.providerAccountId,
-                type: account.type,
-                access_token: account.access_token,
-                refresh_token: account.refresh_token,
-                expires_at: account.expires_at,
-                token_type: account.token_type,
-                scope: account.scope,
-                id_token: account.id_token,
-              },
-            });
-
+            // Verify email if not already verified
             if (!existingUser.emailVerified) {
               await prisma.user.update({
                 where: { id: existingUser.id },
@@ -249,7 +232,8 @@ export const authOptions: AuthOptions = {
             return true;
           }
 
-          await prisma.user.create({
+          // Create new user for OAuth
+          const newUser = await prisma.user.create({
             data: {
               email: user.email!,
               name: user.name ?? '',
@@ -259,11 +243,16 @@ export const authOptions: AuthOptions = {
             },
           });
 
+          // The PrismaAdapter will handle creating the account
           return true;
         }
 
         // Email provider
         if (account && account.type === 'email') {
+          const existingUser = await prisma.user.findUnique({
+            where: { email: user.email! },
+          });
+
           if (!existingUser) {
             await prisma.user.create({
               data: {

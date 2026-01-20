@@ -5,7 +5,7 @@ import { Input } from '@heroui/input';
 import { Divider } from '@heroui/divider';
 import { Alert } from '@heroui/alert';
 import { FcGoogle } from 'react-icons/fc';
-import { FaXTwitter, FaApple, FaLock } from 'react-icons/fa6';
+import { FaLock } from 'react-icons/fa6';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { signIn } from 'next-auth/react';
@@ -32,6 +32,7 @@ export function EmailScreen({
     message: string;
   } | null>(initialError ? { type: 'error', message: initialError } : null);
   const [showEmailSuccess, setShowEmailSuccess] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
   const emailForm = useForm<withEmailType>({
     resolver: zodResolver(withEmailSchema),
@@ -74,14 +75,17 @@ export function EmailScreen({
   const handleSocialSignIn = async (provider: string) => {
     try {
       setAlertMessage(null);
+      setIsGoogleLoading(true);
+
       await signIn(provider, {
         callbackUrl: '/dashboard',
         redirect: true,
       });
-    } catch {
+    } catch (error) {
+      setIsGoogleLoading(false);
       setAlertMessage({
         type: 'error',
-        message: 'Failed to sign in with social provider.',
+        message: 'Failed to sign in. Please try again.',
       });
     }
   };
@@ -91,10 +95,10 @@ export function EmailScreen({
       <div className="mx-auto w-full md:max-w-sm px-12 md:px-0 py-20">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-sans font-bold text-heading tracking-tighter text-foreground mb-0.5">
-            Welcome back
+            Welcome
           </h1>
           <p className="text-gray-500 text-sm font-light">
-            Sign in to your account to continue
+            Sign in or create an account to continue
           </p>
         </div>
 
@@ -145,6 +149,7 @@ export function EmailScreen({
               color="primary"
               isLoading={emailForm.formState.isSubmitting}
               size="md"
+              isDisabled
               onPress={() => emailForm.handleSubmit(onEmailSubmit)()}
             >
               Continue with email
@@ -179,6 +184,8 @@ export function EmailScreen({
               startContent={<FaLock className="w-5 h-5" />}
               variant="bordered"
               onPress={onPasswordClick}
+              // isDisabled={isGoogleLoading}
+              isDisabled
             >
               Continue with password
             </Button>
@@ -188,26 +195,11 @@ export function EmailScreen({
               startContent={<FcGoogle className="w-5 h-5" />}
               variant="bordered"
               onPress={() => handleSocialSignIn('google')}
+              isLoading={isGoogleLoading}
+              // isDisabled={isGoogleLoading}
+              isDisabled
             >
-              Continue with Google
-            </Button>
-
-            <Button
-              className="border-gray-300 border-1 text-sm rounded-full"
-              startContent={<FaXTwitter className="w-5 h-5" />}
-              variant="bordered"
-              onPress={() => handleSocialSignIn('twitter')}
-            >
-              Continue with Twitter
-            </Button>
-
-            <Button
-              className="border-gray-300 border-1 text-sm rounded-full"
-              startContent={<FaApple className="w-5 h-5" />}
-              variant="bordered"
-              onPress={() => handleSocialSignIn('apple')}
-            >
-              Continue with Apple
+              {isGoogleLoading ? 'Signing in...' : 'Continue with Google'}
             </Button>
           </div>
         </div>
