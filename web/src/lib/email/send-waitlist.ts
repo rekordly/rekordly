@@ -54,6 +54,7 @@ function generateWaitlistEmailHTML(name: string): string {
     <head>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700&family=Figtree:wght@400;500&display=swap" rel="stylesheet">
       <title>Welcome to Rekordly Waitlist</title>
     </head>
     <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
@@ -65,38 +66,49 @@ function generateWaitlistEmailHTML(name: string): string {
               <!-- Header with Logo -->
               <tr>
                 <td style="padding: 40px 40px 20px 40px; text-align: center;">
-                  <div style="width: 60px; height: 60px; margin: 0 auto 20px; background: linear-gradient(135deg, #8900FF 0%, #6200CC 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center;">
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M13 10V3L4 14h7v7l9-11h-7z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                  </div>
-                  <h1 style="margin: 0; font-size: 28px; font-weight: 700; color: #1a1a1a; letter-spacing: -0.5px;">
-                    You're on the List! 🎉
+                  
+                  <h1 style="
+                    font-family: 'Sora', Arial, sans-serif;
+                    font-size: 28px;
+                    font-weight: 700;
+                    color: #0b0b0b;
+                    margin: 0;
+                  ">
+                    You're on the List 🎉
                   </h1>
+
                 </td>
               </tr>
               
               <!-- Body -->
               <tr>
                 <td style="padding: 20px 40px 40px 40px;">
-                  <p style="margin: 0 0 20px 0; font-size: 16px; line-height: 24px; color: #666666;">
+                  <p style="font-family: 'Figtree', Arial, sans-serif; font-size: 16px; line-height: 24px; color: #555;">
                     Hi ${firstName},
                   </p>
-                  
-                  <p style="margin: 0 0 20px 0; font-size: 16px; line-height: 24px; color: #666666;">
-                    Thank you for joining the <strong style="color: #8900FF;">Rekordly</strong> waitlist! We're thrilled to have you as part of our early community.
+
+                  <p style="
+                    font-family: 'Figtree', Arial, sans-serif;
+                    font-size: 16px;
+                    line-height: 24px;
+                    color: #555;
+                  ">
+                    Thanks for joining the <strong style="color:#009e10;">Rekordly</strong> waitlist.
+                    We’re building a simpler way to manage your business records — without Excel,
+                    notebooks, or complicated software.
                   </p>
+
                   
                   <p style="margin: 0 0 24px 0; font-size: 16px; line-height: 24px; color: #666666;">
                     We're working hard to build something special, and you'll be among the first to know when we launch.
                   </p>
                   
                   <!-- Benefits Box -->
-                  <div style="background: linear-gradient(135deg, #f8f0ff 0%, #f0e6ff 100%); padding: 24px; border-radius: 12px; border-left: 4px solid #8900FF; margin: 24px 0;">
+                  <div style="background: linear-gradient(135deg, #CEEFD1 0%, #E6F7E8 100%); padding: 24px; border-radius: 12px; border-left: 4px solid #009e10; margin: 24px 0;">
                     <h3 style="margin: 0 0 16px 0; font-size: 18px; font-weight: 600; color: #1a1a1a;">
                       What's Next?
                     </h3>
-                    <ul style="margin: 0; padding-left: 20px; color: #666666; font-size: 14px; line-height: 22px;">
+                    <ul style="margin: 0; padding-left: 10px; color: #666666; font-size: 14px; line-height: 22px;">
                       <li style="margin-bottom: 8px;">✨ <strong>Early Access</strong> - Be the first to try Rekordly</li>
                       <li style="margin-bottom: 8px;">🎁 <strong>Exclusive Features</strong> - Access to premium features</li>
                       <li style="margin-bottom: 8px;">💰 <strong>Special Pricing</strong> - Founders' discount on launch</li>
@@ -109,25 +121,46 @@ function generateWaitlistEmailHTML(name: string): string {
                   </p>
                   
                   <!-- Social Links -->
-                  <table role="presentation" style="margin: 24px auto 0; text-align: center;">
-                    <tr>
-                      <td style="padding: 0 10px;">
-                        <a href="#" style="display: inline-block; width: 36px; height: 36px; background-color: #f0f0f0; border-radius: 50%; text-align: center; line-height: 36px; text-decoration: none; color: #666;">
-                          𝕏
-                        </a>
-                      </td>
-                      <td style="padding: 0 10px;">
-                        <a href="#" style="display: inline-block; width: 36px; height: 36px; background-color: #f0f0f0; border-radius: 50%; text-align: center; line-height: 36px; text-decoration: none; color: #666;">
-                          in
-                        </a>
-                      </td>
-                      <td style="padding: 0 10px;">
-                        <a href="#" style="display: inline-block; width: 36px; height: 36px; background-color: #f0f0f0; border-radius: 50%; text-align: center; line-height: 36px; text-decoration: none; color: #666;">
-                          f
-                        </a>
-                      </td>
-                    </tr>
-                  </table>
+                  <!-- Social Links using SimpleIcons CDN -->
+<table role="presentation" align="center" cellpadding="0" cellspacing="0" style="margin: 24px auto;">
+  <tr>
+    <td style="padding: 0 8px;">
+      <a href="https://facebook.com/rekordly">
+        <img src="https://www.rekordly.com/social/facebook.png" width="32" height="32" alt="Facebook" />
+      </a>
+    </td>
+    <td style="padding: 0 8px;">
+      <a href="https://instagram.com/rekordly">
+        <img src="https://www.rekordly.com/social/instagram.png" width="32" height="32" alt="Instagram" />
+      </a>
+    </td>
+    <td style="padding: 0 8px;">
+      <a href="https://tiktok.com/@rekordly">
+        <img src="https://www.rekordly.com/social/tiktok.png" width="32" height="32" alt="TikTok" />
+      </a>
+    </td>
+    <td style="padding: 0 8px;">
+      <a href="https://x.com/rekordly">
+        <img src="https://www.rekordly.com/social/x.png" width="32" height="32" alt="X" />
+      </a>
+    </td>
+    <td style="padding: 0 8px;">
+      <a href="https://youtube.com/@rekordly">
+        <img src="https://www.rekordly.com/social/youtube.png" width="32" height="32" alt="YouTube" />
+      </a>
+    </td>
+    <td style="padding: 0 8px;">
+      <a href="https://linkedin.com/company/rekordly">
+        <img src="https://www.rekordly.com/social/linkedin.png" width="32" height="32" alt="LinkedIn" />
+      </a>
+    </td>
+    <td style="padding: 0 8px;">
+      <a href="https://threads.net/@rekordly">
+        <img src="https://www.rekordly.com/social/threads.png" width="32" height="32" alt="Threads" />
+      </a>
+    </td>
+  </tr>
+</table>
                 </td>
               </tr>
               

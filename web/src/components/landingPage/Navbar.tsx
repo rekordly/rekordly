@@ -84,15 +84,15 @@ export default function Navbar() {
           <NavbarItem className="hidden lg:flex">
             <WaitlistModal />
           </NavbarItem>
-
+{/* 
           <NavbarItem className="hidden lg:flex">
             <ThemeToggle />
-          </NavbarItem>
+          </NavbarItem> */}
 
           {/* Mobile: Theme Toggle + Menu Icon */}
-          <NavbarItem className="lg:hidden">
+          {/* <NavbarItem className="lg:hidden">
             <ThemeToggle />
-          </NavbarItem>
+          </NavbarItem> */}
 
           <NavbarItem className="lg:hidden">
             <button

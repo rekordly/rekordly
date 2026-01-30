@@ -140,8 +140,9 @@ export function WaitlistModal({
                   />
 
                   <TextInput
+                    isRequired
                     control={methods.control}
-                    label="Phone Number (Optional)"
+                    label="Phone Number "
                     name="phoneNumber"
                     type="tel"
                     placeholder="08012345678"

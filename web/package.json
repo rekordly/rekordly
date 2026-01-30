@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "next dev --turbopack",
+    "prod": "dotenv -e .env.production -- next dev --turbopack",
     "build": "next build",
     "build:prod": "dotenv -e .env.production -- next build",
     "start": "next start",

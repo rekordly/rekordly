@@ -1023,7 +1023,8 @@ export default function RekordlyLanding() {
                       Join thousands of Nigerian businesses using Rekordly to
                       track growth and manage cash flow
                     </p>
-                    <Button
+                    <WaitlistModal className="bg-linear-to-r from-primary-300 rounded-full to-primary-500 text-black px-6 mb-3 p-3" />
+                    {/* <Button
                       className="bg-linear-to-r from-primary-400 to-primary-500 text-black px-6 mb-3"
                       endContent={<ArrowUpRight className="w-4 h-4" />}
                       radius="full"
@@ -1031,7 +1032,7 @@ export default function RekordlyLanding() {
                       variant="shadow"
                     >
                       Get Started for Free
-                    </Button>
+                    </Button> */}
                   </div>
                 </div>
               </CardBody>
@@ -1191,25 +1192,25 @@ export default function RekordlyLanding() {
             className="border-t border-divider pt-8"
           >
             <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-              <p className="text-default-600 text-sm text-center md:text-left">
-                © 2025 Rekordly. All rights reserved. Made with ❤️ in Nigeria.
-              </p>
               <div className="flex items-center gap-4 text-sm text-default-600">
                 <a
                   href="#"
                   className="hover:text-primary transition-colors flex items-center gap-1"
                 >
                   <EnvelopeSimple size={16} weight="bold" />
-                  hello@rekordly.com
+                  rekordlly@gmail.com
                 </a>
                 <a
                   href="#"
                   className="hover:text-primary transition-colors flex items-center gap-1"
                 >
                   <Phone size={16} weight="bold" />
-                  +234 812 XXX XXXX
+                  +234 805 163 4960
                 </a>
               </div>
+              <p className="text-default-600 text-sm text-center md:text-left">
+                © 2025 Rekordly. All rights reserved. Made with ❤️ in Nigeria.
+              </p>
             </div>
           </motion.div>
         </div>
