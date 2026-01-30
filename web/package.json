@@ -78,6 +78,7 @@
     "@phosphor-icons/react": "^2.1.10",
     "@react-aria/ssr": "3.9.10",
     "@react-aria/visually-hidden": "3.8.28",
+    "@vercel/analytics": "^1.6.1",
     "bcryptjs": "^3.0.2",
     "cloudinary": "^2.8.0",
     "clsx": "2.1.1",

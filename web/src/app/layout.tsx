@@ -1,6 +1,7 @@
 // app/layout.tsx
 import '@/styles/globals.css';
 import { Metadata, Viewport } from 'next';
+import { Analytics } from '@vercel/analytics/next';
 import clsx from 'clsx';
 
 import { Providers } from './providers';
@@ -116,6 +117,7 @@ export default function RootLayout({
         <Providers themeProps={{ attribute: 'class', defaultTheme: 'light' }}>
           {children}
         </Providers>
+        <Analytics />
       </body>
     </html>
   );
