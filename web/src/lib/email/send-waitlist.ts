@@ -126,37 +126,37 @@ function generateWaitlistEmailHTML(name: string): string {
   <tr>
     <td style="padding: 0 8px;">
       <a href="https://facebook.com/rekordly">
-        <img src="https://www.rekordly.com/social/facebook.png" width="32" height="32" alt="Facebook" />
+        <img src="https://www.rekordly.com/social/facebook.png" width="28" height="28" alt="Facebook" />
       </a>
     </td>
     <td style="padding: 0 8px;">
       <a href="https://instagram.com/rekordly">
-        <img src="https://www.rekordly.com/social/instagram.png" width="32" height="32" alt="Instagram" />
+        <img src="https://www.rekordly.com/social/instagram.png" width="28" height="28" alt="Instagram" />
       </a>
     </td>
     <td style="padding: 0 8px;">
       <a href="https://tiktok.com/@rekordly">
-        <img src="https://www.rekordly.com/social/tiktok.png" width="32" height="32" alt="TikTok" />
+        <img src="https://www.rekordly.com/social/tiktok.png" width="28" height="28" alt="TikTok" />
       </a>
     </td>
     <td style="padding: 0 8px;">
       <a href="https://x.com/rekordly">
-        <img src="https://www.rekordly.com/social/x.png" width="32" height="32" alt="X" />
+        <img src="https://www.rekordly.com/social/x.png" width="28" height="28" alt="X" />
       </a>
     </td>
     <td style="padding: 0 8px;">
       <a href="https://youtube.com/@rekordly">
-        <img src="https://www.rekordly.com/social/youtube.png" width="32" height="32" alt="YouTube" />
+        <img src="https://www.rekordly.com/social/youtube.png" width="28" height="28" alt="YouTube" />
       </a>
     </td>
     <td style="padding: 0 8px;">
       <a href="https://linkedin.com/company/rekordly">
-        <img src="https://www.rekordly.com/social/linkedin.png" width="32" height="32" alt="LinkedIn" />
+        <img src="https://www.rekordly.com/social/linkedin.png" width="28" height="28" alt="LinkedIn" />
       </a>
     </td>
     <td style="padding: 0 8px;">
       <a href="https://threads.net/@rekordly">
-        <img src="https://www.rekordly.com/social/threads.png" width="32" height="32" alt="Threads" />
+        <img src="https://www.rekordly.com/social/threads.png" width="28" height="28" alt="Threads" />
       </a>
     </td>
   </tr>
