@@ -150,7 +150,7 @@ function generateWaitlistEmailHTML(name: string): string {
       </a>
     </td>
     <td style="padding: 0 8px;">
-      <a href="https://linkedin.com/company/rekordly">
+      <a href="https://linkedin.com/in/rekordly">
         <img src="https://www.rekordly.com/social/linkedin.png" width="28" height="28" alt="LinkedIn" />
       </a>
     </td>
