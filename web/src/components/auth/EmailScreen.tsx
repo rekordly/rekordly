@@ -149,7 +149,7 @@ export function EmailScreen({
               color="primary"
               isLoading={emailForm.formState.isSubmitting}
               size="md"
-              isDisabled
+              // isDisabled
               onPress={() => emailForm.handleSubmit(onEmailSubmit)()}
             >
               Continue with email
@@ -184,8 +184,8 @@ export function EmailScreen({
               startContent={<FaLock className="w-5 h-5" />}
               variant="bordered"
               onPress={onPasswordClick}
-              // isDisabled={isGoogleLoading}
-              isDisabled
+              isDisabled={isGoogleLoading}
+              // isDisabled
             >
               Continue with password
             </Button>
@@ -196,8 +196,8 @@ export function EmailScreen({
               variant="bordered"
               onPress={() => handleSocialSignIn('google')}
               isLoading={isGoogleLoading}
-              // isDisabled={isGoogleLoading}
-              isDisabled
+              isDisabled={isGoogleLoading}
+              // isDisabled
             >
               {isGoogleLoading ? 'Signing in...' : 'Continue with Google'}
             </Button>
