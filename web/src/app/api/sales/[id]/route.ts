@@ -49,6 +49,8 @@ export async function PATCH(
     const updateSchema = BaseSaleSchema.partial();
     const data = await validateRequest(request, updateSchema);
 
+    console.log('Received update data:', JSON.stringify(data, null, 2));
+
     // Validate customer if provided and has an ID
     if (data.customer?.id) {
       const customer = await prisma.customer.findFirst({
@@ -110,14 +112,18 @@ export async function PATCH(
 
     // Update sale with transaction for inventory reconciliation
     const result = await prisma.$transaction(async tx => {
-      let inventoryRestored = false;
-
       // Handle inventory reconciliation if items are being updated
       if (data.items && data.items.length > 0) {
-        // Changed: Use string Set for IDs
+        // Only treat items with real DB IDs (not temp_ prefixed) as existing
         const incomingItemIds = new Set(
-          data.items.filter(item => item.id !== undefined).map(item => item.id!)
+          data.items
+            .filter(
+              item =>
+                item.id !== undefined && !String(item.id).startsWith('temp_')
+            )
+            .map(item => item.id!)
         );
+
         const existingItemMap = new Map(
           existingSale.saleItems.map(item => [item.id, item])
         );
@@ -149,9 +155,15 @@ export async function PATCH(
 
         // Update or add items
         for (const item of data.items) {
-          if (item.id !== undefined) {
+          // Determine if this is a real existing item or a new one (temp ID or no ID)
+          const isExistingItem =
+            item.id !== undefined &&
+            !String(item.id).startsWith('temp_') &&
+            existingItemMap.has(item.id);
+
+          if (isExistingItem) {
             // Updating existing item
-            const existingItem = existingItemMap.get(item.id);
+            const existingItem = existingItemMap.get(item.id!);
             if (existingItem) {
               const quantityDiff = toTwoDecimals(
                 item.quantity - existingItem.quantity
@@ -230,7 +242,7 @@ export async function PATCH(
               });
             }
           } else {
-            // Adding new item
+            // Adding new item (no ID, or temp_ prefixed ID)
             let costPrice = 0;
             if (item.inventoryItemId) {
               const inventoryItem = await tx.inventoryItem.findFirst({
@@ -270,7 +282,7 @@ export async function PATCH(
                 saleId: existingSale.id,
                 inventoryItemId: item.inventoryItemId || null,
                 productionId: item.productionId || null,
-                itemName: item.description || 'Unnamed Item',
+                itemName: item.itemName || item.description || 'Unnamed Item',
                 description: item.description,
                 quantity: toTwoDecimals(item.quantity),
                 unitPrice: toTwoDecimals(item.unitPrice),
