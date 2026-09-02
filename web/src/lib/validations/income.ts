@@ -2,6 +2,7 @@
 import { z } from 'zod';
 import { IncomeMainCategory } from '@/types/income';
 import { PaymentMethod } from '@prisma/client';
+import { dateStringSchema } from '@/lib/validations/date';
 
 // Validation schema for adding income
 export const addIncomeSchema = z
@@ -36,18 +37,7 @@ export const addIncomeSchema = z
       .optional()
       .transform(val => val?.trim()),
 
-    date: z
-      .string()
-      .min(1, 'Date is required')
-      .refine(
-        val => {
-          const date = new Date(val);
-          return !isNaN(date.getTime());
-        },
-        {
-          message: 'Please provide a valid date',
-        }
-      ),
+    date: dateStringSchema('Date is required'),
 
     // Payment tracking fields
     amountPaid: z

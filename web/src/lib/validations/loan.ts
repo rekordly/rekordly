@@ -5,6 +5,7 @@ import {
   TermUnit,
 } from '@prisma/client';
 import { z } from 'zod';
+import { dateStringSchema } from '@/lib/validations/date';
 
 export const LoanTypeSchema = z.enum(LoanType, {
   error: 'Loan type is required',
@@ -91,18 +92,7 @@ export const addLoanSchema = z.object({
     .optional()
     .default(0),
 
-  startDate: z
-    .string()
-    .min(1, 'Start date is required')
-    .refine(
-      val => {
-        const date = new Date(val);
-        return !isNaN(date.getTime());
-      },
-      {
-        message: 'Please provide a valid start date',
-      }
-    ),
+  startDate: dateStringSchema('Start date is required'),
 
   term: z
     .number({

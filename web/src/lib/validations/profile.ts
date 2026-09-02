@@ -1,6 +1,7 @@
 // @/lib/validations/profile.ts
 
 import { z } from 'zod';
+import { dateStringSchema } from '@/lib/validations/date';
 import { validRegistrationTypes } from './general';
 
 export const UpdateBasicDetailsSchema = z.object({
@@ -21,7 +22,7 @@ export const UpdateWorkDetailsSchema = z.object({
     }),
   businessName: z.string().optional().nullable(),
   workTypes: z.array(z.string()).min(1, 'Please select at least one work type'),
-  startDate: z.string().min(1, 'Please select a start date'),
+  startDate: dateStringSchema('Please select a start date'),
 });
 
 export const UpdateAgencyDetailsSchema = z.object({
