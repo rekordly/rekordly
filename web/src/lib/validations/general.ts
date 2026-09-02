@@ -439,8 +439,7 @@ export const SecurityTransactionSchema = z.object({
 // SALE SCHEMAS
 // ============================================
 
-export const CreateSaleSchema = z
-  .object({
+const SaleSchemaBase = z.object({
     sourceType: SaleSourceTypeSchema.default('DIRECT'),
     invoiceId: z.string().cuid().optional(),
 
@@ -465,8 +464,10 @@ export const CreateSaleSchema = z
     amountPaid: z.number().nonnegative().default(0),
     balance: z.number().nonnegative(),
 
-    saleDate: z.date().default(() => new Date()),
-  })
+  saleDate: z.date().default(() => new Date()),
+});
+
+export const CreateSaleSchema = SaleSchemaBase
   .refine(
     data => {
       if (data.costOfSales !== undefined && data.grossProfit !== undefined) {
@@ -485,9 +486,30 @@ export const CreateSaleSchema = z
     { message: 'Balance must equal total amount minus amount paid' }
   );
 
-export const UpdateSaleSchema = CreateSaleSchema.partial().extend({
-  status: SaleStatusSchema.optional(),
-});
+export const UpdateSaleSchema = SaleSchemaBase.partial()
+  .extend({
+    status: SaleStatusSchema.optional(),
+  })
+  .refine(
+    data => {
+      if (data.costOfSales !== undefined && data.grossProfit !== undefined) {
+        return (
+          data.revenue === undefined ||
+          Math.abs(data.grossProfit - (data.revenue - data.costOfSales)) < 0.01
+        );
+      }
+      return true;
+    },
+    { message: 'Gross profit must equal revenue minus cost of sales' }
+  )
+  .refine(
+    data =>
+      data.balance === undefined ||
+      data.totalAmount === undefined ||
+      data.amountPaid === undefined ||
+      Math.abs(data.balance - (data.totalAmount - data.amountPaid)) < 0.01,
+    { message: 'Balance must equal total amount minus amount paid' }
+  );
 
 export type CreateSaleInput = z.infer<typeof CreateSaleSchema>;
 export type UpdateSaleInput = z.infer<typeof UpdateSaleSchema>;
@@ -496,8 +518,7 @@ export type UpdateSaleInput = z.infer<typeof UpdateSaleSchema>;
 // PURCHASE SCHEMAS
 // ============================================
 
-export const CreatePurchaseSchema = z
-  .object({
+const PurchaseSchemaBase = z.object({
     vendorName: z.string().min(1, 'Vendor name is required'),
     vendorEmail: z.string().email().optional(),
     vendorPhone: z.string().optional(),
@@ -518,8 +539,10 @@ export const CreatePurchaseSchema = z
     amountPaid: z.number().nonnegative().default(0),
     balance: z.number().nonnegative(),
 
-    purchaseDate: z.date().default(() => new Date()),
-  })
+  purchaseDate: z.date().default(() => new Date()),
+});
+
+export const CreatePurchaseSchema = PurchaseSchemaBase
   .refine(
     data => {
       const calculated = data.subtotal + data.otherCostsTotal;
@@ -538,9 +561,36 @@ export const CreatePurchaseSchema = z
     { message: 'Balance must equal total amount minus amount paid' }
   );
 
-export const UpdatePurchaseSchema = CreatePurchaseSchema.partial().extend({
-  status: PurchaseStatusSchema.optional(),
-});
+export const UpdatePurchaseSchema = PurchaseSchemaBase.partial()
+  .extend({
+    status: PurchaseStatusSchema.optional(),
+  })
+  .refine(
+    data => {
+      if (
+        data.subtotal === undefined ||
+        data.otherCostsTotal === undefined ||
+        data.totalAmount === undefined
+      ) {
+        return true;
+      }
+      const calculated = data.subtotal + data.otherCostsTotal;
+      const withVAT =
+        data.includeVAT && data.vatAmount
+          ? calculated + data.vatAmount
+          : calculated;
+      return Math.abs(withVAT - data.totalAmount) < 0.01;
+    },
+    { message: 'Total amount must equal subtotal + other costs + VAT' }
+  )
+  .refine(
+    data =>
+      data.balance === undefined ||
+      data.totalAmount === undefined ||
+      data.amountPaid === undefined ||
+      Math.abs(data.balance - (data.totalAmount - data.amountPaid)) < 0.01,
+    { message: 'Balance must equal total amount minus amount paid' }
+  );
 
 export type CreatePurchaseInput = z.infer<typeof CreatePurchaseSchema>;
 export type UpdatePurchaseInput = z.infer<typeof UpdatePurchaseSchema>;
@@ -573,8 +623,7 @@ export type UpdatePaymentInput = z.infer<typeof UpdatePaymentSchema>;
 // INCOME RECORD SCHEMAS
 // ============================================
 
-export const CreateIncomeRecordSchema = z
-  .object({
+const IncomeRecordSchemaBase = z.object({
     mainCategory: IncomeMainCategorySchema,
     subCategory: IncomeSubCategorySchema,
 
@@ -594,13 +643,21 @@ export const CreateIncomeRecordSchema = z
     withholdingTax: z.number().nonnegative().default(0),
     vatAmount: z.number().nonnegative().default(0),
 
-    attachments: z.array(AttachmentSchema).optional(),
-  })
+  attachments: z.array(AttachmentSchema).optional(),
+});
+
+export const CreateIncomeRecordSchema = IncomeRecordSchemaBase
   .refine(data => data.taxableAmount <= data.grossAmount, {
     message: 'Taxable amount cannot exceed gross amount',
   });
 
-export const UpdateIncomeRecordSchema = CreateIncomeRecordSchema.partial();
+export const UpdateIncomeRecordSchema = IncomeRecordSchemaBase.partial().refine(
+  data =>
+    data.taxableAmount === undefined ||
+    data.grossAmount === undefined ||
+    data.taxableAmount <= data.grossAmount,
+  { message: 'Taxable amount cannot exceed gross amount' }
+);
 
 export type CreateIncomeRecordInput = z.infer<typeof CreateIncomeRecordSchema>;
 export type UpdateIncomeRecordInput = z.infer<typeof UpdateIncomeRecordSchema>;
