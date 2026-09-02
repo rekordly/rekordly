@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Button } from '@heroui/button';
-import { InputOtp } from '@heroui/input-otp';
+import { InputOtp } from '@heroui/react';
 import { Alert } from '@heroui/alert';
 import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
