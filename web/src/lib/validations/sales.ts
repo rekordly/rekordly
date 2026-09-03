@@ -15,8 +15,7 @@ export const OtherExpensesSchema = z.object({
   amount: z.number().nonnegative('Amount must be non-negative'),
 });
 
-export const SaleItemSchema = z
-  .object({
+export const SaleItemBaseSchema = z.object({
     id: z.string().optional(),
     itemName: z.string().min(1, 'Item name is required'),
     description: z.string().nullable().optional().default(''),
@@ -34,8 +33,10 @@ export const SaleItemSchema = z
       .optional()
       .transform(val => val || undefined),
     costPrice: z.number().nonnegative().optional().default(0),
-    profit: z.number().optional().default(0),
-  })
+  profit: z.number().optional().default(0),
+});
+
+export const SaleItemSchema = SaleItemBaseSchema
   .refine(
     data => {
       // Either itemName or inventoryItemId must be provided

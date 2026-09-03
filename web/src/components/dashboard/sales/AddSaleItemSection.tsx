@@ -13,7 +13,7 @@ import { addToast } from '@heroui/react';
 
 import { TextInput, NumberInput } from '@/components/ui/Input';
 import { formatCurrency } from '@/lib/fn';
-import { SaleItemSchema } from '@/lib/validations/sales';
+import { SaleItemBaseSchema } from '@/lib/validations/sales';
 import { SaleItemType } from '@/types/sales';
 
 export function AddSaleItemSection() {
@@ -29,7 +29,7 @@ export function AddSaleItemSection() {
     formState: { errors: itemErrors },
   } = useForm<Omit<SaleItemType, 'id' | 'amount'>>({
     resolver: zodResolver(
-      SaleItemSchema.omit({ id: true, amount: true })
+      SaleItemBaseSchema.omit({ id: true, amount: true })
     ) as Resolver<Omit<SaleItemType, 'id' | 'amount'>>,
     defaultValues: {
       itemName: '',
