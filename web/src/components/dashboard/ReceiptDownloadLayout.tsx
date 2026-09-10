@@ -23,69 +23,69 @@ export interface ReceiptDownloadData {
   }>;
 }
 
-export function ReceiptDownloadLayout({
-  data,
-}: {
-  data: ReceiptDownloadData;
-}) {
+const brand = {
+  green: '#009e10',
+  muted: '#64748b',
+  ink: '#17202a',
+  line: '#dbe4ea',
+  soft: '#f6f9fb',
+  danger: '#dc2626',
+};
+
+const rowStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'baseline',
+  justifyContent: 'space-between',
+  gap: '32px',
+  padding: '15px 0',
+  borderBottom: `1px solid ${brand.line}`,
+  fontSize: '16px',
+};
+
+export function ReceiptDownloadLayout({ data }: { data: ReceiptDownloadData }) {
+  const remaining = data.balance > 0;
+
   return (
-    <div
-      style={{
-        width: '700px',
-        padding: '42px',
-        background: '#fff',
-        color: '#17202a',
-        fontFamily: 'Arial, sans-serif',
-      }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px solid #16a34a', paddingBottom: '22px' }}>
+    <div style={{ width: '640px', boxSizing: 'border-box', margin: '0 auto', padding: '48px 52px 38px', background: '#fff', color: brand.ink, fontFamily: 'Figtree, Arial, sans-serif' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '32px', paddingBottom: '24px', borderBottom: `2px solid ${brand.green}` }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: '30px', color: '#15803d' }}>
-            {data.businessName || 'Rekordly'}
-          </h1>
-          {data.businessEmail && <div style={{ marginTop: '6px', color: '#64748b' }}>{data.businessEmail}</div>}
-          {data.businessPhone && <div style={{ marginTop: '4px', color: '#64748b' }}>{data.businessPhone}</div>}
+          <div style={{ fontFamily: 'Sora, Figtree, Arial, sans-serif', fontSize: '28px', lineHeight: 1.15, fontWeight: 700, letterSpacing: '-0.03em' }}>Customer receipt</div>
+          <div style={{ marginTop: '9px', fontSize: '13px', color: brand.muted, letterSpacing: '0.02em' }}>Payment received · {data.number}</div>
+          <div style={{ marginTop: '5px', fontSize: '13px', color: brand.muted }}>{formatDate(data.date)}</div>
         </div>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: '26px', fontWeight: 700 }}>RECEIPT</div>
-          <div style={{ marginTop: '8px', color: '#475569' }}>{data.number}</div>
-          <div style={{ marginTop: '4px', color: '#475569' }}>{formatDate(data.date)}</div>
+        <div style={{ minWidth: '150px', textAlign: 'right' }}>
+          <img src="/rekordly-logo.svg" alt="Rekordly" style={{ width: '158px', height: 'auto', display: 'inline-block' }} />
+          {data.businessEmail && <div style={{ marginTop: '9px', fontSize: '11px', color: brand.muted }}>{data.businessEmail}</div>}
+          {data.businessPhone && <div style={{ marginTop: '3px', fontSize: '11px', color: brand.muted }}>{data.businessPhone}</div>}
         </div>
       </div>
 
-      <div style={{ marginTop: '26px', padding: '16px', background: '#f8fafc', borderRadius: '8px' }}>
-        <div style={{ color: '#64748b', fontSize: '12px', textTransform: 'uppercase', fontWeight: 700 }}>Received from</div>
-        <div style={{ marginTop: '7px', fontSize: '18px', fontWeight: 700 }}>{data.customerName || 'Walk-in customer'}</div>
-        {data.customerEmail && <div style={{ marginTop: '4px', color: '#64748b' }}>{data.customerEmail}</div>}
-        {data.customerPhone && <div style={{ marginTop: '4px', color: '#64748b' }}>{data.customerPhone}</div>}
+      <div style={{ marginTop: '26px', padding: '19px 21px', background: brand.soft, borderRadius: '10px', textAlign: 'center' }}>
+        <div style={{ color: brand.muted, fontSize: '11px', fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase' }}>Received from</div>
+        <div style={{ marginTop: '8px', fontFamily: 'Sora, Figtree, Arial, sans-serif', fontSize: '22px', fontWeight: 700 }}>{data.customerName || 'Walk-in customer'}</div>
+        {(data.customerEmail || data.customerPhone) && <div style={{ marginTop: '8px', fontSize: '13px', color: brand.muted }}>{[data.customerEmail, data.customerPhone].filter(Boolean).join('  ·  ')}</div>}
       </div>
 
-      {(data.title || data.description) && (
-        <div style={{ marginTop: '24px' }}>
-          {data.title && <div style={{ fontSize: '18px', fontWeight: 700 }}>{data.title}</div>}
-          {data.description && <div style={{ marginTop: '6px', color: '#475569' }}>{data.description}</div>}
-        </div>
-      )}
+      {(data.title || data.description) && <div style={{ marginTop: '27px', textAlign: 'center' }}>
+        {data.title && <div style={{ fontFamily: 'Sora, Figtree, Arial, sans-serif', fontSize: '19px', fontWeight: 700 }}>{data.title}</div>}
+        {data.description && <div style={{ marginTop: '7px', fontSize: '14px', color: brand.muted }}>{data.description}</div>}
+      </div>}
 
-      <div style={{ marginTop: '26px', borderTop: '1px solid #cbd5e1', borderBottom: '1px solid #cbd5e1' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '14px 0' }}><span>Total</span><strong>{formatCurrency(data.totalAmount)}</strong></div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '14px 0' }}><span>Amount paid</span><strong style={{ color: '#15803d' }}>{formatCurrency(data.amountPaid)}</strong></div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '14px 0' }}><span>Amount remaining</span><strong>{formatCurrency(data.balance)}</strong></div>
+      <div style={{ marginTop: '28px', borderTop: `1px solid ${brand.line}` }}>
+        <div style={rowStyle}><span>Total</span><strong style={{ fontSize: '17px' }}>{formatCurrency(data.totalAmount)}</strong></div>
+        <div style={rowStyle}><span>Amount paid</span><strong style={{ color: brand.green, fontSize: '17px' }}>{formatCurrency(data.amountPaid)}</strong></div>
+        <div style={{ ...rowStyle, borderBottom: `1px solid ${brand.line}` }}><span>Amount remaining</span><strong style={{ color: remaining ? brand.danger : brand.green, fontSize: '17px' }}>{formatCurrency(data.balance)}</strong></div>
       </div>
 
-      {(data.payments?.length ?? 0) > 0 && (
-        <div style={{ marginTop: '26px' }}>
-          <div style={{ fontWeight: 700, marginBottom: '10px' }}>Payment history</div>
-          {data.payments!.map((payment, index) => (
-            <div key={`${payment.paymentDate}-${index}`} style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 0', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>
-              <span>{formatDate(payment.paymentDate)}{payment.paymentMethod ? ` · ${payment.paymentMethod}` : ''}{payment.reference ? ` · ${payment.reference}` : ''}</span>
-              <strong style={{ color: '#17202a' }}>{formatCurrency(payment.amount)}</strong>
-            </div>
-          ))}
-        </div>
-      )}
+      {(data.payments?.length ?? 0) > 0 && <div style={{ marginTop: '28px' }}>
+        <div style={{ marginBottom: '8px', fontFamily: 'Sora, Figtree, Arial, sans-serif', fontSize: '16px', fontWeight: 700 }}>Payment history</div>
+        {data.payments!.map((payment, index) => <div key={`${payment.paymentDate}-${index}`} style={{ ...rowStyle, padding: '11px 0', fontSize: '13px', color: brand.muted }}>
+          <span>{formatDate(payment.paymentDate)}{payment.paymentMethod ? ` · ${payment.paymentMethod}` : ''}{payment.reference ? ` · ${payment.reference}` : ''}</span>
+          <strong style={{ color: brand.ink, fontSize: '14px' }}>{formatCurrency(payment.amount)}</strong>
+        </div>)}
+      </div>}
 
-      <div style={{ marginTop: '34px', textAlign: 'center', color: '#64748b', fontSize: '12px' }}>Thank you for your business.</div>
+      <div style={{ marginTop: '31px', textAlign: 'center', color: brand.muted, fontSize: '12px' }}>Thank you for your business.</div>
     </div>
   );
 }
