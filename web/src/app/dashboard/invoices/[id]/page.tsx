@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Button, Skeleton, addToast } from '@heroui/react';
 import { ArrowLeft, FileX, ArrowRight } from '@phosphor-icons/react';
@@ -17,6 +17,9 @@ import ConvertToSales from '@/components/dashboard/invoices/single/ConvertToSale
 import { CustomerInfoSection } from '@/components/dashboard/CustomerInfoSection';
 import { PaymentSection } from '@/components/dashboard/PaymentSection';
 import { EntityHeader } from '@/components/dashboard/EntityHeader';
+import { CreateInvoiceDrawer } from '@/components/drawer/CreateInvoiceDrawer';
+import { ReceiptDownloadLayout } from '@/components/dashboard/ReceiptDownloadLayout';
+import { downloadAsImage as downloadReceiptImage, downloadAsPDF as downloadReceiptPDF } from '@/lib/downloadUtils';
 
 export default function SingleInvoice() {
   const params = useParams();
@@ -41,6 +44,8 @@ export default function SingleInvoice() {
   const [notFound, setNotFound] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const receiptRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const loadInvoice = async () => {
@@ -106,10 +111,11 @@ export default function SingleInvoice() {
 
     setIsDownloading(true);
     try {
-      await downloadAsPDF(invoice, businessInfo, {
-        fileName: `invoice-${invoice.invoiceNumber}`,
-        orientation: 'portrait',
-      });
+      if (invoice.sale && invoice.sale.amountPaid > 0 && receiptRef.current) {
+        await downloadReceiptPDF(receiptRef.current, `receipt-${invoice.invoiceNumber}`);
+      } else {
+        await downloadAsPDF(invoice, businessInfo, { fileName: `invoice-${invoice.invoiceNumber}`, orientation: 'portrait' });
+      }
       addToast({
         title: 'Success',
         description: 'Invoice downloaded as PDF',
@@ -134,9 +140,11 @@ export default function SingleInvoice() {
 
     setIsDownloading(true);
     try {
-      await downloadAsImage(invoice, businessInfo, {
-        fileName: `invoice-${invoice.invoiceNumber}`,
-      });
+      if (invoice.sale && invoice.sale.amountPaid > 0 && receiptRef.current) {
+        await downloadReceiptImage(receiptRef.current, `receipt-${invoice.invoiceNumber}`);
+      } else {
+        await downloadAsImage(invoice, businessInfo, { fileName: `invoice-${invoice.invoiceNumber}` });
+      }
       addToast({
         title: 'Success',
         description: 'Invoice downloaded as image',
@@ -203,10 +211,28 @@ export default function SingleInvoice() {
     <div className="max-w-7xl mx-auto">
       <EntityHeader
         entity="invoices"
+        onEdit={() => setIsEditOpen(true)}
         onDownloadImage={handleDownloadImage}
         onDownloadPDF={handleDownloadPDF}
         onShare={handleShare}
       />
+      {invoice.sale && invoice.sale.amountPaid > 0 && (
+        <div ref={receiptRef} style={{ position: 'absolute', left: '-100000px', top: 0 }}>
+          <ReceiptDownloadLayout data={{
+            number: invoice.invoiceNumber,
+            customerName: invoice.customer?.name || invoice.customerName,
+            customerEmail: invoice.customer?.email || invoice.customerEmail,
+            customerPhone: invoice.customer?.phone || invoice.customerPhone,
+            date: invoice.issueDate,
+            title: invoice.title,
+            description: invoice.description,
+            totalAmount: invoice.totalAmount,
+            amountPaid: invoice.sale.amountPaid,
+            balance: invoice.sale.balance,
+            payments: invoice.sale.payments,
+          }} />
+        </div>
+      )}
 
       <div className="lg:grid lg:grid-cols-3 lg:gap-6 mt-6 lg:mt-0">
         <div className="lg:col-span-2 space-y-6">
@@ -257,6 +283,15 @@ export default function SingleInvoice() {
           <ConvertToSales invoice={invoice} />
         </div>
       </div>
+      <CreateInvoiceDrawer
+        isOpen={isEditOpen}
+        invoiceId={invoice.id}
+        onClose={() => setIsEditOpen(false)}
+        onSuccess={async () => {
+          setIsEditOpen(false);
+          await fetchInvoices(true);
+        }}
+      />
     </div>
   );
 }

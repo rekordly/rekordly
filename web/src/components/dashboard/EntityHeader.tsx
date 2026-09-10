@@ -15,11 +15,13 @@ import {
   DownloadSimple,
   FilePdf,
   FileImage,
+  PencilSimple,
 } from '@phosphor-icons/react';
 
 interface EntityHeaderProps {
   entity: 'sales' | 'purchases' | 'quotations' | 'loans' | 'invoices';
   onShare?: () => void;
+  onEdit?: () => void;
   onDownloadPDF?: (layoutStyle: 'professional' | 'default') => void;
   onDownloadImage?: (layoutStyle: 'professional' | 'default') => void;
   isDownloading?: boolean;
@@ -31,6 +33,7 @@ export function EntityHeader({
   onDownloadPDF,
   onDownloadImage,
   onShare,
+  onEdit,
   isDownloading = false,
   backPath,
 }: EntityHeaderProps) {
@@ -86,6 +89,16 @@ export function EntityHeader({
       </Button>
 
       <div className="flex gap-2">
+        {onEdit && (
+          <Button
+            className="border-default-200"
+            startContent={<PencilSimple size={18} />}
+            variant="bordered"
+            onPress={onEdit}
+          >
+            Edit
+          </Button>
+        )}
         {onShare && (
           <Button
             isIconOnly

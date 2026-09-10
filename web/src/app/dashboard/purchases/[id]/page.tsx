@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Button, Skeleton, addToast } from '@heroui/react';
 import { ArrowLeft, FileX } from 'lucide-react';
@@ -16,6 +16,9 @@ import { AddPaymentModal } from '@/components/modals/AddPaymentModal';
 import { CustomerInfoSection } from '@/components/dashboard/CustomerInfoSection';
 import { RefundInfoSection } from '@/components/dashboard/RefundInfoSection';
 import { EntityHeader } from '@/components/dashboard/EntityHeader';
+import { CreatePurchaseDrawer } from '@/components/drawer/CreatePurchaseDrawer';
+import { ReceiptDownloadLayout } from '@/components/dashboard/ReceiptDownloadLayout';
+import { downloadAsImage, downloadAsPDF } from '@/lib/downloadUtils';
 
 export default function SinglePurchase() {
   const params = useParams();
@@ -31,6 +34,8 @@ export default function SinglePurchase() {
 
   const [notFound, setNotFound] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const receiptRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const loadPurchase = async () => {
@@ -87,21 +92,15 @@ export default function SinglePurchase() {
   };
 
   const handleDownloadPDF = async (layoutStyle: 'professional' | 'default') => {
-    addToast({
-      title: 'Coming Soon',
-      description: 'PDF download feature coming soon',
-      color: 'default',
-    });
+    if (!purchase || purchase.amountPaid <= 0 || !receiptRef.current) return;
+    await downloadAsPDF(receiptRef.current, `receipt-${purchase.purchaseNumber}`);
   };
 
   const handleDownloadImage = async (
     layoutStyle: 'professional' | 'default'
   ) => {
-    addToast({
-      title: 'Coming Soon',
-      description: 'Image download feature coming soon',
-      color: 'default',
-    });
+    if (!purchase || purchase.amountPaid <= 0 || !receiptRef.current) return;
+    await downloadAsImage(receiptRef.current, `receipt-${purchase.purchaseNumber}`);
   };
 
   const handleRefundSuccess = (data: any) => {
@@ -183,10 +182,28 @@ export default function SinglePurchase() {
     <div className="max-w-7xl mx-auto">
       <EntityHeader
         entity="purchases"
+        onEdit={() => setIsEditOpen(true)}
         onShare={handleShare}
-        onDownloadPDF={handleDownloadPDF}
-        onDownloadImage={handleDownloadImage}
+        onDownloadPDF={purchase.amountPaid > 0 ? handleDownloadPDF : undefined}
+        onDownloadImage={purchase.amountPaid > 0 ? handleDownloadImage : undefined}
       />
+      {purchase.amountPaid > 0 && (
+        <div ref={receiptRef} style={{ position: 'absolute', left: '-100000px', top: 0 }}>
+          <ReceiptDownloadLayout data={{
+            number: purchase.purchaseNumber,
+            customerName: purchase.customer?.name || purchase.vendorName,
+            customerEmail: purchase.customer?.email || purchase.vendorEmail,
+            customerPhone: purchase.customer?.phone || purchase.vendorPhone,
+            date: purchase.purchaseDate,
+            title: purchase.title,
+            description: purchase.description,
+            totalAmount: purchase.totalAmount,
+            amountPaid: purchase.amountPaid,
+            balance: purchase.balance,
+            payments: purchase.payments,
+          }} />
+        </div>
+      )}
       <div className="lg:grid lg:grid-cols-3 lg:gap-6 mt-6 lg:mt-0">
         <div className="lg:col-span-2 space-y-6">
           <PurchaseInfoSection purchase={purchase} />
@@ -262,6 +279,16 @@ export default function SinglePurchase() {
           </div>
         </div>
       </div>
+      <CreatePurchaseDrawer
+        isOpen={isEditOpen}
+        purchaseId={purchase.id}
+        purchaseType={purchase.purchaseType}
+        onClose={() => setIsEditOpen(false)}
+        onSuccess={async () => {
+          setIsEditOpen(false);
+          await fetchPurchases(true);
+        }}
+      />
     </div>
   );
 }

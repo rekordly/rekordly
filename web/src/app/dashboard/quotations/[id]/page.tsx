@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Button, Skeleton, addToast } from '@heroui/react';
 import { ArrowLeft, FileX } from '@phosphor-icons/react';
@@ -20,6 +20,9 @@ import { RefundModal } from '@/components/modals/RefundModal';
 import { CustomerInfoSection } from '@/components/dashboard/CustomerInfoSection';
 import { RefundInfoSection } from '@/components/dashboard/RefundInfoSection';
 import { EntityHeader } from '@/components/dashboard/EntityHeader';
+import { CreateQuotationDrawer } from '@/components/drawer/CreateQuotationDrawer';
+import { ReceiptDownloadLayout } from '@/components/dashboard/ReceiptDownloadLayout';
+import { downloadAsImage, downloadAsPDF } from '@/lib/downloadUtils';
 
 export default function SingleQuotation() {
   const params = useParams();
@@ -43,6 +46,8 @@ export default function SingleQuotation() {
   const [notFound, setNotFound] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const receiptRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const loadQuotation = async () => {
@@ -100,23 +105,23 @@ export default function SingleQuotation() {
   };
 
   const handleDownloadPDF = async (layoutStyle: 'professional' | 'default') => {
-    // Implement download logic
-    addToast({
-      title: 'Coming Soon',
-      description: 'PDF download feature coming soon',
-      color: 'default',
-    });
+    if (!quotation || quotation.amountPaid <= 0 || !receiptRef.current) return;
+    try {
+      await downloadAsPDF(receiptRef.current, `receipt-${quotation.quotationNumber}`);
+    } catch {
+      addToast({ title: 'Receipt download failed', description: 'Please try again.', color: 'danger' });
+    }
   };
 
   const handleDownloadImage = async (
     layoutStyle: 'professional' | 'default'
   ) => {
-    // Implement download logic
-    addToast({
-      title: 'Coming Soon',
-      description: 'Image download feature coming soon',
-      color: 'default',
-    });
+    if (!quotation || quotation.amountPaid <= 0 || !receiptRef.current) return;
+    try {
+      await downloadAsImage(receiptRef.current, `receipt-${quotation.quotationNumber}`);
+    } catch {
+      addToast({ title: 'Receipt download failed', description: 'Please try again.', color: 'danger' });
+    }
   };
 
   const handleRefundSuccess = (data: any) => {
@@ -194,11 +199,32 @@ export default function SingleQuotation() {
     <div className="max-w-7xl mx-auto">
       <EntityHeader
         entity="quotations"
+        onEdit={() => setIsEditOpen(true)}
         isDownloading={isDownloading}
         onShare={handleShare}
-        onDownloadPDF={handleDownloadPDF}
-        onDownloadImage={handleDownloadImage}
+        onDownloadPDF={quotation.amountPaid > 0 ? handleDownloadPDF : undefined}
+        onDownloadImage={quotation.amountPaid > 0 ? handleDownloadImage : undefined}
       />
+
+      {quotation.amountPaid > 0 && (
+        <div ref={receiptRef} style={{ position: 'absolute', left: '-100000px', top: 0 }}>
+          <ReceiptDownloadLayout
+            data={{
+              number: quotation.quotationNumber,
+              customerName: quotation.customer?.name || quotation.customerName,
+              customerEmail: quotation.customer?.email || quotation.customerEmail,
+              customerPhone: quotation.customer?.phone || quotation.customerPhone,
+              date: quotation.issueDate,
+              title: quotation.title,
+              description: quotation.description,
+              totalAmount: quotation.totalAmount,
+              amountPaid: quotation.amountPaid,
+              balance: quotation.balance,
+              payments: quotation.payments,
+            }}
+          />
+        </div>
+      )}
 
       <div className="lg:grid lg:grid-cols-3 lg:gap-6 mt-6 lg:mt-0">
         <div className="lg:col-span-2 space-y-6">
@@ -274,6 +300,15 @@ export default function SingleQuotation() {
           </div>
         </div>
       </div>
+      <CreateQuotationDrawer
+        isOpen={isEditOpen}
+        quotationId={quotation.id}
+        onClose={() => setIsEditOpen(false)}
+        onSuccess={async () => {
+          setIsEditOpen(false);
+          await fetchQuotations(true);
+        }}
+      />
     </div>
   );
 }

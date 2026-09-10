@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Button, Skeleton, addToast } from '@heroui/react';
 import { ArrowLeft, FileX } from '@phosphor-icons/react';
@@ -15,6 +15,9 @@ import { EditPaymentModal } from '@/components/modals/EditPaymentModal';
 import { CustomerInfoSection } from '@/components/dashboard/CustomerInfoSection';
 import { RefundInfoSection } from '@/components/dashboard/RefundInfoSection';
 import { EntityHeader } from '@/components/dashboard/EntityHeader';
+import { CreateSaleDrawer } from '@/components/drawer/CreateSaleDrawer';
+import { ReceiptDownloadLayout } from '@/components/dashboard/ReceiptDownloadLayout';
+import { downloadAsImage, downloadAsPDF } from '@/lib/downloadUtils';
 
 export default function SingleSale() {
   const params = useParams();
@@ -29,6 +32,8 @@ export default function SingleSale() {
 
   const [notFound, setNotFound] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const receiptRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const loadSale = async () => {
@@ -86,21 +91,23 @@ export default function SingleSale() {
   };
 
   const handleDownloadPDF = async (layoutStyle: 'professional' | 'default') => {
-    addToast({
-      title: 'Coming Soon',
-      description: 'PDF download feature coming soon',
-      color: 'default',
-    });
+    if (!sale || sale.amountPaid <= 0 || !receiptRef.current) return;
+    try {
+      await downloadAsPDF(receiptRef.current, `receipt-${sale.receiptNumber}`);
+    } catch {
+      addToast({ title: 'Receipt download failed', description: 'Please try again.', color: 'danger' });
+    }
   };
 
   const handleDownloadImage = async (
     layoutStyle: 'professional' | 'default'
   ) => {
-    addToast({
-      title: 'Coming Soon',
-      description: 'Image download feature coming soon',
-      color: 'default',
-    });
+    if (!sale || sale.amountPaid <= 0 || !receiptRef.current) return;
+    try {
+      await downloadAsImage(receiptRef.current, `receipt-${sale.receiptNumber}`);
+    } catch {
+      addToast({ title: 'Receipt download failed', description: 'Please try again.', color: 'danger' });
+    }
   };
 
   const handleRefundSuccess = (data: any) => {
@@ -167,10 +174,31 @@ export default function SingleSale() {
     <div className="max-w-7xl mx-auto">
       <EntityHeader
         entity="sales"
+        onEdit={() => setIsEditOpen(true)}
         onShare={handleShare}
-        onDownloadPDF={handleDownloadPDF}
-        onDownloadImage={handleDownloadImage}
+        onDownloadPDF={sale.amountPaid > 0 ? handleDownloadPDF : undefined}
+        onDownloadImage={sale.amountPaid > 0 ? handleDownloadImage : undefined}
       />
+
+      {sale.amountPaid > 0 && (
+        <div ref={receiptRef} style={{ position: 'absolute', left: '-100000px', top: 0 }}>
+          <ReceiptDownloadLayout
+            data={{
+              number: sale.receiptNumber,
+              customerName: sale.customer?.name || sale.customerName,
+              customerEmail: sale.customer?.email || sale.customerEmail,
+              customerPhone: sale.customer?.phone || sale.customerPhone,
+              date: sale.saleDate,
+              title: sale.title,
+              description: sale.description,
+              totalAmount: sale.totalAmount,
+              amountPaid: sale.amountPaid,
+              balance: sale.balance,
+              payments: sale.payments,
+            }}
+          />
+        </div>
+      )}
 
       <div className="lg:grid lg:grid-cols-3 lg:gap-6 mt-6 lg:mt-0">
         <div className="lg:col-span-2 space-y-6">
@@ -237,6 +265,15 @@ export default function SingleSale() {
           </div>
         </div>
       </div>
+      <CreateSaleDrawer
+        isOpen={isEditOpen}
+        saleId={sale.id}
+        onClose={() => setIsEditOpen(false)}
+        onSuccess={async () => {
+          setIsEditOpen(false);
+          await fetchSales(true);
+        }}
+      />
     </div>
   );
 }

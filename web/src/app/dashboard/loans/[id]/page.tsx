@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Button, Skeleton } from '@heroui/react';
+import { Button, Skeleton, addToast } from '@heroui/react';
 import { ArrowLeft, FileX } from 'lucide-react';
 
 import { useLoanStore } from '@/store/loan-store';
@@ -14,6 +14,9 @@ import { PaymentSection } from '@/components/dashboard/PaymentSection';
 import { AddPaymentModal } from '@/components/modals/AddPaymentModal';
 import { Handshake } from '@phosphor-icons/react';
 import { EntityHeader } from '@/components/dashboard/EntityHeader';
+import { CreateLoanDrawer } from '@/components/drawer/CreateLoanDrawer';
+import { ReceiptDownloadLayout } from '@/components/dashboard/ReceiptDownloadLayout';
+import { downloadAsImage, downloadAsPDF } from '@/lib/downloadUtils';
 
 export default function SingleLoan() {
   const params = useParams();
@@ -28,6 +31,8 @@ export default function SingleLoan() {
 
   const [notFound, setNotFound] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const receiptRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const loadLoan = async () => {
@@ -76,13 +81,17 @@ export default function SingleLoan() {
   };
 
   const handleDownloadPDF = async (layoutStyle: 'professional' | 'default') => {
-    // Add PDF download logic here
+    if (!loan || loan.totalPaid <= 0 || !receiptRef.current) return;
+    try { await downloadAsPDF(receiptRef.current, `receipt-${loan.loanNumber}`); }
+    catch { addToast({ title: 'Receipt download failed', description: 'Please try again.', color: 'danger' }); }
   };
 
   const handleDownloadImage = async (
     layoutStyle: 'professional' | 'default'
   ) => {
-    // Add image download logic here
+    if (!loan || loan.totalPaid <= 0 || !receiptRef.current) return;
+    try { await downloadAsImage(receiptRef.current, `receipt-${loan.loanNumber}`); }
+    catch { addToast({ title: 'Receipt download failed', description: 'Please try again.', color: 'danger' }); }
   };
 
   // Updated handler for payment success
@@ -164,10 +173,28 @@ export default function SingleLoan() {
     <div className="max-w-7xl mx-auto">
       <EntityHeader
         entity="loans"
-        onDownloadImage={handleDownloadImage}
-        onDownloadPDF={handleDownloadPDF}
+        onEdit={() => setIsEditOpen(true)}
+        onDownloadImage={loan.totalPaid > 0 ? handleDownloadImage : undefined}
+        onDownloadPDF={loan.totalPaid > 0 ? handleDownloadPDF : undefined}
         onShare={handleShare}
       />
+      {loan.totalPaid > 0 && (
+        <div ref={receiptRef} style={{ position: 'absolute', left: '-100000px', top: 0 }}>
+          <ReceiptDownloadLayout data={{
+            number: loan.loanNumber,
+            customerName: loan.partyName,
+            customerEmail: loan.partyEmail,
+            customerPhone: loan.partyPhone,
+            date: loan.startDate,
+            title: loan.loanType === 'RECEIVABLE' ? 'Loan repayment received' : 'Loan payment receipt',
+            description: loan.purpose,
+            totalAmount: loan.principalAmount + loan.totalCharges,
+            amountPaid: loan.totalPaid,
+            balance: loan.currentBalance,
+            payments,
+          }} />
+        </div>
+      )}
 
       <div className="lg:grid lg:grid-cols-3 lg:gap-6 mt-6 lg:mt-0">
         <div className="lg:col-span-2 space-y-6">
@@ -232,6 +259,15 @@ export default function SingleLoan() {
           </div>
         </div>
       </div>
+      <CreateLoanDrawer
+        isOpen={isEditOpen}
+        loanId={loan.id}
+        onClose={() => setIsEditOpen(false)}
+        onSuccess={async () => {
+          setIsEditOpen(false);
+          await fetchLoans(true);
+        }}
+      />
     </div>
   );
 }
