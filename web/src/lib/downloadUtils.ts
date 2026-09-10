@@ -98,6 +98,17 @@ export const prepareElementForDownload = (
 
   const clone = element.cloneNode(true) as HTMLElement;
 
+  // The source element is commonly an off-screen export host. Reset that
+  // positioning on the clone so html2canvas can measure a real box instead of
+  // producing a 0x0 canvas.
+  clone.style.position = 'static';
+  clone.style.left = 'auto';
+  clone.style.top = 'auto';
+  clone.style.width = '100%';
+  clone.style.height = 'auto';
+  clone.style.display = 'block';
+  clone.style.visibility = 'visible';
+
   container.appendChild(clone);
   document.body.appendChild(container);
 
@@ -139,6 +150,26 @@ const generateCanvas = async (
     imageTimeout: 15000,
     removeContainer: false,
   });
+
+  // Some browsers report the off-screen host as zero-sized even when the
+  // child has content. Capture the normalized clone itself as a fallback.
+  if (!canvas.width || !canvas.height) {
+    const child = container.firstElementChild as HTMLElement | null;
+    if (child) {
+      const fallback = await html2canvas(child, {
+        scale: Math.min(Math.max(scale, 1), 2),
+        useCORS: true,
+        logging: false,
+        backgroundColor,
+        windowWidth: width,
+        allowTaint: true,
+        foreignObjectRendering: false,
+        imageTimeout: 15000,
+        removeContainer: false,
+      });
+      if (fallback.width && fallback.height) return fallback;
+    }
+  }
 
   if (!canvas.width || !canvas.height || !Number.isFinite(canvas.width) || !Number.isFinite(canvas.height)) {
     throw new Error('Unable to render document for download');

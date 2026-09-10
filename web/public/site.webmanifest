@@ -1,0 +1,21 @@
+{
+  "name": "Rekordly",
+  "short_name": "Rekordly",
+  "description": "Professional accounting for Nigerian businesses",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#009e10",
+  "icons": [
+    {
+      "src": "/image.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "1200x1200",
+      "type": "image/png"
+    }
+  ]
+}
