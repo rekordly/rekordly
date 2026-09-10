@@ -122,11 +122,14 @@ const generateCanvas = async (
 ): Promise<HTMLCanvasElement> => {
   const { scale = 2, backgroundColor = '#ffffff', width = 800 } = config;
 
-  // Wait for styles and color conversion to apply
+  // Wait for styles/fonts and color conversion to apply.
   await new Promise(resolve => setTimeout(resolve, 300));
+  if (document.fonts?.ready) await document.fonts.ready;
 
   const canvas = await html2canvas(container, {
-    scale,
+    // Keep the bitmap bounded. Very large canvases produce invalid PDF
+    // coordinates in jsPDF and are unnecessary for a receipt.
+    scale: Math.min(Math.max(scale, 1), 2),
     useCORS: true,
     logging: false,
     backgroundColor,
@@ -136,6 +139,10 @@ const generateCanvas = async (
     imageTimeout: 15000,
     removeContainer: false,
   });
+
+  if (!canvas.width || !canvas.height || !Number.isFinite(canvas.width) || !Number.isFinite(canvas.height)) {
+    throw new Error('Unable to render document for download');
+  }
 
   return canvas;
 };
@@ -158,20 +165,21 @@ export const downloadAsImage = async (
 
     cleanup = cleanupFn;
 
-    const canvas = await generateCanvas(container, { ...config, scale: 3 });
-
-    canvas.toBlob(blob => {
-      if (!blob) return;
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-
-      link.href = url;
-      link.download = `${fileName}.png`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    }, 'image/png');
+    const canvas = await generateCanvas(container, { ...config, scale: 2 });
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(value => {
+        if (value) resolve(value);
+        else reject(new Error('Unable to encode document image'));
+      }, 'image/png');
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${fileName}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   } catch (error) {
     console.error('Error downloading image:', error);
     throw error;
@@ -229,21 +237,16 @@ export const downloadAsPDF = async (
     const scaledWidth = imgWidth * ratio;
     const scaledHeight = imgHeight * ratio;
 
+    if (![ratio, scaledWidth, scaledHeight].every(Number.isFinite) || ratio <= 0) {
+      throw new Error('Unable to calculate PDF dimensions');
+    }
+
     // Check if content fits on one page
     if (scaledHeight <= availableHeight) {
       // Single page - center vertically
       const y = (pdfHeight - scaledHeight) / 2;
 
-      pdf.addImage(
-        imgData,
-        'JPEG',
-        margin,
-        y,
-        scaledWidth,
-        scaledHeight,
-        undefined,
-        'FAST'
-      );
+      pdf.addImage(imgData, 'JPEG', margin, y, scaledWidth, scaledHeight);
     } else {
       // Multi-page - split content
       let yOffset = 0;
@@ -263,7 +266,7 @@ export const downloadAsPDF = async (
         const pageCanvas = document.createElement('canvas');
 
         pageCanvas.width = imgWidth;
-        pageCanvas.height = currentSliceHeight;
+        pageCanvas.height = Math.max(1, Math.floor(currentSliceHeight));
 
         const pageCtx = pageCanvas.getContext('2d');
 
@@ -283,19 +286,13 @@ export const downloadAsPDF = async (
           const pageImgData = pageCanvas.toDataURL('image/jpeg', 0.95);
           const pageScaledHeight = currentSliceHeight * ratio;
 
-          pdf.addImage(
-            pageImgData,
-            'JPEG',
-            margin,
-            margin,
-            scaledWidth,
-            pageScaledHeight,
-            undefined,
-            'FAST'
-          );
+          if (!Number.isFinite(pageScaledHeight) || pageScaledHeight <= 0) {
+            throw new Error('Unable to calculate PDF page dimensions');
+          }
+          pdf.addImage(pageImgData, 'JPEG', margin, margin, scaledWidth, pageScaledHeight);
         }
 
-        yOffset += currentSliceHeight;
+        yOffset += pageCanvas.height;
         pageNumber++;
       }
     }
