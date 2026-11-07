@@ -1,0 +1,227 @@
+@import "tailwindcss";
+@import "@heroui/styles";
+
+@custom-variant dark (&:is(.dark, [data-theme="dark"], .dark *, [data-theme="dark"] *));
+
+:root,
+.light,
+[data-theme="light"] {
+  color-scheme: light;
+
+  /* Rekordly V2 Semantic Color Tokens (OKLCH mapped from approved V1 brand palette)
+   * Primary green:   #009e10 -> oklch(0.6054 0.1977 143.2)
+   * Secondary orange:#fa8901 -> oklch(0.7426 0.1745 58.65)
+   * Light background:#FAFFFB -> oklch(0.9969 0.0067 148.5)
+   */
+  --background: oklch(0.9969 0.0067 148.5);
+  --foreground: oklch(0.205 0.028 147.5);
+
+  --surface: oklch(1 0 0);
+  --surface-foreground: var(--foreground);
+  --surface-muted: oklch(0.968 0.011 146.5);
+  --surface-secondary: var(--surface-muted);
+  --surface-secondary-foreground: var(--foreground);
+  --surface-tertiary: oklch(0.946 0.015 146.5);
+  --surface-tertiary-foreground: var(--foreground);
+
+  --primary: oklch(0.6054 0.1977 143.2);
+  --primary-foreground: oklch(1 0 0);
+  --primary-hover: oklch(0.548 0.182 143.2);
+  --primary-soft: color-mix(in oklab, var(--primary) 13%, transparent);
+
+  --secondary: oklch(0.7426 0.1745 58.65);
+  --secondary-foreground: oklch(0.18 0.02 58.65);
+  --secondary-hover: oklch(0.685 0.165 58.65);
+  --secondary-soft: color-mix(in oklab, var(--secondary) 16%, transparent);
+
+  --muted: oklch(0.955 0.008 146.5);
+  --muted-foreground: oklch(0.475 0.02 147.5);
+
+  --border: oklch(0.895 0.012 146.5);
+  --separator: oklch(0.915 0.01 146.5);
+
+  --danger: oklch(0.585 0.22 26.5);
+  --danger-foreground: oklch(0.99 0 0);
+  --success: var(--primary);
+  --success-foreground: oklch(1 0 0);
+  --warning: var(--secondary);
+  --warning-foreground: oklch(0.19 0.025 58.65);
+
+  --focus-ring: var(--primary);
+  --focus: var(--focus-ring);
+
+  /* HeroUI v3 token bridge */
+  --accent: var(--primary);
+  --accent-foreground: var(--primary-foreground);
+  --default: var(--surface-muted);
+  --default-foreground: var(--foreground);
+
+  /* Form field tokens */
+  --field-background: var(--surface);
+  --field-foreground: var(--foreground);
+  --field-placeholder: var(--muted-foreground);
+  --field-border: var(--border);
+  --field-border-width: 1px;
+  --field-border-hover: color-mix(in oklab, var(--primary) 45%, var(--border) 55%);
+  --field-border-focus: var(--focus-ring);
+
+  /* Radius controls */
+  --radius: 0.625rem;
+  --radius-control: 1rem;
+  --radius-card: 1.25rem;
+  --radius-pill: 9999px;
+  --field-radius: var(--radius-control);
+
+  /* Shadows */
+  --shadow-control: 0 1px 2px 0 oklch(0.2 0.02 147 / 0.05);
+  --shadow-card:
+    0 4px 16px -2px oklch(0.2 0.03 147 / 0.06),
+    0 2px 6px -1px oklch(0.2 0.03 147 / 0.04);
+  --surface-shadow: var(--shadow-card);
+  --field-shadow: var(--shadow-control);
+
+  /* Authentication surface spacing tokens */
+  --auth-panel-padding-mobile: 1.5rem;
+  --auth-panel-padding-desktop: 3rem;
+  --auth-form-max-width: 25rem;
+  --auth-stack-gap: 1.5rem;
+  --auth-field-gap: 1.125rem;
+  --control-height-md: 3.25rem;
+  --control-height-lg: 3.5rem;
+}
+
+.dark,
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Rekordly V2 Dark Mode Tokens
+   * Dark background: #010501 -> oklch(0.1149 0.0178 145.2)
+   * Dark card:       #121212 -> oklch(0.1822 0 0)
+   */
+  --background: oklch(0.1149 0.0178 145.2);
+  --foreground: oklch(0.968 0.008 146.5);
+
+  --surface: oklch(0.1822 0 0);
+  --surface-foreground: var(--foreground);
+  --surface-muted: oklch(0.228 0.01 146.5);
+  --surface-secondary: var(--surface-muted);
+  --surface-secondary-foreground: var(--foreground);
+  --surface-tertiary: oklch(0.265 0.012 146.5);
+  --surface-tertiary-foreground: var(--foreground);
+
+  --primary: oklch(0.642 0.198 143.2);
+  --primary-foreground: oklch(0.995 0 0);
+  --primary-hover: oklch(0.685 0.195 143.2);
+  --primary-soft: color-mix(in oklab, var(--primary) 18%, transparent);
+
+  --secondary: oklch(0.765 0.172 58.65);
+  --secondary-foreground: oklch(0.15 0.02 58.65);
+  --secondary-hover: oklch(0.805 0.165 58.65);
+  --secondary-soft: color-mix(in oklab, var(--secondary) 18%, transparent);
+
+  --muted: oklch(0.24 0.01 146.5);
+  --muted-foreground: oklch(0.725 0.014 146.5);
+
+  --border: oklch(0.285 0.012 146.5);
+  --separator: oklch(0.255 0.01 146.5);
+
+  --danger: oklch(0.645 0.21 25.5);
+  --danger-foreground: oklch(0.99 0 0);
+  --success: var(--primary);
+  --success-foreground: oklch(0.995 0 0);
+  --warning: var(--secondary);
+  --warning-foreground: oklch(0.15 0.02 58.65);
+
+  --focus-ring: var(--primary);
+  --focus: var(--focus-ring);
+
+  /* HeroUI v3 token bridge */
+  --accent: var(--primary);
+  --accent-foreground: var(--primary-foreground);
+  --default: var(--surface-muted);
+  --default-foreground: var(--foreground);
+
+  /* Form field tokens */
+  --field-background: var(--surface);
+  --field-foreground: var(--foreground);
+  --field-placeholder: var(--muted-foreground);
+  --field-border: var(--border);
+  --field-border-width: 1px;
+  --field-border-hover: color-mix(in oklab, var(--primary) 50%, var(--border) 50%);
+  --field-border-focus: var(--focus-ring);
+
+  /* Shadows */
+  --shadow-control: 0 1px 2px 0 oklch(0 0 0 / 0.35);
+  --shadow-card:
+    0 8px 24px -4px oklch(0 0 0 / 0.55),
+    0 0 0 1px oklch(1 0 0 / 0.06);
+  --surface-shadow: var(--shadow-card);
+  --field-shadow: var(--shadow-control);
+}
+
+@theme inline {
+  --font-sans: var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-sora), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-fira-code), ui-monospace, SFMono-Regular, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-foreground: var(--surface-foreground);
+  --color-surface-muted: var(--surface-muted);
+  --color-border: var(--border);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-soft: var(--primary-soft);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary-hover: var(--secondary-hover);
+  --color-secondary-soft: var(--secondary-soft);
+
+  --color-danger: var(--danger);
+  --color-danger-foreground: var(--danger-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-focus-ring: var(--focus-ring);
+
+  --radius-control: var(--radius-control);
+  --radius-card: var(--radius-card);
+  --radius-pill: var(--radius-pill);
+
+  --shadow-card: var(--shadow-card);
+  --shadow-control: var(--shadow-control);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Ensure HeroUI Input inside Rekordly InputGroup pill does not render a duplicate inner box */
+.input-group .input {
+  background-color: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+  padding-inline: 0 !important;
+}
