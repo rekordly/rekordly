@@ -1,6 +1,6 @@
 "use client";
 
-import { ShieldAlert } from "lucide-react";
+import { ShieldWarning } from "@phosphor-icons/react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
@@ -27,7 +27,7 @@ export function AccessDenied() {
     <main className="flex min-h-[70vh] items-center justify-center p-6">
       <SurfaceCard className="max-w-md items-center text-center shadow-none">
         <div className="grid size-12 place-items-center rounded-xl bg-danger-soft text-danger">
-          <ShieldAlert className="size-6" aria-hidden="true" />
+          <ShieldWarning size={24} weight="duotone" aria-hidden="true" />
         </div>
         <div>
           <p className="text-xs font-semibold tracking-wider text-danger uppercase">403</p>

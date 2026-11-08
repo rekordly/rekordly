@@ -1,6 +1,6 @@
 "use client";
 
-import { Moon, Sun } from "lucide-react";
+import { Moon, Sun } from "@phosphor-icons/react";
 import { useTheme } from "next-themes";
 import { useSyncExternalStore } from "react";
 
@@ -28,9 +28,9 @@ export function ThemeToggle() {
       className="border-0 bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground focus:outline-none"
     >
       {isDark ? (
-        <Sun className="size-4 text-primary" aria-hidden="true" />
+        <Sun size={18} weight="duotone" className="text-primary" aria-hidden="true" />
       ) : (
-        <Moon className="size-4 text-primary" aria-hidden="true" />
+        <Moon size={18} weight="duotone" className="text-primary" aria-hidden="true" />
       )}
     </Button>
   );

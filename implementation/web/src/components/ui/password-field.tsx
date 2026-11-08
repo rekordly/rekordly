@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeSlash } from "@phosphor-icons/react";
 import { useState } from "react";
 
 import { TextField, type TextFieldProps } from "./text-field";
@@ -56,9 +56,9 @@ export function PasswordField({
           className="inline-flex size-7 items-center justify-center rounded-lg border-0 bg-transparent p-0 text-muted-foreground shadow-none transition-colors hover:text-foreground focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isVisible ? (
-            <EyeOff className="size-4" aria-hidden="true" />
+            <EyeSlash size={18} weight="duotone" aria-hidden="true" />
           ) : (
-            <Eye className="size-4" aria-hidden="true" />
+            <Eye size={18} weight="duotone" aria-hidden="true" />
           )}
         </button>
       }

@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowLeft, KeyRound, MailCheck } from "lucide-react";
+import { ArrowLeft, EnvelopeSimple, GoogleLogo, Key } from "@phosphor-icons/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
@@ -14,7 +14,7 @@ import {
   LoadingButton,
   TextField,
 } from "@/components/ui";
-import { ApiClientError } from "@/lib/api/client";
+import { ApiClientError, resolveApiBaseUrl } from "@/lib/api/client";
 import {
   type AuthApiContract,
   createSubmissionGuard,
@@ -98,6 +98,14 @@ export function EmailEntryScreen({
     router.push(AUTH_ROUTES.LOGIN_PASSWORD);
   };
 
+  const handleGoogleSignIn = () => {
+    const returnTo = useAuthFlowStore.getState().returnTo ?? "/dashboard";
+    window.open(
+      `${resolveApiBaseUrl()}/api/v1/auth/google/start?return_to=${encodeURIComponent(returnTo)}`,
+      "_self",
+    );
+  };
+
   const handleBackToEmail = () => {
     setApiError(null);
     setView("email");
@@ -136,7 +144,7 @@ export function EmailEntryScreen({
         >
           <div className="flex items-start gap-3">
             <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary">
-              <MailCheck className="size-5" aria-hidden="true" />
+              <EnvelopeSimple size={20} weight="duotone" aria-hidden="true" />
             </div>
             <div className="flex flex-col gap-1">
               <h2 className="font-heading text-sm font-semibold text-foreground">
@@ -228,7 +236,18 @@ export function EmailEntryScreen({
           size="md"
           fullWidth
           isDisabled={isLoading}
-          startIcon={<KeyRound className="size-4 text-primary" />}
+          startIcon={<GoogleLogo />}
+          onPress={handleGoogleSignIn}
+          data-testid="continue-with-google-button"
+        >
+          Continue with Google
+        </Button>
+        <Button
+          variant="outline"
+          size="md"
+          fullWidth
+          isDisabled={isLoading}
+          startIcon={<Key className="text-primary" />}
           onPress={handleContinueWithPasswordDirect}
           data-testid="continue-with-password-button"
         >

@@ -5,7 +5,6 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { ThemeToggle } from "./theme-toggle";
 
 export interface AuthCardProps {
   title: string;
@@ -42,8 +41,8 @@ export function AuthCard({
 }: AuthCardProps) {
   return (
     <div className="flex min-h-dvh w-full flex-col px-5 py-5 sm:px-8 md:h-full md:min-h-0 md:px-10 md:py-7">
-      {/* Top bar with Rekordly branding and theme toggle */}
-      <header className="mx-auto flex w-full max-w-md items-center justify-between gap-4">
+      {/* Top bar with Rekordly branding on mobile */}
+      <header className="mx-auto flex w-full max-w-md items-center gap-4">
         <Link
           href="/login"
           aria-label="Rekordly home"
@@ -58,7 +57,6 @@ export function AuthCard({
             className="h-7 w-auto object-contain"
           />
         </Link>
-        <ThemeToggle />
       </header>
 
       {/* Main compact authentication surface */}

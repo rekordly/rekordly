@@ -1,7 +1,7 @@
 "use client";
 
 import { cn, Description, FieldError, Label } from "@heroui/react";
-import { AlertCircle } from "lucide-react";
+import { WarningCircle } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 
 import { getFormFieldAccessibilityIds } from "@/lib/auth/accessibility";
@@ -75,7 +75,7 @@ export function FormField({
           id={errorId}
           className="mt-0.5 flex items-start gap-1.5 font-sans text-xs font-medium text-danger"
         >
-          <AlertCircle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+          <WarningCircle size={16} weight="duotone" className="mt-0.5 shrink-0" aria-hidden="true" />
           <span role="alert">{errorMessage}</span>
         </FieldError>
       ) : null}

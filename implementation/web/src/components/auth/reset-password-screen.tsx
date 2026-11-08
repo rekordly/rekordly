@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowLeft, KeyRound } from "lucide-react";
+import { ArrowLeft, Key } from "@phosphor-icons/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
@@ -127,7 +127,7 @@ export function ResetPasswordScreen({
           variant="primary"
           size="lg"
           fullWidth
-          startIcon={<KeyRound className="size-4" />}
+          startIcon={<Key />}
           onPress={() => router.push(AUTH_ROUTES.FORGOT_PASSWORD)}
           data-testid="reset-password-request-new"
         >

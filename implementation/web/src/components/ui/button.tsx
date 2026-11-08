@@ -1,7 +1,7 @@
 "use client";
 
 import { Button as HeroButton, cn } from "@heroui/react";
-import type { ComponentPropsWithoutRef, ReactNode } from "react";
+import { cloneElement, isValidElement, type ComponentPropsWithoutRef, type ReactNode } from "react";
 
 export type RekordlyButtonVariant =
   | "primary"
@@ -60,6 +60,16 @@ const VARIANT_CLASSES: Readonly<Record<RekordlyButtonVariant, string>> = {
     "bg-danger text-danger-foreground hover:opacity-95 shadow-none border border-transparent",
 };
 
+function resolveIcon(icon: ReactNode, size: RekordlyButtonSize): ReactNode {
+  if (!icon || !isValidElement(icon)) return icon;
+  const iconSize = size === "sm" ? 16 : size === "lg" ? 20 : 18;
+  return cloneElement(icon, {
+    size: iconSize,
+    weight: "duotone",
+    "aria-hidden": true,
+  } as Record<string, unknown>);
+}
+
 export function Button({
   children,
   variant = "primary",
@@ -102,13 +112,13 @@ export function Button({
     >
       {startIcon ? (
         <span className="inline-flex shrink-0 items-center justify-center" aria-hidden="true">
-          {startIcon}
+          {resolveIcon(startIcon, size)}
         </span>
       ) : null}
       {children}
       {endIcon ? (
         <span className="inline-flex shrink-0 items-center justify-center" aria-hidden="true">
-          {endIcon}
+          {resolveIcon(endIcon, size)}
         </span>
       ) : null}
     </HeroButton>

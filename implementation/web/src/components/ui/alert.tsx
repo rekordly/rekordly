@@ -1,13 +1,7 @@
 "use client";
 
 import { Alert as HeroAlert, cn } from "@heroui/react";
-import {
-  AlertCircle,
-  AlertTriangle,
-  CheckCircle2,
-  Info,
-  X,
-} from "lucide-react";
+import { CheckCircle, Info, Warning, WarningCircle, X } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 
 export type RekordlyAlertStatus = "error" | "success" | "warning" | "info";
@@ -54,13 +48,13 @@ const STATUS_ICON_CLASSES: Readonly<Record<RekordlyAlertStatus, string>> = {
 function renderStatusIcon(status: RekordlyAlertStatus): ReactNode {
   switch (status) {
     case "error":
-      return <AlertCircle className="size-4 shrink-0" aria-hidden="true" />;
+      return <WarningCircle size={18} weight="duotone" aria-hidden="true" />;
     case "success":
-      return <CheckCircle2 className="size-4 shrink-0" aria-hidden="true" />;
+      return <CheckCircle size={18} weight="duotone" aria-hidden="true" />;
     case "warning":
-      return <AlertTriangle className="size-4 shrink-0" aria-hidden="true" />;
+      return <Warning size={18} weight="duotone" aria-hidden="true" />;
     case "info":
-      return <Info className="size-4 shrink-0" aria-hidden="true" />;
+      return <Info size={18} weight="duotone" aria-hidden="true" />;
   }
 }
 
@@ -111,7 +105,7 @@ export function Alert({
           onClick={onDismiss}
           className="inline-flex size-6 shrink-0 items-center justify-center rounded-lg border-0 bg-transparent p-0 text-muted-foreground shadow-none transition-colors hover:text-foreground focus:outline-none"
         >
-          <X className="size-3.5" aria-hidden="true" />
+          <X size={16} weight="duotone" aria-hidden="true" />
         </button>
       ) : null}
     </HeroAlert.Root>
