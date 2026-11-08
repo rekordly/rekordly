@@ -10,11 +10,12 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rekordly/rekordly-api/internal/auth"
 	"github.com/rekordly/rekordly-api/internal/config"
+	"github.com/rekordly/rekordly-api/internal/finance"
 )
 
 type ReadinessCheck func(context.Context) error
 
-func NewRouter(cfg config.Config, logger *slog.Logger, readiness ReadinessCheck, authHandler *auth.Handler) http.Handler {
+func NewRouter(cfg config.Config, logger *slog.Logger, readiness ReadinessCheck, authHandler *auth.Handler, financeHandlers ...*finance.Handler) http.Handler {
 	if cfg.Environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -51,6 +52,11 @@ func NewRouter(cfg config.Config, logger *slog.Logger, readiness ReadinessCheck,
 	v1 := router.Group("/api/v1")
 	if authHandler != nil {
 		authHandler.RegisterRoutes(v1)
+	}
+	for _, fh := range financeHandlers {
+		if fh != nil {
+			fh.RegisterRoutes(v1)
+		}
 	}
 	v1.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"status": "ok"}})
