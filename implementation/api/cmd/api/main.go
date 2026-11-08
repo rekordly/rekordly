@@ -48,7 +48,9 @@ func main() {
 		os.Exit(1)
 	}
 	authHandler := auth.NewHandler(authService, googleOIDC, cfg.Environment == "production")
-	financeHandler := finance.NewHandler(finance.NewService(pool))
+	financeService := finance.NewService(pool)
+	financeAuthMiddleware := finance.AuthAndWorkspaceMiddleware(pool, authService)
+	financeHandler := finance.NewHandler(financeService, financeAuthMiddleware)
 
 	httpServer := &http.Server{
 		Addr:              ":" + cfg.Port,

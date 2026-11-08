@@ -53,8 +53,10 @@ func NewRouter(cfg config.Config, logger *slog.Logger, readiness ReadinessCheck,
 	if authHandler != nil {
 		authHandler.RegisterRoutes(v1)
 	}
-	for _, financeHandler := range financeHandlers {
-		if financeHandler != nil { financeHandler.RegisterRoutes(v1) }
+	for _, fh := range financeHandlers {
+		if fh != nil {
+			fh.RegisterRoutes(v1)
+		}
 	}
 	v1.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"status": "ok"}})
