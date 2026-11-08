@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { SurfaceCard } from "@/components/ui/surface-card";
 import { useSessionStore } from "@/lib/auth/session-store";
+import { useWorkspaceStore } from "@/lib/workspace/workspace-store";
 import {
   getFeature,
   resolveSpaceContext,
@@ -32,10 +33,27 @@ export function FeatureScaffold({
 }: FeatureScaffoldProps) {
   const feature = getFeature(featureId);
   const user = useSessionStore((state) => state.user);
-
-  const [activeSpace, setActiveSpace] = useState<FinanceSpace>(defaultSpace);
+  const selectedWorkspace = useWorkspaceStore((state) => state.activeWorkspace);
+  const setActiveWorkspace = useWorkspaceStore((state) => state.setActiveWorkspace);
+  const [localSpace, setLocalSpace] = useState<FinanceSpace>(defaultSpace);
   const [viewMode, setViewMode] = useState<FeatureViewMode>(initialMode);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
+
+  const selectedWorkspaceRecord = selectedWorkspace === "all" ? undefined : user?.workspaces.find((workspace) => workspace.id === selectedWorkspace);
+  const activeSpace: FinanceSpace = selectedWorkspace === "all"
+    ? "all"
+    : selectedWorkspaceRecord?.kind === "personal"
+      ? "personal"
+      : selectedWorkspaceRecord?.kind === "business"
+        ? "business"
+        : localSpace;
+
+  function handleSpaceChange(space: FinanceSpace) {
+    setLocalSpace(space);
+    const target = space === "all" ? "all" : user?.workspaces.find((workspace) => workspace.kind === space)?.id;
+    if (!target) return;
+    setActiveWorkspace(target);
+  }
 
   const spaceContext = resolveSpaceContext(user, activeSpace);
 
@@ -59,7 +77,7 @@ export function FeatureScaffold({
       <FeaturePageHeader
         feature={feature}
         activeSpace={activeSpace}
-        onSpaceChange={setActiveSpace}
+        onSpaceChange={handleSpaceChange}
         onPrimaryAction={handlePrimaryAction}
         actionDisabled={viewMode === "loading" || isBlockedInPersonal}
       />
@@ -125,7 +143,7 @@ export function FeatureScaffold({
             feature={feature}
             activeSpace={activeSpace}
             onAction={handlePrimaryAction}
-            onSwitchSpace={(target) => setActiveSpace(target)}
+            onSwitchSpace={handleSpaceChange}
           />
 
           {/* Feature Information Details Card */}

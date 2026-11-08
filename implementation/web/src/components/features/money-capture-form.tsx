@@ -2,12 +2,13 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, ArrowsLeftRight, Money, Spinner } from "@phosphor-icons/react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { Alert, Button, SurfaceCard, TextField } from "@/components/ui";
 import { useSessionStore } from "@/lib/auth/session-store";
 import { moneyApi } from "@/lib/api/money";
+import { useWorkspaceStore } from "@/lib/workspace/workspace-store";
 
 type Direction = "money_in" | "money_out" | "transfer";
 
@@ -15,10 +16,10 @@ function today() { return new Date().toISOString().slice(0, 10); }
 
 export function MoneyCaptureForm({ onCreated }: { onCreated?: () => void }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const user = useSessionStore((state) => state.user);
+  const activeWorkspace = useWorkspaceStore((state) => state.activeWorkspace);
   const queryClient = useQueryClient();
-  const workspaceId = Number(searchParams.get("workspace")) || user?.workspaces[0]?.id || 0;
+  const workspaceId = activeWorkspace === "all" ? 0 : activeWorkspace ?? user?.workspaces[0]?.id ?? 0;
   const [direction, setDirection] = useState<Direction>("money_out");
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(today);
@@ -33,7 +34,7 @@ export function MoneyCaptureForm({ onCreated }: { onCreated?: () => void }) {
   const categories = useQuery({ queryKey: ["money", "categories", workspaceId, direction], queryFn: () => moneyApi.listCategories({ workspaceId, direction }), enabled: workspaceId > 0 });
   const mutation = useMutation({
     mutationFn: () => moneyApi.createTransaction({ workspaceId, direction, amount, currency: "NGN", effective_date: date, money_account_id: Number(accountId), destination_account_id: direction === "transfer" ? Number(destinationId) : undefined, category_id: direction === "transfer" ? undefined : Number(categoryId) || undefined, purpose: purpose.trim() || "other", counterparty_name: counterparty.trim() || undefined, notes: notes.trim() || undefined }),
-    onSuccess: () => { setError(null); queryClient.invalidateQueries({ queryKey: ["money"] }); onCreated?.(); router.push(`/transactions${workspaceId ? `?workspace=${workspaceId}` : ""}`); },
+  onSuccess: () => { setError(null); queryClient.invalidateQueries({ queryKey: ["money"] }); onCreated?.(); router.push("/transactions"); },
     onError: (mutationError: Error) => setError(mutationError.message),
   });
   const canSubmit = useMemo(() => workspaceId > 0 && amount.trim() !== "" && accountId !== "" && date !== "" && (direction === "transfer" ? destinationId !== "" && destinationId !== accountId : true), [accountId, amount, date, destinationId, direction, workspaceId]);

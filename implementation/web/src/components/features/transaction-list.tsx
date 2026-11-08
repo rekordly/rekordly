@@ -2,20 +2,20 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDownLeft, ArrowUpRight, ArrowsLeftRight, Plus, Spinner, Trash } from "@phosphor-icons/react";
-import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 
 import { Alert, Button, SurfaceCard } from "@/components/ui";
 import { useSessionStore } from "@/lib/auth/session-store";
 import { formatMinorAmount, moneyApi, type MoneyTransaction } from "@/lib/api/money";
+import { useWorkspaceStore } from "@/lib/workspace/workspace-store";
 import { MoneyCaptureForm } from "./money-capture-form";
 
 function directionIcon(direction: MoneyTransaction["direction"]) { return direction === "money_in" ? <ArrowDownLeft size={18} weight="duotone" /> : direction === "money_out" ? <ArrowUpRight size={18} weight="duotone" /> : <ArrowsLeftRight size={18} weight="duotone" />; }
 
 export function TransactionList() {
-  const searchParams = useSearchParams();
   const user = useSessionStore((state) => state.user);
-  const workspaceId = Number(searchParams.get("workspace")) || user?.workspaces[0]?.id || 0;
+  const activeWorkspace = useWorkspaceStore((state) => state.activeWorkspace);
+  const workspaceId = activeWorkspace === "all" ? 0 : activeWorkspace ?? user?.workspaces[0]?.id ?? 0;
   const queryClient = useQueryClient();
   const [showCapture, setShowCapture] = useState(false);
   const [error, setError] = useState<string | null>(null);
