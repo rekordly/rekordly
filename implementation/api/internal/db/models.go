@@ -84,6 +84,17 @@ type Counterparty struct {
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
+type CustomerWallet struct {
+	ID               int64              `json:"id"`
+	WorkspaceID      int64              `json:"workspace_id"`
+	CustomerID       int64              `json:"customer_id"`
+	Currency         string             `json:"currency"`
+	CurrencyExponent int32              `json:"currency_exponent"`
+	BalanceMinor     int64              `json:"balance_minor"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
 type IdempotencyRecord struct {
 	ID            int64              `json:"id"`
 	ActorUserID   pgtype.Int8        `json:"actor_user_id"`
@@ -116,6 +127,43 @@ type Invitation struct {
 	RevokedAt             pgtype.Timestamptz `json:"revoked_at"`
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+}
+
+type Invoice struct {
+	ID               int64              `json:"id"`
+	WorkspaceID      int64              `json:"workspace_id"`
+	CustomerID       int64              `json:"customer_id"`
+	CustomerName     string             `json:"customer_name"`
+	InvoiceNumber    string             `json:"invoice_number"`
+	IssueDate        pgtype.Date        `json:"issue_date"`
+	DueDate          pgtype.Date        `json:"due_date"`
+	SubtotalMinor    int64              `json:"subtotal_minor"`
+	TaxAmountMinor   int64              `json:"tax_amount_minor"`
+	TotalAmountMinor int64              `json:"total_amount_minor"`
+	PaidAmountMinor  int64              `json:"paid_amount_minor"`
+	Currency         string             `json:"currency"`
+	CurrencyExponent int32              `json:"currency_exponent"`
+	Status           string             `json:"status"`
+	Notes            pgtype.Text        `json:"notes"`
+	Terms            pgtype.Text        `json:"terms"`
+	IdempotencyKey   pgtype.Text        `json:"idempotency_key"`
+	CreatedByUserID  pgtype.Int8        `json:"created_by_user_id"`
+	FinalizedAt      pgtype.Timestamptz `json:"finalized_at"`
+	VoidedAt         pgtype.Timestamptz `json:"voided_at"`
+	VoidReason       pgtype.Text        `json:"void_reason"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+type InvoiceItem struct {
+	ID             int64              `json:"id"`
+	InvoiceID      int64              `json:"invoice_id"`
+	WorkspaceID    int64              `json:"workspace_id"`
+	Description    string             `json:"description"`
+	Quantity       int32              `json:"quantity"`
+	UnitPriceMinor int64              `json:"unit_price_minor"`
+	AmountMinor    int64              `json:"amount_minor"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
 type LedgerEntry struct {
@@ -406,6 +454,22 @@ type User struct {
 	OnboardingVersion int32              `json:"onboarding_version"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+type WalletTransaction struct {
+	ID                int64              `json:"id"`
+	WorkspaceID       int64              `json:"workspace_id"`
+	CustomerID        int64              `json:"customer_id"`
+	TransactionType   string             `json:"transaction_type"`
+	AmountMinor       int64              `json:"amount_minor"`
+	BalanceAfterMinor int64              `json:"balance_after_minor"`
+	MoneyAccountID    pgtype.Int8        `json:"money_account_id"`
+	InvoiceID         pgtype.Int8        `json:"invoice_id"`
+	Notes             pgtype.Text        `json:"notes"`
+	Reference         pgtype.Text        `json:"reference"`
+	IdempotencyKey    pgtype.Text        `json:"idempotency_key"`
+	CreatedByUserID   pgtype.Int8        `json:"created_by_user_id"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 }
 
 type Workspace struct {
