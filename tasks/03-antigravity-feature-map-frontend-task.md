@@ -36,24 +36,20 @@ Build only under `implementation/web/**`:
    - reports/tax readiness;
    - offline drafts/sync status;
    - subscription/plan limits.
-2. Add route/page scaffolds for the feature surfaces that do not yet exist.
-3. Every scaffold must have:
-   - a clear page title and active-space context;
-   - one primary action;
-   - a useful empty state explaining what the user can do next;
-   - loading, unavailable and plan-locked states where relevant;
-   - no fake financial totals, balances, transactions or API success claims.
-4. Keep Personal, Business and All presentation distinct. Do not merge their records in UI state.
-5. Keep all domain metadata in a registry so the future sidebar, More menu, search and Universal Add can consume the same source.
+2. Add route/page scaffolds for feature surfaces that do not yet exist.
+3. Every scaffold must have a clear page title, active-space context, one primary action, useful empty state, and honest loading/unavailable/plan-locked states where relevant.
+4. Do not show fake financial totals, balances, transactions or API success claims.
+5. Keep Personal, Business and All presentation distinct.
+6. Keep all domain metadata in a registry so the future sidebar, More menu, search and Universal Add can consume the same source.
 
 ## Design and implementation rules
 
-- Use the existing HeroUI v3 wrappers and Phosphor icons with `weight="duotone"`.
+- Use existing HeroUI v3 wrappers and Phosphor icons with `weight="duotone"`.
 - Follow the existing Rekordly/Kero field, spacing and typography conventions.
-- No new UI library, no shadow-heavy cards, no arbitrary gradients, no orange as a dominant colour.
+- No new UI library, shadow-heavy cards, arbitrary gradients or dominant orange.
 - Do not edit the shared auth layout, session guards, API client, global CSS or app shell; the primary agent owns those files.
 - Do not change Go, SQL, Docker, worker or planning files.
-- Do not create invented endpoints, response shapes or permission names. If a page needs data, use an explicit typed placeholder and mark the integration boundary.
+- Do not invent endpoints, response shapes or permission names. Use typed placeholders at integration boundaries.
 - Do not use JavaScript floating-point arithmetic for money. Keep money examples as display strings only.
 - Do not persist sensitive data in localStorage or IndexedDB.
 
