@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, MailCheck, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
@@ -10,6 +10,7 @@ import { Controller, useForm } from "react-hook-form";
 import {
   Alert,
   AuthCard,
+  AuthDivider,
   Button,
   LoadingButton,
   PasswordField,
@@ -19,6 +20,8 @@ import { ApiClientError } from "@/lib/api/client";
 import {
   type AuthApiContract,
   createSubmissionGuard,
+  handleMagicLinkRequestSubmit,
+  handleOtpRequestSubmit,
   handlePasswordSignInSubmit,
 } from "@/lib/auth/controllers";
 import { AUTH_ROUTES } from "@/lib/auth/onboarding-routes";
@@ -40,11 +43,15 @@ export function PasswordSignInScreen({
   const router = useRouter();
   const storedEmail = useAuthFlowStore((state) => state.email);
   const setEmail = useAuthFlowStore((state) => state.setEmail);
+  const setOtpContext = useAuthFlowStore((state) => state.setOtpContext);
 
   const [apiError, setApiError] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
+  const [isStartingOtp, setIsStartingOtp] = useState(false);
+  const [isStartingMagic, setIsStartingMagic] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
   const submissionGuardRef = useRef(createSubmissionGuard());
+  const alternateGuardRef = useRef(createSubmissionGuard());
 
   const form = useForm<PasswordSignInFormValues>({
     resolver: zodResolver(passwordSignInSchema),
@@ -74,6 +81,71 @@ export function PasswordSignInScreen({
     });
   };
 
+  const handleSignInWithOtp = async () => {
+    const currentEmail = form.getValues("email").trim();
+    if (!currentEmail) {
+      setOtpContext("", "sign_in");
+      router.push(AUTH_ROUTES.LOGIN_OTP);
+      return;
+    }
+    const emailValid = await form.trigger("email");
+    if (!emailValid) {
+      return;
+    }
+
+    await alternateGuardRef.current.run(async () => {
+      setApiError(null);
+      setIsStartingOtp(true);
+      try {
+        await handleOtpRequestSubmit(
+          {
+            email: currentEmail,
+            purpose: "sign_in",
+          },
+          api,
+        );
+        router.push(AUTH_ROUTES.LOGIN_OTP);
+      } catch (error: unknown) {
+        if (error instanceof ApiClientError) {
+          setApiError(error.message);
+        } else {
+          setApiError("Unable to send a verification code right now.");
+        }
+      } finally {
+        setIsStartingOtp(false);
+      }
+    });
+  };
+
+  const handleSignInWithMagicLink = async () => {
+    const currentEmail = form.getValues("email").trim();
+    if (!currentEmail) {
+      router.push(AUTH_ROUTES.LOGIN_MAGIC);
+      return;
+    }
+    const emailValid = await form.trigger("email");
+    if (!emailValid) {
+      return;
+    }
+
+    await alternateGuardRef.current.run(async () => {
+      setApiError(null);
+      setIsStartingMagic(true);
+      try {
+        await handleMagicLinkRequestSubmit({ email: currentEmail }, { api });
+        router.push(AUTH_ROUTES.LOGIN_MAGIC);
+      } catch (error: unknown) {
+        if (error instanceof ApiClientError) {
+          setApiError(error.message);
+        } else {
+          setApiError("Unable to send a sign-in link right now.");
+        }
+      } finally {
+        setIsStartingMagic(false);
+      }
+    });
+  };
+
   const handleBackToEmail = () => {
     const currentEmail = form.getValues("email").trim();
     if (currentEmail) {
@@ -82,7 +154,12 @@ export function PasswordSignInScreen({
     router.push(AUTH_ROUTES.LOGIN);
   };
 
-  const isLoading = isBusy || isRedirecting || form.formState.isSubmitting;
+  const isLoading =
+    isBusy ||
+    isStartingOtp ||
+    isStartingMagic ||
+    isRedirecting ||
+    form.formState.isSubmitting;
 
   return (
     <AuthCard
@@ -200,13 +277,51 @@ export function PasswordSignInScreen({
           variant="primary"
           size="lg"
           fullWidth
-          isLoading={isLoading}
+          isLoading={isBusy || isRedirecting}
           loadingText={isRedirecting ? "Redirecting..." : "Signing in..."}
           data-testid="password-signin-submit"
         >
           Sign in
         </LoadingButton>
       </form>
+
+      <AuthDivider label="or" />
+
+      <div className="flex flex-col gap-2.5">
+        <LoadingButton
+          type="button"
+          variant="outline"
+          size="md"
+          fullWidth
+          isDisabled={isLoading}
+          isLoading={isStartingOtp}
+          loadingText="Sending code..."
+          startIcon={<MailCheck className="size-4 text-primary" />}
+          onPress={() => {
+            void handleSignInWithOtp();
+          }}
+          data-testid="signin-with-otp-button"
+        >
+          Sign in with email code
+        </LoadingButton>
+
+        <LoadingButton
+          type="button"
+          variant="outline"
+          size="md"
+          fullWidth
+          isDisabled={isLoading}
+          isLoading={isStartingMagic}
+          loadingText="Sending link..."
+          startIcon={<Sparkles className="size-4 text-primary" />}
+          onPress={() => {
+            void handleSignInWithMagicLink();
+          }}
+          data-testid="signin-with-magic-link-button"
+        >
+          Email me a magic link
+        </LoadingButton>
+      </div>
     </AuthCard>
   );
 }

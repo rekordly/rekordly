@@ -269,6 +269,7 @@ export function normalizeUnknownError(
 
 export interface ApiRequestOptions {
   headers?: Readonly<Record<string, string>>;
+  params?: Readonly<Record<string, string | undefined>>;
   sensitiveValues?: readonly string[];
   signal?: AbortSignal;
 }
@@ -292,6 +293,7 @@ export function buildAuthRequestConfig(options?: ApiRequestOptions): AxiosReques
     },
     timeout: DEFAULT_API_TIMEOUT_MS,
     headers,
+    params: options?.params,
     signal: options?.signal,
   };
 }
@@ -320,6 +322,29 @@ export class RekordlyApiClient {
 
   public getAxiosInstance(): AxiosInstance {
     return this.instance;
+  }
+
+  public async get<TResponseData>(
+    path: string,
+    options?: ApiRequestOptions,
+  ): Promise<TResponseData> {
+    const config = buildAuthRequestConfig(options);
+    try {
+      const response: AxiosResponse<ApiSuccessEnvelope<TResponseData>> =
+        await this.instance.get<ApiSuccessEnvelope<TResponseData>>(path, config);
+
+      if (!isRecord(response.data) || !("data" in response.data)) {
+        throw new ApiClientError({
+          code: "INTERNAL_ERROR",
+          message: DEFAULT_SAFE_MESSAGES.INTERNAL_ERROR,
+          status: response.status,
+        });
+      }
+
+      return response.data.data;
+    } catch (error: unknown) {
+      throw normalizeUnknownError(error, options?.sensitiveValues ?? []);
+    }
   }
 
   public async post<TRequest, TResponseData>(

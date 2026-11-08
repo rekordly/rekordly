@@ -34,6 +34,8 @@ export type OnboardingStatus =
 
 export type EmailContinuationKind = "password" | "registration";
 
+export type OtpPurpose = "registration" | "sign_in";
+
 export interface EmailContinueRequest {
   email: string;
 }
@@ -64,8 +66,43 @@ export interface PasswordCreateRequest {
   password: string;
 }
 
+export interface OtpRequestPayload {
+  email: string;
+  purpose: OtpPurpose;
+}
+
+export interface OtpRequestResponseData {
+  message: string;
+}
+
+export interface OtpVerifyRequestPayload {
+  email: string;
+  purpose: OtpPurpose;
+  code: string;
+}
+
+export interface MagicLinkRequestPayload {
+  email: string;
+  return_to?: string;
+}
+
+export interface MagicLinkRequestResponseData {
+  message: string;
+}
+
+export interface MagicLinkInspectResponseData {
+  valid: boolean;
+  confirmation_required: boolean;
+}
+
+export interface MagicLinkConfirmRequestPayload {
+  token: string;
+}
+
 export interface AuthSessionResponseData {
   user_id: number;
   onboarding_status: OnboardingStatus;
   expires_at: string;
+  requires_password?: boolean;
+  pre_auth_token?: string;
 }

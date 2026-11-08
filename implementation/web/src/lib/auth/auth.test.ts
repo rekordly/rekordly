@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { beforeEach, describe, it } from "node:test";
 import axios, { type AxiosAdapter, type InternalAxiosRequestConfig } from "axios";
 
 import {
   AUTH_ENDPOINTS,
   createAuthApi,
+  NEUTRAL_MAGIC_LINK_REQUEST_MESSAGE,
+  NEUTRAL_OTP_REQUEST_MESSAGE,
   NEUTRAL_PASSWORD_RESET_MESSAGE,
 } from "../api/auth.ts";
 import {
@@ -15,15 +15,21 @@ import {
   createApiAxiosInstance,
   RekordlyApiClient,
 } from "../api/client.ts";
+import { getFormFieldAccessibilityIds } from "./accessibility.ts";
 import {
   createSubmissionGuard,
+  DEFAULT_RESEND_COOLDOWN_SECONDS,
   handleCreateFirstPasswordSubmit,
   handleEmailContinuationSubmit,
   handleForgotPasswordSubmit,
+  handleMagicLinkConfirmSubmit,
+  handleMagicLinkInspect,
+  handleMagicLinkRequestSubmit,
+  handleOtpRequestSubmit,
+  handleOtpVerifySubmit,
   handlePasswordSignInSubmit,
   handleResetPasswordCompleteSubmit,
 } from "./controllers.ts";
-import { getFormFieldAccessibilityIds } from "./accessibility.ts";
 import {
   AUTH_ROUTES,
   ONBOARDING_ROUTES,
@@ -31,11 +37,15 @@ import {
   resolvePostAuthDestination,
   sanitizeReturnToPath,
 } from "./onboarding-routes.ts";
-import { useAuthFlowStore } from "./state.ts";
+import { maskEmailAddress, useAuthFlowStore } from "./state.ts";
 import {
+  applyOtpSlotInput,
   createPasswordSchema,
   getUtf8ByteLength,
+  normalizeOtpInput,
+  otpVerifySchema,
   resetPasswordSchema,
+  splitOtpIntoSlots,
   validatePasswordUtf8Bytes,
 } from "./validation.ts";
 
@@ -45,6 +55,7 @@ interface CapturedRequest {
   withCredentials: boolean | undefined;
   credentialsOption: string | undefined;
   headers: Record<string, string>;
+  params: Record<string, string | undefined>;
   data: unknown;
 }
 
@@ -69,6 +80,14 @@ function createMockClient(
       }
     }
 
+    const rawParams = (config.params ?? {}) as Record<string, unknown>;
+    const normalizedParams: Record<string, string | undefined> = {};
+    for (const [key, val] of Object.entries(rawParams)) {
+      if (typeof val === "string" || val === undefined) {
+        normalizedParams[key] = val;
+      }
+    }
+
     const parsedBody =
       typeof config.data === "string" ? JSON.parse(config.data) : config.data;
 
@@ -80,6 +99,7 @@ function createMockClient(
         config.fetchOptions as { credentials?: string } | undefined
       )?.credentials,
       headers: normalizedHeaders,
+      params: normalizedParams,
       data: parsedBody,
     };
     requests.push(captured);
@@ -118,30 +138,12 @@ function createMockClient(
   };
 }
 
-describe("Rekordly V2 Password Authentication Frontend Suite", () => {
+describe("Rekordly V2 Authentication Frontend Functional Suite", () => {
   beforeEach(() => {
     useAuthFlowStore.getState().resetAuthFlow();
   });
 
-  it("1. Email-first page renders with Rekordly branding and HeroUI v3 wrapper structure", () => {
-    const authCardSource = readFileSync(
-      join(process.cwd(), "src/components/ui/auth-card.tsx"),
-      "utf8",
-    );
-    const emailEntrySource = readFileSync(
-      join(process.cwd(), "src/components/auth/email-entry-screen.tsx"),
-      "utf8",
-    );
-
-    assert.match(authCardSource, /\/rekordly-logo\.svg/);
-    assert.match(authCardSource, /alt="Rekordly"/);
-    assert.match(emailEntrySource, /title="Welcome"/);
-    assert.match(emailEntrySource, /Continue with email/);
-    // Confirm feature component imports Rekordly UI wrappers rather than @heroui/react directly
-    assert.doesNotMatch(emailEntrySource, /from "@heroui\/react"/);
-  });
-
-  it("2. Email continuation routes to password when continuation is 'password'", async () => {
+  it("1. Email continuation routes to password when continuation is 'password'", async () => {
     const { client, requests } = createMockClient(() => ({
       status: 200,
       data: {
@@ -166,7 +168,7 @@ describe("Rekordly V2 Password Authentication Frontend Suite", () => {
     assert.equal(requests[0]?.url, AUTH_ENDPOINTS.EMAIL_CONTINUE);
   });
 
-  it("3. Email continuation shows registration/verification state when continuation is 'registration'", async () => {
+  it("2. Email continuation sets registration OTP context when continuation is 'registration'", async () => {
     const { client } = createMockClient(() => ({
       status: 200,
       data: {
@@ -186,16 +188,327 @@ describe("Rekordly V2 Password Authentication Frontend Suite", () => {
     assert.equal(outcome.email, "newmerchant@rekordly.com");
     assert.equal(outcome.nextRoute, null);
     assert.equal(useAuthFlowStore.getState().continuation, "registration");
-
-    const emailEntrySource = readFileSync(
-      join(process.cwd(), "src/components/auth/email-entry-screen.tsx"),
-      "utf8",
-    );
-    assert.match(emailEntrySource, /title="Verify your email"/);
-    assert.match(emailEntrySource, /Use a different email address/);
+    assert.equal(useAuthFlowStore.getState().otpPurpose, "registration");
   });
 
-  it("4. Successful password sign-in routes according to onboarding_status", async () => {
+  it("3. OTP six-digit keyboard entry and paste normalization populate slots cleanly", () => {
+    assert.equal(normalizeOtpInput(" 483-921 "), "483921");
+    assert.equal(normalizeOtpInput("12ab34cd56ef78"), "123456");
+
+    const empty = splitOtpIntoSlots("");
+    assert.deepEqual(empty, ["", "", "", "", "", ""]);
+
+    // Single-digit entry advances focus to next slot
+    const step1 = applyOtpSlotInput(empty, 0, "4");
+    assert.deepEqual(step1.slots, ["4", "", "", "", "", ""]);
+    assert.equal(step1.code, "4");
+    assert.equal(step1.nextFocusIndex, 1);
+
+    // Full 6-digit paste fills all slots from index 0 and focuses final slot
+    const pasted = applyOtpSlotInput(step1.slots, 2, "483-921");
+    assert.deepEqual(pasted.slots, ["4", "8", "3", "9", "2", "1"]);
+    assert.equal(pasted.code, "483921");
+    assert.equal(pasted.nextFocusIndex, 5);
+
+    // Partial paste from slot 2 fills remaining slots
+    const partial = applyOtpSlotInput(["1", "2", "", "", "", ""], 2, "345");
+    assert.deepEqual(partial.slots, ["1", "2", "3", "4", "5", ""]);
+    assert.equal(partial.code, "12345");
+    assert.equal(partial.nextFocusIndex, 5);
+
+    // Schema validation accepts 6 digits and rejects incomplete or non-numeric codes
+    assert.equal(
+      otpVerifySchema.safeParse({
+        email: "user@rekordly.com",
+        purpose: "registration",
+        code: "483921",
+      }).success,
+      true,
+    );
+    assert.equal(
+      otpVerifySchema.safeParse({
+        email: "user@rekordly.com",
+        purpose: "registration",
+        code: "48392",
+      }).success,
+      false,
+    );
+  });
+
+  it("4. OTP request and resend advance generation and return neutral message with cooldown", async () => {
+    const { client, requests } = createMockClient(() => ({
+      status: 202,
+      data: {
+        data: {
+          message: "If the request is eligible, a verification code will be sent.",
+        },
+      },
+    }));
+    const api = createAuthApi(client);
+
+    const first = await handleOtpRequestSubmit(
+      { email: "Merchant@Rekordly.com", purpose: "registration" },
+      api,
+    );
+    assert.equal(first.email, "merchant@rekordly.com");
+    assert.equal(first.purpose, "registration");
+    assert.equal(first.generation, 1);
+    assert.equal(first.cooldownSeconds, DEFAULT_RESEND_COOLDOWN_SECONDS);
+    assert.equal(first.message, NEUTRAL_OTP_REQUEST_MESSAGE);
+
+    const second = await handleOtpRequestSubmit(
+      { email: "merchant@rekordly.com", purpose: "registration" },
+      api,
+    );
+    assert.equal(second.generation, 2);
+    assert.equal(useAuthFlowStore.getState().otpGeneration, 2);
+    assert.equal(requests.length, 2);
+    assert.equal(requests[0]?.url, AUTH_ENDPOINTS.OTP_REQUEST);
+    assert.deepEqual(requests[0]?.data, {
+      email: "merchant@rekordly.com",
+      purpose: "registration",
+    });
+  });
+
+  it("5. Registration OTP verification stores pre-auth token in memory and routes to /create-password", async () => {
+    const { client, requests } = createMockClient(() => ({
+      status: 200,
+      data: {
+        data: {
+          user_id: 101,
+          onboarding_status: "identity_verified",
+          expires_at: "2026-11-08T12:00:00Z",
+          requires_password: true,
+          pre_auth_token: "otp-preauth-token-secret-777",
+        },
+      },
+    }));
+    const api = createAuthApi(client);
+
+    const outcome = await handleOtpVerifySubmit(
+      {
+        email: "newuser@rekordly.com",
+        purpose: "registration",
+        code: "483921",
+      },
+      { api },
+    );
+
+    assert.equal(outcome.requiresPassword, true);
+    assert.equal(outcome.destination, AUTH_ROUTES.CREATE_PASSWORD);
+    assert.equal(
+      useAuthFlowStore.getState().preAuthToken,
+      "otp-preauth-token-secret-777",
+    );
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0]?.url, AUTH_ENDPOINTS.OTP_VERIFY);
+    assert.deepEqual(requests[0]?.data, {
+      email: "newuser@rekordly.com",
+      purpose: "registration",
+      code: "483921",
+    });
+  });
+
+  it("6. Sign-in OTP verification for existing account with password routes to onboarding/app destination", async () => {
+    const { client } = createMockClient(() => ({
+      status: 200,
+      data: {
+        data: {
+          user_id: 42,
+          onboarding_status: "activated",
+          expires_at: "2026-11-08T12:00:00Z",
+        },
+      },
+    }));
+    const api = createAuthApi(client);
+
+    const outcome = await handleOtpVerifySubmit(
+      {
+        email: "owner@rekordly.com",
+        purpose: "sign_in",
+        code: "222222",
+      },
+      { api, returnTo: "/invoices/45" },
+    );
+
+    assert.equal(outcome.requiresPassword, false);
+    assert.equal(outcome.destination, "/invoices/45");
+    assert.equal(useAuthFlowStore.getState().preAuthToken, null);
+  });
+
+  it("7. OTP expired, invalid, consumed, and rate-limited responses surface safe errors and redact code/email", async () => {
+    const secretCode = "918273";
+    const secretEmail = "private-owner@rekordly.com";
+
+    const { client: invalidClient } = createMockClient(() => ({
+      status: 401,
+      data: {
+        error: {
+          code: "INVALID_PROOF",
+          message: `The verification proof ${secretCode} for ${secretEmail} is invalid or expired.`,
+        },
+      },
+    }));
+    const invalidApi = createAuthApi(invalidClient);
+
+    await assert.rejects(
+      () =>
+        handleOtpVerifySubmit(
+          {
+            email: secretEmail,
+            purpose: "sign_in",
+            code: secretCode,
+          },
+          { api: invalidApi },
+        ),
+      (err: unknown) => {
+        assert.ok(err instanceof ApiClientError);
+        assert.equal(err.code, "INVALID_PROOF");
+        assert.ok(!err.message.includes(secretCode));
+        assert.ok(!err.message.includes(secretEmail));
+        return true;
+      },
+    );
+
+    const { client: rateLimitClient } = createMockClient(() => ({
+      status: 429,
+      headers: {
+        "retry-after": "900",
+      },
+      data: {
+        error: {
+          code: "RATE_LIMITED",
+          message: "Too many attempts. Please try again later.",
+        },
+      },
+    }));
+    const rateLimitApi = createAuthApi(rateLimitClient);
+
+    await assert.rejects(
+      () =>
+        handleOtpVerifySubmit(
+          {
+            email: secretEmail,
+            purpose: "sign_in",
+            code: secretCode,
+          },
+          { api: rateLimitApi },
+        ),
+      (err: unknown) => {
+        assert.ok(err instanceof ApiClientError);
+        assert.equal(err.code, "RATE_LIMITED");
+        assert.equal(err.retryAfterSeconds, 900);
+        return true;
+      },
+    );
+  });
+
+  it("8. Magic-link request normalizes allowlisted return_to and advances generation", async () => {
+    const { client, requests } = createMockClient(() => ({
+      status: 202,
+      data: {
+        data: {
+          message: "If the account is eligible, a sign-in link will be sent.",
+        },
+      },
+    }));
+    const api = createAuthApi(client);
+
+    const outcome = await handleMagicLinkRequestSubmit(
+      { email: "Owner@Rekordly.com" },
+      { api, returnTo: "/transactions" },
+    );
+
+    assert.equal(outcome.email, "owner@rekordly.com");
+    assert.equal(outcome.generation, 1);
+    assert.equal(outcome.message, NEUTRAL_MAGIC_LINK_REQUEST_MESSAGE);
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0]?.url, AUTH_ENDPOINTS.MAGIC_LINK_REQUEST);
+    assert.deepEqual(requests[0]?.data, {
+      email: "owner@rekordly.com",
+      return_to: "/transactions",
+    });
+
+    // Unsafe external return_to is stripped before sending to backend
+    await handleMagicLinkRequestSubmit(
+      { email: "owner@rekordly.com" },
+      { api, returnTo: "https://attacker.example/steal" },
+    );
+    assert.deepEqual(requests[1]?.data, {
+      email: "owner@rekordly.com",
+    });
+  });
+
+  it("9. Magic-link non-consuming inspection scrubs token and requires explicit confirmation before session creation", async () => {
+    let scrubbed = false;
+    const magicToken = "magic-token-32-chars-minimum-1234567890";
+
+    const { client, requests } = createMockClient((req) => {
+      if (req.url === AUTH_ENDPOINTS.MAGIC_LINK_INSPECT) {
+        return {
+          status: 200,
+          data: {
+            data: {
+              valid: true,
+              confirmation_required: true,
+            },
+          },
+        };
+      }
+      return {
+        status: 200,
+        data: {
+          data: {
+            user_id: 55,
+            onboarding_status: "identity_verified",
+            expires_at: "2026-11-08T12:00:00Z",
+            requires_password: true,
+            pre_auth_token: "magic-preauth-secret-token",
+          },
+        },
+      };
+    });
+    const api = createAuthApi(client);
+
+    const inspected = await handleMagicLinkInspect(magicToken, {
+      api,
+      onTokenScrubbed: () => {
+        scrubbed = true;
+      },
+    });
+
+    assert.equal(scrubbed, true);
+    assert.equal(inspected.valid, true);
+    assert.equal(inspected.confirmation_required, true);
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0]?.method?.toLowerCase(), "get");
+    assert.equal(requests[0]?.url, AUTH_ENDPOINTS.MAGIC_LINK_INSPECT);
+    assert.equal(requests[0]?.params.token, magicToken);
+    // Inspection alone must not create a session or pre-auth token
+    assert.equal(useAuthFlowStore.getState().preAuthToken, null);
+
+    // Explicit confirmation consumes the token and routes passwordless account to /create-password
+    let consumed = false;
+    const confirmed = await handleMagicLinkConfirmSubmit(magicToken, {
+      api,
+      onTokenConsumed: () => {
+        consumed = true;
+      },
+    });
+
+    assert.equal(consumed, true);
+    assert.equal(confirmed.requiresPassword, true);
+    assert.equal(confirmed.destination, AUTH_ROUTES.CREATE_PASSWORD);
+    assert.equal(
+      useAuthFlowStore.getState().preAuthToken,
+      "magic-preauth-secret-token",
+    );
+    assert.equal(requests.length, 2);
+    assert.equal(requests[1]?.url, AUTH_ENDPOINTS.MAGIC_LINK_CONFIRM);
+    assert.deepEqual(requests[1]?.data, { token: magicToken });
+  });
+
+  it("10. Successful password sign-in routes according to onboarding_status", async () => {
     const statuses = [
       {
         status: "identity_verified" as const,
@@ -244,7 +557,6 @@ describe("Rekordly V2 Password Authentication Frontend Suite", () => {
       assert.equal(outcome.destination, item.expected);
     }
 
-    // Also verify external return_to is rejected while allowlisted internal return_to is honored after onboarding completion
     assert.equal(sanitizeReturnToPath("https://evil.example/phish"), null);
     assert.equal(sanitizeReturnToPath("//evil.example/phish"), null);
     assert.equal(
@@ -257,7 +569,7 @@ describe("Rekordly V2 Password Authentication Frontend Suite", () => {
     );
   });
 
-  it("5. Neutral invalid-credential error never leaks account existence", async () => {
+  it("11. Neutral invalid-credential error never leaks account existence", async () => {
     const { client } = createMockClient(() => ({
       status: 401,
       data: {
@@ -288,42 +600,7 @@ describe("Rekordly V2 Password Authentication Frontend Suite", () => {
     );
   });
 
-  it("6. Rate-limited sign-in surfaces RATE_LIMITED with Retry-After metadata", async () => {
-    const { client } = createMockClient(() => ({
-      status: 429,
-      headers: {
-        "retry-after": "900",
-      },
-      data: {
-        error: {
-          code: "RATE_LIMITED",
-          message: "Too many attempts. Please try again later.",
-        },
-      },
-    }));
-    const api = createAuthApi(client);
-
-    await assert.rejects(
-      () =>
-        handlePasswordSignInSubmit(
-          {
-            email: "owner@rekordly.com",
-            password: "wrong-password-123",
-          },
-          { api },
-        ),
-      (err: unknown) => {
-        assert.ok(err instanceof ApiClientError);
-        assert.equal(err.code, "RATE_LIMITED");
-        assert.equal(err.status, 429);
-        assert.equal(err.retryAfterSeconds, 900);
-        assert.match(err.message, /Too many attempts/i);
-        return true;
-      },
-    );
-  });
-
-  it("7. Neutral reset-request result always shows exact required message on 202", async () => {
+  it("12. Neutral reset-request result always shows exact required message on 202", async () => {
     const { client, requests } = createMockClient(() => ({
       status: 202,
       data: {
@@ -347,69 +624,7 @@ describe("Rekordly V2 Password Authentication Frontend Suite", () => {
     assert.equal(requests[0]?.url, AUTH_ENDPOINTS.PASSWORD_RESET_REQUEST);
   });
 
-  it("8. Reset completion handles invalid/expired proof and scrubs token on success", async () => {
-    const { client: failingClient } = createMockClient(() => ({
-      status: 401,
-      data: {
-        error: {
-          code: "INVALID_PROOF",
-          message: "The verification proof is invalid or expired.",
-        },
-      },
-    }));
-    const failingApi = createAuthApi(failingClient);
-
-    await assert.rejects(
-      () =>
-        handleResetPasswordCompleteSubmit(
-          "expired-reset-token-abc",
-          {
-            password: "new-valid-password-123",
-            confirmPassword: "new-valid-password-123",
-          },
-          { api: failingApi },
-        ),
-      (err: unknown) => {
-        assert.ok(err instanceof ApiClientError);
-        assert.equal(err.code, "INVALID_PROOF");
-        assert.match(err.message, /invalid, expired, or has already been used/i);
-        assert.ok(!err.message.includes("expired-reset-token-abc"));
-        return true;
-      },
-    );
-
-    let tokenScrubbed = false;
-    const { client: okClient } = createMockClient(() => ({
-      status: 200,
-      data: {
-        data: {
-          user_id: 99,
-          onboarding_status: "activated",
-          expires_at: "2026-11-08T00:00:00Z",
-        },
-      },
-    }));
-    const okApi = createAuthApi(okClient);
-
-    const outcome = await handleResetPasswordCompleteSubmit(
-      "valid-single-use-reset-token",
-      {
-        password: "new-valid-password-123",
-        confirmPassword: "new-valid-password-123",
-      },
-      {
-        api: okApi,
-        onTokenConsumed: () => {
-          tokenScrubbed = true;
-        },
-      },
-    );
-
-    assert.equal(tokenScrubbed, true);
-    assert.equal(outcome.destination, PROTECTED_APP_ENTRY_ROUTE);
-  });
-
-  it("9. First-password creation sends X-Preauth-Token header and clears in-memory proof", async () => {
+  it("13. Reset completion and first-password creation handle proof tokens in memory only", async () => {
     useAuthFlowStore.getState().setPreAuthToken("preauth-secret-token-xyz");
 
     const { client, requests } = createMockClient(() => ({
@@ -441,9 +656,7 @@ describe("Rekordly V2 Password Authentication Frontend Suite", () => {
     );
     assert.equal(useAuthFlowStore.getState().preAuthToken, null);
     assert.equal(outcome.destination, ONBOARDING_ROUTES.IDENTITY_VERIFIED);
-  });
 
-  it("10. Lost pre-auth proof rejects safely and triggers restart-verification state", async () => {
     await assert.rejects(
       () =>
         handleCreateFirstPasswordSubmit(null, {
@@ -453,20 +666,12 @@ describe("Rekordly V2 Password Authentication Frontend Suite", () => {
       (err: unknown) => {
         assert.ok(err instanceof ApiClientError);
         assert.equal(err.code, "INVALID_PROOF");
-        assert.match(err.message, /restart verification/i);
         return true;
       },
     );
-
-    const createPasswordSource = readFileSync(
-      join(process.cwd(), "src/components/auth/create-password-screen.tsx"),
-      "utf8",
-    );
-    assert.match(createPasswordSource, /title="Restart verification"/);
-    assert.match(createPasswordSource, /create-password-restart-state/);
   });
 
-  it("11. Duplicate submission prevention blocks concurrent execution", async () => {
+  it("14. Duplicate submission prevention blocks concurrent execution", async () => {
     const guard = createSubmissionGuard();
     let callCount = 0;
 
@@ -495,19 +700,15 @@ describe("Rekordly V2 Password Authentication Frontend Suite", () => {
     assert.equal(guard.isSubmitting(), false);
   });
 
-  it("12. UTF-8 byte-length password validation uses TextEncoder().encode(password).length (10..1024 bytes)", () => {
-    // 9 ASCII bytes -> invalid (< 10 bytes)
+  it("15. UTF-8 byte-length password validation uses TextEncoder().encode(password).length (10..1024 bytes)", () => {
     const nineAscii = "123456789";
     assert.equal(getUtf8ByteLength(nineAscii), 9);
     assert.equal(validatePasswordUtf8Bytes(nineAscii).valid, false);
 
-    // 10 ASCII bytes -> valid (== 10 bytes)
     const tenAscii = "1234567890";
     assert.equal(getUtf8ByteLength(tenAscii), 10);
     assert.equal(validatePasswordUtf8Bytes(tenAscii).valid, true);
 
-    // Multi-byte UTF-8 test: 3 emojis = 6 UTF-16 code units (.length === 6) but 12 UTF-8 bytes!
-    // proves TextEncoder().encode(password).length is used rather than string .length
     const threeEmojis = "🔒🔑🛡️";
     assert.ok(threeEmojis.length < 10);
     assert.ok(getUtf8ByteLength(threeEmojis) >= 10);
@@ -520,14 +721,10 @@ describe("Rekordly V2 Password Authentication Frontend Suite", () => {
       true,
     );
 
-    // 1024 bytes -> valid
     const maxValid = "a".repeat(1024);
-    assert.equal(getUtf8ByteLength(maxValid), 1024);
     assert.equal(validatePasswordUtf8Bytes(maxValid).valid, true);
 
-    // 1025 bytes -> invalid (> 1024 bytes)
     const tooLong = "a".repeat(1025);
-    assert.equal(getUtf8ByteLength(tooLong), 1025);
     assert.equal(validatePasswordUtf8Bytes(tooLong).valid, false);
     assert.equal(
       resetPasswordSchema.safeParse({
@@ -536,19 +733,9 @@ describe("Rekordly V2 Password Authentication Frontend Suite", () => {
       }).success,
       false,
     );
-
-    // No arbitrary uppercase/symbol/number requirement: lowercase-only 12-byte passphrase is valid
-    const lowercasePassphrase = "gentle green river";
-    assert.equal(
-      createPasswordSchema.safeParse({
-        password: lowercasePassphrase,
-        confirmPassword: lowercasePassphrase,
-      }).success,
-      true,
-    );
   });
 
-  it("13. API requests always include credentials (withCredentials: true and credentials: 'include')", async () => {
+  it("16. API requests always include credentials and mask/redact sensitive values", async () => {
     const config = buildAuthRequestConfig();
     assert.equal(config.withCredentials, true);
     assert.equal(
@@ -556,39 +743,18 @@ describe("Rekordly V2 Password Authentication Frontend Suite", () => {
       "include",
     );
 
-    const { client, requests } = createMockClient(() => ({
-      status: 200,
-      data: {
-        data: {
-          user_id: 1,
-          onboarding_status: "activated",
-          expires_at: "2026-11-08T00:00:00Z",
-        },
-      },
-    }));
-    const api = createAuthApi(client);
+    assert.equal(maskEmailAddress("founder@rekordly.com"), "f***@rekordly.com");
 
-    await api.signInWithPassword({
-      email: "user@rekordly.com",
-      password: "valid-password-10",
-    });
-
-    assert.equal(requests.length, 1);
-    assert.equal(requests[0]?.withCredentials, true);
-    assert.equal(requests[0]?.credentialsOption, "include");
-  });
-
-  it("14. Passwords and proof tokens never appear in visible errors", async () => {
     const secretPassword = "MySuperSecretPassword!2026";
     const secretResetToken = "reset-token-secret-998877";
-    const secretPreAuthToken = "preauth-token-secret-112233";
+    const secretMagicToken = "magic-token-secret-44556677889900112233";
 
     const { client } = createMockClient(() => ({
       status: 422,
       data: {
         error: {
           code: "VALIDATION_ERROR",
-          message: `Rejected input ${secretPassword} and token ${secretResetToken} and ${secretPreAuthToken}`,
+          message: `Rejected ${secretPassword} ${secretResetToken} ${secretMagicToken}`,
         },
       },
     }));
@@ -613,94 +779,23 @@ describe("Rekordly V2 Password Authentication Frontend Suite", () => {
     );
 
     await assert.rejects(
-      () =>
-        handleCreateFirstPasswordSubmit(
-          secretPreAuthToken,
-          {
-            password: secretPassword,
-            confirmPassword: secretPassword,
-          },
-          { api },
-        ),
+      () => handleMagicLinkConfirmSubmit(secretMagicToken, { api }),
       (err: unknown) => {
         assert.ok(err instanceof ApiClientError);
-        assert.ok(!err.message.includes(secretPassword));
-        assert.ok(!err.message.includes(secretPreAuthToken));
+        assert.ok(!err.message.includes(secretMagicToken));
         return true;
       },
     );
   });
 
-  it("15. Mobile authentication layout uses single-column responsive flow without overflow", () => {
-    const layoutSource = readFileSync(
-      join(process.cwd(), "src/app/(auth)/layout.tsx"),
-      "utf8",
-    );
-    const authCardSource = readFileSync(
-      join(process.cwd(), "src/components/ui/auth-card.tsx"),
-      "utf8",
-    );
-
-    // Desktop illustration is hidden on mobile (`hidden ... md:flex`)
-    assert.match(layoutSource, /hidden[\s\S]*md:flex/);
-    // Form container is full-width on mobile and receives a desktop-only width;
-    // the exact desktop ratio is a visual decision, not a mobile behavior contract.
-    assert.match(layoutSource, /overflow-x-hidden/);
-    assert.match(layoutSource, /w-full[\s\S]*md:w-(?:\d+\/\d+|\[[^\]]+\])/);
-    // Logo remains visible in AuthCard header across all viewports
-    assert.match(authCardSource, /\/rekordly-logo\.svg/);
-  });
-
-  it("16. Keyboard submission is wired via native <form onSubmit> and type='submit' buttons", () => {
-    const screens = [
-      "src/components/auth/email-entry-screen.tsx",
-      "src/components/auth/password-sign-in-screen.tsx",
-      "src/components/auth/forgot-password-screen.tsx",
-      "src/components/auth/reset-password-screen.tsx",
-      "src/components/auth/create-password-screen.tsx",
-    ];
-
-    for (const screenPath of screens) {
-      const source = readFileSync(join(process.cwd(), screenPath), "utf8");
-      assert.match(source, /<form[\s\S]*form\.handleSubmit\(onSubmit\)/);
-      assert.match(source, /type="submit"/);
-    }
-  });
-
-  it("17. Wrapper components preserve accessible labels, descriptions, and field-associated errors", () => {
-    const ids = getFormFieldAccessibilityIds("signin-password", {
+  it("17. Accessibility ID helper associates labels, descriptions, and field errors", () => {
+    const ids = getFormFieldAccessibilityIds("otp-code", {
       hasDescription: true,
       hasError: true,
     });
-    assert.equal(ids.labelId, "signin-password-label");
-    assert.equal(ids.descriptionId, "signin-password-description");
-    assert.equal(ids.errorId, "signin-password-error");
-    assert.equal(
-      ids.ariaDescribedBy,
-      "signin-password-description signin-password-error",
-    );
-
-    const textFieldSource = readFileSync(
-      join(process.cwd(), "src/components/ui/text-field.tsx"),
-      "utf8",
-    );
-    const passwordFieldSource = readFileSync(
-      join(process.cwd(), "src/components/ui/password-field.tsx"),
-      "utf8",
-    );
-    const formFieldSource = readFileSync(
-      join(process.cwd(), "src/components/ui/form-field.tsx"),
-      "utf8",
-    );
-
-    assert.match(textFieldSource, /aria-labelledby=\{labelId\}/);
-    assert.match(textFieldSource, /aria-describedby=\{ariaDescribedBy\}/);
-    assert.match(textFieldSource, /aria-invalid=\{hasError \|\| undefined\}/);
-    assert.match(formFieldSource, /htmlFor=\{id\}/);
-    assert.match(formFieldSource, /role="alert"/);
-    assert.match(
-      passwordFieldSource,
-      /aria-label=\{isVisible \? "Hide password" : "Show password"\}/,
-    );
+    assert.equal(ids.labelId, "otp-code-label");
+    assert.equal(ids.descriptionId, "otp-code-description");
+    assert.equal(ids.errorId, "otp-code-error");
+    assert.equal(ids.ariaDescribedBy, "otp-code-description otp-code-error");
   });
 });

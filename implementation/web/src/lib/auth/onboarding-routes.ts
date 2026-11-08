@@ -3,6 +3,9 @@ import type { OnboardingStatus } from "../api/types.ts";
 export const AUTH_ROUTES = {
   LOGIN: "/login",
   LOGIN_PASSWORD: "/login/password",
+  LOGIN_OTP: "/login/otp",
+  LOGIN_MAGIC: "/login/magic",
+  AUTH_MAGIC: "/auth/magic",
   FORGOT_PASSWORD: "/forgot-password",
   RESET_PASSWORD: "/reset-password",
   CREATE_PASSWORD: "/create-password",

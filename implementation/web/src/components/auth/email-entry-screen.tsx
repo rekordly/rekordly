@@ -1,11 +1,12 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowLeft, KeyRound, MailCheck } from "lucide-react";
+import { KeyRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 
+import { OtpVerificationScreen } from "@/components/auth/otp-verification-screen";
 import {
   Alert,
   AuthCard,
@@ -19,6 +20,7 @@ import {
   type AuthApiContract,
   createSubmissionGuard,
   handleEmailContinuationSubmit,
+  handleOtpRequestSubmit,
 } from "@/lib/auth/controllers";
 import { AUTH_ROUTES } from "@/lib/auth/onboarding-routes";
 import { useAuthFlowStore } from "@/lib/auth/state";
@@ -76,6 +78,13 @@ export function EmailEntryScreen({
           router.push(outcome.nextRoute);
           return;
         }
+        await handleOtpRequestSubmit(
+          {
+            email: outcome.email,
+            purpose: "registration",
+          },
+          api,
+        );
         setRegistrationEmail(outcome.email);
         setView("registration");
       } catch (error: unknown) {
@@ -107,61 +116,12 @@ export function EmailEntryScreen({
 
   if (view === "registration") {
     return (
-      <AuthCard
-        title="Verify your email"
-        subtitle={
-          <>
-            Email verification is required to create your Rekordly account for{" "}
-            <span className="font-semibold text-foreground">
-              {registrationEmail || form.getValues("email")}
-            </span>
-            .
-          </>
-        }
-        alert={
-          <Alert
-            status="info"
-            title="Email verification required"
-            description="To protect your financial workspace, new accounts must verify email ownership with a single-use code before creating a password."
-            data-testid="registration-verification-notice"
-          />
-        }
-        footer={
-          <Button
-            variant="ghost"
-            size="md"
-            fullWidth
-            startIcon={<ArrowLeft className="size-4" />}
-            onPress={handleBackToEmail}
-            data-testid="registration-change-email-button"
-          >
-            Use a different email address
-          </Button>
-        }
-      >
-        <div
-          className="flex flex-col gap-4 rounded-2xl border border-border bg-surface p-5 shadow-2xs"
-          data-testid="registration-otp-slot"
-        >
-          <div className="flex items-start gap-3">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary">
-              <MailCheck className="size-5" aria-hidden="true" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <h2 className="font-heading text-sm font-semibold text-foreground">
-                Next step: 6-digit verification code
-              </h2>
-              <p className="font-sans text-xs leading-relaxed text-muted-foreground">
-                Once email OTP verification is active in this environment, you will enter the single-use verification code sent to your inbox and then set your password.
-              </p>
-            </div>
-          </div>
-
-          <div className="rounded-xl bg-surface-muted px-3.5 py-2.5 font-sans text-xs text-muted-foreground">
-            Already have a Rekordly password for a different address? Go back to switch emails or sign in with your password.
-          </div>
-        </div>
-      </AuthCard>
+      <OtpVerificationScreen
+        initialEmail={registrationEmail || form.getValues("email")}
+        initialPurpose="registration"
+        onBackToEmail={handleBackToEmail}
+        api={api}
+      />
     );
   }
 
