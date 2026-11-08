@@ -36,6 +36,9 @@ func (h *Handler) RegisterRoutes(group *gin.RouterGroup) {
 	protected.GET("/transactions", h.listTransactions)
 	protected.GET("/transactions/:id", h.getTransaction)
 	protected.POST("/transactions/:id/void", h.voidTransaction)
+
+	// Sales, Purchases, Counterparties, Payments
+	h.RegisterSalesPurchasesRoutes(protected)
 }
 
 // @Summary Create a money account

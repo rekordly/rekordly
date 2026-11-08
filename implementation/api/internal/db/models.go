@@ -71,6 +71,19 @@ type Category struct {
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
 
+type Counterparty struct {
+	ID          int64              `json:"id"`
+	WorkspaceID int64              `json:"workspace_id"`
+	Name        string             `json:"name"`
+	PartyType   string             `json:"party_type"`
+	Email       pgtype.Text        `json:"email"`
+	Phone       pgtype.Text        `json:"phone"`
+	Notes       pgtype.Text        `json:"notes"`
+	IsActive    bool               `json:"is_active"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
 type IdempotencyRecord struct {
 	ID            int64              `json:"id"`
 	ActorUserID   pgtype.Int8        `json:"actor_user_id"`
@@ -269,6 +282,56 @@ type PasswordCredential struct {
 	ReplacedAt       pgtype.Timestamptz `json:"replaced_at"`
 }
 
+type Payment struct {
+	ID               int64              `json:"id"`
+	WorkspaceID      int64              `json:"workspace_id"`
+	Direction        string             `json:"direction"`
+	PaymentDate      pgtype.Date        `json:"payment_date"`
+	TotalAmountMinor int64              `json:"total_amount_minor"`
+	Currency         string             `json:"currency"`
+	CurrencyExponent int32              `json:"currency_exponent"`
+	CounterpartyID   pgtype.Int8        `json:"counterparty_id"`
+	CounterpartyName string             `json:"counterparty_name"`
+	LinkedRecordType pgtype.Text        `json:"linked_record_type"`
+	LinkedRecordID   pgtype.Int8        `json:"linked_record_id"`
+	Status           string             `json:"status"`
+	Notes            pgtype.Text        `json:"notes"`
+	Reference        pgtype.Text        `json:"reference"`
+	IdempotencyKey   pgtype.Text        `json:"idempotency_key"`
+	CreatedByUserID  pgtype.Int8        `json:"created_by_user_id"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+type PaymentLeg struct {
+	ID             int64              `json:"id"`
+	PaymentID      int64              `json:"payment_id"`
+	WorkspaceID    int64              `json:"workspace_id"`
+	MoneyAccountID int64              `json:"money_account_id"`
+	AmountMinor    int64              `json:"amount_minor"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type Purchase struct {
+	ID               int64              `json:"id"`
+	WorkspaceID      int64              `json:"workspace_id"`
+	SupplierID       pgtype.Int8        `json:"supplier_id"`
+	SupplierName     string             `json:"supplier_name"`
+	PurchaseDate     pgtype.Date        `json:"purchase_date"`
+	TotalAmountMinor int64              `json:"total_amount_minor"`
+	PaidAmountMinor  int64              `json:"paid_amount_minor"`
+	Currency         string             `json:"currency"`
+	CurrencyExponent int32              `json:"currency_exponent"`
+	Status           string             `json:"status"`
+	CategoryID       pgtype.Int8        `json:"category_id"`
+	Notes            pgtype.Text        `json:"notes"`
+	Reference        pgtype.Text        `json:"reference"`
+	IdempotencyKey   pgtype.Text        `json:"idempotency_key"`
+	CreatedByUserID  pgtype.Int8        `json:"created_by_user_id"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Role struct {
 	ID          int64              `json:"id"`
 	WorkspaceID pgtype.Int8        `json:"workspace_id"`
@@ -277,6 +340,25 @@ type Role struct {
 	IsSystem    bool               `json:"is_system"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+type Sale struct {
+	ID               int64              `json:"id"`
+	WorkspaceID      int64              `json:"workspace_id"`
+	CustomerID       pgtype.Int8        `json:"customer_id"`
+	CustomerName     string             `json:"customer_name"`
+	SaleDate         pgtype.Date        `json:"sale_date"`
+	TotalAmountMinor int64              `json:"total_amount_minor"`
+	PaidAmountMinor  int64              `json:"paid_amount_minor"`
+	Currency         string             `json:"currency"`
+	CurrencyExponent int32              `json:"currency_exponent"`
+	Status           string             `json:"status"`
+	Notes            pgtype.Text        `json:"notes"`
+	Reference        pgtype.Text        `json:"reference"`
+	IdempotencyKey   pgtype.Text        `json:"idempotency_key"`
+	CreatedByUserID  pgtype.Int8        `json:"created_by_user_id"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Session struct {
