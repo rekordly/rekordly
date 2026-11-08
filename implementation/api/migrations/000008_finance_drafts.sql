@@ -43,15 +43,3 @@ CREATE TABLE money_records (
     UNIQUE (workspace_id, idempotency_key)
 );
 CREATE INDEX money_records_workspace_date_idx ON money_records (workspace_id, occurred_on DESC, id DESC);
-
-CREATE TABLE ledger_entries (
-    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    workspace_id BIGINT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    money_record_id BIGINT NOT NULL REFERENCES money_records(id) ON DELETE RESTRICT,
-    account_code TEXT NOT NULL,
-    debit_minor BIGINT NOT NULL DEFAULT 0 CHECK (debit_minor >= 0),
-    credit_minor BIGINT NOT NULL DEFAULT 0 CHECK (credit_minor >= 0),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CHECK ((debit_minor > 0 AND credit_minor = 0) OR (credit_minor > 0 AND debit_minor = 0))
-);
-CREATE INDEX ledger_entries_workspace_idx ON ledger_entries (workspace_id, created_at DESC);
