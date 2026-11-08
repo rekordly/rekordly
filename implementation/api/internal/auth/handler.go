@@ -3,6 +3,7 @@ package auth
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -38,6 +39,14 @@ func (handler *Handler) RegisterRoutes(group *gin.RouterGroup) {
 	auth.GET("/google/callback", handler.googleCallback)
 	auth.POST("/google/link/password", handler.linkGoogleWithPassword)
 	auth.POST("/google/disconnect", handler.disconnectGoogle)
+	auth.POST("/refresh", handler.refreshSession)
+	auth.POST("/logout", handler.logout)
+	auth.POST("/logout-all", handler.logoutAll)
+	group.GET("/me/sessions", handler.listSessions)
+	group.DELETE("/me/sessions/:id", handler.revokeSession)
+	group.GET("/me", handler.currentUser)
+	group.PUT("/me/onboarding/preferences", handler.saveOnboardingPreferences)
+	group.POST("/me/onboarding/workspaces", handler.createInitialWorkspaces)
 	group.GET("/invitations/:token", handler.inspectInvitation)
 	group.POST("/invitations/:token/otp/request", handler.requestInvitationOTP)
 	group.POST("/invitations/:token/otp/verify", handler.verifyInvitationOTP)
@@ -89,6 +98,13 @@ type googleLinkPasswordRequest struct {
 
 type invitationOTPVerifyRequest struct {
 	Code string `json:"code" binding:"required"`
+}
+
+type onboardingPreferencesRequest struct {
+	FlowVersion   int32          `json:"flow_version" binding:"required"`
+	SelectedRoles []string       `json:"selected_roles" binding:"required"`
+	SpaceChoice   string         `json:"space_choice" binding:"required"`
+	Preferences   map[string]any `json:"preferences"`
 }
 
 func (handler *Handler) emailContinuation(c *gin.Context) {
@@ -296,6 +312,147 @@ func (handler *Handler) disconnectGoogle(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"disconnected": true}})
 }
 
+func (handler *Handler) sessionAndCSRF(c *gin.Context) (string, string, bool) {
+	sessionToken, err := c.Cookie("rekordly_session")
+	if err != nil {
+		handler.writeError(c, ErrInvalidProof)
+		return "", "", false
+	}
+	csrfCookie, err := c.Cookie("rekordly_csrf")
+	if err != nil || !subtleCompare(csrfCookie, c.GetHeader("X-CSRF-Token")) {
+		handler.writeError(c, ErrInvalidProof)
+		return "", "", false
+	}
+	return sessionToken, csrfCookie, true
+}
+
+func (handler *Handler) refreshSession(c *gin.Context) {
+	sessionToken, csrfToken, ok := handler.sessionAndCSRF(c)
+	if !ok {
+		return
+	}
+	proof, err := handler.service.RefreshSession(c.Request.Context(), sessionToken, csrfToken, deviceLabel(c), userAgent(c), "")
+	if err != nil {
+		handler.writeError(c, err)
+		return
+	}
+	handler.writeSession(c, proof)
+}
+
+func (handler *Handler) logout(c *gin.Context) {
+	sessionToken, csrfToken, ok := handler.sessionAndCSRF(c)
+	if !ok {
+		return
+	}
+	if err := handler.service.Logout(c.Request.Context(), sessionToken, csrfToken); err != nil {
+		handler.writeError(c, err)
+		return
+	}
+	handler.clearSessionCookies(c)
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"logged_out": true}})
+}
+
+func (handler *Handler) logoutAll(c *gin.Context) {
+	sessionToken, csrfToken, ok := handler.sessionAndCSRF(c)
+	if !ok {
+		return
+	}
+	if err := handler.service.LogoutAll(c.Request.Context(), sessionToken, csrfToken); err != nil {
+		handler.writeError(c, err)
+		return
+	}
+	handler.clearSessionCookies(c)
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"logged_out": true}})
+}
+
+func (handler *Handler) listSessions(c *gin.Context) {
+	sessionToken, err := c.Cookie("rekordly_session")
+	if err != nil {
+		handler.writeError(c, ErrInvalidProof)
+		return
+	}
+	sessions, err := handler.service.ListSessions(c.Request.Context(), sessionToken)
+	if err != nil {
+		handler.writeError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"sessions": sessions}})
+}
+
+func (handler *Handler) revokeSession(c *gin.Context) {
+	sessionToken, csrfToken, ok := handler.sessionAndCSRF(c)
+	if !ok {
+		return
+	}
+	sessionID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || sessionID < 1 {
+		handler.writeError(c, ErrInvalidProof)
+		return
+	}
+	if err := handler.service.RevokeSelectedSession(c.Request.Context(), sessionToken, csrfToken, sessionID); err != nil {
+		handler.writeError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"revoked": true}})
+}
+
+func (handler *Handler) currentUser(c *gin.Context) {
+	sessionToken, err := c.Cookie("rekordly_session")
+	if err != nil {
+		handler.writeError(c, ErrInvalidProof)
+		return
+	}
+	current, err := handler.service.CurrentUser(c.Request.Context(), sessionToken)
+	if err != nil {
+		handler.writeError(c, err)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, gin.H{"data": current})
+}
+
+func (handler *Handler) saveOnboardingPreferences(c *gin.Context) {
+	sessionToken, csrfToken, ok := handler.sessionAndCSRF(c)
+	if !ok {
+		return
+	}
+	var request onboardingPreferencesRequest
+	if !bindJSON(c, &request) {
+		return
+	}
+	state, err := handler.service.SaveOnboardingPreferences(c.Request.Context(), sessionToken, csrfToken, OnboardingPreferencesInput{
+		FlowVersion: request.FlowVersion, SelectedRoles: request.SelectedRoles, SpaceChoice: request.SpaceChoice, Preferences: request.Preferences,
+	})
+	if err != nil {
+		handler.writeError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": state})
+}
+
+func (handler *Handler) createInitialWorkspaces(c *gin.Context) {
+	sessionToken, csrfToken, ok := handler.sessionAndCSRF(c)
+	if !ok {
+		return
+	}
+	var request CreateWorkspacesInput
+	if !bindJSON(c, &request) {
+		return
+	}
+	result, err := handler.service.CreateInitialWorkspaces(c.Request.Context(), sessionToken, csrfToken, c.GetHeader("Idempotency-Key"), request)
+	if err != nil {
+		handler.writeError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": result})
+}
+
+func (handler *Handler) clearSessionCookies(c *gin.Context) {
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("rekordly_session", "", -1, "/", "", handler.secureCookie, true)
+	c.SetCookie("rekordly_csrf", "", -1, "/", "", handler.secureCookie, false)
+}
+
 func (handler *Handler) inspectInvitation(c *gin.Context) {
 	summary, err := handler.service.InspectInvitation(c.Request.Context(), c.Param("token"))
 	if err != nil {
@@ -383,6 +540,15 @@ func (handler *Handler) writeError(c *gin.Context, err error) {
 		c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "SEAT_LIMIT_REACHED", "message": "This workspace has no available seat for the invitation."}})
 	case errors.Is(err, ErrFinalLoginMethod):
 		c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "FINAL_LOGIN_METHOD", "message": "Add another login or recovery method before disconnecting Google."}})
+	case errors.Is(err, ErrRefreshInProgress):
+		c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "SESSION_ALREADY_ROTATED", "message": "The session was refreshed in another request. Retry with the current cookie."}})
+	case errors.Is(err, ErrSessionReplayed):
+		handler.clearSessionCookies(c)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": gin.H{"code": "SESSION_REPLAYED", "message": "The session is no longer valid. Sign in again."}})
+	case errors.Is(err, ErrIdempotencyConflict):
+		c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "IDEMPOTENCY_CONFLICT", "message": "The idempotency key was already used for a different request."}})
+	case errors.Is(err, ErrOnboardingConflict):
+		c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "ONBOARDING_CONFLICT", "message": "The onboarding operation is already in progress or conflicts with completed setup."}})
 	default:
 		if strings.Contains(err.Error(), "password must contain") || strings.Contains(err.Error(), "invalid email") {
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": gin.H{"code": "VALIDATION_ERROR", "message": err.Error()}})

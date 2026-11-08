@@ -74,3 +74,21 @@
 - Production Google client ID, client secret and redirect URL remain intentionally unset until deployment credentials are supplied.
 - `AUTH-BE-05` is complete. Next backend task is `AUTH-BE-06` sessions and onboarding API.
 
+## 8 November 2026 — AUTH-BE-06 sessions and onboarding API
+
+- Added a 24-hour opaque full-session lifecycle with transactional rotation inside one session family; only SHA-256 token/CSRF digests are stored.
+- A ten-second concurrent-tab grace returns a safe retry conflict without storing replacement raw tokens. Reuse after grace revokes the entire family, writes an audit event and queues a security notice.
+- Added refresh, current logout, logout-all, active-session listing and owner-scoped selected-session revocation endpoints with cookie/header CSRF protection.
+- Logout-all and selected-session revocation create audit evidence; logout-all queues a security notification through the worker.
+- Added canonical `GET /api/v1/me` returning safe user/session/onboarding data and membership-scoped authorized workspaces only—never balances or invented dashboard data.
+- Membership joins enforce the privacy boundary: an invited Business member does not receive the owner’s Personal workspace.
+- Added resumable, versioned onboarding preferences for personal, freelancer, small-business and general-business use cases plus Personal/Business/both selection.
+- Added validated Personal/Business basics: name, ISO currency, IANA timezone, Business type and two-letter country code.
+- Initial workspace creation locks the user, digests the idempotency key/request, replays completed results safely, rejects key mismatch and creates workspace/Owner role/membership atomically.
+- Personal and Business spaces remain separate. Creation writes no opening balance, stock, receivable, payable, loan, asset or other invented financial record.
+- Onboarding completion, audit event, welcome/checklist outbox job and idempotency completion are committed in the same transaction; a forced outbox failure test proves complete rollback.
+- Worker now delivers onboarding, session-replay and all-session-revoked notices without secrets in outbox payloads.
+- Migration `000006_sessions_and_onboarding.sql` stores Business type/country configuration and applied successfully; repeat migration is safe.
+- Verification passed: live PostgreSQL `go test -count=1 ./...`, API and worker `go vet ./...`, `sqlc generate/vet`, migration replay, Docker rebuild and HTTP 200 liveness/readiness.
+- `AUTH-BE-06` is complete. All backend authentication tasks are complete; frontend integration and final E2E remain.
+

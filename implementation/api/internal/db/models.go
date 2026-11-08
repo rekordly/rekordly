@@ -248,4 +248,6 @@ type Workspace struct {
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 	StaffSeatLimit      int32              `json:"staff_seat_limit"`
 	AccountantSeatLimit int32              `json:"accountant_seat_limit"`
+	BusinessType        pgtype.Text        `json:"business_type"`
+	CountryCode         pgtype.Text        `json:"country_code"`
 }

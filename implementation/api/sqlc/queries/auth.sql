@@ -318,3 +318,29 @@ UPDATE auth_identities
 SET status = 'unlinked', unlinked_at = now(), updated_at = now()
 WHERE user_id = $1 AND provider = 'google' AND status = 'active';
 
+-- name: CompleteSessionRotation :execrows
+UPDATE sessions
+SET rotated_at = now(),
+    replaced_by_session_id = $2,
+    revoked_at = now(),
+    revocation_reason = 'rotated'
+WHERE id = $1 AND rotated_at IS NULL AND revoked_at IS NULL;
+
+-- name: TouchSessionIfStale :execrows
+UPDATE sessions
+SET last_seen_at = now()
+WHERE id = $1 AND last_seen_at < now() - interval '5 minutes';
+
+-- name: RevokeAllUserSessions :execrows
+UPDATE sessions
+SET revoked_at = now(), revocation_reason = $2
+WHERE user_id = $1 AND revoked_at IS NULL;
+
+-- name: RevokeOwnedSession :execrows
+UPDATE sessions
+SET revoked_at = now(), revocation_reason = 'user_revoked'
+WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL;
+
+-- name: GetSessionByID :one
+SELECT * FROM sessions WHERE id = $1;
+

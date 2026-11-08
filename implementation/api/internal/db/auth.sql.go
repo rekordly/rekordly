@@ -106,6 +106,28 @@ func (q *Queries) CompleteOAuthLoginAttempt(ctx context.Context, stateDigest []b
 	return i, err
 }
 
+const completeSessionRotation = `-- name: CompleteSessionRotation :execrows
+UPDATE sessions
+SET rotated_at = now(),
+    replaced_by_session_id = $2,
+    revoked_at = now(),
+    revocation_reason = 'rotated'
+WHERE id = $1 AND rotated_at IS NULL AND revoked_at IS NULL
+`
+
+type CompleteSessionRotationParams struct {
+	ID                  int64       `json:"id"`
+	ReplacedBySessionID pgtype.Int8 `json:"replaced_by_session_id"`
+}
+
+func (q *Queries) CompleteSessionRotation(ctx context.Context, arg CompleteSessionRotationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, completeSessionRotation, arg.ID, arg.ReplacedBySessionID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const completeSocialLinkAttempt = `-- name: CompleteSocialLinkAttempt :one
 UPDATE social_link_attempts SET status = 'completed', completed_at = now()
 WHERE id = $1 AND status = 'pending' AND expires_at > now()
@@ -729,7 +751,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 const createWorkspace = `-- name: CreateWorkspace :one
 INSERT INTO workspaces (kind, name, slug, base_currency, timezone, owner_user_id)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, kind, name, slug, base_currency, timezone, status, owner_user_id, created_at, updated_at, staff_seat_limit, accountant_seat_limit
+RETURNING id, kind, name, slug, base_currency, timezone, status, owner_user_id, created_at, updated_at, staff_seat_limit, accountant_seat_limit, business_type, country_code
 `
 
 type CreateWorkspaceParams struct {
@@ -764,6 +786,8 @@ func (q *Queries) CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams
 		&i.UpdatedAt,
 		&i.StaffSeatLimit,
 		&i.AccountantSeatLimit,
+		&i.BusinessType,
+		&i.CountryCode,
 	)
 	return i, err
 }
@@ -1225,6 +1249,36 @@ func (q *Queries) GetPasswordSignInRecord(ctx context.Context, normalizedIdentif
 	return i, err
 }
 
+const getSessionByID = `-- name: GetSessionByID :one
+SELECT id, user_id, family_id, refresh_digest, previous_session_id, replaced_by_session_id, session_kind, device_label, user_agent_summary, ip_prefix, issued_at, expires_at, last_seen_at, rotated_at, revoked_at, revocation_reason, created_at, csrf_digest FROM sessions WHERE id = $1
+`
+
+func (q *Queries) GetSessionByID(ctx context.Context, id int64) (Session, error) {
+	row := q.db.QueryRow(ctx, getSessionByID, id)
+	var i Session
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.FamilyID,
+		&i.RefreshDigest,
+		&i.PreviousSessionID,
+		&i.ReplacedBySessionID,
+		&i.SessionKind,
+		&i.DeviceLabel,
+		&i.UserAgentSummary,
+		&i.IpPrefix,
+		&i.IssuedAt,
+		&i.ExpiresAt,
+		&i.LastSeenAt,
+		&i.RotatedAt,
+		&i.RevokedAt,
+		&i.RevocationReason,
+		&i.CreatedAt,
+		&i.CsrfDigest,
+	)
+	return i, err
+}
+
 const getSessionByRefreshDigestForUpdate = `-- name: GetSessionByRefreshDigestForUpdate :one
 SELECT id, user_id, family_id, refresh_digest, previous_session_id, replaced_by_session_id, session_kind, device_label, user_agent_summary, ip_prefix, issued_at, expires_at, last_seen_at, rotated_at, revoked_at, revocation_reason, created_at, csrf_digest FROM sessions WHERE refresh_digest = $1 FOR UPDATE
 `
@@ -1532,6 +1586,25 @@ func (q *Queries) ReplaceActivePasswordCredential(ctx context.Context, userID in
 	return result.RowsAffected(), nil
 }
 
+const revokeAllUserSessions = `-- name: RevokeAllUserSessions :execrows
+UPDATE sessions
+SET revoked_at = now(), revocation_reason = $2
+WHERE user_id = $1 AND revoked_at IS NULL
+`
+
+type RevokeAllUserSessionsParams struct {
+	UserID           int64       `json:"user_id"`
+	RevocationReason pgtype.Text `json:"revocation_reason"`
+}
+
+func (q *Queries) RevokeAllUserSessions(ctx context.Context, arg RevokeAllUserSessionsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeAllUserSessions, arg.UserID, arg.RevocationReason)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const revokeOtherUserSessions = `-- name: RevokeOtherUserSessions :execrows
 UPDATE sessions SET revoked_at = now(), revocation_reason = $3
 WHERE user_id = $1 AND id <> $2 AND revoked_at IS NULL
@@ -1545,6 +1618,25 @@ type RevokeOtherUserSessionsParams struct {
 
 func (q *Queries) RevokeOtherUserSessions(ctx context.Context, arg RevokeOtherUserSessionsParams) (int64, error) {
 	result, err := q.db.Exec(ctx, revokeOtherUserSessions, arg.UserID, arg.ID, arg.RevocationReason)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const revokeOwnedSession = `-- name: RevokeOwnedSession :execrows
+UPDATE sessions
+SET revoked_at = now(), revocation_reason = 'user_revoked'
+WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL
+`
+
+type RevokeOwnedSessionParams struct {
+	ID     int64 `json:"id"`
+	UserID int64 `json:"user_id"`
+}
+
+func (q *Queries) RevokeOwnedSession(ctx context.Context, arg RevokeOwnedSessionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeOwnedSession, arg.ID, arg.UserID)
 	if err != nil {
 		return 0, err
 	}
@@ -1581,6 +1673,20 @@ type RevokeSessionFamilyParams struct {
 
 func (q *Queries) RevokeSessionFamily(ctx context.Context, arg RevokeSessionFamilyParams) (int64, error) {
 	result, err := q.db.Exec(ctx, revokeSessionFamily, arg.FamilyID, arg.RevocationReason)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const touchSessionIfStale = `-- name: TouchSessionIfStale :execrows
+UPDATE sessions
+SET last_seen_at = now()
+WHERE id = $1 AND last_seen_at < now() - interval '5 minutes'
+`
+
+func (q *Queries) TouchSessionIfStale(ctx context.Context, id int64) (int64, error) {
+	result, err := q.db.Exec(ctx, touchSessionIfStale, id)
 	if err != nil {
 		return 0, err
 	}

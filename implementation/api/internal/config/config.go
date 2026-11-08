@@ -38,7 +38,7 @@ func Load() (Config, error) {
 	v.SetDefault("DATABASE_MIN_CONNS", 1)
 	v.SetDefault("DATABASE_CONNECT_TIMEOUT", "5s")
 	v.SetDefault("DATABASE_HEALTH_TIMEOUT", "2s")
-	v.SetDefault("SESSION_TTL", "720h")
+	v.SetDefault("SESSION_TTL", "24h")
 	v.SetDefault("GOOGLE_AUTHORIZATION_URL", "https://accounts.google.com/o/oauth2/v2/auth")
 	v.SetDefault("GOOGLE_TOKEN_URL", "https://oauth2.googleapis.com/token")
 	v.SetDefault("GOOGLE_JWKS_URL", "https://www.googleapis.com/oauth2/v3/certs")
@@ -86,8 +86,8 @@ func Load() (Config, error) {
 	if cfg.DatabaseConnectTimeout <= 0 || cfg.DatabaseHealthTimeout <= 0 {
 		return Config{}, fmt.Errorf("database timeouts must be positive")
 	}
-	if cfg.SessionTTL < time.Hour || cfg.SessionTTL > 90*24*time.Hour {
-		return Config{}, fmt.Errorf("SESSION_TTL must be between 1h and 2160h")
+	if cfg.SessionTTL < time.Hour || cfg.SessionTTL > 30*24*time.Hour {
+		return Config{}, fmt.Errorf("SESSION_TTL must be between 1h and 720h")
 	}
 	googleValues := []string{cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.GoogleRedirectURL}
 	configured := 0

@@ -149,3 +149,23 @@ Status: **complete and verified**. Proceed to Google OIDC and invitation authent
 ### Decision
 
 Status: **complete and verified**. Proceed to `AUTH-BE-06` session lifecycle and onboarding API.
+
+## AUTH-BE-06 checkpoint — 8 November 2026
+
+### Passed evidence
+
+- Refresh rotates token and CSRF digests transactionally and links predecessor/replacement sessions in one family.
+- Immediate duplicate refresh receives the bounded concurrent-tab result; replay after grace revokes the replacement family and queues a security notice.
+- Full-session authentication rejects pre-auth, expired and revoked proofs.
+- Session listing identifies the current session; selected revocation enforces ownership and logout-all invalidates every active session.
+- Canonical `/me` returns only membership-authorized workspaces with exact role, ownership and outlet scope.
+- An invited Business member receives that Business only and cannot see its owner’s Personal workspace.
+- Two concurrent initial-onboarding commands with one key return the same two-workspace result and create exactly one Personal, one Business, two owner memberships, one audit event and one welcome job.
+- Reusing an idempotency key with changed input is rejected.
+- A forced mandatory outbox failure leaves zero workspaces, idempotency records and completion audits, proving transaction rollback.
+- Business basics validate ISO currency, IANA timezone, type and country; migration 6 preserves them without creating financial values.
+- Live PostgreSQL full suite, API/worker vet, sqlc verification, repeat migration, image rebuild, liveness and readiness all pass.
+
+### Decision
+
+Status: **complete and verified**. Every backend authentication task (`AUTH-BE-01` through `AUTH-BE-06`) is complete. Proceed with frontend authentication integration and `AUTH-E2E-01`.

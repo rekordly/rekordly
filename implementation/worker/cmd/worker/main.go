@@ -151,10 +151,50 @@ func (worker *worker) process(ctx context.Context, claimed job) error {
 		return worker.sendOTP(ctx, claimed)
 	case "send_auth_magic_link", "prepare_password_reset":
 		return worker.sendMagicLink(ctx, claimed)
+	case "security_session_replay", "security_sessions_revoked":
+		return worker.sendSecurityNotice(ctx, claimed)
+	case "onboarding_welcome":
+		return worker.sendOnboardingWelcome(ctx, claimed)
 	default:
 		_, err := worker.pool.Exec(ctx, `UPDATE outbox_jobs SET status = 'failed', attempts = 3, last_error_class = 'unsupported_job', updated_at = now() WHERE id = $1`, claimed.ID)
 		return err
 	}
+}
+
+func (worker *worker) sendSecurityNotice(ctx context.Context, claimed job) error {
+	var payload authEmailJob
+	if err := json.Unmarshal(claimed.Payload, &payload); err != nil || payload.UserID == 0 {
+		return errors.New("invalid_payload")
+	}
+	if err := worker.pool.QueryRow(ctx, `SELECT normalized_identifier FROM auth_identities WHERE user_id = $1 AND provider = 'email' AND status = 'active'`, payload.UserID).Scan(&payload.Email); err != nil {
+		return err
+	}
+	subject := "Your Rekordly sessions were signed out"
+	body := "All active Rekordly sessions were signed out. If this was not you, reset your password immediately."
+	if claimed.JobType == "security_session_replay" {
+		subject = "Rekordly blocked a reused session"
+		body = "Rekordly detected a reused session token and signed out that session family. If this was not expected, reset your password immediately."
+	}
+	if err := worker.send(ctx, payload.Email, subject, body); err != nil {
+		return err
+	}
+	_, err := worker.pool.Exec(ctx, `UPDATE outbox_jobs SET status = 'completed', completed_at = now(), locked_at = NULL, locked_by = NULL, updated_at = now() WHERE id = $1`, claimed.ID)
+	return err
+}
+
+func (worker *worker) sendOnboardingWelcome(ctx context.Context, claimed job) error {
+	var payload authEmailJob
+	if err := json.Unmarshal(claimed.Payload, &payload); err != nil || payload.UserID == 0 {
+		return errors.New("invalid_payload")
+	}
+	if err := worker.pool.QueryRow(ctx, `SELECT normalized_identifier FROM auth_identities WHERE user_id = $1 AND provider = 'email' AND status = 'active'`, payload.UserID).Scan(&payload.Email); err != nil {
+		return err
+	}
+	if err := worker.send(ctx, payload.Email, "Your Rekordly workspace is ready", "Your workspace is ready. Start by recording your first real income or expense—Rekordly did not create any opening balances for you."); err != nil {
+		return err
+	}
+	_, err := worker.pool.Exec(ctx, `UPDATE outbox_jobs SET status = 'completed', completed_at = now(), locked_at = NULL, locked_by = NULL, updated_at = now() WHERE id = $1`, claimed.ID)
+	return err
 }
 
 func (worker *worker) sendOTP(ctx context.Context, claimed job) error {

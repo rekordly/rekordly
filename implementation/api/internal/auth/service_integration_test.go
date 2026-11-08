@@ -373,3 +373,162 @@ func createInvitationWorkspace(t *testing.T, owner authFixture, staffLimit int) 
 	})
 	return workspaceID, memberRoleID
 }
+
+func TestSessionRotationGraceAndReplayRevokesFamily(t *testing.T) {
+	fixture := newAuthFixture(t)
+	proof := createFullSession(t, fixture, "rotation-preauth")
+	replacement, err := fixture.service.RefreshSession(context.Background(), proof.Token, proof.CSRFToken, "browser", "test-agent", "")
+	require.NoError(t, err)
+	require.NotEqual(t, proof.Token, replacement.Token)
+	_, err = fixture.service.RefreshSession(context.Background(), proof.Token, proof.CSRFToken, "browser", "test-agent", "")
+	require.ErrorIs(t, err, ErrRefreshInProgress)
+	_, err = fixture.pool.Exec(context.Background(), `UPDATE sessions SET rotated_at = now() - interval '11 seconds' WHERE refresh_digest = $1`, digest(proof.Token))
+	require.NoError(t, err)
+	_, err = fixture.service.RefreshSession(context.Background(), proof.Token, proof.CSRFToken, "browser", "test-agent", "")
+	require.ErrorIs(t, err, ErrSessionReplayed)
+	_, err = fixture.service.ListSessions(context.Background(), replacement.Token)
+	require.ErrorIs(t, err, ErrInvalidProof)
+}
+
+func TestSessionManagementOwnershipAndLogoutAll(t *testing.T) {
+	fixture := newAuthFixture(t)
+	other := newAuthFixture(t)
+	current := createFullSession(t, fixture, "session-management-current")
+	second, err := fixture.service.SignIn(context.Background(), fixture.email, "integration test password", "second", "phone", "agent", "")
+	require.NoError(t, err)
+	otherProof := createFullSession(t, other, "other-session")
+	var otherSessionID int64
+	require.NoError(t, fixture.pool.QueryRow(context.Background(), `SELECT id FROM sessions WHERE refresh_digest = $1`, digest(otherProof.Token)).Scan(&otherSessionID))
+	require.ErrorIs(t, fixture.service.RevokeSelectedSession(context.Background(), current.Token, current.CSRFToken, otherSessionID), ErrInvalidProof)
+	sessions, err := fixture.service.ListSessions(context.Background(), current.Token)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(sessions), 2)
+	var secondID int64
+	require.NoError(t, fixture.pool.QueryRow(context.Background(), `SELECT id FROM sessions WHERE refresh_digest = $1`, digest(second.Token)).Scan(&secondID))
+	require.NoError(t, fixture.service.RevokeSelectedSession(context.Background(), current.Token, current.CSRFToken, secondID))
+	require.NoError(t, fixture.service.LogoutAll(context.Background(), current.Token, current.CSRFToken))
+	_, err = fixture.service.ListSessions(context.Background(), current.Token)
+	require.ErrorIs(t, err, ErrInvalidProof)
+}
+
+func TestConcurrentOnboardingCreatesOneWorkspaceSet(t *testing.T) {
+	fixture := newAuthFixture(t)
+	proof := createFullSession(t, fixture, "onboarding-session")
+	input := CreateWorkspacesInput{
+		SpaceChoice: "all",
+		Personal:    &WorkspaceSetup{Name: "My Money", BaseCurrency: "NGN", Timezone: "Africa/Lagos"},
+		Business:    &WorkspaceSetup{Name: "Launch Business", BaseCurrency: "NGN", Timezone: "Africa/Lagos", BusinessType: "services", Country: "NG"},
+	}
+	results := make([]CreateWorkspacesResult, 2)
+	errs := make([]error, 2)
+	start := make(chan struct{})
+	var wait sync.WaitGroup
+	for index := range errs {
+		wait.Add(1)
+		go func(index int) {
+			defer wait.Done()
+			<-start
+			results[index], errs[index] = fixture.service.CreateInitialWorkspaces(context.Background(), proof.Token, proof.CSRFToken, "same-onboarding-key", input)
+		}(index)
+	}
+	close(start)
+	wait.Wait()
+	require.NoError(t, errs[0])
+	require.NoError(t, errs[1])
+	require.Equal(t, results[0], results[1])
+	var workspaceCount, ownerMembershipCount, auditCount, outboxCount int
+	require.NoError(t, fixture.pool.QueryRow(context.Background(), `SELECT count(*) FROM workspaces WHERE owner_user_id = $1 AND status = 'active'`, fixture.userID).Scan(&workspaceCount))
+	require.Equal(t, 2, workspaceCount)
+	require.NoError(t, fixture.pool.QueryRow(context.Background(), `SELECT count(*) FROM memberships WHERE user_id = $1 AND is_owner AND status = 'active'`, fixture.userID).Scan(&ownerMembershipCount))
+	require.Equal(t, 2, ownerMembershipCount)
+	require.NoError(t, fixture.pool.QueryRow(context.Background(), `SELECT count(*) FROM audit_events WHERE actor_user_id = $1 AND event_type = 'onboarding_core_completed'`, fixture.userID).Scan(&auditCount))
+	require.Equal(t, 1, auditCount)
+	require.NoError(t, fixture.pool.QueryRow(context.Background(), `SELECT count(*) FROM outbox_jobs WHERE aggregate_type = 'user' AND aggregate_id = $1 AND job_type = 'onboarding_welcome'`, fmt.Sprintf("%d", fixture.userID)).Scan(&outboxCount))
+	require.Equal(t, 1, outboxCount)
+	t.Cleanup(func() {
+		_, _ = fixture.pool.Exec(context.Background(), `DELETE FROM workspaces WHERE owner_user_id = $1`, fixture.userID)
+	})
+}
+
+func TestOnboardingIdempotencyMismatchIsRejected(t *testing.T) {
+	fixture := newAuthFixture(t)
+	proof := createFullSession(t, fixture, "onboarding-mismatch-session")
+	first := CreateWorkspacesInput{SpaceChoice: "personal", Personal: &WorkspaceSetup{Name: "Personal One", BaseCurrency: "NGN", Timezone: "Africa/Lagos"}}
+	_, err := fixture.service.CreateInitialWorkspaces(context.Background(), proof.Token, proof.CSRFToken, "mismatch-key-01", first)
+	require.NoError(t, err)
+	second := CreateWorkspacesInput{SpaceChoice: "personal", Personal: &WorkspaceSetup{Name: "Changed Name", BaseCurrency: "NGN", Timezone: "Africa/Lagos"}}
+	_, err = fixture.service.CreateInitialWorkspaces(context.Background(), proof.Token, proof.CSRFToken, "mismatch-key-01", second)
+	require.ErrorIs(t, err, ErrIdempotencyConflict)
+	t.Cleanup(func() {
+		_, _ = fixture.pool.Exec(context.Background(), `DELETE FROM workspaces WHERE owner_user_id = $1`, fixture.userID)
+	})
+}
+
+func TestCurrentUserOnlyReturnsAuthorizedWorkspaces(t *testing.T) {
+	owner := newAuthFixture(t)
+	member := newAuthFixture(t)
+	ownerProof := createFullSession(t, owner, "owner-current-user-session")
+	memberProof := createFullSession(t, member, "member-current-user-session")
+	ownerInput := CreateWorkspacesInput{
+		SpaceChoice: "all",
+		Personal:    &WorkspaceSetup{Name: "Owner Personal", BaseCurrency: "NGN", Timezone: "Africa/Lagos"},
+		Business:    &WorkspaceSetup{Name: "Owner Business", BaseCurrency: "NGN", Timezone: "Africa/Lagos", BusinessType: "services", Country: "NG"},
+	}
+	created, err := owner.service.CreateInitialWorkspaces(context.Background(), ownerProof.Token, ownerProof.CSRFToken, "owner-workspaces-key", ownerInput)
+	require.NoError(t, err)
+	var businessID int64
+	for _, workspace := range created.Workspaces {
+		if workspace.Kind == "business" {
+			businessID = workspace.ID
+		}
+	}
+	var roleID int64
+	require.NoError(t, owner.pool.QueryRow(context.Background(), `INSERT INTO roles (workspace_id, code, name) VALUES ($1, 'member', 'Member') RETURNING id`, businessID).Scan(&roleID))
+	_, err = owner.pool.Exec(context.Background(), `INSERT INTO memberships (workspace_id, user_id, role_id) VALUES ($1, $2, $3)`, businessID, member.userID, roleID)
+	require.NoError(t, err)
+	current, err := member.service.CurrentUser(context.Background(), memberProof.Token)
+	require.NoError(t, err)
+	require.Len(t, current.Workspaces, 1)
+	require.Equal(t, "business", current.Workspaces[0].Kind)
+	require.False(t, current.Workspaces[0].IsOwner)
+	t.Cleanup(func() {
+		_, _ = owner.pool.Exec(context.Background(), `DELETE FROM workspaces WHERE owner_user_id = $1`, owner.userID)
+	})
+}
+
+func TestOnboardingMandatoryFailureRollsBackEverything(t *testing.T) {
+	fixture := newAuthFixture(t)
+	proof := createFullSession(t, fixture, "onboarding-rollback-session")
+	_, err := fixture.pool.Exec(context.Background(), `
+		CREATE OR REPLACE FUNCTION rekordly_test_reject_onboarding_outbox() RETURNS trigger LANGUAGE plpgsql AS $$
+		BEGIN
+			IF NEW.job_type = 'onboarding_welcome' THEN
+				RAISE EXCEPTION 'forced onboarding outbox failure';
+			END IF;
+			RETURN NEW;
+		END $$`)
+	require.NoError(t, err)
+	_, err = fixture.pool.Exec(context.Background(), `CREATE TRIGGER rekordly_test_reject_onboarding_outbox_trigger BEFORE INSERT ON outbox_jobs FOR EACH ROW EXECUTE FUNCTION rekordly_test_reject_onboarding_outbox()`)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, _ = fixture.pool.Exec(context.Background(), `DROP TRIGGER IF EXISTS rekordly_test_reject_onboarding_outbox_trigger ON outbox_jobs`)
+		_, _ = fixture.pool.Exec(context.Background(), `DROP FUNCTION IF EXISTS rekordly_test_reject_onboarding_outbox()`)
+	})
+	input := CreateWorkspacesInput{SpaceChoice: "personal", Personal: &WorkspaceSetup{Name: "Rollback Personal", BaseCurrency: "NGN", Timezone: "Africa/Lagos"}}
+	_, err = fixture.service.CreateInitialWorkspaces(context.Background(), proof.Token, proof.CSRFToken, "rollback-key-01", input)
+	require.Error(t, err)
+	var workspaces, idempotency, audits int
+	require.NoError(t, fixture.pool.QueryRow(context.Background(), `SELECT count(*) FROM workspaces WHERE owner_user_id = $1`, fixture.userID).Scan(&workspaces))
+	require.NoError(t, fixture.pool.QueryRow(context.Background(), `SELECT count(*) FROM idempotency_records WHERE actor_user_id = $1 AND operation = 'create_initial_workspaces'`, fixture.userID).Scan(&idempotency))
+	require.NoError(t, fixture.pool.QueryRow(context.Background(), `SELECT count(*) FROM audit_events WHERE actor_user_id = $1 AND event_type = 'onboarding_core_completed'`, fixture.userID).Scan(&audits))
+	require.Zero(t, workspaces)
+	require.Zero(t, idempotency)
+	require.Zero(t, audits)
+}
+
+func TestPreAuthCannotAccessCurrentUser(t *testing.T) {
+	fixture := newAuthFixture(t)
+	fixture.createPreAuthSession(t, "preauth-me-token")
+	_, err := fixture.service.CurrentUser(context.Background(), "preauth-me-token")
+	require.ErrorIs(t, err, ErrInvalidProof)
+}

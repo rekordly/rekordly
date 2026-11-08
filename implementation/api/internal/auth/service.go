@@ -20,12 +20,16 @@ import (
 )
 
 var (
-	ErrInvalidCredentials = errors.New("invalid credentials")
-	ErrInvalidProof       = errors.New("invalid or expired proof")
-	ErrRateLimited        = errors.New("too many attempts")
-	ErrPasswordExists     = errors.New("password already exists")
-	ErrSeatLimitReached   = errors.New("workspace seat limit reached")
-	ErrFinalLoginMethod   = errors.New("cannot remove final login or recovery method")
+	ErrInvalidCredentials  = errors.New("invalid credentials")
+	ErrInvalidProof        = errors.New("invalid or expired proof")
+	ErrRateLimited         = errors.New("too many attempts")
+	ErrPasswordExists      = errors.New("password already exists")
+	ErrSeatLimitReached    = errors.New("workspace seat limit reached")
+	ErrFinalLoginMethod    = errors.New("cannot remove final login or recovery method")
+	ErrRefreshInProgress   = errors.New("session already rotated; retry with current cookie")
+	ErrSessionReplayed     = errors.New("session replay detected")
+	ErrIdempotencyConflict = errors.New("idempotency key reused with different request")
+	ErrOnboardingConflict  = errors.New("onboarding request conflicts with completed setup")
 )
 
 type SessionProof struct {
