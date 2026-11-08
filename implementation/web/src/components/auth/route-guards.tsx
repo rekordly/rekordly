@@ -69,6 +69,7 @@ export function GuestRoute({ children }: { children: ReactNode }) {
     const destination = resolvePostAuthDestination(
       user.onboarding_status,
       searchParams.get("return_to"),
+      user.onboarding?.current_step,
     );
     router.replace(destination);
   }, [router, searchParams, status, user]);

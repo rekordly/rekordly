@@ -70,8 +70,12 @@ export function isOnboardingComplete(status: OnboardingStatus): boolean {
 export function resolvePostAuthDestination(
   status: OnboardingStatus,
   returnTo?: string | null,
+  currentStep?: string,
 ): string {
   if (!isOnboardingComplete(status)) {
+    if (currentStep === "space_choice_saved") {
+      return ONBOARDING_ROUTES.PREFERENCES_SAVED;
+    }
     return resolveOnboardingRoute(status);
   }
   const safeReturnTo = sanitizeReturnToPath(returnTo);
