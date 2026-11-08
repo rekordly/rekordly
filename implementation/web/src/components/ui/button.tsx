@@ -34,9 +34,9 @@ export interface ButtonProps {
 }
 
 const SIZE_CLASSES: Readonly<Record<RekordlyButtonSize, string>> = {
-  sm: "h-10 min-h-10 px-4 text-sm",
-  md: "h-12 min-h-12 px-5 text-sm",
-  lg: "h-13 min-h-13 px-6 text-base",
+  sm: "h-9 min-h-9 px-3.5 text-sm",
+  md: "h-11 min-h-11 px-4 text-sm",
+  lg: "h-12 min-h-12 px-5 text-[15px]",
 };
 
 const ICON_ONLY_SIZE_CLASSES: Readonly<Record<RekordlyButtonSize, string>> = {
@@ -47,9 +47,9 @@ const ICON_ONLY_SIZE_CLASSES: Readonly<Record<RekordlyButtonSize, string>> = {
 
 const VARIANT_CLASSES: Readonly<Record<RekordlyButtonVariant, string>> = {
   primary:
-    "bg-primary text-primary-foreground hover:bg-primary-hover shadow-xs border border-transparent",
+    "bg-primary text-primary-foreground hover:bg-primary-hover shadow-none border border-transparent",
   secondary:
-    "bg-secondary text-secondary-foreground hover:bg-secondary-hover shadow-xs border border-transparent",
+    "bg-secondary text-secondary-foreground hover:bg-secondary-hover shadow-none border border-transparent",
   tertiary:
     "bg-surface-muted text-foreground hover:bg-surface-tertiary border border-border",
   outline:
@@ -57,7 +57,7 @@ const VARIANT_CLASSES: Readonly<Record<RekordlyButtonVariant, string>> = {
   ghost:
     "bg-transparent text-foreground hover:bg-surface-muted border border-transparent shadow-none",
   danger:
-    "bg-danger text-danger-foreground hover:opacity-95 shadow-xs border border-transparent",
+    "bg-danger text-danger-foreground hover:opacity-95 shadow-none border border-transparent",
 };
 
 export function Button({
@@ -91,7 +91,7 @@ export function Button({
       aria-pressed={ariaPressed}
       data-testid={dataTestId}
       className={cn(
-        "inline-flex items-center justify-center gap-2.5 rounded-full font-sans font-medium transition-colors select-none",
+        "inline-flex items-center justify-center gap-2 rounded-xl font-sans font-semibold transition-colors select-none",
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring",
         "disabled:cursor-not-allowed disabled:opacity-60 data-[disabled=true]:cursor-not-allowed data-[disabled=true]:opacity-60",
         isIconOnly ? ICON_ONLY_SIZE_CLASSES[size] : SIZE_CLASSES[size],

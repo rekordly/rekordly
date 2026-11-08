@@ -18,7 +18,7 @@
 
   --surface: oklch(1 0 0);
   --surface-foreground: var(--foreground);
-  --surface-muted: oklch(0.968 0.011 146.5);
+  --surface-muted: oklch(0.975 0.008 146.5);
   --surface-secondary: var(--surface-muted);
   --surface-secondary-foreground: var(--foreground);
   --surface-tertiary: oklch(0.946 0.015 146.5);
@@ -32,7 +32,7 @@
   --secondary: oklch(0.7426 0.1745 58.65);
   --secondary-foreground: oklch(0.18 0.02 58.65);
   --secondary-hover: oklch(0.685 0.165 58.65);
-  --secondary-soft: color-mix(in oklab, var(--secondary) 16%, transparent);
+  --secondary-soft: color-mix(in oklab, var(--secondary) 10%, transparent);
 
   --muted: oklch(0.955 0.008 146.5);
   --muted-foreground: oklch(0.475 0.02 147.5);
@@ -57,7 +57,7 @@
   --default-foreground: var(--foreground);
 
   /* Form field tokens */
-  --field-background: var(--surface);
+  --field-background: oklch(0.992 0.004 146.5);
   --field-foreground: var(--foreground);
   --field-placeholder: var(--muted-foreground);
   --field-border: var(--border);
@@ -67,13 +67,13 @@
 
   /* Radius controls */
   --radius: 0.625rem;
-  --radius-control: 1rem;
-  --radius-card: 1.25rem;
+  --radius-control: 0.75rem;
+  --radius-card: 1rem;
   --radius-pill: 9999px;
   --field-radius: var(--radius-control);
 
   /* Shadows */
-  --shadow-control: 0 1px 2px 0 oklch(0.2 0.02 147 / 0.05);
+  --shadow-control: none;
   --shadow-card:
     0 4px 16px -2px oklch(0.2 0.03 147 / 0.06),
     0 2px 6px -1px oklch(0.2 0.03 147 / 0.04);
@@ -83,11 +83,11 @@
   /* Authentication surface spacing tokens */
   --auth-panel-padding-mobile: 1.5rem;
   --auth-panel-padding-desktop: 3rem;
-  --auth-form-max-width: 25rem;
+  --auth-form-max-width: 24rem;
   --auth-stack-gap: 1.5rem;
   --auth-field-gap: 1.125rem;
-  --control-height-md: 3.25rem;
-  --control-height-lg: 3.5rem;
+  --control-height-md: 2.75rem;
+  --control-height-lg: 3rem;
 }
 
 .dark,
@@ -142,7 +142,7 @@
   --default-foreground: var(--foreground);
 
   /* Form field tokens */
-  --field-background: var(--surface);
+  --field-background: oklch(0.205 0.008 146.5);
   --field-foreground: var(--foreground);
   --field-placeholder: var(--muted-foreground);
   --field-border: var(--border);
@@ -151,7 +151,7 @@
   --field-border-focus: var(--focus-ring);
 
   /* Shadows */
-  --shadow-control: 0 1px 2px 0 oklch(0 0 0 / 0.35);
+  --shadow-control: none;
   --shadow-card:
     0 8px 24px -4px oklch(0 0 0 / 0.55),
     0 0 0 1px oklch(1 0 0 / 0.06);
@@ -207,6 +207,14 @@
 html,
 body {
   min-height: 100%;
+}
+
+input,
+textarea,
+select,
+[data-slot="input"],
+[data-slot="input-group"] {
+  box-shadow: none !important;
 }
 
 body {
