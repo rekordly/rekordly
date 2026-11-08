@@ -98,14 +98,14 @@ export function ResetPasswordScreen({
     return (
       <AuthCard
         title="Reset link expired or invalid"
-        subtitle="For your security, password reset links are single-use and expire quickly."
+        subtitle="Request a new link to continue"
         alert={
           <Alert
             status="warning"
-            title="Reset proof cannot be used"
+            title="Link unavailable"
             description={
               apiError ??
-              "This verification link is invalid, expired, or has already been used. Request a new password reset link to continue."
+              "This link is invalid, expired, or has already been used."
             }
             data-testid="reset-password-invalid-proof"
           />
@@ -140,7 +140,7 @@ export function ResetPasswordScreen({
   return (
     <AuthCard
       title="Set a new password"
-      subtitle="Choose a strong password to secure your Rekordly account"
+      subtitle="Choose a password you do not use elsewhere"
       alert={
         apiError ? (
           <Alert
@@ -183,7 +183,7 @@ export function ResetPasswordScreen({
               label="New password"
               autoComplete="new-password"
               placeholder="At least 10 characters"
-              description={`Use between ${MIN_PASSWORD_UTF8_BYTES} and ${MAX_PASSWORD_UTF8_BYTES} UTF-8 bytes. Passphrases and password managers are supported.`}
+              description={`${MIN_PASSWORD_UTF8_BYTES}–${MAX_PASSWORD_UTF8_BYTES} characters. A passphrase works well.`}
               value={field.value}
               onChange={(value) => {
                 field.onChange(value);

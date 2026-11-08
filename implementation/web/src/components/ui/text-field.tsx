@@ -107,10 +107,10 @@ export function TextField({
           isInvalid={hasError}
           isDisabled={isDisabled}
           className={cn(
-            "flex h-11 min-h-11 w-full items-center rounded-xl border bg-[var(--field-background)] px-3.5 shadow-none transition-colors",
+            "flex h-11 min-h-11 w-full items-center rounded-xl border bg-[var(--field-background)] px-3.5 shadow-none outline-none transition-colors",
             hasError
-              ? "border-danger focus-within:border-danger focus-within:ring-2 focus-within:ring-danger/25"
-              : "border-border hover:border-primary/50 focus-within:border-primary focus-within:ring-2 focus-within:ring-focus-ring/25",
+              ? "border-danger focus-within:border-danger"
+              : "border-border hover:border-primary/45 focus-within:border-primary",
             isDisabled && "cursor-not-allowed bg-surface-muted opacity-65",
             isReadOnly && "bg-surface-muted",
           )}

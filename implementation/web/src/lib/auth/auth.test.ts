@@ -192,7 +192,7 @@ describe("Rekordly V2 Password Authentication Frontend Suite", () => {
       "utf8",
     );
     assert.match(emailEntrySource, /title="Verify your email"/);
-    assert.match(emailEntrySource, /Use a different email address/);
+    assert.match(emailEntrySource, /Change email/);
   });
 
   it("4. Successful password sign-in routes according to onboarding_status", async () => {

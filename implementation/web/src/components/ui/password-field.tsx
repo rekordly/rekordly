@@ -53,18 +53,12 @@ export function PasswordField({
           aria-label={isVisible ? "Hide password" : "Show password"}
           aria-pressed={isVisible}
           onClick={handleToggleVisibility}
-          className="inline-flex items-center gap-1 rounded-lg px-2 py-1 font-sans text-xs font-medium text-primary transition-colors hover:bg-primary-soft focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex size-7 items-center justify-center rounded-lg border-0 bg-transparent p-0 text-muted-foreground shadow-none transition-colors hover:text-foreground focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isVisible ? (
-            <>
-              <EyeOff className="size-3.5" aria-hidden="true" />
-              <span>Hide</span>
-            </>
+            <EyeOff className="size-4" aria-hidden="true" />
           ) : (
-            <>
-              <Eye className="size-3.5" aria-hidden="true" />
-              <span>Show</span>
-            </>
+            <Eye className="size-4" aria-hidden="true" />
           )}
         </button>
       }

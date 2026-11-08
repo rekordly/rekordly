@@ -111,20 +111,11 @@ export function EmailEntryScreen({
         title="Verify your email"
         subtitle={
           <>
-            Email verification is required to create your Rekordly account for{" "}
+            We sent a 6-digit code to{" "}
             <span className="font-semibold text-foreground">
               {registrationEmail || form.getValues("email")}
             </span>
-            .
           </>
-        }
-        alert={
-          <Alert
-            status="info"
-            title="Email verification required"
-            description="To protect your financial workspace, new accounts must verify email ownership with a single-use code before creating a password."
-            data-testid="registration-verification-notice"
-          />
         }
         footer={
           <Button
@@ -135,12 +126,12 @@ export function EmailEntryScreen({
             onPress={handleBackToEmail}
             data-testid="registration-change-email-button"
           >
-            Use a different email address
+            Change email
           </Button>
         }
       >
         <div
-          className="flex flex-col gap-4 rounded-2xl border border-border bg-surface p-5 shadow-2xs"
+          className="flex flex-col gap-3 rounded-xl bg-surface-muted p-4 shadow-none"
           data-testid="registration-otp-slot"
         >
           <div className="flex items-start gap-3">
@@ -149,17 +140,14 @@ export function EmailEntryScreen({
             </div>
             <div className="flex flex-col gap-1">
               <h2 className="font-heading text-sm font-semibold text-foreground">
-                Next step: 6-digit verification code
+                Enter your verification code
               </h2>
               <p className="font-sans text-xs leading-relaxed text-muted-foreground">
-                Once email OTP verification is active in this environment, you will enter the single-use verification code sent to your inbox and then set your password.
+                The code expires shortly. Check spam if it does not arrive.
               </p>
             </div>
           </div>
 
-          <div className="rounded-xl bg-surface-muted px-3.5 py-2.5 font-sans text-xs text-muted-foreground">
-            Already have a Rekordly password for a different address? Go back to switch emails or sign in with your password.
-          </div>
         </div>
       </AuthCard>
     );
@@ -168,7 +156,7 @@ export function EmailEntryScreen({
   return (
     <AuthCard
       title="Welcome"
-      subtitle="Sign in or create an account to continue"
+      subtitle="Enter your email to continue"
       alert={
         apiError ? (
           <Alert

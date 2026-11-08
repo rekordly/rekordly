@@ -38,14 +38,10 @@ const HERO_STATUS_MAP: Readonly<
 };
 
 const STATUS_CONTAINER_CLASSES: Readonly<Record<RekordlyAlertStatus, string>> = {
-  error:
-    "border-danger/30 bg-danger-soft text-foreground",
-  success:
-    "border-primary/30 bg-primary-soft text-foreground",
-  warning:
-    "border-secondary/35 bg-secondary-soft text-foreground",
-  info:
-    "border-border bg-surface-muted text-foreground",
+  error: "bg-danger-soft text-foreground",
+  success: "bg-primary-soft text-foreground",
+  warning: "bg-secondary-soft text-foreground",
+  info: "bg-surface-muted text-foreground",
 };
 
 const STATUS_ICON_CLASSES: Readonly<Record<RekordlyAlertStatus, string>> = {
@@ -86,7 +82,7 @@ export function Alert({
       aria-live={status === "error" ? "assertive" : "polite"}
       data-testid={dataTestId}
       className={cn(
-        "flex w-full items-start gap-3 rounded-2xl border p-3.5 text-left font-sans text-sm shadow-2xs",
+        "flex w-full items-start gap-2.5 rounded-xl border-0 p-3 text-left font-sans text-sm shadow-none outline-none",
         STATUS_CONTAINER_CLASSES[status],
         className,
       )}
@@ -113,7 +109,7 @@ export function Alert({
           type="button"
           aria-label="Dismiss message"
           onClick={onDismiss}
-          className="inline-flex size-6 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-surface hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring"
+          className="inline-flex size-6 shrink-0 items-center justify-center rounded-lg border-0 bg-transparent p-0 text-muted-foreground shadow-none transition-colors hover:text-foreground focus:outline-none"
         >
           <X className="size-3.5" aria-hidden="true" />
         </button>

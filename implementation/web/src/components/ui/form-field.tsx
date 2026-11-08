@@ -49,7 +49,7 @@ export function FormField({
           isInvalid={showError}
           isRequired={isRequired}
           className={cn(
-            "font-sans text-sm font-medium text-foreground select-none",
+            "font-sans text-[13px] font-medium text-foreground select-none",
             showError && "text-danger",
             isDisabled && "opacity-60",
           )}

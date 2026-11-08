@@ -75,7 +75,7 @@ export function ForgotPasswordScreen({
   return (
     <AuthCard
       title="Reset your password"
-      subtitle="Enter your email address to request password reset instructions"
+      subtitle="We’ll email you a secure reset link"
       alert={
         submittedMessage ? (
           <Alert
@@ -110,9 +110,6 @@ export function ForgotPasswordScreen({
     >
       {submittedMessage ? (
         <div className="flex flex-col gap-3">
-          <p className="font-sans text-xs leading-relaxed text-muted-foreground">
-            Don&apos;t forget to check your spam or promotions folder if the message does not appear within a few minutes.
-          </p>
           <Button
             variant="outline"
             size="md"
@@ -123,7 +120,7 @@ export function ForgotPasswordScreen({
             }}
             data-testid="forgot-password-try-another-button"
           >
-            Enter a different email
+            Try another email
           </Button>
         </div>
       ) : (
@@ -171,10 +168,10 @@ export function ForgotPasswordScreen({
             size="lg"
             fullWidth
             isLoading={isLoading}
-            loadingText="Sending instructions..."
+            loadingText="Sending..."
             data-testid="forgot-password-submit"
           >
-            Send reset instructions
+            Send reset link
           </LoadingButton>
         </form>
       )}

@@ -87,7 +87,7 @@ export function PasswordSignInScreen({
   return (
     <AuthCard
       title="Welcome back"
-      subtitle="Enter your password to sign in to Rekordly"
+      subtitle="Sign in with your password"
       alert={
         apiError ? (
           <Alert
@@ -121,7 +121,7 @@ export function PasswordSignInScreen({
                 setEmail(currentEmail);
               }
             }}
-            className="rounded-lg px-2 py-1 font-sans text-sm font-medium text-primary transition-colors hover:bg-primary-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
+            className="rounded-lg px-2 py-1 font-sans text-sm font-medium text-primary transition-colors hover:text-primary-hover focus:outline-none"
             data-testid="forgot-password-link"
           >
             Forgot password?
