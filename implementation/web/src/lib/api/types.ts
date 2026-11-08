@@ -3,6 +3,7 @@ export type ApiErrorCode =
   | "INVALID_PROOF"
   | "RATE_LIMITED"
   | "PASSWORD_ALREADY_SET"
+  | "GOOGLE_UNAVAILABLE"
   | "VALIDATION_ERROR"
   | "INVALID_REQUEST"
   | "INTERNAL_ERROR"
@@ -106,3 +107,29 @@ export interface AuthSessionResponseData {
   requires_password?: boolean;
   pre_auth_token?: string;
 }
+
+export interface GoogleStartResponseData {
+  authorization_url: string;
+}
+
+export interface GoogleCallbackParams {
+  code?: string;
+  state?: string;
+  error?: string;
+}
+
+export interface GoogleLinkRequiredResponseData {
+  requires_existing_account_proof: true;
+  link_proof_token: string;
+  return_to?: string;
+}
+
+export type GoogleCallbackResponseData =
+  | AuthSessionResponseData
+  | GoogleLinkRequiredResponseData;
+
+export interface GoogleLinkPasswordRequest {
+  link_proof_token: string;
+  password: string;
+}
+

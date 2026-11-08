@@ -10,6 +10,7 @@ export interface AuthFlowState {
   otpGeneration: number;
   magicLinkGeneration: number;
   preAuthToken: string | null;
+  googleLinkProofToken: string | null;
   returnTo: string | null;
   setEmail: (email: string) => void;
   setEmailContinuation: (email: string, continuation: EmailContinuationKind) => void;
@@ -18,6 +19,8 @@ export interface AuthFlowState {
   advanceMagicLinkGeneration: () => number;
   setPreAuthToken: (token: string | null) => void;
   clearPreAuthToken: () => void;
+  setGoogleLinkProofToken: (token: string | null) => void;
+  clearGoogleLinkProofToken: () => void;
   setReturnTo: (returnTo: string | null | undefined) => void;
   resetAuthFlow: () => void;
 }
@@ -29,6 +32,7 @@ const INITIAL_STATE = {
   otpGeneration: 0,
   magicLinkGeneration: 0,
   preAuthToken: null as string | null,
+  googleLinkProofToken: null as string | null,
   returnTo: null as string | null,
 };
 
@@ -82,6 +86,16 @@ export const useAuthFlowStore = create<AuthFlowState>((set, get) => ({
   clearPreAuthToken: () =>
     set({
       preAuthToken: null,
+    }),
+
+  setGoogleLinkProofToken: (token: string | null) =>
+    set({
+      googleLinkProofToken: token ? token.trim() : null,
+    }),
+
+  clearGoogleLinkProofToken: () =>
+    set({
+      googleLinkProofToken: null,
     }),
 
   setReturnTo: (returnTo: string | null | undefined) =>

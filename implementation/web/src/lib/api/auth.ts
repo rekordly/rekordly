@@ -4,6 +4,10 @@ import type {
   AuthSessionResponseData,
   EmailContinueRequest,
   EmailContinueResponseData,
+  GoogleCallbackParams,
+  GoogleCallbackResponseData,
+  GoogleLinkPasswordRequest,
+  GoogleStartResponseData,
   MagicLinkConfirmRequestPayload,
   MagicLinkInspectResponseData,
   MagicLinkRequestPayload,
@@ -29,6 +33,9 @@ export const AUTH_ENDPOINTS = {
   MAGIC_LINK_REQUEST: "/api/v1/auth/magic/request",
   MAGIC_LINK_INSPECT: "/api/v1/auth/magic/inspect",
   MAGIC_LINK_CONFIRM: "/api/v1/auth/magic/confirm",
+  GOOGLE_START: "/api/v1/auth/google/start",
+  GOOGLE_CALLBACK: "/api/v1/auth/google/callback",
+  GOOGLE_LINK_PASSWORD: "/api/v1/auth/google/link/password",
 } as const;
 
 export const NEUTRAL_PASSWORD_RESET_MESSAGE =
@@ -190,6 +197,48 @@ export function createAuthApi(client: RekordlyApiClient = apiClient) {
         },
         {
           sensitiveValues: [trimmedToken],
+        },
+      );
+    },
+
+    async startGoogleAuth(returnTo?: string | null): Promise<GoogleStartResponseData> {
+      const safeReturnTo = sanitizeReturnToPath(returnTo) ?? undefined;
+      return client.get<GoogleStartResponseData>(AUTH_ENDPOINTS.GOOGLE_START, {
+        params: safeReturnTo ? { return_to: safeReturnTo } : undefined,
+      });
+    },
+
+    async completeGoogleCallback(
+      params: GoogleCallbackParams,
+    ): Promise<GoogleCallbackResponseData> {
+      const trimmedCode = (params.code ?? "").trim();
+      const trimmedState = (params.state ?? "").trim();
+      const trimmedError = (params.error ?? "").trim();
+      const sensitiveValues = [trimmedCode, trimmedState].filter(
+        (val) => val.length > 0,
+      );
+      return client.get<GoogleCallbackResponseData>(AUTH_ENDPOINTS.GOOGLE_CALLBACK, {
+        params: {
+          ...(trimmedCode ? { code: trimmedCode } : {}),
+          ...(trimmedState ? { state: trimmedState } : {}),
+          ...(trimmedError ? { error: trimmedError } : {}),
+        },
+        sensitiveValues,
+      });
+    },
+
+    async linkGoogleWithPassword(
+      payload: GoogleLinkPasswordRequest,
+    ): Promise<AuthSessionResponseData> {
+      const trimmedProofToken = payload.link_proof_token.trim();
+      return client.post<GoogleLinkPasswordRequest, AuthSessionResponseData>(
+        AUTH_ENDPOINTS.GOOGLE_LINK_PASSWORD,
+        {
+          link_proof_token: trimmedProofToken,
+          password: payload.password,
+        },
+        {
+          sensitiveValues: [trimmedProofToken, payload.password],
         },
       );
     },

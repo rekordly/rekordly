@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 
+import { GoogleMarkIcon } from "@/components/auth/google-auth-screen";
 import { OtpVerificationScreen } from "@/components/auth/otp-verification-screen";
 import {
   Alert,
@@ -20,6 +21,7 @@ import {
   type AuthApiContract,
   createSubmissionGuard,
   handleEmailContinuationSubmit,
+  handleGoogleStart,
   handleOtpRequestSubmit,
 } from "@/lib/auth/controllers";
 import { AUTH_ROUTES } from "@/lib/auth/onboarding-routes";
@@ -53,7 +55,9 @@ export function EmailEntryScreen({
   );
   const [apiError, setApiError] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
+  const [isStartingGoogle, setIsStartingGoogle] = useState(false);
   const submissionGuardRef = useRef(createSubmissionGuard());
+  const googleGuardRef = useRef(createSubmissionGuard());
 
   useEffect(() => {
     if (initialReturnTo !== undefined) {
@@ -107,12 +111,33 @@ export function EmailEntryScreen({
     router.push(AUTH_ROUTES.LOGIN_PASSWORD);
   };
 
+  const handleContinueWithGoogle = async () => {
+    await googleGuardRef.current.run(async () => {
+      setApiError(null);
+      setIsStartingGoogle(true);
+      try {
+        await handleGoogleStart({
+          api,
+          returnTo: initialReturnTo,
+        });
+      } catch (error: unknown) {
+        if (error instanceof ApiClientError) {
+          setApiError(error.message);
+        } else {
+          setApiError("Google sign-in is not available right now.");
+        }
+      } finally {
+        setIsStartingGoogle(false);
+      }
+    });
+  };
+
   const handleBackToEmail = () => {
     setApiError(null);
     setView("email");
   };
 
-  const isLoading = isBusy || form.formState.isSubmitting;
+  const isLoading = isBusy || isStartingGoogle || form.formState.isSubmitting;
 
   if (view === "registration") {
     return (
@@ -195,6 +220,23 @@ export function EmailEntryScreen({
       <AuthDivider label="or" />
 
       <div className="flex flex-col gap-3">
+        <LoadingButton
+          type="button"
+          variant="outline"
+          size="md"
+          fullWidth
+          isDisabled={isLoading}
+          isLoading={isStartingGoogle}
+          loadingText="Connecting to Google..."
+          startIcon={<GoogleMarkIcon className="size-4" />}
+          onPress={() => {
+            void handleContinueWithGoogle();
+          }}
+          data-testid="continue-with-google-button"
+        >
+          Continue with Google
+        </LoadingButton>
+
         <Button
           variant="outline"
           size="md"

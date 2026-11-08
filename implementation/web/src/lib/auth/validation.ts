@@ -167,6 +167,12 @@ export const passwordSignInSchema = z.object({
 
 export type PasswordSignInFormValues = z.infer<typeof passwordSignInSchema>;
 
+export const googleLinkPasswordSchema = z.object({
+  password: signInPasswordFieldSchema,
+});
+
+export type GoogleLinkPasswordFormValues = z.infer<typeof googleLinkPasswordSchema>;
+
 export const forgotPasswordSchema = z.object({
   email: emailFieldSchema,
 });

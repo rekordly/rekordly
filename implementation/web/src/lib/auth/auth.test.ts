@@ -22,6 +22,9 @@ import {
   handleCreateFirstPasswordSubmit,
   handleEmailContinuationSubmit,
   handleForgotPasswordSubmit,
+  handleGoogleCallback,
+  handleGoogleLinkPasswordSubmit,
+  handleGoogleStart,
   handleMagicLinkConfirmSubmit,
   handleMagicLinkInspect,
   handleMagicLinkRequestSubmit,
@@ -798,4 +801,260 @@ describe("Rekordly V2 Authentication Frontend Functional Suite", () => {
     assert.equal(ids.errorId, "otp-code-error");
     assert.equal(ids.ariaDescribedBy, "otp-code-description otp-code-error");
   });
+
+  it("18. Google start requests authorization URL with allowlisted return_to and handles GOOGLE_UNAVAILABLE", async () => {
+    let redirectedTo: string | null = null;
+    const { client, requests } = createMockClient(() => ({
+      status: 200,
+      data: {
+        data: {
+          authorization_url:
+            "https://accounts.google.com/o/oauth2/v2/auth?client_id=test&state=abc",
+        },
+      },
+    }));
+    const api = createAuthApi(client);
+
+    const outcome = await handleGoogleStart({
+      api,
+      returnTo: "/reports",
+      onRedirect: (url) => {
+        redirectedTo = url;
+      },
+    });
+
+    assert.equal(
+      outcome.authorizationUrl,
+      "https://accounts.google.com/o/oauth2/v2/auth?client_id=test&state=abc",
+    );
+    assert.equal(redirectedTo, outcome.authorizationUrl);
+    assert.equal(useAuthFlowStore.getState().returnTo, "/reports");
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0]?.url, AUTH_ENDPOINTS.GOOGLE_START);
+    assert.equal(requests[0]?.params.return_to, "/reports");
+
+    // Unsafe external return_to is not forwarded
+    await handleGoogleStart({
+      api,
+      returnTo: "https://evil.example/steal",
+      onRedirect: () => {},
+    });
+    assert.equal(requests[1]?.params.return_to, undefined);
+
+    // 503 GOOGLE_UNAVAILABLE surfaces clean error code and message
+    const { client: unavailableClient } = createMockClient(() => ({
+      status: 503,
+      data: {
+        error: {
+          code: "GOOGLE_UNAVAILABLE",
+          message: "Google sign-in is not available right now.",
+        },
+      },
+    }));
+    const unavailableApi = createAuthApi(unavailableClient);
+
+    await assert.rejects(
+      () =>
+        handleGoogleStart({
+          api: unavailableApi,
+          onRedirect: () => {},
+        }),
+      (err: unknown) => {
+        assert.ok(err instanceof ApiClientError);
+        assert.equal(err.code, "GOOGLE_UNAVAILABLE");
+        assert.equal(err.message, "Google sign-in is not available right now.");
+        return true;
+      },
+    );
+  });
+
+  it("19. Google callback handles existing linked account sign-in and new Google account routing to /create-password", async () => {
+    // Case A: Existing linked account -> full session -> post-auth destination
+    let scrubbedA = false;
+    const { client: linkedClient, requests: linkedRequests } = createMockClient(
+      () => ({
+        status: 200,
+        data: {
+          data: {
+            user_id: 88,
+            onboarding_status: "activated",
+            expires_at: "2026-11-08T12:00:00Z",
+          },
+        },
+      }),
+    );
+    const linkedApi = createAuthApi(linkedClient);
+
+    const linkedOutcome = await handleGoogleCallback(
+      { code: "google-auth-code-1", state: "google-state-1" },
+      {
+        api: linkedApi,
+        returnTo: "/customers",
+        onParamsScrubbed: () => {
+          scrubbedA = true;
+        },
+      },
+    );
+
+    assert.equal(scrubbedA, true);
+    assert.equal(linkedOutcome.kind, "authenticated");
+    if (linkedOutcome.kind === "authenticated") {
+      assert.equal(linkedOutcome.requiresPassword, false);
+      assert.equal(linkedOutcome.destination, "/customers");
+    }
+    assert.equal(linkedRequests[0]?.url, AUTH_ENDPOINTS.GOOGLE_CALLBACK);
+    assert.equal(linkedRequests[0]?.params.code, "google-auth-code-1");
+    assert.equal(linkedRequests[0]?.params.state, "google-state-1");
+
+    // Case B: New Google account -> requires_password: true -> pre_auth_token in memory -> /create-password
+    const { client: newClient } = createMockClient(() => ({
+      status: 200,
+      data: {
+        data: {
+          user_id: 89,
+          onboarding_status: "identity_verified",
+          expires_at: "2026-11-08T12:00:00Z",
+          requires_password: true,
+          pre_auth_token: "google-preauth-secret-token-89",
+        },
+      },
+    }));
+    const newApi = createAuthApi(newClient);
+
+    const newOutcome = await handleGoogleCallback(
+      { code: "google-auth-code-2", state: "google-state-2" },
+      {
+        api: newApi,
+        onParamsScrubbed: () => {},
+      },
+    );
+
+    assert.equal(newOutcome.kind, "authenticated");
+    if (newOutcome.kind === "authenticated") {
+      assert.equal(newOutcome.requiresPassword, true);
+      assert.equal(newOutcome.destination, AUTH_ROUTES.CREATE_PASSWORD);
+    }
+    assert.equal(
+      useAuthFlowStore.getState().preAuthToken,
+      "google-preauth-secret-token-89",
+    );
+  });
+
+  it("20. Google callback handles matching-email account-link proof in memory and password confirmation", async () => {
+    const secretLinkToken = "google-link-proof-token-secret-12345";
+    const { client, requests } = createMockClient((req) => {
+      if (req.url === AUTH_ENDPOINTS.GOOGLE_CALLBACK) {
+        return {
+          status: 200,
+          data: {
+            data: {
+              requires_existing_account_proof: true,
+              link_proof_token: secretLinkToken,
+              return_to: "/settings",
+            },
+          },
+        };
+      }
+      return {
+        status: 200,
+        data: {
+          data: {
+            user_id: 90,
+            onboarding_status: "activated",
+            expires_at: "2026-11-08T12:00:00Z",
+          },
+        },
+      };
+    });
+    const api = createAuthApi(client);
+
+    const callbackOutcome = await handleGoogleCallback(
+      { code: "code-link", state: "state-link" },
+      {
+        api,
+        onParamsScrubbed: () => {},
+      },
+    );
+
+    assert.equal(callbackOutcome.kind, "link_required");
+    if (callbackOutcome.kind === "link_required") {
+      assert.equal(callbackOutcome.linkProofToken, secretLinkToken);
+      assert.equal(callbackOutcome.returnTo, "/settings");
+    }
+    assert.equal(
+      useAuthFlowStore.getState().googleLinkProofToken,
+      secretLinkToken,
+    );
+    assert.equal(useAuthFlowStore.getState().returnTo, "/settings");
+
+    // Confirming with existing password links account, clears in-memory link_proof_token, and routes to /settings
+    const linkOutcome = await handleGoogleLinkPasswordSubmit(
+      useAuthFlowStore.getState().googleLinkProofToken,
+      { password: "existing-account-password" },
+      { api },
+    );
+
+    assert.equal(linkOutcome.requiresPassword, false);
+    assert.equal(linkOutcome.destination, "/settings");
+    assert.equal(useAuthFlowStore.getState().googleLinkProofToken, null);
+    assert.equal(requests.length, 2);
+    assert.equal(requests[1]?.url, AUTH_ENDPOINTS.GOOGLE_LINK_PASSWORD);
+    assert.deepEqual(requests[1]?.data, {
+      link_proof_token: secretLinkToken,
+      password: "existing-account-password",
+    });
+  });
+
+  it("21. Google callback denied and invalid-callback states surface safe errors and scrub parameters", async () => {
+    let scrubbedDenied = false;
+    const { client, requests } = createMockClient(() => ({
+      status: 401,
+      data: {
+        error: {
+          code: "INVALID_PROOF",
+          message: "Google sign-in could not be completed.",
+        },
+      },
+    }));
+    const api = createAuthApi(client);
+
+    await assert.rejects(
+      () =>
+        handleGoogleCallback(
+          { error: "access_denied" },
+          {
+            api,
+            onParamsScrubbed: () => {
+              scrubbedDenied = true;
+            },
+          },
+        ),
+      (err: unknown) => {
+        assert.ok(err instanceof ApiClientError);
+        assert.equal(err.code, "INVALID_PROOF");
+        return true;
+      },
+    );
+    assert.equal(scrubbedDenied, true);
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0]?.params.error, "access_denied");
+
+    // Missing code/state rejects with INVALID_PROOF immediately
+    await assert.rejects(
+      () =>
+        handleGoogleCallback(
+          {},
+          {
+            api,
+            onParamsScrubbed: () => {},
+          },
+        ),
+      (err: unknown) => {
+        assert.ok(err instanceof ApiClientError);
+        assert.equal(err.code, "INVALID_PROOF");
+        return true;
+      },
+    );
+  });
 });
+

@@ -9,6 +9,9 @@ import { ApiClientError, normalizeUnknownError } from "../api/client.ts";
 import type {
   AuthSessionResponseData,
   EmailContinuationKind,
+  GoogleCallbackParams,
+  GoogleCallbackResponseData,
+  GoogleLinkRequiredResponseData,
   MagicLinkInspectResponseData,
   OtpPurpose,
 } from "../api/types.ts";
@@ -22,6 +25,7 @@ import type {
   CreatePasswordFormValues,
   EmailContinueFormValues,
   ForgotPasswordFormValues,
+  GoogleLinkPasswordFormValues,
   MagicLinkRequestFormValues,
   OtpVerifyFormValues,
   PasswordSignInFormValues,
@@ -407,3 +411,199 @@ export async function handleCreateFirstPasswordSubmit(
     throw normalizeUnknownError(error, [trimmedToken, values.password]);
   }
 }
+
+export interface GoogleStartOutcome {
+  authorizationUrl: string;
+}
+
+function isValidAuthorizationRedirectUrl(rawUrl: string): boolean {
+  const trimmed = rawUrl.trim();
+  if (!trimmed) {
+    return false;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+export async function handleGoogleStart(options?: {
+  api?: AuthApiContract;
+  returnTo?: string | null;
+  onRedirect?: (authorizationUrl: string) => void;
+}): Promise<GoogleStartOutcome> {
+  const api = options?.api ?? authApi;
+  const safeReturnTo = sanitizeReturnToPath(
+    options?.returnTo ?? useAuthFlowStore.getState().returnTo,
+  );
+  if (safeReturnTo) {
+    useAuthFlowStore.getState().setReturnTo(safeReturnTo);
+  }
+
+  try {
+    const response = await api.startGoogleAuth(safeReturnTo);
+    const authorizationUrl = (response.authorization_url ?? "").trim();
+    if (!isValidAuthorizationRedirectUrl(authorizationUrl)) {
+      throw new ApiClientError({
+        code: "GOOGLE_UNAVAILABLE",
+        message: "Google sign-in is not available right now.",
+        status: 503,
+      });
+    }
+
+    if (options?.onRedirect) {
+      options.onRedirect(authorizationUrl);
+    } else if (typeof window !== "undefined" && window.location?.assign) {
+      window.location.assign(authorizationUrl);
+    }
+
+    return {
+      authorizationUrl,
+    };
+  } catch (error: unknown) {
+    throw normalizeUnknownError(error);
+  }
+}
+
+function isGoogleLinkRequiredResponse(
+  response: GoogleCallbackResponseData,
+): response is GoogleLinkRequiredResponseData {
+  return (
+    "requires_existing_account_proof" in response &&
+    response.requires_existing_account_proof === true
+  );
+}
+
+export type GoogleCallbackOutcome =
+  | ({
+      kind: "authenticated";
+    } & AuthenticatedRouteOutcome)
+  | {
+      kind: "link_required";
+      linkProofToken: string;
+      returnTo: string | null;
+    };
+
+export async function handleGoogleCallback(
+  params: GoogleCallbackParams,
+  options?: {
+    api?: AuthApiContract;
+    returnTo?: string | null;
+    cleanPathname?: string;
+    onParamsScrubbed?: () => void;
+  },
+): Promise<GoogleCallbackOutcome> {
+  const trimmedCode = (params.code ?? "").trim();
+  const trimmedState = (params.state ?? "").trim();
+  const trimmedError = (params.error ?? "").trim();
+
+  if (options?.onParamsScrubbed) {
+    options.onParamsScrubbed();
+  } else {
+    scrubTokenFromBrowserUrl(options?.cleanPathname ?? AUTH_ROUTES.GOOGLE_CALLBACK);
+  }
+
+  const sensitiveValues = [trimmedCode, trimmedState].filter((val) => val.length > 0);
+  const api = options?.api ?? authApi;
+
+  if (trimmedError.length > 0) {
+    try {
+      await api.completeGoogleCallback({
+        error: trimmedError,
+      });
+    } catch {
+      // Backend clears flow cookie and returns 401 INVALID_PROOF on provider error.
+    }
+    throw new ApiClientError({
+      code: "INVALID_PROOF",
+      message: "Google sign-in was cancelled or could not be completed.",
+      status: 401,
+    });
+  }
+
+  if (!trimmedCode || !trimmedState) {
+    throw new ApiClientError({
+      code: "INVALID_PROOF",
+      message: "Google sign-in could not be completed. Please try again.",
+      status: 401,
+    });
+  }
+
+  try {
+    const response = await api.completeGoogleCallback({
+      code: trimmedCode,
+      state: trimmedState,
+    });
+
+    if (isGoogleLinkRequiredResponse(response)) {
+      const linkProofToken = (response.link_proof_token ?? "").trim();
+      if (!linkProofToken) {
+        throw new ApiClientError({
+          code: "INVALID_PROOF",
+          message: "Google sign-in could not be completed. Please try again.",
+          status: 401,
+        });
+      }
+      const store = useAuthFlowStore.getState();
+      store.setGoogleLinkProofToken(linkProofToken);
+      const safeReturnTo = sanitizeReturnToPath(
+        response.return_to ?? options?.returnTo ?? store.returnTo,
+      );
+      if (safeReturnTo) {
+        store.setReturnTo(safeReturnTo);
+      }
+      return {
+        kind: "link_required",
+        linkProofToken,
+        returnTo: safeReturnTo,
+      };
+    }
+
+    useAuthFlowStore.getState().clearGoogleLinkProofToken();
+    const sessionOutcome = resolveSessionOutcome(response, options?.returnTo);
+    return {
+      kind: "authenticated",
+      ...sessionOutcome,
+    };
+  } catch (error: unknown) {
+    throw normalizeUnknownError(error, sensitiveValues);
+  }
+}
+
+export async function handleGoogleLinkPasswordSubmit(
+  linkProofToken: string | null | undefined,
+  values: GoogleLinkPasswordFormValues,
+  options?: {
+    api?: AuthApiContract;
+    returnTo?: string | null;
+  },
+): Promise<AuthenticatedRouteOutcome> {
+  const trimmedProofToken = (linkProofToken ?? "").trim();
+  if (!trimmedProofToken) {
+    throw new ApiClientError({
+      code: "INVALID_PROOF",
+      message:
+        "Your Google account-linking session has expired. Please continue with Google again.",
+      status: 401,
+    });
+  }
+
+  const api = options?.api ?? authApi;
+  try {
+    const session = await api.linkGoogleWithPassword({
+      link_proof_token: trimmedProofToken,
+      password: values.password,
+    });
+    useAuthFlowStore.getState().clearGoogleLinkProofToken();
+    return resolveSessionOutcome(session, options?.returnTo);
+  } catch (error: unknown) {
+    const normalized = normalizeUnknownError(error, [trimmedProofToken, values.password]);
+    if (normalized.code === "INVALID_PROOF") {
+      useAuthFlowStore.getState().clearGoogleLinkProofToken();
+    }
+    throw normalized;
+  }
+}
+

@@ -20,6 +20,7 @@ const KNOWN_ERROR_CODES: ReadonlySet<ApiErrorCode> = new Set<ApiErrorCode>([
   "INVALID_PROOF",
   "RATE_LIMITED",
   "PASSWORD_ALREADY_SET",
+  "GOOGLE_UNAVAILABLE",
   "VALIDATION_ERROR",
   "INVALID_REQUEST",
   "INTERNAL_ERROR",
@@ -33,6 +34,7 @@ const DEFAULT_SAFE_MESSAGES: Readonly<Record<ApiErrorCode, string>> = {
     "This verification link or session proof is invalid, expired, or has already been used.",
   RATE_LIMITED: "Too many attempts. Please wait a few minutes and try again.",
   PASSWORD_ALREADY_SET: "A password is already configured for this account.",
+  GOOGLE_UNAVAILABLE: "Google sign-in is not available right now.",
   VALIDATION_ERROR: "Please check your input and try again.",
   INVALID_REQUEST: "Unable to process the request. Please check your details and try again.",
   INTERNAL_ERROR: "Unable to complete the request right now. Please try again.",
@@ -156,11 +158,13 @@ export function parseApiErrorEnvelope(
           ? "RATE_LIMITED"
           : status === 409
             ? "PASSWORD_ALREADY_SET"
-            : status === 422
-              ? "VALIDATION_ERROR"
-              : status === 400
-                ? "INVALID_REQUEST"
-                : "INTERNAL_ERROR";
+            : status === 503
+              ? "GOOGLE_UNAVAILABLE"
+              : status === 422
+                ? "VALIDATION_ERROR"
+                : status === 400
+                  ? "INVALID_REQUEST"
+                  : "INTERNAL_ERROR";
 
     const rawMessage =
       typeof envelope.error.message === "string" ? envelope.error.message : undefined;
@@ -186,6 +190,12 @@ export function parseApiErrorEnvelope(
     return {
       code: "PASSWORD_ALREADY_SET",
       message: DEFAULT_SAFE_MESSAGES.PASSWORD_ALREADY_SET,
+    };
+  }
+  if (status === 503) {
+    return {
+      code: "GOOGLE_UNAVAILABLE",
+      message: DEFAULT_SAFE_MESSAGES.GOOGLE_UNAVAILABLE,
     };
   }
   if (status === 422) {

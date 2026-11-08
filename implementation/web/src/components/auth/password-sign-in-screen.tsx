@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 
+import { GoogleMarkIcon } from "@/components/auth/google-auth-screen";
 import {
   Alert,
   AuthCard,
@@ -20,6 +21,7 @@ import { ApiClientError } from "@/lib/api/client";
 import {
   type AuthApiContract,
   createSubmissionGuard,
+  handleGoogleStart,
   handleMagicLinkRequestSubmit,
   handleOtpRequestSubmit,
   handlePasswordSignInSubmit,
@@ -49,6 +51,7 @@ export function PasswordSignInScreen({
   const [isBusy, setIsBusy] = useState(false);
   const [isStartingOtp, setIsStartingOtp] = useState(false);
   const [isStartingMagic, setIsStartingMagic] = useState(false);
+  const [isStartingGoogle, setIsStartingGoogle] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
   const submissionGuardRef = useRef(createSubmissionGuard());
   const alternateGuardRef = useRef(createSubmissionGuard());
@@ -154,10 +157,29 @@ export function PasswordSignInScreen({
     router.push(AUTH_ROUTES.LOGIN);
   };
 
+  const handleContinueWithGoogle = async () => {
+    await alternateGuardRef.current.run(async () => {
+      setApiError(null);
+      setIsStartingGoogle(true);
+      try {
+        await handleGoogleStart({ api });
+      } catch (error: unknown) {
+        if (error instanceof ApiClientError) {
+          setApiError(error.message);
+        } else {
+          setApiError("Google sign-in is not available right now.");
+        }
+      } finally {
+        setIsStartingGoogle(false);
+      }
+    });
+  };
+
   const isLoading =
     isBusy ||
     isStartingOtp ||
     isStartingMagic ||
+    isStartingGoogle ||
     isRedirecting ||
     form.formState.isSubmitting;
 
@@ -288,6 +310,23 @@ export function PasswordSignInScreen({
       <AuthDivider label="or" />
 
       <div className="flex flex-col gap-2.5">
+        <LoadingButton
+          type="button"
+          variant="outline"
+          size="md"
+          fullWidth
+          isDisabled={isLoading}
+          isLoading={isStartingGoogle}
+          loadingText="Connecting to Google..."
+          startIcon={<GoogleMarkIcon className="size-4" />}
+          onPress={() => {
+            void handleContinueWithGoogle();
+          }}
+          data-testid="signin-with-google-button"
+        >
+          Continue with Google
+        </LoadingButton>
+
         <LoadingButton
           type="button"
           variant="outline"
