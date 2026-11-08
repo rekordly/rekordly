@@ -1,2 +1,11 @@
-import { ModulePlaceholder } from "@/components/layout/module-placeholder";
-export default function SalesPage() { return <ModulePlaceholder title="Sales" description="Manage sales, invoices, receipts, and customer payments." permission="sales.view" actionLabel="New sale" actionHref="/sales/new" />; }
+import type { Metadata } from "next";
+import { FeatureScaffold } from "@/components/features";
+
+export const metadata: Metadata = {
+  title: "Sales & Orders — Rekordly",
+  description: "Record customer sales, manage orders, and track revenue.",
+};
+
+export default function SalesPage() {
+  return <FeatureScaffold featureId="sales" defaultSpace="business" />;
+}

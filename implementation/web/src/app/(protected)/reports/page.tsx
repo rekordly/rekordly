@@ -1,2 +1,11 @@
-import { ModulePlaceholder } from "@/components/layout/module-placeholder";
-export default function ReportsPage() { return <ModulePlaceholder title="Reports" description="Open plain-language summaries and accounting reports for the active space." permission="reports.view_basic" actionLabel="Choose report" />; }
+import type { Metadata } from "next";
+import { FeatureScaffold } from "@/components/features";
+
+export const metadata: Metadata = {
+  title: "Reports & Financial Statements — Rekordly",
+  description: "View financial summaries, cash flows, and export statements.",
+};
+
+export default function ReportsPage() {
+  return <FeatureScaffold featureId="reports-tax" defaultSpace="business" />;
+}

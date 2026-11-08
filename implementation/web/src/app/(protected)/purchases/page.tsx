@@ -1,2 +1,11 @@
-import { ModulePlaceholder } from "@/components/layout/module-placeholder";
-export default function PurchasesPage() { return <ModulePlaceholder title="Purchases" description="Track supplier requests, bills, receipts, and payments." permission="purchases.view" actionLabel="New purchase" />; }
+import type { Metadata } from "next";
+import { FeatureScaffold } from "@/components/features";
+
+export const metadata: Metadata = {
+  title: "Purchases & Vendor Bills — Rekordly",
+  description: "Track procurement, supplier bills, and vendor commitments.",
+};
+
+export default function PurchasesPage() {
+  return <FeatureScaffold featureId="purchases" defaultSpace="business" />;
+}
