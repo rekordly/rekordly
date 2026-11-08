@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { FeatureScaffold } from "@/components/features";
+import { TransactionList } from "@/components/features/transaction-list";
 
 export const metadata: Metadata = {
   title: "Transactions — Rekordly",
@@ -7,5 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function TransactionsPage() {
-  return <FeatureScaffold featureId="income-expenses" defaultSpace="business" />;
+  return <main className="mx-auto max-w-6xl p-5 sm:p-7"><TransactionList /></main>;
 }
