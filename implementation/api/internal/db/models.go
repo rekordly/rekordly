@@ -58,6 +58,26 @@ type AuthRateLimit struct {
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
+type Budget struct {
+	ID               int64              `json:"id"`
+	WorkspaceID      int64              `json:"workspace_id"`
+	Name             string             `json:"name"`
+	CategoryID       pgtype.Int8        `json:"category_id"`
+	Scope            string             `json:"scope"`
+	Period           string             `json:"period"`
+	AmountMinor      int64              `json:"amount_minor"`
+	Currency         string             `json:"currency"`
+	CurrencyExponent int32              `json:"currency_exponent"`
+	StartDate        pgtype.Date        `json:"start_date"`
+	EndDate          pgtype.Date        `json:"end_date"`
+	IsActive         bool               `json:"is_active"`
+	Notes            pgtype.Text        `json:"notes"`
+	IdempotencyKey   pgtype.Text        `json:"idempotency_key"`
+	CreatedByUserID  pgtype.Int8        `json:"created_by_user_id"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Category struct {
 	ID           int64              `json:"id"`
 	WorkspaceID  int64              `json:"workspace_id"`
@@ -378,6 +398,8 @@ type Purchase struct {
 	CreatedByUserID  pgtype.Int8        `json:"created_by_user_id"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	SubtotalMinor    pgtype.Int8        `json:"subtotal_minor"`
+	TaxAmountMinor   int64              `json:"tax_amount_minor"`
 }
 
 type Role struct {
@@ -407,6 +429,8 @@ type Sale struct {
 	CreatedByUserID  pgtype.Int8        `json:"created_by_user_id"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	SubtotalMinor    pgtype.Int8        `json:"subtotal_minor"`
+	TaxAmountMinor   int64              `json:"tax_amount_minor"`
 }
 
 type Session struct {
@@ -487,4 +511,12 @@ type Workspace struct {
 	AccountantSeatLimit int32              `json:"accountant_seat_limit"`
 	BusinessType        pgtype.Text        `json:"business_type"`
 	CountryCode         pgtype.Text        `json:"country_code"`
+}
+
+type WorkspaceTaxSetting struct {
+	WorkspaceID               int64              `json:"workspace_id"`
+	TaxIdentificationNumber   pgtype.Text        `json:"tax_identification_number"`
+	DefaultVatRateBasisPoints int32              `json:"default_vat_rate_basis_points"`
+	IsVatRegistered           bool               `json:"is_vat_registered"`
+	UpdatedAt                 pgtype.Timestamptz `json:"updated_at"`
 }

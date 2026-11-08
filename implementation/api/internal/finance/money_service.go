@@ -27,8 +27,9 @@ var (
 )
 
 type Service struct {
-	pool    *pgxpool.Pool
-	queries *db.Queries
+	pool             *pgxpool.Pool
+	queries          *db.Queries
+	planLimitChecker PlanLimitChecker
 }
 
 func NewService(pool *pgxpool.Pool) *Service {

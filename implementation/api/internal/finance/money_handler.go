@@ -42,6 +42,9 @@ func (h *Handler) RegisterRoutes(group *gin.RouterGroup) {
 
 	// Invoices and Customer Wallets
 	h.RegisterInvoicesWalletsRoutes(protected)
+
+	// Budgets and Tax-Readiness Reports
+	h.RegisterBudgetsTaxRoutes(protected)
 }
 
 // @Summary Create a money account
