@@ -92,3 +92,15 @@
 - Verification passed: live PostgreSQL `go test -count=1 ./...`, API and worker `go vet ./...`, `sqlc generate/vet`, migration replay, Docker rebuild and HTTP 200 liveness/readiness.
 - `AUTH-BE-06` is complete. All backend authentication tasks are complete; frontend integration and final E2E remain.
 
+## 8 November 2026 — Frontend session and route-access foundation
+
+- Added a cookie-aware shared session API using the existing Axios client and authoritative `GET /api/v1/me` endpoint.
+- Added Zod boundary validation for current-user, session and workspace payloads; inferred frontend types come from the schemas.
+- Added an in-memory Zustand session store. No session token or sensitive proof is persisted in browser storage.
+- Added a TanStack Query session query with bounded retry and explicit authenticated, unauthenticated and restoration states.
+- Added guest and protected route guards. Protected routes preserve a sanitized `return_to`; authenticated users visiting auth pages return to onboarding or their intended application route.
+- Added permission primitives, a dedicated 403 state, a protected application shell and `/dashboard` route.
+- Added a global 404 page for unknown routes.
+- Verification passed: ESLint, TypeScript, 21 authentication/session tests and the Next.js production build.
+- Runtime browser validation with the live Go API remains part of final frontend/backend E2E.
+

@@ -1,6 +1,6 @@
 "use client";
 
-import { Card as HeroCard, cn, Separator as HeroSeparator } from "@heroui/react";
+import { Card as HeroCard, cn } from "@heroui/react";
 import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -23,11 +23,11 @@ export function AuthDivider({ label = "or" }: { label?: string }) {
       role="separator"
       aria-orientation="horizontal"
     >
-      <HeroSeparator isDecorative className="h-px flex-1 bg-border" />
+      <span className="h-px flex-1 bg-border" aria-hidden="true" />
       <span className="font-sans text-xs font-medium tracking-wider text-muted-foreground uppercase">
         {label}
       </span>
-      <HeroSeparator isDecorative className="h-px flex-1 bg-border" />
+      <span className="h-px flex-1 bg-border" aria-hidden="true" />
     </div>
   );
 }

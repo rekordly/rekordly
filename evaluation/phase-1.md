@@ -169,3 +169,9 @@ Status: **complete and verified**. Proceed to `AUTH-BE-06` session lifecycle and
 ### Decision
 
 Status: **complete and verified**. Every backend authentication task (`AUTH-BE-01` through `AUTH-BE-06`) is complete. Proceed with frontend authentication integration and `AUTH-E2E-01`.
+- 8 November 2026 frontend session foundation: PASS — Zod-validated `/api/v1/me`, Zustand session state, TanStack Query restoration, protected/guest guards, safe return routing, 403/404 states and dashboard shell compile and pass 21 tests.
+- Financial safety: NOT APPLICABLE — no money or ledger behavior changed.
+- Memory/disk: PASS — one bounded session query, one retry, no token persistence and no new cache/storage layer.
+- Dependencies: PASS — no package was added; existing Axios, TanStack Query, Zustand and Zod dependencies were used.
+- Architecture: PASS — implementation remains under `/implementation/web`; the Go API remains the authoritative session and permission boundary.
+- Deferred: live browser E2E against the running API/database stack, including session expiry and post-login return routing.

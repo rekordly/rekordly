@@ -1,4 +1,6 @@
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
+
+import { GuestRoute, RouteLoading } from "@/components/auth/route-guards";
 
 export default function AuthLayout({
   children,
@@ -6,7 +8,9 @@ export default function AuthLayout({
   children: ReactNode;
 }>) {
   return (
-    <div className="flex min-h-dvh w-full flex-col overflow-x-hidden bg-background text-foreground md:h-dvh md:flex-row md:overflow-hidden">
+    <Suspense fallback={<RouteLoading />}>
+      <GuestRoute>
+        <div className="flex min-h-dvh w-full flex-col overflow-x-hidden bg-background text-foreground md:h-dvh md:flex-row md:overflow-hidden">
       <aside
         aria-label="Rekordly visual showcase"
         className="relative hidden overflow-hidden bg-[#063d18] text-white md:flex md:h-dvh md:w-1/2 md:shrink-0 md:flex-col"
@@ -30,6 +34,8 @@ export default function AuthLayout({
       <div className="flex min-h-dvh w-full flex-col overflow-x-hidden md:h-dvh md:min-h-0 md:w-1/2 md:overflow-hidden">
         {children}
       </div>
-    </div>
+        </div>
+      </GuestRoute>
+    </Suspense>
   );
 }

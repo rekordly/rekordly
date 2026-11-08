@@ -32,6 +32,7 @@ import {
   sanitizeReturnToPath,
 } from "./onboarding-routes.ts";
 import { useAuthFlowStore } from "./state.ts";
+import { currentUserSchema } from "./session-schema.ts";
 import {
   createPasswordSchema,
   getUtf8ByteLength,
@@ -702,5 +703,58 @@ describe("Rekordly V2 Password Authentication Frontend Suite", () => {
       passwordFieldSource,
       /aria-label=\{isVisible \? "Hide password" : "Show password"\}/,
     );
+  });
+
+  it("18. Session responses are validated at the API boundary", () => {
+    const valid = currentUserSchema.safeParse({
+      id: 1,
+      display_name: "Founder",
+      locale: "en-NG",
+      timezone: "Africa/Lagos",
+      onboarding_status: "activated",
+      session: {
+        id: 2,
+        kind: "full",
+        issued_at: "2026-11-08T08:00:00Z",
+        expires_at: "2026-11-15T08:00:00Z",
+      },
+      workspaces: [],
+    });
+    assert.equal(valid.success, true);
+    assert.equal(currentUserSchema.safeParse({ id: "1" }).success, false);
+  });
+
+  it("19. Protected routes preserve a safe return destination", () => {
+    const guardSource = readFileSync(
+      join(process.cwd(), "src/components/auth/route-guards.tsx"),
+      "utf8",
+    );
+    assert.match(guardSource, /return_to=\$\{encodeURIComponent\(returnTo\)\}/);
+    assert.match(guardSource, /router\.replace/);
+    assert.equal(sanitizeReturnToPath("/dashboard?view=business"), "/dashboard?view=business");
+    assert.equal(sanitizeReturnToPath("https://evil.example/dashboard"), null);
+  });
+
+  it("20. Guest routes and permission failures have explicit destinations", () => {
+    const guardSource = readFileSync(
+      join(process.cwd(), "src/components/auth/route-guards.tsx"),
+      "utf8",
+    );
+    const permissionSource = readFileSync(
+      join(process.cwd(), "src/components/auth/permission.tsx"),
+      "utf8",
+    );
+    assert.match(guardSource, /resolvePostAuthDestination/);
+    assert.match(permissionSource, /Permission required/);
+    assert.match(permissionSource, /403/);
+  });
+
+  it("21. Unknown routes have a dedicated 404 page", () => {
+    const notFoundSource = readFileSync(
+      join(process.cwd(), "src/app/not-found.tsx"),
+      "utf8",
+    );
+    assert.match(notFoundSource, /Page not found/);
+    assert.match(notFoundSource, /404/);
   });
 });
