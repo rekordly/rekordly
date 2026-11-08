@@ -13,6 +13,7 @@ import (
 	"github.com/rekordly/rekordly-api/internal/auth"
 	"github.com/rekordly/rekordly-api/internal/config"
 	"github.com/rekordly/rekordly-api/internal/database"
+	"github.com/rekordly/rekordly-api/internal/finance"
 	"github.com/rekordly/rekordly-api/internal/server"
 )
 
@@ -47,10 +48,11 @@ func main() {
 		os.Exit(1)
 	}
 	authHandler := auth.NewHandler(authService, googleOIDC, cfg.Environment == "production")
+	financeHandler := finance.NewHandler(finance.NewService(pool))
 
 	httpServer := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           server.NewRouter(cfg, logger, pool.Ping, authHandler),
+		Handler:           server.NewRouter(cfg, logger, pool.Ping, authHandler, financeHandler),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      15 * time.Second,
