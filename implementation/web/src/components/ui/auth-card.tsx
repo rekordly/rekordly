@@ -41,28 +41,28 @@ export function AuthCard({
   className,
 }: AuthCardProps) {
   return (
-    <div className="flex min-h-dvh w-full flex-col justify-between px-5 py-6 sm:px-8 md:px-10 md:py-8">
+    <div className="flex min-h-dvh w-full flex-col px-5 py-5 sm:px-8 md:px-10 md:py-7">
       {/* Top bar with Rekordly branding and theme toggle */}
       <header className="mx-auto flex w-full max-w-md items-center justify-between gap-4">
         <Link
           href="/login"
           aria-label="Rekordly home"
-          className="inline-flex items-center gap-2 rounded-lg py-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
+          className="inline-flex items-center gap-2 rounded-lg py-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring md:hidden"
         >
           <Image
             src="/rekordly-logo.svg"
             alt="Rekordly"
-            width={136}
-            height={33}
+            width={124}
+            height={30}
             priority
-            className="h-8 w-auto object-contain"
+            className="h-7 w-auto object-contain"
           />
         </Link>
         <ThemeToggle />
       </header>
 
       {/* Main compact authentication surface */}
-      <main className="mx-auto my-auto flex w-full max-w-[var(--auth-form-max-width)] flex-col py-6 sm:py-8">
+      <main className="mx-auto flex w-full max-w-[var(--auth-form-max-width)] flex-1 flex-col justify-center py-10 sm:py-12">
         <HeroCard.Root
           variant="transparent"
           className={cn(
@@ -70,8 +70,8 @@ export function AuthCard({
             className,
           )}
         >
-          <HeroCard.Header className="mb-6 flex flex-col items-center gap-1.5 p-0 text-center">
-            <HeroCard.Title className="font-heading text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+          <HeroCard.Header className="mb-7 flex flex-col items-start gap-1.5 p-0 text-left">
+            <HeroCard.Title className="font-heading text-2xl font-bold text-foreground sm:text-[1.75rem]">
               {title}
             </HeroCard.Title>
             {subtitle ? (
@@ -97,7 +97,7 @@ export function AuthCard({
 
       {/* Subtle compliance / trust footer */}
       <footer className="mx-auto flex w-full max-w-md items-center justify-center gap-4 text-center font-sans text-xs text-muted-foreground">
-        <span>Rekordly — Trustworthy books for your business & personal money</span>
+        <span>Secure bookkeeping for business and personal money.</span>
       </footer>
     </div>
   );

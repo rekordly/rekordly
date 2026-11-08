@@ -107,7 +107,7 @@ export function TextField({
           isInvalid={hasError}
           isDisabled={isDisabled}
           className={cn(
-            "flex h-13 min-h-13 w-full items-center rounded-2xl border bg-surface px-3.5 shadow-xs transition-colors",
+            "flex h-11 min-h-11 w-full items-center rounded-xl border bg-[var(--field-background)] px-3.5 shadow-none transition-colors",
             hasError
               ? "border-danger focus-within:border-danger focus-within:ring-2 focus-within:ring-danger/25"
               : "border-border hover:border-primary/50 focus-within:border-primary focus-within:ring-2 focus-within:ring-focus-ring/25",
@@ -142,7 +142,7 @@ export function TextField({
             onBlur={onBlur}
             data-testid={dataTestId}
             className={cn(
-              "h-full w-full flex-1 border-0 bg-transparent px-0.5 font-sans text-sm text-foreground placeholder:text-muted-foreground",
+              "h-full w-full flex-1 border-0 bg-transparent px-0.5 font-sans text-sm text-foreground shadow-none placeholder:text-muted-foreground",
               "focus:ring-0 focus:outline-none",
               "disabled:cursor-not-allowed",
             )}

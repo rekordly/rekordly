@@ -25,10 +25,10 @@ export function ThemeToggle() {
       isIconOnly
       aria-label={isDark ? "Switch to light theme" : "Switch to dark theme"}
       onPress={() => setTheme(isDark ? "light" : "dark")}
-      className="border-border bg-surface text-foreground shadow-2xs"
+      className="border-border bg-surface text-foreground shadow-none"
     >
       {isDark ? (
-        <Sun className="size-4 text-secondary" aria-hidden="true" />
+        <Sun className="size-4 text-primary" aria-hidden="true" />
       ) : (
         <Moon className="size-4 text-primary" aria-hidden="true" />
       )}

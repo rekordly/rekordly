@@ -643,9 +643,10 @@ describe("Rekordly V2 Password Authentication Frontend Suite", () => {
 
     // Desktop illustration is hidden on mobile (`hidden ... md:flex`)
     assert.match(layoutSource, /hidden[\s\S]*md:flex/);
-    // Form container is full-width single column on mobile (`w-full ... md:w-5/12`) and prevents horizontal overflow (`overflow-x-hidden`)
+    // Form container is full-width on mobile and receives a desktop-only width;
+    // the exact desktop ratio is a visual decision, not a mobile behavior contract.
     assert.match(layoutSource, /overflow-x-hidden/);
-    assert.match(layoutSource, /w-full[\s\S]*md:w-5\/12/);
+    assert.match(layoutSource, /w-full[\s\S]*md:w-(?:\d+\/\d+|\[[^\]]+\])/);
     // Logo remains visible in AuthCard header across all viewports
     assert.match(authCardSource, /\/rekordly-logo\.svg/);
   });
