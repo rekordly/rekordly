@@ -30,12 +30,22 @@ export const authorizedWorkspaceSchema = z.object({
   permissions: z.array(z.string()).optional(),
 });
 
+const onboardingStateSchema = z.object({
+  flow_version: z.number().int().positive(),
+  current_step: z.string().min(1),
+  selected_roles: z.array(z.string()),
+  space_choice: z.string().optional(),
+  preferences: z.record(z.string(), z.unknown()),
+  completed: z.boolean(),
+});
+
 export const currentUserSchema = z.object({
   id: z.number().int().positive(),
   display_name: z.string().optional(),
   locale: z.string().min(1),
   timezone: z.string().min(1),
   onboarding_status: onboardingStatusSchema,
+  onboarding: onboardingStateSchema.optional(),
   session: currentSessionSchema,
   workspaces: z.array(authorizedWorkspaceSchema),
   permissions: z.array(z.string()).optional(),

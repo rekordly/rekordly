@@ -368,6 +368,24 @@ export class RekordlyApiClient {
       throw normalizeUnknownError(error, options?.sensitiveValues ?? []);
     }
   }
+
+  public async put<TRequest, TResponseData>(
+    path: string,
+    body: TRequest,
+    options?: ApiRequestOptions,
+  ): Promise<TResponseData> {
+    const config = buildAuthRequestConfig(options);
+    try {
+      const response: AxiosResponse<ApiSuccessEnvelope<TResponseData>> =
+        await this.instance.put<ApiSuccessEnvelope<TResponseData>>(path, body, config);
+      if (!isRecord(response.data) || !("data" in response.data)) {
+        throw new ApiClientError({ code: "INTERNAL_ERROR", message: DEFAULT_SAFE_MESSAGES.INTERNAL_ERROR, status: response.status });
+      }
+      return response.data.data;
+    } catch (error: unknown) {
+      throw normalizeUnknownError(error, options?.sensitiveValues ?? []);
+    }
+  }
 }
 
 export const apiClient = new RekordlyApiClient();
