@@ -6,9 +6,9 @@
     "dev": "next dev -H 0.0.0.0",
     "build": "next build",
     "start": "next start -H 0.0.0.0",
-    "lint": "eslint src",
+    "lint": "eslint src tests",
     "type-check": "tsc --noEmit",
-    "test": "npm run type-check && node --test src/lib/auth.test.ts src/lib/feature-registry.test.ts"
+    "test": "npm run type-check && node --test tests/auth.test.ts tests/feature-registry.test.ts tests/session.test.ts"
   },
   "dependencies": {
     "@heroui/react": "3.2.7",

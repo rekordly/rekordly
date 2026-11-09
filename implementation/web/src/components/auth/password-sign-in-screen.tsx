@@ -1,46 +1,52 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowLeft } from "@phosphor-icons/react";
+import { ArrowLeft, ArrowRight, EnvelopeSimple, LockKey, Password } from "@phosphor-icons/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 
+import { OtpCard } from "@/components/auth/otp-card";
+import { Alert } from "@/components/ui/alert";
+import { AppButton } from "@/components/ui/app-button";
+import { AppInput } from "@/components/ui/app-input";
+import { AuthCard, AuthDivider } from "@/components/ui/auth-card";
+import { GoogleLogo } from "@/components/ui/google-logo";
 import {
-  Alert,
-  AuthCard,
-  Button,
-  LoadingButton,
-  PasswordField,
-  TextField,
-} from "@/components/ui";
-import { ApiClientError } from "@/lib/api";
+  authApi,
+  NEUTRAL_MAGIC_LINK_MESSAGE,
+  AUTH_ROUTES,
+} from "@/lib/auth";
+import { ApiClientError } from "@/lib/errors";
 import {
   type AuthApiContract,
   createSubmissionGuard,
   handlePasswordSignInSubmit,
-} from "@/lib/auth-flow";
-import { AUTH_ROUTES } from "@/lib/auth-routes";
-import { useAuthFlowStore } from "@/stores/auth-flow-store";
+  startGoogleSignIn,
+  useAuthStore,
+} from "@/stores/auth-store";
 import {
   type PasswordSignInFormValues,
   passwordSignInSchema,
-} from "@/lib/validation";
+} from "@/lib/schemas/auth.schemas";
 
 export interface PasswordSignInScreenProps {
   initialEmail?: string;
   api?: AuthApiContract;
 }
 
+type View = "password" | "magic-sent" | "otp";
+
 export function PasswordSignInScreen({
   initialEmail,
   api,
 }: PasswordSignInScreenProps) {
   const router = useRouter();
-  const storedEmail = useAuthFlowStore((state) => state.email);
-  const setEmail = useAuthFlowStore((state) => state.setEmail);
+  const storedEmail = useAuthStore((state) => state.email);
+  const setEmail = useAuthStore((state) => state.setEmail);
 
+  const [view, setView] = useState<View>("password");
   const [apiError, setApiError] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
@@ -74,6 +80,27 @@ export function PasswordSignInScreen({
     });
   };
 
+  /** Magic link and one-time code only need a valid email, not the password field. */
+  const sendEmailProof = async (send: (email: string) => Promise<void>, nextView: View) => {
+    if (!(await form.trigger("email"))) return;
+    await submissionGuardRef.current.run(async () => {
+      setApiError(null);
+      setIsBusy(true);
+      try {
+        const email = form.getValues("email").trim();
+        setEmail(email);
+        await send(email);
+        setView(nextView);
+      } catch (error: unknown) {
+        setApiError(
+          error instanceof ApiClientError ? error.message : "Unable to send that right now. Please try again.",
+        );
+      } finally {
+        setIsBusy(false);
+      }
+    });
+  };
+
   const handleBackToEmail = () => {
     const currentEmail = form.getValues("email").trim();
     if (currentEmail) {
@@ -83,6 +110,46 @@ export function PasswordSignInScreen({
   };
 
   const isLoading = isBusy || isRedirecting || form.formState.isSubmitting;
+
+  if (view === "otp") {
+    return (
+      <OtpCard
+        email={form.getValues("email").trim()}
+        purpose="sign_in"
+        title="Enter your code"
+        backLabel="Back"
+        onBack={() => setView("password")}
+      />
+    );
+  }
+
+  if (view === "magic-sent") {
+    return (
+      <AuthCard
+        title="Check your email"
+        subtitle={NEUTRAL_MAGIC_LINK_MESSAGE}
+        footer={
+          <AppButton
+            variant="ghost"
+            fullWidth
+            startContent={<ArrowLeft />}
+            label="Back to sign in"
+            onPress={() => setView("password")}
+            data-testid="magic-link-back-button"
+          />
+        }
+      >
+        <div className="flex items-start gap-3 rounded-2xl bg-surface-secondary p-4">
+          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary">
+            <EnvelopeSimple size={20} aria-hidden="true" />
+          </span>
+          <p className="text-[13px] text-muted">
+            Open the link on this device. It works once and expires shortly. Check spam if it does not arrive.
+          </p>
+        </div>
+      </AuthCard>
+    );
+  }
 
   return (
     <AuthCard
@@ -99,35 +166,6 @@ export function PasswordSignInScreen({
           />
         ) : null
       }
-      footer={
-        <div className="flex w-full items-center justify-between gap-4 pt-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            isDisabled={isLoading}
-            startIcon={<ArrowLeft className="size-4" />}
-            onPress={handleBackToEmail}
-            className="px-2.5"
-            data-testid="password-back-button"
-          >
-            Back
-          </Button>
-
-          <Link
-            href={AUTH_ROUTES.FORGOT_PASSWORD}
-            onClick={() => {
-              const currentEmail = form.getValues("email").trim();
-              if (currentEmail) {
-                setEmail(currentEmail);
-              }
-            }}
-            className="rounded-lg px-2 py-1 font-sans text-sm font-medium text-primary transition-colors hover:text-primary-hover focus:outline-none"
-            data-testid="forgot-password-link"
-          >
-            Forgot password?
-          </Link>
-        </div>
-      }
     >
       <form
         onSubmit={(event) => {
@@ -141,7 +179,7 @@ export function PasswordSignInScreen({
           control={form.control}
           name="email"
           render={({ field, fieldState }) => (
-            <TextField
+            <AppInput
               id="signin-email"
               name={field.name}
               label="Email"
@@ -149,15 +187,16 @@ export function PasswordSignInScreen({
               inputMode="email"
               autoComplete="username"
               placeholder="you@example.com"
+              startContent={<EnvelopeSimple />}
               value={field.value}
-              onChange={(value) => {
-                field.onChange(value);
+              onChange={(event) => {
+                field.onChange(event.target.value);
                 if (apiError) {
                   setApiError(null);
                 }
               }}
               onBlur={field.onBlur}
-              inputRef={field.ref}
+              ref={field.ref}
               isDisabled={isLoading}
               isRequired
               isInvalid={Boolean(fieldState.error)}
@@ -171,21 +210,23 @@ export function PasswordSignInScreen({
           control={form.control}
           name="password"
           render={({ field, fieldState }) => (
-            <PasswordField
+            <AppInput
+              type="password"
               id="signin-password"
               name={field.name}
               label="Password"
               autoComplete="current-password"
               placeholder="Enter your password"
+              startContent={<LockKey />}
               value={field.value}
-              onChange={(value) => {
-                field.onChange(value);
+              onChange={(event) => {
+                field.onChange(event.target.value);
                 if (apiError) {
                   setApiError(null);
                 }
               }}
               onBlur={field.onBlur}
-              inputRef={field.ref}
+              ref={field.ref}
               isDisabled={isLoading}
               isRequired
               isInvalid={Boolean(fieldState.error)}
@@ -195,18 +236,79 @@ export function PasswordSignInScreen({
           )}
         />
 
-        <LoadingButton
+        <AppButton
           type="submit"
-          variant="primary"
-          size="lg"
+          size="md"
           fullWidth
           isLoading={isLoading}
-          loadingText={isRedirecting ? "Redirecting..." : "Signing in..."}
+          endContent={<ArrowRight weight="bold" />}
           data-testid="password-signin-submit"
         >
-          Sign in
-        </LoadingButton>
+          {isLoading ? (isRedirecting ? "Redirecting..." : "Signing in...") : "Sign in"}
+        </AppButton>
       </form>
+
+      <div className="flex items-center justify-between gap-4">
+        <AppButton
+          variant="ghost"
+          size="sm"
+          isDisabled={isLoading}
+          startContent={<ArrowLeft />}
+          onPress={handleBackToEmail}
+          label="Back"
+          data-testid="password-back-button"
+        />
+        <Link
+          href={AUTH_ROUTES.FORGOT_PASSWORD}
+          onClick={() => {
+            const currentEmail = form.getValues("email").trim();
+            if (currentEmail) {
+              setEmail(currentEmail);
+            }
+          }}
+          className="text-[13px] font-medium text-link hover:underline"
+          data-testid="forgot-password-link"
+        >
+          Forgot password?
+        </Link>
+      </div>
+
+      <AuthDivider label="or" />
+
+      <div className="flex flex-col gap-3">
+        <AppButton
+          variant="outline"
+          fullWidth
+          isDisabled={isLoading}
+          startContent={<Password />}
+          label="Sign in with a code"
+          onPress={() => void sendEmailProof((email) => authApi.requestOtp(email, "sign_in"), "otp")}
+          data-testid="signin-otp-button"
+        />
+        <AppButton
+          variant="outline"
+          fullWidth
+          isDisabled={isLoading}
+          startContent={<EnvelopeSimple />}
+          label="Email me a magic link"
+          onPress={() =>
+            void sendEmailProof(
+              (email) => authApi.requestMagicLink(email, useAuthStore.getState().returnTo),
+              "magic-sent",
+            )
+          }
+          data-testid="magic-link-button"
+        />
+        <AppButton
+          variant="outline"
+          fullWidth
+          isDisabled={isLoading}
+          startContent={<GoogleLogo />}
+          label="Continue with Google"
+          onPress={() => void startGoogleSignIn(setApiError)}
+          data-testid="password-google-button"
+        />
+      </div>
     </AuthCard>
   );
 }

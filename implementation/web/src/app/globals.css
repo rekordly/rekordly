@@ -1,235 +1,394 @@
+/* Tailwind CSS v4 + HeroUI v3 */
 @import "tailwindcss";
 @import "@heroui/styles";
 
-@custom-variant dark (&:is(.dark, [data-theme="dark"], .dark *, [data-theme="dark"] *));
+/* Class-based dark mode: next-themes sets `.dark` on <html> (HeroUI also honours data-theme). */
+@custom-variant dark (&:where(.dark, .dark *, [data-theme="dark"], [data-theme="dark"] *));
 
+/* -------------------------------------------------------------------------- */
+/* Rekordly primitive palette. Approved brand: green #009e10, orange #fa8901. */
+/* Application code must use the semantic tokens below, never these scales    */
+/* or raw hex values.                                                         */
+/* -------------------------------------------------------------------------- */
+:root {
+  --rk-primary-50: #e8f6ea;
+  --rk-primary-100: #c6e9ca;
+  --rk-primary-200: #97d89e;
+  --rk-primary-300: #5dc267;
+  --rk-primary-400: #27ad33;
+  --rk-primary-500: #009e10;
+  --rk-primary-600: #008a0e;
+  --rk-primary-700: #006f0b;
+  --rk-primary-800: #0a5219;
+  --rk-primary-900: #063d18;
+
+  --rk-secondary-50: #fff4e6;
+  --rk-secondary-100: #ffe2bf;
+  --rk-secondary-200: #fdc98a;
+  --rk-secondary-300: #fcb052;
+  --rk-secondary-400: #fb9c26;
+  --rk-secondary-500: #fa8901;
+  --rk-secondary-600: #dc7801;
+  --rk-secondary-700: #b06001;
+  --rk-secondary-800: #844801;
+  --rk-secondary-900: #5c3201;
+
+  --rk-gray-default: #fdfdfd;
+  --rk-gray-subtle: #f4f4f4;
+  --rk-gray-border: #d1d1d1;
+  --rk-gray-border-disabled: #eeeeee;
+  --rk-gray-title: #353535;
+  --rk-gray-body: #6f6f6f;
+  --rk-gray-disabled-text: #a4a4a4;
+
+  --rk-error: #e80000;
+  --rk-error-light: #ff5454;
+}
+
+/* ------------------------------- Light ----------------------------------- */
 :root,
 .light,
 [data-theme="light"] {
   color-scheme: light;
+  --radius: 0.625rem;
 
-  /* Rekordly V2 Semantic Color Tokens (OKLCH mapped from approved V1 brand palette)
-   * Primary green:   #009e10 -> oklch(0.6054 0.1977 143.2)
-   * Secondary orange:#fa8901 -> oklch(0.7426 0.1745 58.65)
-   * Light background:#FAFFFB -> oklch(0.9969 0.0067 148.5)
-   */
-  --background: oklch(0.9969 0.0067 148.5);
-  --foreground: oklch(0.205 0.028 147.5);
-
-  --surface: oklch(1 0 0);
+  --background: #f5f5f5;
+  --foreground: var(--rk-gray-title);
+  --surface: #ffffff;
   --surface-foreground: var(--foreground);
-  --surface-muted: oklch(0.975 0.008 146.5);
-  --surface-secondary: var(--surface-muted);
+  --surface-secondary: #f7f7f6;
   --surface-secondary-foreground: var(--foreground);
-  --surface-tertiary: oklch(0.946 0.015 146.5);
+  --surface-tertiary: #f3f3f2;
   --surface-tertiary-foreground: var(--foreground);
-
-  --primary: oklch(0.6054 0.1977 143.2);
-  --primary-foreground: oklch(1 0 0);
-  --primary-hover: oklch(0.548 0.182 143.2);
-  --primary-soft: color-mix(in oklab, var(--primary) 13%, transparent);
-
-  --secondary: oklch(0.7426 0.1745 58.65);
-  --secondary-foreground: oklch(0.18 0.02 58.65);
-  --secondary-hover: oklch(0.685 0.165 58.65);
-  --secondary-soft: color-mix(in oklab, var(--secondary) 10%, transparent);
-
-  --muted: oklch(0.955 0.008 146.5);
-  --muted-foreground: oklch(0.475 0.02 147.5);
-
-  --border: oklch(0.895 0.012 146.5);
-  --separator: oklch(0.915 0.01 146.5);
-
-  --danger: oklch(0.585 0.22 26.5);
-  --danger-foreground: oklch(0.99 0 0);
-  --success: var(--primary);
-  --success-foreground: oklch(1 0 0);
-  --warning: var(--secondary);
-  --warning-foreground: oklch(0.19 0.025 58.65);
-
-  --focus-ring: var(--primary);
-  --focus: var(--focus-ring);
-
-  /* HeroUI v3 token bridge */
-  --accent: var(--primary);
-  --accent-foreground: var(--primary-foreground);
-  --default: var(--surface-muted);
+  --overlay: #ffffff;
+  --overlay-foreground: var(--foreground);
+  --backdrop: rgb(24 23 21 / 32%);
+  --muted: var(--rk-gray-body);
+  --muted-foreground: var(--rk-gray-body);
+  --default: var(--rk-gray-subtle);
   --default-foreground: var(--foreground);
 
-  /* Form field tokens */
-  --field-background: oklch(0.992 0.004 146.5);
+  /* HeroUI paints its primary actions from --accent, so accent is Rekordly green. */
+  --accent: var(--rk-primary-500);
+  --accent-foreground: #ffffff;
+  --primary: var(--rk-primary-500);
+  --primary-foreground: #ffffff;
+  --primary-hover: var(--rk-primary-600);
+  --primary-soft: var(--rk-primary-50);
+  --primary-soft-foreground: var(--rk-primary-700);
+  --secondary: var(--rk-secondary-500);
+  --secondary-foreground: var(--rk-secondary-900);
+  --secondary-hover: var(--rk-secondary-600);
+  --secondary-soft: var(--rk-secondary-50);
+  --secondary-soft-foreground: var(--rk-secondary-700);
+
+  --field-background: #fafafa;
   --field-foreground: var(--foreground);
-  --field-placeholder: var(--muted-foreground);
-  --field-border: var(--border);
-  --field-border-width: 1px;
-  --field-border-hover: color-mix(in oklab, var(--primary) 45%, var(--border) 55%);
-  --field-border-focus: var(--focus-ring);
+  --field-placeholder: var(--rk-gray-disabled-text);
+  --field-border: #dededb;
 
-  /* Radius controls */
-  --radius: 0.625rem;
-  --radius-control: 0.75rem;
-  --radius-card: 1rem;
-  --radius-pill: 9999px;
-  --field-radius: var(--radius-control);
+  --success: var(--rk-primary-500);
+  --success-foreground: #ffffff;
+  --warning: var(--rk-secondary-500);
+  --warning-foreground: var(--rk-secondary-900);
+  --danger: var(--rk-error);
+  --danger-foreground: var(--rk-gray-default);
+  --border: #e5e5e2;
+  --separator: #eeeeeb;
+  --focus: var(--rk-primary-500);
+  --link: var(--rk-primary-600);
 
-  /* Shadows */
-  --shadow-control: none;
-  --shadow-card:
-    0 4px 16px -2px oklch(0.2 0.03 147 / 0.06),
-    0 2px 6px -1px oklch(0.2 0.03 147 / 0.04);
-  --surface-shadow: var(--shadow-card);
-  --field-shadow: var(--shadow-control);
+  --wallet-card: var(--rk-primary-900);
+  --wallet-card-foreground: var(--rk-primary-50);
+  --wallet-card-muted: var(--rk-primary-200);
+  --wallet-card-icon: var(--rk-primary-800);
+  --disabled: var(--rk-gray-border-disabled);
+  --disabled-foreground: var(--rk-gray-disabled-text);
 
-  /* Authentication surface spacing tokens */
-  --auth-panel-padding-mobile: 1.5rem;
-  --auth-panel-padding-desktop: 3rem;
-  --auth-form-max-width: 24rem;
-  --auth-stack-gap: 1.5rem;
-  --auth-field-gap: 1.125rem;
-  --control-height-md: 2.75rem;
-  --control-height-lg: 3rem;
+  /* App shell: the sidebar and auth panel always sit on the brand surface. */
+  --sidebar: var(--rk-primary-900);
+  --sidebar-foreground: #ffffff;
+  --sidebar-muted: #ececea;
+  --sidebar-label: #c9cbc8;
+  --sidebar-hover: var(--rk-primary-800);
+  --sidebar-border: var(--rk-primary-800);
+  --sidebar-active: #ffffff;
+  --sidebar-active-foreground: var(--rk-primary-900);
+  --brand-panel: var(--rk-primary-900);
+  --brand-panel-foreground: #ffffff;
+  --brand-panel-accent: var(--rk-secondary-500);
+
+  /* Chart series (fixed order) */
+  --chart-1: var(--rk-primary-500);
+  --chart-2: var(--rk-secondary-500);
+  --chart-3: #2a78d6;
 }
 
+/* -------------------------------- Dark ----------------------------------- */
 .dark,
 [data-theme="dark"] {
   color-scheme: dark;
 
-  /* Rekordly V2 Dark Mode Tokens
-   * Dark background: #010501 -> oklch(0.1149 0.0178 145.2)
-   * Dark card:       #121212 -> oklch(0.1822 0 0)
-   */
-  --background: oklch(0.1149 0.0178 145.2);
-  --foreground: oklch(0.968 0.008 146.5);
-
-  --surface: oklch(0.1822 0 0);
+  --background: #12110f;
+  --foreground: #f5f4f2;
+  --surface: #1b1a18;
   --surface-foreground: var(--foreground);
-  --surface-muted: oklch(0.228 0.01 146.5);
-  --surface-secondary: var(--surface-muted);
+  --surface-secondary: #23221f;
   --surface-secondary-foreground: var(--foreground);
-  --surface-tertiary: oklch(0.265 0.012 146.5);
+  --surface-tertiary: #2b2925;
   --surface-tertiary-foreground: var(--foreground);
-
-  --primary: oklch(0.642 0.198 143.2);
-  --primary-foreground: oklch(0.995 0 0);
-  --primary-hover: oklch(0.685 0.195 143.2);
-  --primary-soft: color-mix(in oklab, var(--primary) 18%, transparent);
-
-  --secondary: oklch(0.765 0.172 58.65);
-  --secondary-foreground: oklch(0.15 0.02 58.65);
-  --secondary-hover: oklch(0.805 0.165 58.65);
-  --secondary-soft: color-mix(in oklab, var(--secondary) 18%, transparent);
-
-  --muted: oklch(0.24 0.01 146.5);
-  --muted-foreground: oklch(0.725 0.014 146.5);
-
-  --border: oklch(0.285 0.012 146.5);
-  --separator: oklch(0.255 0.01 146.5);
-
-  --danger: oklch(0.645 0.21 25.5);
-  --danger-foreground: oklch(0.99 0 0);
-  --success: var(--primary);
-  --success-foreground: oklch(0.995 0 0);
-  --warning: var(--secondary);
-  --warning-foreground: oklch(0.15 0.02 58.65);
-
-  --focus-ring: var(--primary);
-  --focus: var(--focus-ring);
-
-  /* HeroUI v3 token bridge */
-  --accent: var(--primary);
-  --accent-foreground: var(--primary-foreground);
-  --default: var(--surface-muted);
+  --overlay: #1b1a18;
+  --overlay-foreground: var(--foreground);
+  --backdrop: rgb(0 0 0 / 48%);
+  --muted: #a9a69f;
+  --muted-foreground: #a9a69f;
+  --default: #2b2925;
   --default-foreground: var(--foreground);
 
-  /* Form field tokens */
-  --field-background: oklch(0.205 0.008 146.5);
+  --accent: var(--rk-primary-500);
+  --accent-foreground: #ffffff;
+  --primary: var(--rk-primary-400);
+  --primary-foreground: #ffffff;
+  --primary-hover: var(--rk-primary-300);
+  --primary-soft: rgb(0 158 16 / 16%);
+  --primary-soft-foreground: var(--rk-primary-300);
+  --secondary: var(--rk-secondary-500);
+  --secondary-foreground: var(--rk-secondary-900);
+  --secondary-hover: var(--rk-secondary-400);
+  --secondary-soft: rgb(250 137 1 / 14%);
+  --secondary-soft-foreground: var(--rk-secondary-300);
+
+  --field-background: #222221;
   --field-foreground: var(--foreground);
   --field-placeholder: var(--muted-foreground);
-  --field-border: var(--border);
-  --field-border-width: 1px;
-  --field-border-hover: color-mix(in oklab, var(--primary) 50%, var(--border) 50%);
-  --field-border-focus: var(--focus-ring);
+  --field-border: #35332f;
 
-  /* Shadows */
-  --shadow-control: none;
-  --shadow-card:
-    0 8px 24px -4px oklch(0 0 0 / 0.55),
-    0 0 0 1px oklch(1 0 0 / 0.06);
-  --surface-shadow: var(--shadow-card);
-  --field-shadow: var(--shadow-control);
+  --success: var(--rk-primary-400);
+  --success-foreground: #ffffff;
+  --warning: var(--rk-secondary-300);
+  --warning-foreground: var(--rk-secondary-900);
+  --danger: var(--rk-error-light);
+  --danger-foreground: #1b1a18;
+  --border: #35332f;
+  --separator: #2b2925;
+  --focus: var(--rk-primary-400);
+  --link: var(--rk-primary-300);
+
+  --wallet-card: var(--rk-primary-900);
+  --wallet-card-foreground: #f5f4f2;
+  --wallet-card-muted: #a9a69f;
+  --wallet-card-icon: var(--rk-primary-800);
+  --disabled: #35332f;
+  --disabled-foreground: #77736c;
+
+  --sidebar: #171614;
+  --sidebar-foreground: #ffffff;
+  --sidebar-muted: #e4e2de;
+  --sidebar-label: #a9a69f;
+  --sidebar-hover: #23221f;
+  --sidebar-border: #23221f;
+  --sidebar-active: #ffffff;
+  --sidebar-active-foreground: #171614;
+  --brand-panel: var(--rk-primary-900);
+  --brand-panel-foreground: #ffffff;
+  --brand-panel-accent: var(--rk-secondary-500);
+
+  --chart-1: var(--rk-primary-400);
+  --chart-2: var(--rk-secondary-400);
+  --chart-3: #3987e5;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Tailwind utility mapping. HeroUI already exposes background, surface,      */
+/* muted, accent, border, separator, field, success, warning, danger, etc.    */
+/* -------------------------------------------------------------------------- */
 @theme inline {
   --font-sans: var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
   --font-heading: var(--font-sora), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-fira-code), ui-monospace, SFMono-Regular, monospace;
 
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-surface: var(--surface);
-  --color-surface-foreground: var(--surface-foreground);
-  --color-surface-muted: var(--surface-muted);
-  --color-border: var(--border);
-
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary-hover: var(--primary-hover);
   --color-primary-soft: var(--primary-soft);
-
+  --color-primary-soft-foreground: var(--primary-soft-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-secondary-hover: var(--secondary-hover);
   --color-secondary-soft: var(--secondary-soft);
-
-  --color-danger: var(--danger);
-  --color-danger-foreground: var(--danger-foreground);
-  --color-success: var(--success);
-  --color-success-foreground: var(--success-foreground);
-  --color-warning: var(--warning);
-  --color-warning-foreground: var(--warning-foreground);
-
-  --color-muted: var(--muted);
+  --color-secondary-soft-foreground: var(--secondary-soft-foreground);
   --color-muted-foreground: var(--muted-foreground);
-  --color-focus-ring: var(--focus-ring);
+  --color-disabled: var(--disabled);
+  --color-disabled-foreground: var(--disabled-foreground);
+  --color-backdrop: var(--backdrop);
+  --color-link: var(--link);
 
-  --radius-control: var(--radius-control);
-  --radius-card: var(--radius-card);
-  --radius-pill: var(--radius-pill);
+  --color-wallet-card: var(--wallet-card);
+  --color-wallet-card-foreground: var(--wallet-card-foreground);
+  --color-wallet-card-muted: var(--wallet-card-muted);
+  --color-wallet-card-icon: var(--wallet-card-icon);
 
-  --shadow-card: var(--shadow-card);
-  --shadow-control: var(--shadow-control);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-muted: var(--sidebar-muted);
+  --color-sidebar-label: var(--sidebar-label);
+  --color-sidebar-hover: var(--sidebar-hover);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-active: var(--sidebar-active);
+  --color-sidebar-active-foreground: var(--sidebar-active-foreground);
+  --color-brand-panel: var(--brand-panel);
+  --color-brand-panel-foreground: var(--brand-panel-foreground);
+  --color-brand-panel-accent: var(--brand-panel-accent);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
 }
 
-* {
-  box-sizing: border-box;
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    margin: 0;
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+    letter-spacing: -0.005em;
+    min-height: 100vh;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-heading);
+    letter-spacing: -0.02em;
+  }
+
+  ::selection {
+    background: var(--primary-soft);
+    color: var(--foreground);
+  }
+
+  /* Universal shadow removal for all inputs and form fields */
+  input,
+  textarea,
+  select,
+  [data-slot="input"],
+  [data-slot="input-group"] {
+    box-shadow: none !important;
+  }
 }
 
-html,
-body {
-  min-height: 100%;
+/* -------------------------------------------------------------------------- */
+/* Data tables: one quiet style for every list.                               */
+/* No header fill, no uppercase, hairline row separators, soft hover.         */
+/* -------------------------------------------------------------------------- */
+@layer components {
+  .data-table {
+    width: 100%;
+    text-align: left;
+    font-size: 13px;
+    border-collapse: collapse;
+  }
+
+  .data-table thead th {
+    padding: 12px 16px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--muted);
+    white-space: nowrap;
+    background: transparent;
+  }
+
+  .data-table tbody td {
+    padding: 14px 16px;
+    vertical-align: middle;
+  }
+
+  .data-table tbody tr {
+    border-top: 1px solid var(--separator);
+    transition: background-color 150ms ease;
+  }
+
+  .data-table tbody tr:hover {
+    background: var(--surface-secondary);
+  }
+
+  .data-table th:first-child,
+  .data-table td:first-child {
+    padding-left: 24px;
+  }
+
+  .data-table th:last-child,
+  .data-table td:last-child {
+    padding-right: 24px;
+  }
 }
 
-input,
-textarea,
-select,
-[data-slot="input"],
-[data-slot="input-group"] {
-  box-shadow: none !important;
+@utility tabular {
+  font-variant-numeric: tabular-nums;
 }
 
-body {
-  margin: 0;
-  background-color: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
-  -webkit-font-smoothing: antialiased;
+/* Quiet scrollbar for feeds and lists: only visible while hovering the scroll area. */
+@utility scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  &:hover {
+    scrollbar-color: color-mix(in oklab, var(--muted) 45%, transparent) transparent;
+  }
+  &::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  &::-webkit-scrollbar-button {
+    display: none;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 9999px;
+  }
+  &:hover::-webkit-scrollbar-thumb {
+    background: color-mix(in oklab, var(--muted) 45%, transparent);
+  }
 }
 
-/* Ensure HeroUI Input inside Rekordly InputGroup pill does not render a duplicate inner box */
-.input-group .input {
-  background-color: transparent !important;
-  border: 0 !important;
-  box-shadow: none !important;
-  outline: none !important;
-  padding-inline: 0 !important;
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Overlays: one consistent frosted backdrop for every modal, drawer and alert dialog. */
+.modal__backdrop:not(.modal__backdrop--transparent),
+.drawer__backdrop:not(.drawer__backdrop--transparent),
+.alert-dialog__backdrop:not(.alert-dialog__backdrop--transparent) {
+  background-color: var(--backdrop);
+  -webkit-backdrop-filter: blur(20px) saturate(120%);
+  backdrop-filter: blur(20px) saturate(120%);
+}
+
+/* Scrollbars inside modals and drawers: slim and kept clear of the rounded corners. */
+.modal__dialog,
+.modal__dialog *,
+.drawer__dialog,
+.drawer__dialog * {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--muted) 35%, transparent) transparent;
+}
+
+/* No modal is ever taller than the screen: long ones scroll inside. */
+.modal__dialog {
+  max-height: 88vh;
+  overflow-y: auto;
 }

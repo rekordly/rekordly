@@ -1,17 +1,19 @@
+// Early login redirect only. This is a convenience, not a security boundary:
+// cookies here are just presence hints, and the Go API authorises every request.
 import { NextResponse, type NextRequest } from "next/server";
 
+const SESSION_MARKER_COOKIE = "rekordly_signed_in";
+const LOGIN_ROUTE = "/login";
 const PUBLIC_ROUTES = new Set([
   "/",
-  "/login",
+  LOGIN_ROUTE,
   "/login/password",
   "/forgot-password",
   "/reset-password",
   "/create-password",
+  "/auth/magic",
+  "/auth/google/callback",
 ]);
-
-function isPublicRoute(pathname: string) {
-  return PUBLIC_ROUTES.has(pathname);
-}
 
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
@@ -20,19 +22,18 @@ export function proxy(request: NextRequest) {
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api") ||
     pathname.startsWith("/favicon") ||
-    pathname.includes(".")
+    pathname.includes(".") ||
+    PUBLIC_ROUTES.has(pathname)
   ) {
     return NextResponse.next();
   }
 
-  if (isPublicRoute(pathname)) {
-    return NextResponse.next();
-  }
+  const hasSessionHint =
+    request.cookies.has(SESSION_MARKER_COOKIE) || request.cookies.has("rekordly_session");
 
-  if (!request.cookies.has("rekordly_session")) {
-    const loginUrl = new URL("/login", request.url);
-    const returnTo = `${pathname}${search}`;
-    if (returnTo !== "/") loginUrl.searchParams.set("return_to", returnTo);
+  if (!hasSessionHint) {
+    const loginUrl = new URL(LOGIN_ROUTE, request.url);
+    loginUrl.searchParams.set("return_to", `${pathname}${search}`);
     return NextResponse.redirect(loginUrl);
   }
 

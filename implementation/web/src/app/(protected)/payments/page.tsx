@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
-import { FeatureScaffold } from "@/components/features";
+
+import { PaymentsPage } from "@/components/features/finance/payments-page";
 
 export const metadata: Metadata = {
-  title: "Payments & Settlements — Rekordly",
-  description: "Record settlements, invoice receipts, and disbursements.",
+  title: "Payments — Rekordly",
+  description: "Money received and paid.",
 };
 
-export default function PaymentsPage() {
-  return <FeatureScaffold featureId="payments" defaultSpace="business" />;
+export default function Page() {
+  return <PaymentsPage />;
 }

@@ -1,2 +1,12 @@
-import { ModulePlaceholder } from "@/components/layout/module-placeholder";
-export default function CustomersPage() { return <ModulePlaceholder title="Contacts" description="Keep customers, suppliers, and statements organized." actionLabel="Add contact" />; }
+import type { Metadata } from "next";
+
+import { ContactsPage } from "@/components/features/finance/contacts-page";
+
+export const metadata: Metadata = {
+  title: "Contacts — Rekordly",
+  description: "Customers and suppliers.",
+};
+
+export default function Page() {
+  return <ContactsPage />;
+}

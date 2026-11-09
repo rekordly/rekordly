@@ -41,6 +41,15 @@ func verifyCSRF(session db.Session, csrfToken string) error {
 	return nil
 }
 
+// VerifySessionCSRF checks a CSRF token against the one bound to this session.
+func (service *Service) VerifySessionCSRF(ctx context.Context, rawSession, csrfToken string) error {
+	session, err := service.authenticateFullSession(ctx, db.New(service.pool), rawSession)
+	if err != nil {
+		return err
+	}
+	return verifyCSRF(session, csrfToken)
+}
+
 func (service *Service) RefreshSession(ctx context.Context, rawSession, csrfToken, device, userAgent, ipPrefix string) (SessionProof, error) {
 	tx, err := service.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {

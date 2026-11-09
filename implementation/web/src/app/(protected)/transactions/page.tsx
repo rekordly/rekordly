@@ -7,5 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function TransactionsPage() {
-  return <main className="mx-auto max-w-6xl p-5 sm:p-7"><TransactionList /></main>;
+  return <TransactionList />;
 }

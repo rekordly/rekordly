@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
-import { FeatureScaffold } from "@/components/features";
+
+import { FinanceOverview } from "@/components/features/finance/overview";
 
 export const metadata: Metadata = {
-  title: "Reports & Financial Statements — Rekordly",
-  description: "View financial summaries, cash flows, and export statements.",
+  title: "Reports — Rekordly",
+  description: "Income, expenses and spending over time.",
 };
 
-export default function ReportsPage() {
-  return <FeatureScaffold featureId="reports-tax" defaultSpace="business" />;
+export default function Page() {
+  return <FinanceOverview title="Reports" description="Income, expenses and spending over time." showRecent={false} />;
 }

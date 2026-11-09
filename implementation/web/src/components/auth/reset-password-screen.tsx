@@ -1,32 +1,29 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowLeft, Key } from "@phosphor-icons/react";
+import { ArrowLeft, ArrowRight, Key, LockKey } from "@phosphor-icons/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 
-import {
-  Alert,
-  AuthCard,
-  Button,
-  LoadingButton,
-  PasswordField,
-} from "@/components/ui";
-import { ApiClientError } from "@/lib/api";
+import { Alert } from "@/components/ui/alert";
+import { AppButton } from "@/components/ui/app-button";
+import { AppInput } from "@/components/ui/app-input";
+import { AuthCard } from "@/components/ui/auth-card";
+import { ApiClientError } from "@/lib/errors";
 import {
   type AuthApiContract,
   createSubmissionGuard,
   handleResetPasswordCompleteSubmit,
   scrubTokenFromBrowserUrl,
-} from "@/lib/auth-flow";
-import { AUTH_ROUTES } from "@/lib/auth-routes";
+} from "@/stores/auth-store";
+import { AUTH_ROUTES } from "@/lib/auth";
 import {
   MAX_PASSWORD_UTF8_BYTES,
   MIN_PASSWORD_UTF8_BYTES,
   type ResetPasswordFormValues,
   resetPasswordSchema,
-} from "@/lib/validation";
+} from "@/lib/schemas/auth.schemas";
 
 export interface ResetPasswordScreenProps {
   initialToken?: string | null;
@@ -111,28 +108,28 @@ export function ResetPasswordScreen({
           />
         }
         footer={
-          <Button
+          <AppButton
             variant="ghost"
             size="md"
             fullWidth
-            startIcon={<ArrowLeft className="size-4" />}
+            startContent={<ArrowLeft className="size-4" />}
             onPress={() => router.push(AUTH_ROUTES.LOGIN)}
             data-testid="reset-password-back-login"
           >
             Back to sign in
-          </Button>
+          </AppButton>
         }
       >
-        <Button
+        <AppButton
           variant="primary"
-          size="lg"
+          size="md"
           fullWidth
-          startIcon={<Key />}
+          startContent={<Key />}
           onPress={() => router.push(AUTH_ROUTES.FORGOT_PASSWORD)}
           data-testid="reset-password-request-new"
         >
           Request a new reset link
-        </Button>
+        </AppButton>
       </AuthCard>
     );
   }
@@ -153,16 +150,16 @@ export function ResetPasswordScreen({
         ) : null
       }
       footer={
-        <Button
+        <AppButton
           variant="ghost"
           size="md"
           fullWidth
           isDisabled={isLoading}
-          startIcon={<ArrowLeft className="size-4" />}
+          startContent={<ArrowLeft className="size-4" />}
           onPress={() => router.push(AUTH_ROUTES.LOGIN)}
         >
           Back to sign in
-        </Button>
+        </AppButton>
       }
     >
       <form
@@ -177,7 +174,9 @@ export function ResetPasswordScreen({
           control={form.control}
           name="password"
           render={({ field, fieldState }) => (
-            <PasswordField
+            <AppInput
+              type="password"
+              startContent={<LockKey />}
               id="reset-new-password"
               name={field.name}
               label="New password"
@@ -185,14 +184,14 @@ export function ResetPasswordScreen({
               placeholder="At least 10 characters"
               description={`${MIN_PASSWORD_UTF8_BYTES}–${MAX_PASSWORD_UTF8_BYTES} characters. A passphrase works well.`}
               value={field.value}
-              onChange={(value) => {
-                field.onChange(value);
+              onChange={(event) => {
+                field.onChange(event.target.value);
                 if (apiError) {
                   setApiError(null);
                 }
               }}
               onBlur={field.onBlur}
-              inputRef={field.ref}
+              ref={field.ref}
               isDisabled={isLoading}
               isRequired
               isInvalid={Boolean(fieldState.error)}
@@ -206,21 +205,23 @@ export function ResetPasswordScreen({
           control={form.control}
           name="confirmPassword"
           render={({ field, fieldState }) => (
-            <PasswordField
+            <AppInput
+              type="password"
+              startContent={<LockKey />}
               id="reset-confirm-password"
               name={field.name}
               label="Confirm new password"
               autoComplete="new-password"
               placeholder="Re-enter your new password"
               value={field.value}
-              onChange={(value) => {
-                field.onChange(value);
+              onChange={(event) => {
+                field.onChange(event.target.value);
                 if (apiError) {
                   setApiError(null);
                 }
               }}
               onBlur={field.onBlur}
-              inputRef={field.ref}
+              ref={field.ref}
               isDisabled={isLoading}
               isRequired
               isInvalid={Boolean(fieldState.error)}
@@ -230,17 +231,17 @@ export function ResetPasswordScreen({
           )}
         />
 
-        <LoadingButton
+        <AppButton
           type="submit"
+          endContent={<ArrowRight weight="bold" />}
           variant="primary"
-          size="lg"
+          size="md"
           fullWidth
           isLoading={isLoading}
-          loadingText={isRedirecting ? "Redirecting..." : "Saving new password..."}
-          data-testid="reset-password-submit"
+                    data-testid="reset-password-submit"
         >
-          Save new password
-        </LoadingButton>
+          {isLoading ? (isRedirecting ? "Redirecting..." : "Saving new password...") : "Save new password"}
+        </AppButton>
       </form>
     </AuthCard>
   );

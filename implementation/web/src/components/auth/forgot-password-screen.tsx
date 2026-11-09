@@ -1,31 +1,30 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowLeft } from "@phosphor-icons/react";
+import { ArrowLeft, ArrowRight, EnvelopeSimple } from "@phosphor-icons/react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 
+import { Alert } from "@/components/ui/alert";
+import { AppButton } from "@/components/ui/app-button";
+import { AppInput } from "@/components/ui/app-input";
+import { AuthCard } from "@/components/ui/auth-card";
 import {
-  Alert,
-  AuthCard,
-  Button,
-  LoadingButton,
-  TextField,
-} from "@/components/ui";
-import { NEUTRAL_PASSWORD_RESET_MESSAGE } from "@/lib/auth-api";
-import { ApiClientError } from "@/lib/api";
+  NEUTRAL_PASSWORD_RESET_MESSAGE,
+  AUTH_ROUTES,
+} from "@/lib/auth";
+import { ApiClientError } from "@/lib/errors";
 import {
   type AuthApiContract,
   createSubmissionGuard,
   handleForgotPasswordSubmit,
-} from "@/lib/auth-flow";
-import { AUTH_ROUTES } from "@/lib/auth-routes";
-import { useAuthFlowStore } from "@/stores/auth-flow-store";
+  useAuthStore,
+} from "@/stores/auth-store";
 import {
   type ForgotPasswordFormValues,
   forgotPasswordSchema,
-} from "@/lib/validation";
+} from "@/lib/schemas/auth.schemas";
 
 export interface ForgotPasswordScreenProps {
   initialEmail?: string;
@@ -37,7 +36,7 @@ export function ForgotPasswordScreen({
   api,
 }: ForgotPasswordScreenProps) {
   const router = useRouter();
-  const storedEmail = useAuthFlowStore((state) => state.email);
+  const storedEmail = useAuthStore((state) => state.email);
 
   const [submittedMessage, setSubmittedMessage] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -95,22 +94,22 @@ export function ForgotPasswordScreen({
         ) : null
       }
       footer={
-        <Button
+        <AppButton
           variant="ghost"
           size="md"
           fullWidth
           isDisabled={isLoading}
-          startIcon={<ArrowLeft className="size-4" />}
+          startContent={<ArrowLeft className="size-4" />}
           onPress={() => router.push(AUTH_ROUTES.LOGIN)}
           data-testid="forgot-password-back-button"
         >
           Back to sign in
-        </Button>
+        </AppButton>
       }
     >
       {submittedMessage ? (
         <div className="flex flex-col gap-3">
-          <Button
+          <AppButton
             variant="outline"
             size="md"
             fullWidth
@@ -121,7 +120,7 @@ export function ForgotPasswordScreen({
             data-testid="forgot-password-try-another-button"
           >
             Try another email
-          </Button>
+          </AppButton>
         </div>
       ) : (
         <form
@@ -136,23 +135,24 @@ export function ForgotPasswordScreen({
             control={form.control}
             name="email"
             render={({ field, fieldState }) => (
-              <TextField
+              <AppInput
                 id="forgot-password-email"
                 name={field.name}
                 label="Email"
+                startContent={<EnvelopeSimple />}
                 type="email"
                 inputMode="email"
                 autoComplete="email"
                 placeholder="you@example.com"
                 value={field.value}
-                onChange={(value) => {
-                  field.onChange(value);
+                onChange={(event) => {
+                  field.onChange(event.target.value);
                   if (apiError) {
                     setApiError(null);
                   }
                 }}
                 onBlur={field.onBlur}
-                inputRef={field.ref}
+                ref={field.ref}
                 isDisabled={isLoading}
                 isRequired
                 isInvalid={Boolean(fieldState.error)}
@@ -162,17 +162,17 @@ export function ForgotPasswordScreen({
             )}
           />
 
-          <LoadingButton
+          <AppButton
             type="submit"
+            endContent={<ArrowRight weight="bold" />}
             variant="primary"
-            size="lg"
+            size="md"
             fullWidth
             isLoading={isLoading}
-            loadingText="Sending..."
-            data-testid="forgot-password-submit"
+                        data-testid="forgot-password-submit"
           >
-            Send reset link
-          </LoadingButton>
+            {isLoading ? "Sending..." : "Send reset link"}
+          </AppButton>
         </form>
       )}
     </AuthCard>

@@ -376,7 +376,9 @@ func (h *Handler) listWalletLedger(c *gin.Context) {
 }
 
 type walletPaymentRequest struct {
-	AmountMinor int64 `json:"amount_minor" binding:"required"`
+	AmountMinor int64  `json:"amount_minor"`
+	Amount      string `json:"amount"` // optional major decimal string
+	Currency    string `json:"currency"`
 }
 
 // @Summary Pay invoice with customer wallet
@@ -405,6 +407,15 @@ func (h *Handler) payInvoiceWithWallet(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": err.Error()}})
 		return
+	}
+
+	if req.Amount != "" {
+		parsed, parseErr := ParseMajorToMinor(req.Amount, CurrencyExponent(req.Currency))
+		if parseErr != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": parseErr.Error()}})
+			return
+		}
+		req.AmountMinor = parsed
 	}
 
 	detail, err := h.service.PayInvoiceWithWallet(c.Request.Context(), wsCtx.WorkspaceID, wsCtx.UserID, invID, req.AmountMinor)

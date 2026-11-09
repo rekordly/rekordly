@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 import { OnboardingRoute } from "@/components/auth/onboarding-route";
 import { ProtectedRoute, RouteLoading } from "@/components/auth/route-guards";
-import { ThemeToggle } from "@/components/ui";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { Suspense } from "react";
 
 export default function OnboardingLayout({ children }: { children: ReactNode }) {

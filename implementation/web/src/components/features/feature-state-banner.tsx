@@ -1,7 +1,7 @@
 "use client";
 
 import { Alert } from "@/components/ui/alert";
-import { SurfaceCard } from "@/components/ui/surface-card";
+import { DashboardCard } from "@/components/ui/dashboard-card";
 import type { FeatureDefinition, FeaturePlanGateMeta } from "@/types/features";
 import { FeatureIcon } from "./feature-icon";
 
@@ -32,13 +32,13 @@ export function FeatureStateBanner({
         aria-live="polite"
         data-testid="feature-loading-state"
       >
-        <div className="h-6 w-48 rounded-lg bg-surface-elevated" />
+        <div className="h-6 w-48 rounded-lg bg-default" />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div className="h-24 rounded-2xl bg-surface-elevated border border-border" />
-          <div className="h-24 rounded-2xl bg-surface-elevated border border-border" />
-          <div className="h-24 rounded-2xl bg-surface-elevated border border-border" />
+          <div className="h-24 rounded-3xl bg-default" />
+          <div className="h-24 rounded-3xl bg-default" />
+          <div className="h-24 rounded-3xl bg-default" />
         </div>
-        <div className="h-64 rounded-2xl bg-surface-elevated border border-border" />
+        <div className="h-64 rounded-3xl bg-default" />
         <span className="sr-only">Loading feature data...</span>
       </div>
     );
@@ -67,7 +67,7 @@ export function FeatureStateBanner({
     };
 
     return (
-      <SurfaceCard
+      <DashboardCard
         className={`border-secondary/40 bg-secondary-soft/20 p-5 ${className}`}
         data-testid="feature-plan-locked-card"
       >
@@ -77,22 +77,22 @@ export function FeatureStateBanner({
           </div>
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <h4 className="font-heading text-sm font-semibold text-text-primary">
+              <h4 className="font-heading text-sm font-semibold text-foreground">
                 Plan Limit: {gate.limitLabel}
               </h4>
-              <span className="rounded-full bg-secondary-soft px-2 py-0.5 font-sans text-xs font-semibold uppercase tracking-wider text-secondary-text">
+              <span className="rounded-full bg-secondary-soft px-2 py-0.5 font-sans text-xs font-semibold uppercase tracking-wider text-secondary-soft-foreground">
                 {gate.tier}
               </span>
             </div>
-            <p className="font-sans text-xs text-text-secondary leading-relaxed">
+            <p className="font-sans text-xs text-muted leading-relaxed">
               {gate.enforcementNote}
             </p>
-            <p className="font-sans text-[11px] text-text-muted pt-1">
+            <p className="font-sans text-[11px] text-muted pt-1">
               Per AGENT_RULES: Free limits stop new usage, never access to existing financial history.
             </p>
           </div>
         </div>
-      </SurfaceCard>
+      </DashboardCard>
     );
   }
 

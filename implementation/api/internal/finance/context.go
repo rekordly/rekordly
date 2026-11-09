@@ -19,6 +19,7 @@ const (
 
 type AuthSessionValidator interface {
 	CurrentUser(ctx context.Context, rawSession string) (auth.CurrentUser, error)
+	VerifySessionCSRF(ctx context.Context, rawSession, csrfToken string) error
 }
 
 type WorkspaceContext struct {
@@ -31,7 +32,7 @@ type WorkspaceContext struct {
 
 func AuthAndWorkspaceMiddleware(pool *pgxpool.Pool, authValidator AuthSessionValidator) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		sessionToken := extractSessionToken(c)
+		sessionToken, viaCookie := extractSessionToken(c)
 		if sessionToken == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"error": gin.H{
@@ -51,6 +52,20 @@ func AuthAndWorkspaceMiddleware(pool *pgxpool.Pool, authValidator AuthSessionVal
 				},
 			})
 			return
+		}
+
+		// Browsers attach cookies on their own, so a cookie-authenticated write
+		// must also prove it came from our app. Bearer tokens are sent deliberately.
+		if viaCookie && isUnsafeMethod(c.Request.Method) {
+			if err := authValidator.VerifySessionCSRF(c.Request.Context(), sessionToken, c.GetHeader("X-CSRF-Token")); err != nil {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+					"error": gin.H{
+						"code":    "CSRF_INVALID",
+						"message": "This request could not be verified. Refresh the page and try again.",
+					},
+				})
+				return
+			}
 		}
 
 		workspaceIDStr := resolveWorkspaceIDString(c)
@@ -120,15 +135,24 @@ func AuthAndWorkspaceMiddleware(pool *pgxpool.Pool, authValidator AuthSessionVal
 	}
 }
 
-func extractSessionToken(c *gin.Context) string {
+func extractSessionToken(c *gin.Context) (token string, viaCookie bool) {
 	if cookie, err := c.Cookie("rekordly_session"); err == nil && cookie != "" {
-		return cookie
+		return cookie, true
 	}
 	authHeader := c.GetHeader("Authorization")
 	if strings.HasPrefix(authHeader, "Bearer ") {
-		return strings.TrimPrefix(authHeader, "Bearer ")
+		return strings.TrimPrefix(authHeader, "Bearer "), false
 	}
-	return ""
+	return "", false
+}
+
+func isUnsafeMethod(method string) bool {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return false
+	default:
+		return true
+	}
 }
 
 func resolveWorkspaceIDString(c *gin.Context) string {

@@ -67,7 +67,8 @@ type CreateBudgetInput struct {
 	CategoryID       *int64 `json:"category_id"`
 	Scope            string `json:"scope"`  // personal, business, all (default business)
 	Period           string `json:"period"` // monthly, quarterly, annual, custom (default monthly)
-	AmountMinor      int64  `json:"amount_minor" binding:"required"`
+	AmountMinor      int64  `json:"amount_minor"`
+	Amount           string `json:"amount"` // optional major decimal string
 	Currency         string `json:"currency"`
 	CurrencyExponent int    `json:"currency_exponent"`
 	StartDate        string `json:"start_date" binding:"required"` // YYYY-MM-DD
@@ -110,6 +111,13 @@ type BudgetStatusResult struct {
 // ---------------- Budget Service Logic ----------------
 
 func (s *Service) CreateBudget(ctx context.Context, workspaceID, userID int64, in CreateBudgetInput) (BudgetDetail, error) {
+	if in.Amount != "" {
+		parsed, err := ParseMajorToMinor(in.Amount, CurrencyExponent(in.Currency))
+		if err != nil {
+			return BudgetDetail{}, err
+		}
+		in.AmountMinor = parsed
+	}
 	if in.AmountMinor <= 0 {
 		return BudgetDetail{}, ErrInvalidBudgetAmount
 	}

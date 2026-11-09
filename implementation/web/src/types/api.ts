@@ -5,6 +5,18 @@ export type ApiErrorCode =
   | "PASSWORD_ALREADY_SET"
   | "VALIDATION_ERROR"
   | "INVALID_REQUEST"
+  | "UNAUTHORIZED"
+  | "FORBIDDEN"
+  | "NOT_FOUND"
+  | "CONFLICT"
+  | "WORKSPACE_REQUIRED"
+  | "INVALID_WORKSPACE_ID"
+  | "IDEMPOTENCY_CONFLICT"
+  | "PLAN_LIMIT_EXCEEDED"
+  | "SESSION_ALREADY_ROTATED"
+  | "SESSION_REPLAYED"
+  | "CSRF_INVALID"
+  | "GOOGLE_UNAVAILABLE"
   | "INTERNAL_ERROR"
   | "NETWORK_ERROR"
   | "TIMEOUT_ERROR";
@@ -68,39 +80,8 @@ export interface AuthSessionResponseData {
   user_id: number;
   onboarding_status: OnboardingStatus;
   expires_at: string;
-}
-
-export type Permission = string;
-
-export interface CurrentSessionData {
-  id: number;
-  kind: string;
-  device_label?: string;
-  issued_at: string;
-  expires_at: string;
-}
-
-export interface AuthorizedWorkspaceData {
-  id: number;
-  kind: string;
-  name: string;
-  slug: string;
-  base_currency: string;
-  timezone: string;
-  is_owner: boolean;
-  role_code: string;
-  role_name: string;
-  outlet_scope: Record<string, unknown>;
-  permissions?: Permission[];
-}
-
-export interface CurrentUserData {
-  id: number;
-  display_name?: string;
-  locale: string;
-  timezone: string;
-  onboarding_status: OnboardingStatus;
-  session: CurrentSessionData;
-  workspaces: AuthorizedWorkspaceData[];
-  permissions?: Permission[];
+  csrf_token?: string;
+  /** Present on pre-auth responses, where no session cookie was issued. */
+  requires_password?: boolean;
+  pre_auth_token?: string;
 }

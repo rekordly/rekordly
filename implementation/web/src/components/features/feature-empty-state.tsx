@@ -1,7 +1,7 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
-import { SurfaceCard } from "@/components/ui/surface-card";
+import { AppButton } from "@/components/ui/app-button";
+import { DashboardCard } from "@/components/ui/dashboard-card";
 import type { FeatureDefinition, FinanceSpace } from "@/types/features";
 import { FeatureIcon } from "./feature-icon";
 
@@ -43,8 +43,8 @@ export function FeatureEmptyState({
     : emptyMeta.actionLabel;
 
   return (
-    <SurfaceCard
-      className={`flex flex-col items-center justify-center p-8 text-center sm:p-12 border-dashed border-2 ${className}`}
+    <DashboardCard
+      className={`flex flex-col items-center justify-center p-8 text-center sm:p-12 ${className}`}
       data-testid="feature-empty-state"
     >
       {/* Icon container */}
@@ -54,7 +54,7 @@ export function FeatureEmptyState({
 
       {/* Title */}
       <h3
-        className="font-heading text-lg font-semibold tracking-tight text-text-primary sm:text-xl max-w-md"
+        className="font-heading text-lg font-semibold tracking-tight text-foreground sm:text-xl max-w-md"
         data-testid="empty-state-title"
       >
         {emptyMeta.title}
@@ -62,7 +62,7 @@ export function FeatureEmptyState({
 
       {/* Description */}
       <p
-        className="mt-2 max-w-lg font-sans text-sm text-text-secondary leading-relaxed"
+        className="mt-2 max-w-lg font-sans text-sm text-muted leading-relaxed"
         data-testid="empty-state-description"
       >
         {emptyMeta.description}
@@ -71,7 +71,7 @@ export function FeatureEmptyState({
       {/* Honest Tip / Guidance Callout */}
       {emptyMeta.tip && (
         <div
-          className="mt-4 max-w-md rounded-xl bg-surface-elevated px-4 py-2.5 text-left border border-border"
+          className="mt-4 max-w-md rounded-xl bg-default px-4 py-2.5 text-left border border-border"
           data-testid="empty-state-tip"
         >
           <div className="flex items-start gap-2.5">
@@ -81,7 +81,7 @@ export function FeatureEmptyState({
               weight="duotone"
               className="text-primary mt-0.5 shrink-0"
             />
-            <p className="font-sans text-xs text-text-secondary leading-normal">
+            <p className="font-sans text-xs text-muted leading-normal">
               {emptyMeta.tip}
             </p>
           </div>
@@ -90,11 +90,11 @@ export function FeatureEmptyState({
 
       {/* Action Button */}
       <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-        <Button
+        <AppButton
           variant={isBlockedInPersonal ? "secondary" : "primary"}
           size="md"
           onPress={handleAction}
-          startIcon={
+          startContent={
             <FeatureIcon
               name={
                 isBlockedInPersonal
@@ -108,15 +108,15 @@ export function FeatureEmptyState({
           data-testid="empty-state-action-button"
         >
           {actionText}
-        </Button>
+        </AppButton>
 
         {feature.supportsOfflineDrafts && (
-          <span className="inline-flex items-center gap-1 font-sans text-xs text-text-muted">
+          <span className="inline-flex items-center gap-1 font-sans text-xs text-muted">
             <FeatureIcon name="CloudSlash" size={14} weight="duotone" />
             Works offline up to 100 drafts
           </span>
         )}
       </div>
-    </SurfaceCard>
+    </DashboardCard>
   );
 }

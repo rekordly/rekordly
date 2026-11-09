@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "rekordly-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "implementation/web", "run", "dev"],
+      "port": 3000
+    }
+  ]
+}

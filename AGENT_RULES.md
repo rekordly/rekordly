@@ -5,6 +5,8 @@
 
 This document is the supreme law governing all development on Project Rekordly V2. Every agent, every task, every line of code must comply. When in doubt, this document overrides convenience, speed, or assumption.
 
+> **Technology decision — 7 November 2026:** The founder selected a Go modular monolith with separate Go API/worker processes, PostgreSQL, `pgxpool` and `sqlc`. Render and Neon are the initial hosting choices subject to the production-tier gates in `planning/final-v2-plan/11-money-payments-external-parties-and-runtime.md`. Gin remains subject to a small implementation verification; do not install a replacement router without explicit approval.
+
 Violations are not style issues — they are production incidents waiting to happen.
 
 ---
@@ -60,10 +62,12 @@ These rules are non-negotiable from the moment financial logic is introduced. Th
 
 #### DO
 
-- **DO** use `shopspring/decimal` for ALL money values in Go. Every field representing a monetary amount must be `decimal.Decimal`, not `float64`, not `int` cents, not `string` parsed as float.
-- **DO** use `NUMERIC(20,4)` for ALL monetary columns in PostgreSQL. This gives 16 digits before the decimal and 4 digits after, sufficient for Nigerian Naira and any sub-unit precision.
-- **DO** serialize money as decimal strings at the API boundary (JSON). Example: `"amount": "15000.5000"`. This prevents floating-point corruption during JSON serialization/deserialization.
-- **DO** validate that incoming decimal strings from the API are well-formed before converting to `shopspring/decimal`. Reject ambiguous floats, scientific notation, NaN, Infinity.
+- **DO** store finalized monetary totals and journal debit/credit values as signed `BIGINT` currency minor units, with ISO currency code and currency exponent metadata.
+- **DO** use `shopspring/decimal` and PostgreSQL `NUMERIC(p,s)` for rates, quantities, fractional unit costs, weighted-average calculations and other values that legitimately require sub-minor precision.
+- **DO** serialize `BIGINT` minor-unit values as JSON strings (for example `"amount_minor": "1500050"`) to avoid JavaScript safe-integer loss.
+- **DO** accept user-facing major-unit amounts as validated plain decimal strings and convert them exactly to minor units using currency metadata. Reject exponent notation, NaN, Infinity and unsupported excess precision.
+- **DO** use checked integer arithmetic and reject overflow.
+- **DO** round only at documented boundaries and verify exact integer debit/credit equality before commit.
 - **DO** use `react-hook-form` + `zod` with `z.string()` for money input on the frontend. Parse and display as strings. Never parse money into JavaScript `number` (which is float64).
 
 #### DON'T
@@ -72,7 +76,8 @@ These rules are non-negotiable from the moment financial logic is introduced. Th
 - **DON'T** use `float` or `double` PostgreSQL column types for any monetary value.
 - **DON'T** use JavaScript `number` type for monetary values in frontend state. Use string representation.
 - **DON'T** perform arithmetic on money in JavaScript. The Go backend is the only place where financial calculations happen. The frontend sends raw input; the backend computes.
-- **DON'T** store monetary amounts as integer cents unless you also enforce the conversion consistently everywhere. The approved approach is `shopspring/decimal` + `NUMERIC(20,4)` + decimal strings.
+- **DON'T** assume every currency has two minor digits. Use currency exponent metadata (for example NGN 2, JPY 0, KWD 3).
+- **DON'T** use minor-unit integers for exchange rates, fractional quantities or intermediate unit-cost calculations when doing so would discard required precision.
 
 ### 2.2 Workspace (Tenant) Isolation
 
@@ -587,9 +592,15 @@ Security is not a phase — it is enforced from Phase 1. Phase 8 is the hardenin
 
 #### DO
 
-- **DO** use email OTP only for MVP authentication. SMS is excluded due to cost.
+- **DO** implement the founder-approved email-first authentication flow from blueprint document 01: password, email OTP, email magic link and Google OpenID Connect. SMS remains excluded due to cost.
+- **DO** require password creation after a new registration OTP, first social account creation, or new invited-member verification before normal onboarding/application access.
+- **DO** hash passwords with reviewed Argon2id parameters. Never store, log, email or reversibly encrypt a password.
+- **DO** use single-use, short-lived, hashed/digested reset and magic-link proofs and protect magic links from unintended scanner/prefetch consumption.
+- **DO** verify Google authorization-code flow with PKCE, state, nonce, issuer, audience, signature, expiry and verified-email claims.
+- **DO** require existing-account proof by password, OTP or magic link before linking an unlinked Google identity to an existing email account. Never silently merge accounts from an email claim alone.
 - **DO** make OTPs expire quickly. OTP values must not be stored in plaintext.
 - **DO** rate-limit failed OTP attempts and throttle OTP resends.
+- **DO** rate-limit password attempts, magic-link/reset requests and the approved existing-versus-new email branch.
 - **DO** temporarily block verification for emails with excessive failed OTP attempts.
 - **DO** use short-lived access sessions. Support refresh and session revocation.
 - **DO** use `Secure` cookies in production and `HttpOnly` where applicable.
@@ -600,7 +611,9 @@ Security is not a phase — it is enforced from Phase 1. Phase 8 is the hardenin
 #### DON'T
 
 - **DON'T** store long-lived auth secrets in `localStorage` or IndexedDB.
-- **DON'T** confirm whether an email already exists in OTP request responses.
+- **DON'T** disclose credential, reset, OTP, magic-link or social-link details in error responses. The approved email-first UI may branch between an existing-account password screen and new-account OTP verification after email submission; no other endpoint should reveal additional account information.
+- **DON'T** store plaintext passwords, password hints, raw magic/reset tokens, OAuth state/nonce or Google tokens in logs or analytics.
+- **DON'T** automatically link a Google identity to an existing user from email equality alone.
 - **DON'T** log OTP values.
 - **DON'T** implement SMS OTP. SMS is excluded from MVP due to cost.
 
@@ -659,7 +672,7 @@ After every Round, perform the following self-checks before requesting approval.
 
 #### Financial Safety Check
 
-- [ ] If financial logic was touched: verify `shopspring/decimal` usage (no `float64`).
+- [ ] If financial logic was touched: verify `BIGINT` minor units for posted money, fixed decimals for rates/unit-cost intermediates, checked overflow, and no `float64`.
 - [ ] Verify `workspace_id` scoping on all queries.
 - [ ] Verify ledger balance (debits == credits) for all financial writes.
 - [ ] Verify immutability of finalized records (void/reversal only).

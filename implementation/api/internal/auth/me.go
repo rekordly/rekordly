@@ -19,6 +19,8 @@ type CurrentUser struct {
 	Session          CurrentSession        `json:"session"`
 	Onboarding       OnboardingState       `json:"onboarding"`
 	Workspaces       []AuthorizedWorkspace `json:"workspaces"`
+	// CSRFToken is set only on the GET /me response, for the web app to send back.
+	CSRFToken string `json:"csrf_token,omitempty"`
 }
 
 type CurrentSession struct {

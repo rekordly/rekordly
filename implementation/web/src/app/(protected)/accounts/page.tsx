@@ -1,2 +1,12 @@
-import { ModulePlaceholder } from "@/components/layout/module-placeholder";
-export default function AccountsPage() { return <ModulePlaceholder title="Accounts" description="Keep personal and business accounts separate while seeing a clear balance." />; }
+import type { Metadata } from "next";
+
+import { AccountsPage } from "@/components/features/finance/accounts-page";
+
+export const metadata: Metadata = {
+  title: "Accounts — Rekordly",
+  description: "Your money accounts and categories.",
+};
+
+export default function Page() {
+  return <AccountsPage />;
+}

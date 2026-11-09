@@ -4,14 +4,14 @@ import { useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
 
 import { RouteLoading } from "./route-guards";
-import { useSessionQuery } from "@/lib/session-query";
-import { isOnboardingComplete } from "@/lib/auth-routes";
-import { useSessionStore } from "@/stores/auth-store";
+import { useSessionQuery } from "@/components/providers/session-provider";
+import { isOnboardingComplete } from "@/lib/auth";
+import { useAuthStore } from "@/stores/auth-store";
 
 export function OnboardingRoute({ children }: { children: ReactNode }) {
   const router = useRouter();
-  const status = useSessionStore((state) => state.status);
-  const user = useSessionStore((state) => state.user);
+  const status = useAuthStore((state) => state.status);
+  const user = useAuthStore((state) => state.user);
   const query = useSessionQuery();
 
   useEffect(() => {

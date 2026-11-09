@@ -5,10 +5,13 @@ import { ArrowRight, Check, Storefront, UserCircle } from "@phosphor-icons/react
 import { usePathname, useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
-import { onboardingApi, type OnboardingRole, type SpaceChoice } from "@/lib/onboarding-api";
-import { sessionQueryKey } from "@/lib/session-query";
-import { useSessionStore } from "@/stores/auth-store";
-import { Alert, Button, SurfaceCard, TextField } from "@/components/ui";
+import { onboardingApi, type OnboardingRole, type SpaceChoice } from "@/lib/auth";
+import { sessionQueryKey } from "@/components/providers/session-provider";
+import { useAuthStore } from "@/stores/auth-store";
+import { Alert } from "@/components/ui/alert";
+import { AppButton } from "@/components/ui/app-button";
+import { AppInput } from "@/components/ui/app-input";
+import { DashboardCard } from "@/components/ui/dashboard-card";
 
 const roleOptions: { value: OnboardingRole; label: string; description: string }[] = [
   { value: "personal", label: "Personal finance", description: "Track income, spending, and everyday money." },
@@ -31,7 +34,7 @@ export function OnboardingScreen() {
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const user = useSessionStore((state) => state.user);
+  const user = useAuthStore((state) => state.user);
   const [roles, setRoles] = useState<OnboardingRole[]>(
     (user?.onboarding?.selected_roles ?? []) as OnboardingRole[],
   );
@@ -82,7 +85,7 @@ export function OnboardingScreen() {
           })}
         </div>
         <div className="mt-8"><p className="mb-3 text-sm font-semibold">Which spaces should we create?</p><div className="grid gap-3 sm:grid-cols-3">{(["personal", "business", "all"] as SpaceChoice[]).map((choice) => <button key={choice} type="button" onClick={() => setSpaceChoice(choice)} className={`rounded-2xl border px-4 py-4 text-left text-sm font-medium capitalize ${spaceChoice === choice ? "border-primary bg-primary-soft text-primary" : "border-border bg-surface"}`}>{choice === "all" ? "Personal + business" : choice}</button>)}</div></div>
-        <div className="mt-8 flex justify-end"><Button size="lg" endIcon={<ArrowRight />} isDisabled={!canContinue || preferenceMutation.isPending} onPress={() => preferenceMutation.mutate()}>Continue</Button></div>
+        <div className="mt-8 flex justify-end"><AppButton size="lg" endContent={<ArrowRight />} isDisabled={!canContinue || preferenceMutation.isPending} onPress={() => preferenceMutation.mutate()}>Continue</AppButton></div>
       </div>
     );
   }
@@ -91,11 +94,11 @@ export function OnboardingScreen() {
     <div className="mx-auto max-w-3xl py-10 sm:py-16">
       <StepHeader step="02 / 02" title="Name your spaces" description="These names appear in your workspace switcher. You can edit them later." />
       {error ? <Alert status="error" description={error} className="mb-5" /> : null}
-      <SurfaceCard className="gap-5">
-        {wantsPersonal ? <TextField label="Personal space" value={personalName} onChange={setPersonalName} placeholder="Personal finance" startAddon={<UserCircle />} /> : null}
-        {wantsBusiness ? <TextField label="Business name" value={businessName} onChange={setBusinessName} placeholder="Your business name" startAddon={<Storefront />} isRequired /> : null}
-      </SurfaceCard>
-      <div className="mt-8 flex items-center justify-between"><Button variant="ghost" onPress={() => router.back()}>Back</Button><Button size="lg" endIcon={<ArrowRight />} isDisabled={(wantsPersonal && personalName.trim().length < 2) || (wantsBusiness && businessName.trim().length < 2) || workspaceMutation.isPending} onPress={() => workspaceMutation.mutate()}>Create spaces</Button></div>
+      <DashboardCard className="gap-5">
+        {wantsPersonal ? <AppInput label="Personal space" value={personalName} onChange={(event) => setPersonalName(event.target.value)} placeholder="Personal finance" startContent={<UserCircle />} /> : null}
+        {wantsBusiness ? <AppInput label="Business name" value={businessName} onChange={(event) => setBusinessName(event.target.value)} placeholder="Your business name" startContent={<Storefront />} isRequired /> : null}
+      </DashboardCard>
+      <div className="mt-8 flex items-center justify-between"><AppButton variant="ghost" onPress={() => router.back()}>Back</AppButton><AppButton size="lg" endContent={<ArrowRight />} isDisabled={(wantsPersonal && personalName.trim().length < 2) || (wantsBusiness && businessName.trim().length < 2) || workspaceMutation.isPending} onPress={() => workspaceMutation.mutate()}>Create spaces</AppButton></div>
     </div>
   );
 }

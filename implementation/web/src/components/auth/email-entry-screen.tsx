@@ -1,31 +1,33 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowLeft, EnvelopeSimple, GoogleLogo, Key } from "@phosphor-icons/react";
+import { ArrowRight, EnvelopeSimple, Key } from "@phosphor-icons/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 
+import { OtpCard } from "@/components/auth/otp-card";
+import { Alert } from "@/components/ui/alert";
+import { AppButton } from "@/components/ui/app-button";
+import { AppInput } from "@/components/ui/app-input";
+import { AuthCard, AuthDivider } from "@/components/ui/auth-card";
+import { GoogleLogo } from "@/components/ui/google-logo";
 import {
-  Alert,
-  AuthCard,
-  AuthDivider,
-  Button,
-  LoadingButton,
-  TextField,
-} from "@/components/ui";
-import { ApiClientError, resolveApiBaseUrl } from "@/lib/api";
+  authApi,
+  AUTH_ROUTES,
+} from "@/lib/auth";
+import { ApiClientError } from "@/lib/errors";
 import {
   type AuthApiContract,
   createSubmissionGuard,
   handleEmailContinuationSubmit,
-} from "@/lib/auth-flow";
-import { AUTH_ROUTES } from "@/lib/auth-routes";
-import { useAuthFlowStore } from "@/stores/auth-flow-store";
+  startGoogleSignIn,
+  useAuthStore,
+} from "@/stores/auth-store";
 import {
   type EmailContinueFormValues,
   emailContinueSchema,
-} from "@/lib/validation";
+} from "@/lib/schemas/auth.schemas";
 
 export interface EmailEntryScreenProps {
   initialReturnTo?: string | null;
@@ -41,9 +43,9 @@ export function EmailEntryScreen({
   api,
 }: EmailEntryScreenProps) {
   const router = useRouter();
-  const storedEmail = useAuthFlowStore((state) => state.email);
-  const setEmail = useAuthFlowStore((state) => state.setEmail);
-  const setReturnTo = useAuthFlowStore((state) => state.setReturnTo);
+  const storedEmail = useAuthStore((state) => state.email);
+  const setEmail = useAuthStore((state) => state.setEmail);
+  const setReturnTo = useAuthStore((state) => state.setReturnTo);
 
   const [view, setView] = useState<"email" | "registration">(initialView);
   const [registrationEmail, setRegistrationEmail] = useState<string>(
@@ -76,6 +78,8 @@ export function EmailEntryScreen({
           router.push(outcome.nextRoute);
           return;
         }
+        // The email step only classifies the address; the code is requested here.
+        await (api ?? authApi).requestOtp(outcome.email, "registration");
         setRegistrationEmail(outcome.email);
         setView("registration");
       } catch (error: unknown) {
@@ -98,66 +102,20 @@ export function EmailEntryScreen({
     router.push(AUTH_ROUTES.LOGIN_PASSWORD);
   };
 
-  const handleGoogleSignIn = () => {
-    const returnTo = useAuthFlowStore.getState().returnTo ?? "/dashboard";
-    window.open(
-      `${resolveApiBaseUrl()}/api/v1/auth/google/start?return_to=${encodeURIComponent(returnTo)}`,
-      "_self",
-    );
-  };
-
-  const handleBackToEmail = () => {
-    setApiError(null);
-    setView("email");
-  };
-
   const isLoading = isBusy || form.formState.isSubmitting;
 
   if (view === "registration") {
     return (
-      <AuthCard
+      <OtpCard
+        email={registrationEmail || form.getValues("email")}
+        purpose="registration"
         title="Verify your email"
-        subtitle={
-          <>
-            We sent a 6-digit code to{" "}
-            <span className="font-semibold text-foreground">
-              {registrationEmail || form.getValues("email")}
-            </span>
-          </>
-        }
-        footer={
-          <Button
-            variant="ghost"
-            size="md"
-            fullWidth
-            startIcon={<ArrowLeft className="size-4" />}
-            onPress={handleBackToEmail}
-            data-testid="registration-change-email-button"
-          >
-            Change email
-          </Button>
-        }
-      >
-        <div
-          className="flex flex-col gap-3 rounded-xl bg-surface-muted p-4 shadow-none"
-          data-testid="registration-otp-slot"
-        >
-          <div className="flex items-start gap-3">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary">
-              <EnvelopeSimple size={20} weight="duotone" aria-hidden="true" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <h2 className="font-heading text-sm font-semibold text-foreground">
-                Enter your verification code
-              </h2>
-              <p className="font-sans text-xs leading-relaxed text-muted-foreground">
-                The code expires shortly. Check spam if it does not arrive.
-              </p>
-            </div>
-          </div>
-
-        </div>
-      </AuthCard>
+        backLabel="Change email"
+        onBack={() => {
+          setApiError(null);
+          setView("email");
+        }}
+      />
     );
   }
 
@@ -189,7 +147,7 @@ export function EmailEntryScreen({
           control={form.control}
           name="email"
           render={({ field, fieldState }) => (
-            <TextField
+            <AppInput
               id="auth-email"
               name={field.name}
               label="Email"
@@ -197,15 +155,16 @@ export function EmailEntryScreen({
               inputMode="email"
               autoComplete="email"
               placeholder="you@example.com"
+              startContent={<EnvelopeSimple />}
               value={field.value}
-              onChange={(value) => {
-                field.onChange(value);
+              onChange={(event) => {
+                field.onChange(event.target.value);
                 if (apiError) {
                   setApiError(null);
                 }
               }}
               onBlur={field.onBlur}
-              inputRef={field.ref}
+              ref={field.ref}
               isDisabled={isLoading}
               isRequired
               isInvalid={Boolean(fieldState.error)}
@@ -215,44 +174,41 @@ export function EmailEntryScreen({
           )}
         />
 
-        <LoadingButton
+        <AppButton
           type="submit"
-          variant="primary"
-          size="lg"
+          size="md"
           fullWidth
           isLoading={isLoading}
-          loadingText="Continuing..."
+          endContent={<ArrowRight weight="bold" />}
           data-testid="email-continue-submit"
         >
-          Continue with email
-        </LoadingButton>
+          {isLoading ? "Continuing..." : "Continue with email"}
+        </AppButton>
       </form>
 
       <AuthDivider label="or" />
 
       <div className="flex flex-col gap-3">
-        <Button
+        <AppButton
           variant="outline"
-          size="md"
           fullWidth
           isDisabled={isLoading}
-          startIcon={<GoogleLogo />}
-          onPress={handleGoogleSignIn}
+          startContent={<GoogleLogo />}
+          onPress={() => void startGoogleSignIn(setApiError)}
           data-testid="continue-with-google-button"
         >
           Continue with Google
-        </Button>
-        <Button
+        </AppButton>
+        <AppButton
           variant="outline"
-          size="md"
           fullWidth
           isDisabled={isLoading}
-          startIcon={<Key className="text-primary" />}
+          startContent={<Key />}
           onPress={handleContinueWithPasswordDirect}
           data-testid="continue-with-password-button"
         >
           Continue with password
-        </Button>
+        </AppButton>
       </div>
     </AuthCard>
   );

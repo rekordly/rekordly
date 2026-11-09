@@ -36,6 +36,7 @@ type CreateInvoiceInput struct {
 	IssueDate      string             `json:"issue_date" binding:"required"` // YYYY-MM-DD
 	DueDate        string             `json:"due_date" binding:"required"`   // YYYY-MM-DD
 	TaxAmountMinor int64              `json:"tax_amount_minor"`
+	TaxAmount      string             `json:"tax_amount"` // optional major decimal string
 	Currency       string             `json:"currency"`
 	Status         string             `json:"status"` // draft or finalized (default draft)
 	Items          []InvoiceItemInput `json:"items" binding:"required"`
@@ -147,6 +148,14 @@ func (s *Service) CreateInvoice(ctx context.Context, workspaceID, userID int64, 
 			unitPrice:   unitPrice,
 			amountMinor: lineAmount,
 		})
+	}
+
+	if in.TaxAmount != "" {
+		parsed, err := ParseMajorToMinor(in.TaxAmount, CurrencyExponent(in.Currency))
+		if err != nil {
+			return InvoiceDetail{}, err
+		}
+		in.TaxAmountMinor = parsed
 	}
 
 	totalMinor := subtotalMinor + in.TaxAmountMinor

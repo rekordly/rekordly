@@ -407,6 +407,10 @@ func (handler *Handler) currentUser(c *gin.Context) {
 		handler.writeError(c, err)
 		return
 	}
+	// The cookie is scoped to the API host, so the web app on another host cannot
+	// read it. CORS limits this response to approved origins, which keeps the
+	// token away from anything else on the domain, such as storefront subdomains.
+	current.CSRFToken, _ = c.Cookie("rekordly_csrf")
 	c.Header("Cache-Control", "no-store")
 	c.JSON(http.StatusOK, gin.H{"data": current})
 }
@@ -512,7 +516,8 @@ func (handler *Handler) writeSession(c *gin.Context, proof SessionProof) {
 	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie("rekordly_session", proof.Token, maxAge, "/", "", handler.secureCookie, true)
 	c.SetCookie("rekordly_csrf", proof.CSRFToken, maxAge, "/", "", handler.secureCookie, false)
-	c.JSON(http.StatusOK, gin.H{"data": gin.H{"user_id": proof.UserID, "onboarding_status": proof.Onboarding, "expires_at": proof.ExpiresAt}})
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"user_id": proof.UserID, "onboarding_status": proof.Onboarding, "expires_at": proof.ExpiresAt, "csrf_token": proof.CSRFToken}})
 }
 
 func safeReturnTo(value string) string {

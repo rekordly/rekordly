@@ -1,5 +1,12 @@
-import { ModulePlaceholder } from "@/components/layout/module-placeholder";
+import type { Metadata } from "next";
 
-export default function NewSalePage() {
-  return <ModulePlaceholder title="New sale" description="Create a sale for the active Business workspace and link it to a customer or inventory item." permission="sales.create" actionLabel="Back to sales" actionHref="/sales" />;
+import { TradePage } from "@/components/features/finance/trade-page";
+
+export const metadata: Metadata = {
+  title: "New sale — Rekordly",
+  description: "Record a sale.",
+};
+
+export default function Page() {
+  return <TradePage kind="sale" startOpen />;
 }

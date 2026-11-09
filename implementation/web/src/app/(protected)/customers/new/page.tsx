@@ -1,5 +1,12 @@
-import { ModulePlaceholder } from "@/components/layout/module-placeholder";
+import type { Metadata } from "next";
 
-export default function NewCustomerPage() {
-  return <ModulePlaceholder title="Add contact" description="Create a customer or supplier record for the active workspace." actionLabel="Back to contacts" actionHref="/customers" />;
+import { ContactsPage } from "@/components/features/finance/contacts-page";
+
+export const metadata: Metadata = {
+  title: "Add contact — Rekordly",
+  description: "Add a customer or supplier.",
+};
+
+export default function Page() {
+  return <ContactsPage startOpen />;
 }

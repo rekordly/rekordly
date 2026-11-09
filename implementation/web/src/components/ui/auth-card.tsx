@@ -5,7 +5,6 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-
 export interface AuthCardProps {
   title: string;
   subtitle?: ReactNode;
@@ -17,82 +16,41 @@ export interface AuthCardProps {
 
 export function AuthDivider({ label = "or" }: { label?: string }) {
   return (
-    <div
-      className="my-5 flex items-center gap-3 px-1"
-      role="separator"
-      aria-orientation="horizontal"
-    >
-      <span className="h-px flex-1 bg-border" aria-hidden="true" />
-      <span className="font-sans text-xs font-medium tracking-wider text-muted-foreground uppercase">
-        {label}
-      </span>
-      <span className="h-px flex-1 bg-border" aria-hidden="true" />
+    <div className="flex items-center gap-3" role="separator" aria-orientation="horizontal">
+      <span className="h-px flex-1 bg-separator" aria-hidden="true" />
+      <span className="text-xs text-muted">{label}</span>
+      <span className="h-px flex-1 bg-separator" aria-hidden="true" />
     </div>
   );
 }
 
-export function AuthCard({
-  title,
-  subtitle,
-  alert,
-  children,
-  footer,
-  className,
-}: AuthCardProps) {
+export function AuthCard({ title, subtitle, alert, children, footer, className }: AuthCardProps) {
   return (
-    <div className="flex min-h-dvh w-full flex-col px-5 py-5 sm:px-8 md:h-full md:min-h-0 md:px-10 md:py-7">
-      {/* Top bar with Rekordly branding on mobile */}
-      <header className="mx-auto flex w-full max-w-md items-center gap-4">
-        <Link
-          href="/login"
-          aria-label="Rekordly home"
-          className="inline-flex items-center gap-2 rounded-lg py-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring md:hidden"
-        >
-          <Image
-            src="/rekordly-logo.svg"
-            alt="Rekordly"
-            width={124}
-            height={30}
-            priority
-            className="h-7 w-auto object-contain"
-          />
-        </Link>
-      </header>
+    <div className="flex min-h-dvh w-full flex-col items-center justify-center gap-6 p-6 md:min-h-full">
+      {/* The brand panel is hidden on phones, so the logo sits above the card there. */}
+      <Link href="/login" aria-label="Rekordly home" className="md:hidden">
+        <Image src="/logo.png" alt="Rekordly" width={40} height={40} priority className="size-10 rounded-xl" />
+      </Link>
 
-      {/* Main compact authentication surface */}
-      <main className="mx-auto flex w-full max-w-[var(--auth-form-max-width)] flex-1 flex-col justify-center py-6 sm:py-8 md:min-h-0 md:py-4">
-        <HeroCard.Root
-          variant="transparent"
-          className={cn(
-            "w-full border-0 bg-transparent p-0 shadow-none",
-            className,
-          )}
-        >
-          <HeroCard.Header className="mb-5 flex flex-col items-start gap-1 p-0 text-left">
-            <HeroCard.Title className="font-heading text-[1.65rem] font-bold leading-tight tracking-[-0.025em] text-foreground">
-              {title}
-            </HeroCard.Title>
-            {subtitle ? (
-              <HeroCard.Description className="font-sans text-[13px] leading-5 text-muted-foreground">
-                {subtitle}
-              </HeroCard.Description>
-            ) : null}
-          </HeroCard.Header>
-
-          {alert ? <div className="mb-4 w-full">{alert}</div> : null}
-
-          <HeroCard.Content className="flex w-full flex-col gap-3.5 p-0">
-            {children}
-          </HeroCard.Content>
-
-          {footer ? (
-            <HeroCard.Footer className="mt-4 flex w-full flex-col gap-2 p-0">
-              {footer}
-            </HeroCard.Footer>
+      <HeroCard.Root
+        variant="transparent"
+        className={cn("w-full max-w-[420px] gap-0 rounded-3xl border-0 bg-surface p-8 shadow-none sm:p-10", className)}
+      >
+        <HeroCard.Header className="flex flex-col items-start gap-1 p-0 text-left">
+          <HeroCard.Title className="font-heading text-[20px] font-semibold tracking-[-0.02em] text-foreground">
+            {title}
+          </HeroCard.Title>
+          {subtitle ? (
+            <HeroCard.Description className="text-[13px] text-muted">{subtitle}</HeroCard.Description>
           ) : null}
-        </HeroCard.Root>
-      </main>
+        </HeroCard.Header>
 
+        {alert ? <div className="mt-5 w-full">{alert}</div> : null}
+
+        <HeroCard.Content className="mt-6 flex w-full flex-col gap-4 p-0">{children}</HeroCard.Content>
+
+        {footer ? <HeroCard.Footer className="mt-4 flex w-full flex-col gap-2 p-0">{footer}</HeroCard.Footer> : null}
+      </HeroCard.Root>
     </div>
   );
 }

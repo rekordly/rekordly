@@ -2,13 +2,14 @@
 
 import { useState } from "react";
 import { Alert } from "@/components/ui/alert";
-import { SurfaceCard } from "@/components/ui/surface-card";
-import { useSessionStore } from "@/stores/auth-store";
-import { useWorkspaceStore } from "@/stores/workspace-store";
+import { DashboardCard } from "@/components/ui/dashboard-card";
+import { Page } from "@/components/ui/page";
+import { useAuthStore } from "@/stores/auth-store";
+import { useActiveWorkspace } from "@/stores/workspace-store";
 import {
   getFeature,
   resolveSpaceContext,
-} from "@/lib/feature-registry";
+} from "./registry";
 import type { FeatureId, FinanceSpace } from "@/types/features";
 import { FeatureEmptyState } from "./feature-empty-state";
 import { FeatureIcon } from "./feature-icon";
@@ -32,28 +33,12 @@ export function FeatureScaffold({
   className = "",
 }: FeatureScaffoldProps) {
   const feature = getFeature(featureId);
-  const user = useSessionStore((state) => state.user);
-  const selectedWorkspace = useWorkspaceStore((state) => state.activeWorkspace);
-  const setActiveWorkspace = useWorkspaceStore((state) => state.setActiveWorkspace);
-  const [localSpace, setLocalSpace] = useState<FinanceSpace>(defaultSpace);
+  const user = useAuthStore((state) => state.user);
+  const { mode, active, switchSpace } = useActiveWorkspace();
   const [viewMode, setViewMode] = useState<FeatureViewMode>(initialMode);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
 
-  const selectedWorkspaceRecord = selectedWorkspace === "all" ? undefined : user?.workspaces.find((workspace) => workspace.id === selectedWorkspace);
-  const activeSpace: FinanceSpace = selectedWorkspace === "all"
-    ? "all"
-    : selectedWorkspaceRecord?.kind === "personal"
-      ? "personal"
-      : selectedWorkspaceRecord?.kind === "business"
-        ? "business"
-        : localSpace;
-
-  function handleSpaceChange(space: FinanceSpace) {
-    setLocalSpace(space);
-    const target = space === "all" ? "all" : user?.workspaces.find((workspace) => workspace.kind === space)?.id;
-    if (!target) return;
-    setActiveWorkspace(target);
-  }
+  const activeSpace: FinanceSpace = active || mode === "all" ? mode : defaultSpace;
 
   const spaceContext = resolveSpaceContext(user, activeSpace);
 
@@ -69,15 +54,12 @@ export function FeatureScaffold({
     activeSpace === "personal";
 
   return (
-    <main
-      className={`mx-auto max-w-6xl p-5 sm:p-7 space-y-6 ${className}`}
-      data-testid={`feature-scaffold-${feature.id}`}
-    >
+    <Page className={className}>
       {/* Page Header with Real Title, Space Badge, Scope Toggle, and Primary Action */}
       <FeaturePageHeader
         feature={feature}
         activeSpace={activeSpace}
-        onSpaceChange={handleSpaceChange}
+        onSpaceChange={switchSpace}
         onPrimaryAction={handlePrimaryAction}
         actionDisabled={viewMode === "loading" || isBlockedInPersonal}
       />
@@ -103,18 +85,18 @@ export function FeatureScaffold({
       {/* Mode Switcher Bar for Testing & Development Verification */}
       <aside
         aria-label="Feature State Inspector"
-        className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-surface-elevated/80 px-4 py-2.5 text-xs text-text-secondary border border-border max-w-full overflow-hidden"
+        className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-surface px-4 py-2.5 text-xs text-muted max-w-full overflow-hidden"
         data-testid="state-inspector-bar"
       >
         <div className="flex items-center gap-2 min-w-0">
           <FeatureIcon name="Info" size={16} weight="duotone" className="text-primary shrink-0" />
           <span className="font-mono text-[11px] truncate">
-            Active Space: <strong className="text-text-primary">{spaceContext.label}</strong> ({spaceContext.baseCurrency})
+            Active Space: <strong className="text-foreground">{spaceContext.label}</strong> ({spaceContext.baseCurrency})
           </span>
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-text-muted text-[11px] mr-1">Inspect State:</span>
+          <span className="text-muted text-[11px] mr-1">Inspect State:</span>
           {(["normal", "loading", "unavailable", "plan-locked"] as const).map(
             (mode) => (
               <button
@@ -123,8 +105,8 @@ export function FeatureScaffold({
                 onClick={() => setViewMode(mode)}
                 className={`rounded-md px-2 py-0.5 font-mono text-[11px] capitalize transition-colors ${
                   viewMode === mode
-                    ? "bg-primary text-white font-semibold"
-                    : "bg-surface text-text-secondary hover:text-text-primary border border-border"
+                    ? "bg-accent text-accent-foreground font-semibold"
+                    : "bg-default text-muted hover:text-foreground"
                 }`}
                 aria-pressed={viewMode === mode}
                 data-testid={`inspect-mode-${mode}`}
@@ -143,31 +125,31 @@ export function FeatureScaffold({
             feature={feature}
             activeSpace={activeSpace}
             onAction={handlePrimaryAction}
-            onSwitchSpace={handleSpaceChange}
+            onSwitchSpace={switchSpace}
           />
 
           {/* Feature Information Details Card */}
-          <SurfaceCard className="p-6 space-y-4">
-            <h2 className="font-heading text-base font-semibold text-text-primary">
+          <DashboardCard className="space-y-4">
+            <h2 className="font-heading text-base font-semibold text-foreground">
               Feature Information & Scope Rules
             </h2>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 text-xs">
-              <div className="space-y-1 rounded-xl bg-surface-elevated p-3 border border-border">
-                <span className="font-semibold text-text-primary">Category</span>
-                <p className="text-text-secondary capitalize">{feature.category}</p>
+              <div className="space-y-1 rounded-2xl bg-surface-secondary p-3">
+                <span className="font-semibold text-foreground">Category</span>
+                <p className="text-muted capitalize">{feature.category}</p>
               </div>
 
-              <div className="space-y-1 rounded-xl bg-surface-elevated p-3 border border-border">
-                <span className="font-semibold text-text-primary">Space Availability</span>
-                <p className="text-text-secondary">
+              <div className="space-y-1 rounded-2xl bg-surface-secondary p-3">
+                <span className="font-semibold text-foreground">Space Availability</span>
+                <p className="text-muted">
                   Personal: {feature.availability.personal ? "Yes" : "No"} · Business:{" "}
                   {feature.availability.business ? "Yes" : "No"}
                 </p>
               </div>
 
-              <div className="space-y-1 rounded-xl bg-surface-elevated p-3 border border-border">
-                <span className="font-semibold text-text-primary">Offline Support</span>
-                <p className="text-text-secondary">
+              <div className="space-y-1 rounded-2xl bg-surface-secondary p-3">
+                <span className="font-semibold text-foreground">Offline Support</span>
+                <p className="text-muted">
                   {feature.supportsOfflineDrafts ? "Queued up to 100 drafts" : "Requires online connection"}
                 </p>
               </div>
@@ -175,20 +157,20 @@ export function FeatureScaffold({
 
             {feature.tags.length > 0 && (
               <div className="flex flex-wrap items-center gap-1.5 pt-2">
-                <span className="font-sans text-xs text-text-muted mr-1">Tags:</span>
+                <span className="font-sans text-xs text-muted mr-1">Tags:</span>
                 {feature.tags.map((tag) => (
                   <span
                     key={tag}
-                    className="rounded-md bg-surface-elevated px-2 py-0.5 font-mono text-[11px] text-text-secondary border border-border"
+                    className="rounded-md bg-default px-2 py-0.5 font-mono text-[11px] text-muted"
                   >
                     #{tag}
                   </span>
                 ))}
               </div>
             )}
-          </SurfaceCard>
+          </DashboardCard>
         </section>
       )}
-    </main>
+    </Page>
   );
 }

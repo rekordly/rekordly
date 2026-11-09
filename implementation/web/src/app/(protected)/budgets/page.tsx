@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
-import { FeatureScaffold } from "@/components/features";
+
+import { BudgetsPage } from "@/components/features/finance/budgets-page";
 
 export const metadata: Metadata = {
-  title: "Budgets & Spending Targets — Rekordly",
-  description: "Set category spending limits and track income goals.",
+  title: "Budgets — Rekordly",
+  description: "Spending limits and how close you are.",
 };
 
-export default function BudgetsPage() {
-  return <FeatureScaffold featureId="budgets" defaultSpace="personal" />;
+export default function Page() {
+  return <BudgetsPage />;
 }

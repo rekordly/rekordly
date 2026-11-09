@@ -104,3 +104,23 @@
 - Verification passed: ESLint, TypeScript, 21 authentication/session tests and the Next.js production build.
 - Runtime browser validation with the live Go API remains part of final frontend/backend E2E.
 
+
+
+## 9 November 2026 — Web restructure onto the kero-admin architecture
+
+- Rebuilt `globals.css` on kero-admin's primitive/semantic token structure and neutral backgrounds, keeping Rekordly green `#009e10`, orange `#fa8901` and Figtree/Sora/Fira Code.
+- Replaced the Rekordly UI wrappers with the kero UI kit (`AppButton`, `AppInput`, `AppSelect`, `AppTextarea`, `AppModal`, `AppRowActions`, `DashboardCard`, `page.tsx` primitives, `MoneyInput`) and the kero shell (sidebar, topbar, command menu, network banner).
+- Deliberate departures from kero: no profile in localStorage, no bearer token in JavaScript, money stays a string, no `sonner` (HeroUI toast used because `sonner` is not in doc 13).
+- Session: memory-only auth store, single-flight cross-tab rotation before expiry, idle limit, cross-tab sign-out, full reload on sign-out, tenant cache purge when a session ends or the user changes.
+- Workspace: selection bound to the user id and validated against `/me`; permissions come only from the workspace in view (previously owner of any workspace unlocked all).
+- API: added `X-Workspace-ID` to CORS allowed headers (browser preflight was rejecting every workspace-scoped call).
+- Verification passed: ESLint, TypeScript, 41 tests, Next.js production build, and a browser run against the local Docker API (sign-in, record, workspace isolation, void, revoked session, rotation, sign-out, light/dark, 375px).
+- Deferred, needs a backend decision: `rekordly_csrf` is host-only on the API domain so production JS cannot read it; finance writes do not check CSRF; `X-Workspace-ID` is client-supplied (membership-checked) versus AGENT_RULES 2.2; `/me` sends no per-workspace permissions for staff.
+
+- 9 November 2026 follow-up: every page now uses the shared Page layout; sidebar menu is light with a white active item; workspace switching uses HeroUI Select; auth pages use smaller type, the green panel, the official R logo and the Google mark; added magic-link sign-in (with confirm step), sign-in by code, and the registration code entry. Registration now requests its code because /auth/email/continue only classifies the address.
+
+- 9 November 2026 follow-up: reduced src/lib to the kero-admin shape. Auth routes and onboarding API merged into lib/auth.ts; form validation merged into lib/schemas/auth.schemas.ts; sign-in state and actions merged into stores/auth-store.ts; workspace rules into stores/workspace-store.ts; session lifecycle moved to components/providers/session-provider.tsx; feature registry to components/features; tests to web/tests.
+
+- 9 November 2026 follow-up: CSRF. rekordly_csrf stays host-only on the API because the storefront/domain blueprint places storefronts on businessname.rekordly.com; the API now returns the token from sign-in, refresh and GET /me (CORS-limited) and the web app keeps it in memory. Finance writes authenticated by cookie now require a valid X-CSRF-Token (403 CSRF_INVALID), verified against the session digest. Verified with Go tests, 43 web tests and live forged/valid requests against the local API.
+
+- 9 November 2026 follow-up: finance UI on the implemented backend. Ported legacy StatCard and record cards to HeroUI v3, added DataView (table default, cards toggle, phones always cards), FormDrawer, ConfirmDialog (AlertDialog) and recharts charts. Screens wired for dashboard, reports, accounts, categories, contacts, sales, purchases, payments, invoices, wallets, budgets and tax. Added GET /api/v1/reports/summary (SQL aggregates, money as strings) and decimal-string inputs for budgets, invoice tax, wallet payments and opening balances. Google sign-in now completes through /auth/google/callback; no client library, because the server already runs authorization-code with PKCE.

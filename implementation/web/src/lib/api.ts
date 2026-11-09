@@ -1,64 +1,22 @@
-import axios, {
-  type AxiosError,
-  type AxiosInstance,
-  type AxiosRequestConfig,
-  type AxiosResponse,
-} from "axios";
+// The one HTTP client for the Rekordly API.
+//
+// Session model: the session is an HttpOnly cookie the browser sends for us, so
+// JavaScript never holds a bearer token. Unsafe requests also carry the CSRF
+// double-submit header. Responses are unwrapped from the `{ data }` envelope and
+// every failure leaves here as a sanitised ApiClientError.
 
-import type {
-  ApiErrorCode,
-  ApiErrorDetail,
-  ApiErrorEnvelope,
-  ApiSuccessEnvelope,
-} from "../types/api.ts";
+import axios, { type AxiosInstance, type AxiosRequestConfig, type Method } from "axios";
+
+import {
+  ApiClientError,
+  DEFAULT_SAFE_MESSAGES,
+  isRecord,
+  normalizeUnknownError,
+} from "./errors.ts";
+import type { ApiSuccessEnvelope } from "../types/api.ts";
 
 export const DEFAULT_API_TIMEOUT_MS = 15_000;
 export const DEFAULT_API_BASE_URL = "http://localhost:8080";
-
-const KNOWN_ERROR_CODES: ReadonlySet<ApiErrorCode> = new Set<ApiErrorCode>([
-  "INVALID_CREDENTIALS",
-  "INVALID_PROOF",
-  "RATE_LIMITED",
-  "PASSWORD_ALREADY_SET",
-  "VALIDATION_ERROR",
-  "INVALID_REQUEST",
-  "INTERNAL_ERROR",
-  "NETWORK_ERROR",
-  "TIMEOUT_ERROR",
-]);
-
-const DEFAULT_SAFE_MESSAGES: Readonly<Record<ApiErrorCode, string>> = {
-  INVALID_CREDENTIALS: "Email or password is incorrect.",
-  INVALID_PROOF:
-    "This verification link or session proof is invalid, expired, or has already been used.",
-  RATE_LIMITED: "Too many attempts. Please wait a few minutes and try again.",
-  PASSWORD_ALREADY_SET: "A password is already configured for this account.",
-  VALIDATION_ERROR: "Please check your input and try again.",
-  INVALID_REQUEST: "Unable to process the request. Please check your details and try again.",
-  INTERNAL_ERROR: "Unable to complete the request right now. Please try again.",
-  NETWORK_ERROR:
-    "Unable to reach Rekordly servers. Check your internet connection and try again.",
-  TIMEOUT_ERROR: "The request timed out. Please check your connection and try again.",
-};
-
-export class ApiClientError extends Error {
-  public readonly code: ApiErrorCode;
-  public readonly status: number | null;
-  public readonly retryAfterSeconds: number | null;
-
-  public constructor(options: {
-    code: ApiErrorCode;
-    message: string;
-    status?: number | null;
-    retryAfterSeconds?: number | null;
-  }) {
-    super(options.message);
-    this.name = "ApiClientError";
-    this.code = options.code;
-    this.status = options.status ?? null;
-    this.retryAfterSeconds = options.retryAfterSeconds ?? null;
-  }
-}
 
 export function resolveApiBaseUrl(rawEnvUrl?: string): string {
   const candidate = (rawEnvUrl ?? process.env.NEXT_PUBLIC_API_URL ?? DEFAULT_API_BASE_URL).trim();
@@ -72,199 +30,21 @@ export function resolveApiBaseUrl(rawEnvUrl?: string): string {
   return withoutTrailingSlash;
 }
 
-function readCsrfCookie(): string | null {
-  if (typeof document === "undefined" || typeof document.cookie !== "string") {
-    return null;
-  }
-  const match = document.cookie
-    .split(";")
-    .map((part) => part.trim())
-    .find((part) => part.startsWith("rekordly_csrf="));
-  if (!match) {
-    return null;
-  }
-  const rawValue = match.slice("rekordly_csrf=".length);
-  try {
-    return decodeURIComponent(rawValue);
-  } catch {
-    return rawValue;
-  }
+export const API_BASE_URL = resolveApiBaseUrl();
+
+/**
+ * The CSRF token comes from the API and lives only in memory. Its cookie is
+ * private to the API host so that other subdomains, such as customer
+ * storefronts, cannot read it.
+ */
+let csrfToken: string | null = null;
+
+export function getCsrfToken(): string | null {
+  return csrfToken;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-export function isKnownErrorCode(code: string): code is ApiErrorCode {
-  return KNOWN_ERROR_CODES.has(code as ApiErrorCode);
-}
-
-export function sanitizeUserMessage(
-  code: ApiErrorCode,
-  rawMessage: string | undefined,
-  sensitiveValues: readonly string[] = [],
-): string {
-  // Always enforce neutral messaging for INVALID_CREDENTIALS and INVALID_PROOF
-  if (code === "INVALID_CREDENTIALS") {
-    return DEFAULT_SAFE_MESSAGES.INVALID_CREDENTIALS;
-  }
-  if (code === "INVALID_PROOF") {
-    return DEFAULT_SAFE_MESSAGES.INVALID_PROOF;
-  }
-
-  const candidate = (rawMessage ?? "").trim();
-  if (!candidate) {
-    return DEFAULT_SAFE_MESSAGES[code];
-  }
-
-  // Never allow account-existence leakage phrases
-  const lower = candidate.toLowerCase();
-  if (
-    lower.includes("no account") ||
-    lower.includes("no user") ||
-    lower.includes("user not found") ||
-    lower.includes("account not found") ||
-    lower.includes("does not exist")
-  ) {
-    return DEFAULT_SAFE_MESSAGES.INVALID_CREDENTIALS;
-  }
-
-  // Redact any sensitive values (passwords, pre-auth tokens, reset tokens) if ever echoed
-  for (const secret of sensitiveValues) {
-    const trimmedSecret = secret.trim();
-    if (trimmedSecret.length > 0 && candidate.includes(trimmedSecret)) {
-      return DEFAULT_SAFE_MESSAGES[code];
-    }
-  }
-
-  return candidate;
-}
-
-export function parseApiErrorEnvelope(
-  payload: unknown,
-  status: number | null,
-  sensitiveValues: readonly string[] = [],
-): ApiErrorDetail {
-  if (isRecord(payload) && isRecord(payload.error)) {
-    const envelope = payload as unknown as ApiErrorEnvelope;
-    const rawCode = typeof envelope.error.code === "string" ? envelope.error.code : "";
-    const code: ApiErrorCode = isKnownErrorCode(rawCode)
-      ? rawCode
-      : status === 401
-        ? "INVALID_CREDENTIALS"
-        : status === 429
-          ? "RATE_LIMITED"
-          : status === 409
-            ? "PASSWORD_ALREADY_SET"
-            : status === 422
-              ? "VALIDATION_ERROR"
-              : status === 400
-                ? "INVALID_REQUEST"
-                : "INTERNAL_ERROR";
-
-    const rawMessage =
-      typeof envelope.error.message === "string" ? envelope.error.message : undefined;
-    return {
-      code,
-      message: sanitizeUserMessage(code, rawMessage, sensitiveValues),
-    };
-  }
-
-  if (status === 401) {
-    return {
-      code: "INVALID_CREDENTIALS",
-      message: DEFAULT_SAFE_MESSAGES.INVALID_CREDENTIALS,
-    };
-  }
-  if (status === 429) {
-    return {
-      code: "RATE_LIMITED",
-      message: DEFAULT_SAFE_MESSAGES.RATE_LIMITED,
-    };
-  }
-  if (status === 409) {
-    return {
-      code: "PASSWORD_ALREADY_SET",
-      message: DEFAULT_SAFE_MESSAGES.PASSWORD_ALREADY_SET,
-    };
-  }
-  if (status === 422) {
-    return {
-      code: "VALIDATION_ERROR",
-      message: DEFAULT_SAFE_MESSAGES.VALIDATION_ERROR,
-    };
-  }
-  if (status === 400) {
-    return {
-      code: "INVALID_REQUEST",
-      message: DEFAULT_SAFE_MESSAGES.INVALID_REQUEST,
-    };
-  }
-
-  return {
-    code: "INTERNAL_ERROR",
-    message: DEFAULT_SAFE_MESSAGES.INTERNAL_ERROR,
-  };
-}
-
-function parseRetryAfterSeconds(headerValue: unknown): number | null {
-  if (typeof headerValue !== "string") {
-    return null;
-  }
-  const parsed = Number.parseInt(headerValue, 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-}
-
-export function normalizeUnknownError(
-  error: unknown,
-  sensitiveValues: readonly string[] = [],
-): ApiClientError {
-  if (error instanceof ApiClientError) {
-    return new ApiClientError({
-      code: error.code,
-      message: sanitizeUserMessage(error.code, error.message, sensitiveValues),
-      status: error.status,
-      retryAfterSeconds: error.retryAfterSeconds,
-    });
-  }
-
-  if (axios.isAxiosError(error)) {
-    const axiosErr = error as AxiosError<unknown>;
-    if (axiosErr.code === "ECONNABORTED" || axiosErr.message.toLowerCase().includes("timeout")) {
-      return new ApiClientError({
-        code: "TIMEOUT_ERROR",
-        message: DEFAULT_SAFE_MESSAGES.TIMEOUT_ERROR,
-        status: null,
-      });
-    }
-
-    if (!axiosErr.response) {
-      return new ApiClientError({
-        code: "NETWORK_ERROR",
-        message: DEFAULT_SAFE_MESSAGES.NETWORK_ERROR,
-        status: null,
-      });
-    }
-
-    const status = axiosErr.response.status;
-    const retryAfterSeconds = parseRetryAfterSeconds(
-      axiosErr.response.headers?.["retry-after"],
-    );
-    const parsed = parseApiErrorEnvelope(axiosErr.response.data, status, sensitiveValues);
-
-    return new ApiClientError({
-      code: parsed.code,
-      message: parsed.message,
-      status,
-      retryAfterSeconds,
-    });
-  }
-
-  return new ApiClientError({
-    code: "INTERNAL_ERROR",
-    message: DEFAULT_SAFE_MESSAGES.INTERNAL_ERROR,
-    status: null,
-  });
+export function setCsrfToken(token: string | null): void {
+  csrfToken = token;
 }
 
 export interface ApiRequestOptions {
@@ -280,7 +60,6 @@ export function buildAuthRequestConfig(options?: ApiRequestOptions): AxiosReques
     ...(options?.headers ?? {}),
   };
 
-  const csrfToken = readCsrfCookie();
   if (csrfToken && !headers["X-CSRF-Token"]) {
     headers["X-CSRF-Token"] = csrfToken;
   }
@@ -311,6 +90,31 @@ export function createApiAxiosInstance(baseURL?: string): AxiosInstance {
   });
 }
 
+/** Scope one request to a workspace. The API re-checks membership on every call. */
+export function workspaceHeaders(workspaceId: number): Readonly<Record<string, string>> {
+  if (!Number.isSafeInteger(workspaceId) || workspaceId <= 0) {
+    throw new ApiClientError({
+      code: "WORKSPACE_REQUIRED",
+      message: DEFAULT_SAFE_MESSAGES.WORKSPACE_REQUIRED,
+    });
+  }
+  return { "X-Workspace-ID": String(workspaceId) };
+}
+
+type SessionLostHandler = () => void;
+let onSessionLost: SessionLostHandler | null = null;
+
+/** Registered once by the app so a dead session can be handled without an import cycle. */
+export function setSessionLostHandler(handler: SessionLostHandler | null): void {
+  onSessionLost = handler;
+}
+
+/** Auth endpoints answer 401 for wrong passwords, and /me is how we learn the session state. */
+function isSessionAwarePath(path: string): boolean {
+  const pathname = path.split("?")[0] ?? path;
+  return pathname.startsWith("/api/v1/auth/") || pathname === "/api/v1/me";
+}
+
 export class RekordlyApiClient {
   private readonly instance: AxiosInstance;
 
@@ -322,14 +126,25 @@ export class RekordlyApiClient {
     return this.instance;
   }
 
-  public async get<TResponseData>(
+  private async request<TResponseData>(
+    method: Method,
     path: string,
-    options?: ApiRequestOptions,
+    body: unknown,
+    options: ApiRequestOptions | undefined,
+    isRetry = false,
   ): Promise<TResponseData> {
-    const config = buildAuthRequestConfig(options);
+    const csrfAtSend = csrfToken;
     try {
-      const response: AxiosResponse<ApiSuccessEnvelope<TResponseData>> =
-        await this.instance.get<ApiSuccessEnvelope<TResponseData>>(path, config);
+      const response = await this.instance.request<ApiSuccessEnvelope<TResponseData>>({
+        ...buildAuthRequestConfig(options),
+        method,
+        url: path,
+        data: body,
+      });
+
+      if (response.status === 204) {
+        return undefined as TResponseData;
+      }
 
       if (!isRecord(response.data) || !("data" in response.data)) {
         throw new ApiClientError({
@@ -341,50 +156,55 @@ export class RekordlyApiClient {
 
       return response.data.data;
     } catch (error: unknown) {
-      throw normalizeUnknownError(error, options?.sensitiveValues ?? []);
+      const normalized = normalizeUnknownError(error, options?.sensitiveValues ?? []);
+      // Another tab rotated the session, so this tab's token is out of date.
+      // Mutations carry idempotency keys, which makes one retry safe.
+      if (normalized.code === "CSRF_INVALID" && !isRetry) {
+        await this.syncCsrfToken();
+        return this.request<TResponseData>(method, path, body, options, true);
+      }
+      if (normalized.status === 401 && !isSessionAwarePath(path)) {
+        // The session may have rotated while this request was in flight.
+        if (!isRetry && csrfAtSend !== csrfToken) {
+          return this.request<TResponseData>(method, path, body, options, true);
+        }
+        onSessionLost?.();
+      }
+      throw normalized;
     }
   }
 
-  public async post<TRequest, TResponseData>(
+  /** Fetch the session's current CSRF token from the API. */
+  public async syncCsrfToken(): Promise<string | null> {
+    const current = await this.get<{ csrf_token?: string }>("/api/v1/me");
+    if (current.csrf_token) {
+      csrfToken = current.csrf_token;
+    }
+    return csrfToken;
+  }
+
+  public get<TResponseData>(path: string, options?: ApiRequestOptions): Promise<TResponseData> {
+    return this.request<TResponseData>("get", path, undefined, options);
+  }
+
+  public post<TRequest, TResponseData>(
     path: string,
     body: TRequest,
     options?: ApiRequestOptions,
   ): Promise<TResponseData> {
-    const config = buildAuthRequestConfig(options);
-    try {
-      const response: AxiosResponse<ApiSuccessEnvelope<TResponseData>> =
-        await this.instance.post<ApiSuccessEnvelope<TResponseData>>(path, body, config);
-
-      if (!isRecord(response.data) || !("data" in response.data)) {
-        throw new ApiClientError({
-          code: "INTERNAL_ERROR",
-          message: DEFAULT_SAFE_MESSAGES.INTERNAL_ERROR,
-          status: response.status,
-        });
-      }
-
-      return response.data.data;
-    } catch (error: unknown) {
-      throw normalizeUnknownError(error, options?.sensitiveValues ?? []);
-    }
+    return this.request<TResponseData>("post", path, body, options);
   }
 
-  public async put<TRequest, TResponseData>(
+  public put<TRequest, TResponseData>(
     path: string,
     body: TRequest,
     options?: ApiRequestOptions,
   ): Promise<TResponseData> {
-    const config = buildAuthRequestConfig(options);
-    try {
-      const response: AxiosResponse<ApiSuccessEnvelope<TResponseData>> =
-        await this.instance.put<ApiSuccessEnvelope<TResponseData>>(path, body, config);
-      if (!isRecord(response.data) || !("data" in response.data)) {
-        throw new ApiClientError({ code: "INTERNAL_ERROR", message: DEFAULT_SAFE_MESSAGES.INTERNAL_ERROR, status: response.status });
-      }
-      return response.data.data;
-    } catch (error: unknown) {
-      throw normalizeUnknownError(error, options?.sensitiveValues ?? []);
-    }
+    return this.request<TResponseData>("put", path, body, options);
+  }
+
+  public delete<TResponseData>(path: string, options?: ApiRequestOptions): Promise<TResponseData> {
+    return this.request<TResponseData>("delete", path, undefined, options);
   }
 }
 

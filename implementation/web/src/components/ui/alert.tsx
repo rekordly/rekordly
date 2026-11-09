@@ -35,7 +35,7 @@ const STATUS_CONTAINER_CLASSES: Readonly<Record<RekordlyAlertStatus, string>> = 
   error: "bg-danger-soft text-foreground",
   success: "bg-primary-soft text-foreground",
   warning: "bg-secondary-soft text-foreground",
-  info: "bg-surface-muted text-foreground",
+  info: "bg-default text-foreground",
 };
 
 const STATUS_ICON_CLASSES: Readonly<Record<RekordlyAlertStatus, string>> = {

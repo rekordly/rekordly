@@ -25,7 +25,7 @@ func NewRouter(cfg config.Config, logger *slog.Logger, readiness ReadinessCheck,
 	router.Use(cors.New(cors.Config{
 		AllowOrigins:     cfg.CORSAllowedOrigins,
 		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
-		AllowHeaders:     []string{"Authorization", "Content-Type", "Idempotency-Key", "X-Request-ID", "X-CSRF-Token", "X-Preauth-Token", "X-Device-Label"},
+		AllowHeaders:     []string{"Authorization", "Content-Type", "Idempotency-Key", "X-Request-ID", "X-CSRF-Token", "X-Preauth-Token", "X-Device-Label", "X-Workspace-ID"},
 		ExposeHeaders:    []string{"X-Request-ID"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,

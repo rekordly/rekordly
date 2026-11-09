@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
-import { FeatureScaffold } from "@/components/features";
+
+import { InvoicesPage } from "@/components/features/finance/invoices-page";
 
 export const metadata: Metadata = {
-  title: "Invoices & Estimates — Rekordly",
-  description: "Create branded customer invoices, proformas, and track receivables.",
+  title: "Invoices — Rekordly",
+  description: "Bills you send to customers.",
 };
 
-export default function InvoicesPage() {
-  return <FeatureScaffold featureId="invoices" defaultSpace="business" />;
+export default function Page() {
+  return <InvoicesPage />;
 }

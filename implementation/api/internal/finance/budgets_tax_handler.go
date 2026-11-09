@@ -19,6 +19,7 @@ func (h *Handler) RegisterBudgetsTaxRoutes(group *gin.RouterGroup) {
 
 	// Tax-Readiness Reports
 	group.GET("/reports/tax-readiness", h.getTaxReadinessReport)
+	group.GET("/reports/summary", h.getFinanceSummary)
 
 	// Tax Settings
 	group.GET("/tax-settings", h.getTaxSettings)

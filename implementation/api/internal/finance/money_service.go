@@ -46,6 +46,7 @@ type CreateAccountInput struct {
 	AccountType    string `json:"account_type" binding:"required"` // cash, bank, mobile_wallet, clearing, other
 	Currency       string `json:"currency"`
 	OpeningBalance int64  `json:"opening_balance_minor"`
+	OpeningAmount  string `json:"opening_balance"` // optional major decimal string
 	IsActive       bool   `json:"is_active"`
 }
 
@@ -66,6 +67,14 @@ func (s *Service) CreateAccount(ctx context.Context, workspaceID int64, in Creat
 		currency = "NGN"
 	}
 	exponent := int32(CurrencyExponent(currency))
+
+	if in.OpeningAmount != "" {
+		parsed, err := ParseMajorToMinor(in.OpeningAmount, int(exponent))
+		if err != nil {
+			return db.MoneyAccount{}, err
+		}
+		in.OpeningBalance = parsed
+	}
 
 	return s.queries.CreateMoneyAccount(ctx, db.CreateMoneyAccountParams{
 		WorkspaceID:         workspaceID,

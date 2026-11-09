@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
-import { FeatureScaffold } from "@/components/features";
+
+import { TradePage } from "@/components/features/finance/trade-page";
 
 export const metadata: Metadata = {
-  title: "Sales & Orders — Rekordly",
-  description: "Record customer sales, manage orders, and track revenue.",
+  title: "Sales — Rekordly",
+  description: "What you have sold.",
 };
 
-export default function SalesPage() {
-  return <FeatureScaffold featureId="sales" defaultSpace="business" />;
+export default function Page() {
+  return <TradePage kind="sale" />;
 }

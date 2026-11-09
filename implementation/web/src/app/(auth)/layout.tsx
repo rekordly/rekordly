@@ -1,7 +1,7 @@
 import { Suspense, type ReactNode } from "react";
 
 import { GuestRoute, RouteLoading } from "@/components/auth/route-guards";
-import { ThemeToggle } from "@/components/ui";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 export default function AuthLayout({
   children,
@@ -12,35 +12,34 @@ export default function AuthLayout({
     <Suspense fallback={<RouteLoading />}>
       <GuestRoute>
         <div className="relative flex min-h-dvh w-full flex-col overflow-x-hidden bg-background text-foreground md:h-dvh md:flex-row md:overflow-hidden">
-      <aside
-        aria-label="Rekordly visual showcase"
-        className="relative hidden overflow-hidden bg-[#063d18] text-white md:flex md:h-dvh md:w-7/12 md:shrink-0 md:flex-col"
-      >
-        <div className="relative z-10 p-10 lg:p-12">
-          <div className="font-heading text-2xl font-bold tracking-tight">Rekordly</div>
-        </div>
-        <div className="relative z-10 my-auto max-w-xl p-10 lg:p-12">
-          <div className="mb-7 h-1 w-14 rounded-full bg-[#fa8901]" />
-          <p className="font-heading text-4xl font-bold leading-[1.08] tracking-[-0.035em] lg:text-5xl">
-            Know where your money goes. Keep your business records clear.
-          </p>
-          <p className="mt-6 max-w-xl text-[15px] leading-7 text-white/70">
-            Income, expenses and business books in one dependable workspace—without accounting confusion.
-          </p>
-        </div>
-        <div className="relative z-10 p-10 text-xs text-white/65 lg:p-12">
-          <span className="mr-2 inline-block size-1.5 rounded-full bg-[#36c75b]" />
-          Built for everyday Nigerian businesses and personal finance
-        </div>
-      </aside>
+          {/* Brand panel */}
+          <aside
+            aria-label="About Rekordly"
+            className="hidden flex-col justify-between bg-brand-panel p-12 text-brand-panel-foreground md:flex md:h-dvh md:w-1/2 md:shrink-0"
+          >
+            <div className="flex items-center gap-2.5">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.png" alt="" className="size-8 rounded-lg" />
+              <span className="font-heading text-lg font-bold tracking-tight">Rekordly</span>
+            </div>
+            <div className="max-w-md">
+              <h1 className="text-[26px] leading-[1.25] font-semibold tracking-[-0.02em]">
+                Know where your money goes. Keep your business records clear.
+              </h1>
+              <p className="mt-3 text-[14px] opacity-75">
+                Income, expenses and business books in one dependable workspace, without accounting confusion.
+              </p>
+            </div>
+            <p className="text-xs opacity-70">Built for everyday Nigerian businesses and personal finance</p>
+          </aside>
 
-      {/* Authentication form panel */}
-      <div className="flex min-h-dvh w-full flex-col overflow-x-hidden md:h-dvh md:min-h-0 md:w-5/12 md:overflow-hidden">
-        {children}
-      </div>
-      <div className="fixed right-5 bottom-5 z-20 sm:right-7 sm:bottom-7">
-        <ThemeToggle />
-      </div>
+          {/* Form */}
+          <div className="flex min-h-dvh w-full flex-col overflow-x-hidden md:h-dvh md:min-h-0 md:w-1/2 md:overflow-y-auto">
+            {children}
+          </div>
+          <div className="fixed right-5 bottom-5 z-20 sm:right-7 sm:bottom-7">
+            <ThemeToggle />
+          </div>
         </div>
       </GuestRoute>
     </Suspense>

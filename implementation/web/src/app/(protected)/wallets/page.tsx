@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
-import { FeatureScaffold } from "@/components/features";
+
+import { WalletsPage } from "@/components/features/finance/wallets-page";
 
 export const metadata: Metadata = {
-  title: "Customer Deposits & Wallets — Rekordly",
-  description: "Hold customer advance payments and store credit securely as liabilities.",
+  title: "Customer wallets — Rekordly",
+  description: "Advance payments held for customers.",
 };
 
-export default function WalletsPage() {
-  return <FeatureScaffold featureId="customer-deposits" defaultSpace="business" />;
+export default function Page() {
+  return <WalletsPage />;
 }

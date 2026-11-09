@@ -1,32 +1,29 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowLeft } from "@phosphor-icons/react";
+import { ArrowLeft, ArrowRight, LockKey } from "@phosphor-icons/react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 
-import {
-  Alert,
-  AuthCard,
-  Button,
-  LoadingButton,
-  PasswordField,
-} from "@/components/ui";
-import { ApiClientError } from "@/lib/api";
+import { Alert } from "@/components/ui/alert";
+import { AppButton } from "@/components/ui/app-button";
+import { AppInput } from "@/components/ui/app-input";
+import { AuthCard } from "@/components/ui/auth-card";
+import { ApiClientError } from "@/lib/errors";
 import {
   type AuthApiContract,
   createSubmissionGuard,
   handleCreateFirstPasswordSubmit,
-} from "@/lib/auth-flow";
-import { AUTH_ROUTES } from "@/lib/auth-routes";
-import { useAuthFlowStore } from "@/stores/auth-flow-store";
+  useAuthStore,
+} from "@/stores/auth-store";
+import { AUTH_ROUTES } from "@/lib/auth";
 import {
   type CreatePasswordFormValues,
   createPasswordSchema,
   MAX_PASSWORD_UTF8_BYTES,
   MIN_PASSWORD_UTF8_BYTES,
-} from "@/lib/validation";
+} from "@/lib/schemas/auth.schemas";
 
 export interface CreatePasswordScreenProps {
   initialPreAuthToken?: string | null;
@@ -38,9 +35,9 @@ export function CreatePasswordScreen({
   api,
 }: CreatePasswordScreenProps) {
   const router = useRouter();
-  const storePreAuthToken = useAuthFlowStore((state) => state.preAuthToken);
-  const storedEmail = useAuthFlowStore((state) => state.email);
-  const clearPreAuthToken = useAuthFlowStore((state) => state.clearPreAuthToken);
+  const storePreAuthToken = useAuthStore((state) => state.preAuthToken);
+  const storedEmail = useAuthStore((state) => state.email);
+  const clearPreAuthToken = useAuthStore((state) => state.clearPreAuthToken);
 
   const activePreAuthToken = (initialPreAuthToken ?? storePreAuthToken ?? "").trim();
 
@@ -107,16 +104,16 @@ export function CreatePasswordScreen({
         }
       >
         <div className="flex flex-col gap-3">
-          <Button
+          <AppButton
             variant="primary"
-            size="lg"
+            size="md"
             fullWidth
-            startIcon={<ArrowLeft className="size-4" />}
+            startContent={<ArrowLeft className="size-4" />}
             onPress={() => router.push(AUTH_ROUTES.LOGIN)}
             data-testid="create-password-restart-button"
           >
             Verify again
-          </Button>
+          </AppButton>
         </div>
       </AuthCard>
     );
@@ -159,7 +156,9 @@ export function CreatePasswordScreen({
           control={form.control}
           name="password"
           render={({ field, fieldState }) => (
-            <PasswordField
+            <AppInput
+              type="password"
+              startContent={<LockKey />}
               id="create-password"
               name={field.name}
               label="Password"
@@ -167,14 +166,14 @@ export function CreatePasswordScreen({
               placeholder="At least 10 characters"
               description={`${MIN_PASSWORD_UTF8_BYTES}–${MAX_PASSWORD_UTF8_BYTES} characters. A passphrase works well.`}
               value={field.value}
-              onChange={(value) => {
-                field.onChange(value);
+              onChange={(event) => {
+                field.onChange(event.target.value);
                 if (apiError) {
                   setApiError(null);
                 }
               }}
               onBlur={field.onBlur}
-              inputRef={field.ref}
+              ref={field.ref}
               isDisabled={isLoading}
               isRequired
               isInvalid={Boolean(fieldState.error)}
@@ -188,21 +187,23 @@ export function CreatePasswordScreen({
           control={form.control}
           name="confirmPassword"
           render={({ field, fieldState }) => (
-            <PasswordField
+            <AppInput
+              type="password"
+              startContent={<LockKey />}
               id="create-confirm-password"
               name={field.name}
               label="Confirm password"
               autoComplete="new-password"
               placeholder="Re-enter your password"
               value={field.value}
-              onChange={(value) => {
-                field.onChange(value);
+              onChange={(event) => {
+                field.onChange(event.target.value);
                 if (apiError) {
                   setApiError(null);
                 }
               }}
               onBlur={field.onBlur}
-              inputRef={field.ref}
+              ref={field.ref}
               isDisabled={isLoading}
               isRequired
               isInvalid={Boolean(fieldState.error)}
@@ -212,17 +213,17 @@ export function CreatePasswordScreen({
           )}
         />
 
-        <LoadingButton
+        <AppButton
           type="submit"
+          endContent={<ArrowRight weight="bold" />}
           variant="primary"
-          size="lg"
+          size="md"
           fullWidth
           isLoading={isLoading}
-          loadingText={isRedirecting ? "Redirecting..." : "Creating password..."}
-          data-testid="create-password-submit"
+                    data-testid="create-password-submit"
         >
-          Create password
-        </LoadingButton>
+          {isLoading ? (isRedirecting ? "Redirecting..." : "Creating password...") : "Create password"}
+        </AppButton>
       </form>
     </AuthCard>
   );
