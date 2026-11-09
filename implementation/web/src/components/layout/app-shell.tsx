@@ -6,9 +6,9 @@ import { usePathname, useRouter } from "next/navigation";
 import type { ComponentType, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 
-import { sessionApi } from "@/lib/api/session";
-import { useSessionStore } from "@/lib/auth/session-store";
-import { useWorkspaceStore } from "@/lib/workspace/workspace-store";
+import { sessionApi } from "@/lib/session-api";
+import { useSessionStore } from "@/stores/auth-store";
+import { useWorkspaceStore } from "@/stores/workspace-store";
 import { Button, ThemeToggle } from "@/components/ui";
 
 type ShellMode = "personal" | "business" | "all";

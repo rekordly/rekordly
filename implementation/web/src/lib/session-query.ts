@@ -3,9 +3,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 
-import { ApiClientError } from "@/lib/api/client";
-import { sessionApi } from "@/lib/api/session";
-import { useSessionStore } from "./session-store";
+import { ApiClientError } from "@/lib/api";
+import { sessionApi } from "@/lib/session-api";
+import { useSessionStore } from "@/stores/auth-store";
 
 export const sessionQueryKey = ["auth", "session"] as const;
 

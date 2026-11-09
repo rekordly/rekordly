@@ -3,13 +3,13 @@
 import { useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { SurfaceCard } from "@/components/ui/surface-card";
-import { useSessionStore } from "@/lib/auth/session-store";
-import { useWorkspaceStore } from "@/lib/workspace/workspace-store";
+import { useSessionStore } from "@/stores/auth-store";
+import { useWorkspaceStore } from "@/stores/workspace-store";
 import {
   getFeature,
   resolveSpaceContext,
-} from "@/lib/features/feature-registry";
-import type { FeatureId, FinanceSpace } from "@/lib/features/types";
+} from "@/lib/feature-registry";
+import type { FeatureId, FinanceSpace } from "@/types/features";
 import { FeatureEmptyState } from "./feature-empty-state";
 import { FeatureIcon } from "./feature-icon";
 import { FeaturePageHeader } from "./feature-page-header";

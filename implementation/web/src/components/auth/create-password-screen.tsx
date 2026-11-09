@@ -13,20 +13,20 @@ import {
   LoadingButton,
   PasswordField,
 } from "@/components/ui";
-import { ApiClientError } from "@/lib/api/client";
+import { ApiClientError } from "@/lib/api";
 import {
   type AuthApiContract,
   createSubmissionGuard,
   handleCreateFirstPasswordSubmit,
-} from "@/lib/auth/controllers";
-import { AUTH_ROUTES } from "@/lib/auth/onboarding-routes";
-import { useAuthFlowStore } from "@/lib/auth/state";
+} from "@/lib/auth-flow";
+import { AUTH_ROUTES } from "@/lib/auth-routes";
+import { useAuthFlowStore } from "@/stores/auth-flow-store";
 import {
   type CreatePasswordFormValues,
   createPasswordSchema,
   MAX_PASSWORD_UTF8_BYTES,
   MIN_PASSWORD_UTF8_BYTES,
-} from "@/lib/auth/validation";
+} from "@/lib/validation";
 
 export interface CreatePasswordScreenProps {
   initialPreAuthToken?: string | null;

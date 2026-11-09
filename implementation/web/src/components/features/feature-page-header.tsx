@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import type { FeatureDefinition, FinanceSpace } from "@/lib/features/types";
+import type { FeatureDefinition, FinanceSpace } from "@/types/features";
 import { FeatureIcon } from "./feature-icon";
 
 export interface FeaturePageHeaderProps {

@@ -4,9 +4,9 @@ import { useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
 
 import { RouteLoading } from "./route-guards";
-import { useSessionQuery } from "@/lib/auth/session-query";
-import { isOnboardingComplete } from "@/lib/auth/onboarding-routes";
-import { useSessionStore } from "@/lib/auth/session-store";
+import { useSessionQuery } from "@/lib/session-query";
+import { isOnboardingComplete } from "@/lib/auth-routes";
+import { useSessionStore } from "@/stores/auth-store";
 
 export function OnboardingRoute({ children }: { children: ReactNode }) {
   const router = useRouter();

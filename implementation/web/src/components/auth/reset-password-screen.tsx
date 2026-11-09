@@ -13,20 +13,20 @@ import {
   LoadingButton,
   PasswordField,
 } from "@/components/ui";
-import { ApiClientError } from "@/lib/api/client";
+import { ApiClientError } from "@/lib/api";
 import {
   type AuthApiContract,
   createSubmissionGuard,
   handleResetPasswordCompleteSubmit,
   scrubTokenFromBrowserUrl,
-} from "@/lib/auth/controllers";
-import { AUTH_ROUTES } from "@/lib/auth/onboarding-routes";
+} from "@/lib/auth-flow";
+import { AUTH_ROUTES } from "@/lib/auth-routes";
 import {
   MAX_PASSWORD_UTF8_BYTES,
   MIN_PASSWORD_UTF8_BYTES,
   type ResetPasswordFormValues,
   resetPasswordSchema,
-} from "@/lib/auth/validation";
+} from "@/lib/validation";
 
 export interface ResetPasswordScreenProps {
   initialToken?: string | null;

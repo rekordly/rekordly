@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-import type { CurrentUser } from "./session-schema";
+import type { CurrentUser } from "@/types/auth";
 
 export type SessionStatus =
   | "unknown"

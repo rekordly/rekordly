@@ -5,7 +5,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { Button, SurfaceCard } from "@/components/ui";
-import { useSessionStore } from "@/lib/auth/session-store";
+import { useSessionStore } from "@/stores/auth-store";
 
 interface PermissionProps {
   permission: string | readonly string[];

@@ -6,9 +6,9 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { Alert, Button, SurfaceCard, TextField } from "@/components/ui";
-import { useSessionStore } from "@/lib/auth/session-store";
-import { moneyApi } from "@/lib/api/money";
-import { useWorkspaceStore } from "@/lib/workspace/workspace-store";
+import { useSessionStore } from "@/stores/auth-store";
+import { moneyApi } from "@/lib/money-api";
+import { useWorkspaceStore } from "@/stores/workspace-store";
 
 type Direction = "money_in" | "money_out" | "transfer";
 

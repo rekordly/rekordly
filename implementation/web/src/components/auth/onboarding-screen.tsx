@@ -5,9 +5,9 @@ import { ArrowRight, Check, Storefront, UserCircle } from "@phosphor-icons/react
 import { usePathname, useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
-import { onboardingApi, type OnboardingRole, type SpaceChoice } from "@/lib/api/onboarding";
-import { sessionQueryKey } from "@/lib/auth/session-query";
-import { useSessionStore } from "@/lib/auth/session-store";
+import { onboardingApi, type OnboardingRole, type SpaceChoice } from "@/lib/onboarding-api";
+import { sessionQueryKey } from "@/lib/session-query";
+import { useSessionStore } from "@/stores/auth-store";
 import { Alert, Button, SurfaceCard, TextField } from "@/components/ui";
 
 const roleOptions: { value: OnboardingRole; label: string; description: string }[] = [

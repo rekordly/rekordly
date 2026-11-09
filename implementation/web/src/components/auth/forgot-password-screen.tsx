@@ -13,19 +13,19 @@ import {
   LoadingButton,
   TextField,
 } from "@/components/ui";
-import { NEUTRAL_PASSWORD_RESET_MESSAGE } from "@/lib/api/auth";
-import { ApiClientError } from "@/lib/api/client";
+import { NEUTRAL_PASSWORD_RESET_MESSAGE } from "@/lib/auth-api";
+import { ApiClientError } from "@/lib/api";
 import {
   type AuthApiContract,
   createSubmissionGuard,
   handleForgotPasswordSubmit,
-} from "@/lib/auth/controllers";
-import { AUTH_ROUTES } from "@/lib/auth/onboarding-routes";
-import { useAuthFlowStore } from "@/lib/auth/state";
+} from "@/lib/auth-flow";
+import { AUTH_ROUTES } from "@/lib/auth-routes";
+import { useAuthFlowStore } from "@/stores/auth-flow-store";
 import {
   type ForgotPasswordFormValues,
   forgotPasswordSchema,
-} from "@/lib/auth/validation";
+} from "@/lib/validation";
 
 export interface ForgotPasswordScreenProps {
   initialEmail?: string;

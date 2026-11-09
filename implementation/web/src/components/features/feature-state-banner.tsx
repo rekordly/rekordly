@@ -2,7 +2,7 @@
 
 import { Alert } from "@/components/ui/alert";
 import { SurfaceCard } from "@/components/ui/surface-card";
-import type { FeatureDefinition, FeaturePlanGateMeta } from "@/lib/features/types";
+import type { FeatureDefinition, FeaturePlanGateMeta } from "@/types/features";
 import { FeatureIcon } from "./feature-icon";
 
 export type FeatureViewMode = "normal" | "loading" | "unavailable" | "plan-locked";

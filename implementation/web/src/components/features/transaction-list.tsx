@@ -5,9 +5,11 @@ import { ArrowDownLeft, ArrowUpRight, ArrowsLeftRight, Plus, Spinner, Trash } fr
 import { useState } from "react";
 
 import { Alert, Button, SurfaceCard } from "@/components/ui";
-import { useSessionStore } from "@/lib/auth/session-store";
-import { formatMinorAmount, moneyApi, type MoneyTransaction } from "@/lib/api/money";
-import { useWorkspaceStore } from "@/lib/workspace/workspace-store";
+import { useSessionStore } from "@/stores/auth-store";
+import { moneyApi } from "@/lib/money-api";
+import { formatMinorAmount } from "@/lib/money";
+import type { MoneyTransaction } from "@/types/finance";
+import { useWorkspaceStore } from "@/stores/workspace-store";
 import { MoneyCaptureForm } from "./money-capture-form";
 
 function directionIcon(direction: MoneyTransaction["direction"]) { return direction === "money_in" ? <ArrowDownLeft size={18} weight="duotone" /> : direction === "money_out" ? <ArrowUpRight size={18} weight="duotone" /> : <ArrowsLeftRight size={18} weight="duotone" />; }

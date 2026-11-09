@@ -1,18 +1,18 @@
-import type { CurrentUser } from "@/lib/auth/session-schema";
+import type { CurrentUser } from "./schemas/auth.ts";
 import {
   FEATURE_REGISTRY_LIST,
   FEATURE_REGISTRY_MAP,
-} from "./registry-data.ts";
+} from "./feature-registry-data.ts";
 import type {
   FeatureCategory,
   FeatureDefinition,
   FeatureId,
   FinanceSpace,
   SpaceContextInfo,
-} from "./types.ts";
+} from "../types/features.ts";
 
-export * from "./registry-data.ts";
-export * from "./types.ts";
+export * from "./feature-registry-data.ts";
+export * from "../types/features.ts";
 
 /**
  * Returns a specific feature definition by ID.

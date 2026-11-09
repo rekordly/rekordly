@@ -1,5 +1,6 @@
-import { ApiClientError, apiClient, type RekordlyApiClient } from "./client";
-import { currentUserSchema, type CurrentUser } from "../auth/session-schema";
+import { ApiClientError, apiClient, type RekordlyApiClient } from "./api";
+import { currentUserSchema } from "./schemas/auth";
+import type { CurrentUser } from "@/types/auth";
 
 export const SESSION_ENDPOINTS = {
   CURRENT_USER: "/api/v1/me",

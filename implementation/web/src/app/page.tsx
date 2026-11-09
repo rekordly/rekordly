@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 
 import { Button, StatusBadge, SurfaceCard, ThemeToggle } from "@/components/ui";
-import { AUTH_ROUTES } from "@/lib/auth/onboarding-routes";
+import { AUTH_ROUTES } from "@/lib/auth-routes";
 
 export default function HomePage() {
   const router = useRouter();

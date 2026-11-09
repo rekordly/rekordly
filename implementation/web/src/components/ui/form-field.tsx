@@ -4,7 +4,7 @@ import { cn, Description, FieldError, Label } from "@heroui/react";
 import { WarningCircle } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 
-import { getFormFieldAccessibilityIds } from "@/lib/auth/accessibility";
+import { getFormFieldAccessibilityIds } from "@/lib/accessibility";
 
 export { getFormFieldAccessibilityIds };
 

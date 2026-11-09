@@ -11,8 +11,8 @@ import {
   isFeatureAvailableInSpace,
   resolveSpaceContext,
 } from "./feature-registry.ts";
-import { ALL_FEATURE_IDS } from "./registry-data.ts";
-import type { FeatureId, FinanceSpace } from "./types.ts";
+import { ALL_FEATURE_IDS } from "./feature-registry-data.ts";
+import type { FeatureId, FinanceSpace } from "../types/features.ts";
 
 describe("Rekordly V2 Feature Registry & Frontend Foundation Suite", () => {
   it("1. Registry contains all 11 required MVP feature surfaces", () => {

@@ -3,9 +3,9 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
 
-import { AUTH_ROUTES, resolvePostAuthDestination, sanitizeReturnToPath } from "@/lib/auth/onboarding-routes";
-import { useSessionQuery } from "@/lib/auth/session-query";
-import { useSessionStore } from "@/lib/auth/session-store";
+import { AUTH_ROUTES, resolvePostAuthDestination, sanitizeReturnToPath } from "@/lib/auth-routes";
+import { useSessionQuery } from "@/lib/session-query";
+import { useSessionStore } from "@/stores/auth-store";
 
 export function RouteLoading() {
   return (

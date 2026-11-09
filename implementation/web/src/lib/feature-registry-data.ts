@@ -1,4 +1,4 @@
-import type { FeatureDefinition, FeatureId } from "./types.ts";
+import type { FeatureDefinition, FeatureId } from "../types/features.ts";
 
 export const FEATURE_REGISTRY_MAP: Record<FeatureId, FeatureDefinition> = {
   "ai-capture": {

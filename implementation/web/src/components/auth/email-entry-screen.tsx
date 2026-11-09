@@ -14,18 +14,18 @@ import {
   LoadingButton,
   TextField,
 } from "@/components/ui";
-import { ApiClientError, resolveApiBaseUrl } from "@/lib/api/client";
+import { ApiClientError, resolveApiBaseUrl } from "@/lib/api";
 import {
   type AuthApiContract,
   createSubmissionGuard,
   handleEmailContinuationSubmit,
-} from "@/lib/auth/controllers";
-import { AUTH_ROUTES } from "@/lib/auth/onboarding-routes";
-import { useAuthFlowStore } from "@/lib/auth/state";
+} from "@/lib/auth-flow";
+import { AUTH_ROUTES } from "@/lib/auth-routes";
+import { useAuthFlowStore } from "@/stores/auth-flow-store";
 import {
   type EmailContinueFormValues,
   emailContinueSchema,
-} from "@/lib/auth/validation";
+} from "@/lib/validation";
 
 export interface EmailEntryScreenProps {
   initialReturnTo?: string | null;

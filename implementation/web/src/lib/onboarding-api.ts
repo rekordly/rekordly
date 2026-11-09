@@ -1,4 +1,4 @@
-import { apiClient } from "./client";
+import { apiClient } from "./api";
 
 export type OnboardingRole = "personal" | "freelancer" | "small_business" | "general_business";
 export type SpaceChoice = "personal" | "business" | "all";
