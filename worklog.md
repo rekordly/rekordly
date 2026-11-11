@@ -290,3 +290,42 @@
   8. Comprehensive 7-Tab Frontend: Replaced the single-tab inventory page with a fully responsive 7-tab interface (`balances`, `catalogue`, `outlets`, `transfers`, `counts`, `adjustments`, `reservations`) using HeroUI v3 wrappers, Phosphor duotone icons, Rekordly green (#009e10) and orange (#fa8901) accents, Sora/Figtree typography, and 10 interactive drawers.
 - Added comprehensive unit tests in `implementation/web/tests/inventory.test.ts` (8 passing test cases).
 - Verification: Dockerized Go test suite passed (all auth, config, database, finance, server packages green), `go vet ./...` passed with zero errors, `bun test` passed (52/52 tests green across all test files), `bun run type-check` passed (0 errors), `bun run build` compiled 45/45 static pages in Next.js 16.4.5 with Turbopack, and ESLint passed with 0 errors.
+
+## 11 November 2026 — Blueprints 01–06 Full Completion & Verification
+
+- Completed all missing and partial features across Blueprints 01 through 06 adhering to user design system requirements:
+  1. Selection Primitives & Multi-Step Drawers (`planning/design-system-selection-components.md`):
+     - Created `AppComboBox` (`components/ui/app-combo-box.tsx`): HeroUI v3 combobox with inline `<Input>` visible at rest, immediate typing, custom item typing (`allowsCustomValue`), and on-the-fly customer/supplier creation without pre-registering.
+     - Created `AppAutocomplete` (`components/ui/app-autocomplete.tsx`): HeroUI v3 autocomplete with `<Select>` button trigger at rest, popover with search field, and strict list selection for countries, bank accounts, and categories.
+     - Created `AppPickerSheet` (`components/ui/app-picker-sheet.tsx`): HeroUI v3 mobile-first bottom sheet picker (Professions Picker pattern) with search and category filter chips.
+     - Refactored `invoices-page.tsx` and `trade-page.tsx` (`sales`, `purchases`) into clean multi-step drawer wizards (Items & Pricing -> Customer & Info -> Summary & Review), eliminating overly long single-page scrolling forms.
+  2. Blueprint 06 Estimates & Quotations Engine:
+     - Migration `000040_estimates_and_quotations.sql`: Created `estimates` and `estimate_items` tables with integer minor units, currency exponents, status lifecycle (`draft`, `sent`, `accepted`, `declined`, `expired`, `converted`), and tenant indexes.
+     - SQLC queries and Go models in `internal/db/finance_estimates.sql.go`.
+     - Go service (`internal/finance/estimate_service.go`) and handlers (`internal/finance/estimate_handler.go`) with endpoints `GET/POST /estimates`, `GET /estimates/:id`, `PATCH /estimates/:id/status`, and atomic invoice conversion `POST /estimates/:id/convert-to-invoice`.
+     - Frontend UI in `invoices-page.tsx`: Invoices & Quotations tab switcher, 3-step quotation drawer, status actions (Send, Accept, Decline), and atomic "Convert to Invoice" button.
+  3. Blueprint 05 & 06 Public Guest Portals & WhatsApp/Email Sharing:
+     - Migration `000041_invoice_shares_and_receipts.sql`: Created `invoice_shares` with expiring SHA-256 tokens and access counters; created `payment_receipts` with immutable receipt numbers and token hashes.
+     - SQLC queries and Go code in `internal/db/finance_shares.sql.go`.
+     - Go service (`internal/finance/invoice_share_service.go`) and handlers (`internal/finance/invoice_share_handler.go`) with guest public endpoints `GET /api/v1/public/invoices/:token` and `GET /api/v1/public/receipts/:token`, and protected share creation routes.
+     - Frontend Guest Pages:
+       - `src/app/public/invoices/[token]/page.tsx`: Printable public invoice with line items, tax totals, payment status, WhatsApp click-to-chat sharing (`https://wa.me/?text=...`), email sharing (`mailto:`), and `window.print()`.
+       - `src/app/public/receipts/[token]/page.tsx`: Official payment receipt with "PAID IN FULL" watermark, transaction reference, amount spotlight, and print button.
+     - Next.js route proxy (`src/proxy.ts`) updated to allow guest public paths (`/public`, `/invitations`).
+  4. Blueprint 06 Customer Credit Notes & Sales Returns:
+     - Migration `000042_sales_returns_and_credits.sql`: Created `sales_returns`, `sales_return_items`, `customer_credits`, and `customer_credit_transactions` tables.
+     - Go service (`internal/finance/sales_return_service.go`) and handlers (`internal/finance/sales_return_handler.go`) with endpoints `GET/POST /sales-returns`, `GET /sales-returns/:id`, `GET /customers/:id/credit`, and `POST /customers/:id/credit/apply`.
+     - Implemented atomic ledger postings: Debit 4000 Sales Returns & Allowances, Debit 2200 VAT Output Payable, Credit 1100 Accounts Receivable / Customer Credit.
+     - Implemented optional automatic inventory restock with weighted-average cost: Debit 1200 Inventory Asset, Credit 5000 COGS.
+     - Frontend UI: "Issue Credit Note / Sales Return" drawer in `invoices-page.tsx` with itemized returns, restock toggle, compensation method selection (`customer_credit`, `invoice_reduction`, `refund`), and customer wallet credit tracking.
+  5. Blueprint 01 Workspace Invitation Acceptance Flow:
+     - Frontend route `src/app/invitations/[token]/page.tsx` implementing the complete invitation lifecycle: inspection of workspace/role details, existing signed-in user acceptance (`POST /invitations/:token/accept`), and unauthenticated OTP verification flow (`POST /invitations/:token/otp/request` and `POST /invitations/:token/otp/verify`).
+  6. Blueprint 03 Bank CSV Statement Batch Import:
+     - Backend endpoint `POST /api/v1/transactions/import-csv` in `internal/finance/money_capture_handler.go` supporting up to 500 rows per batch, validating account scoping, and staging transactions into `needs_review` money record drafts.
+     - Frontend page `src/app/(protected)/transactions/import/page.tsx` with drag-and-drop CSV parser, target account picker, direction detection (money_in / money_out), and staged preview table with "Confirm & Import" action.
+- Verification Suite:
+  - `docker run ... golang:1.23-alpine go vet ./...`: 0 errors.
+  - `bun test`: 52/52 tests passing across all test suites.
+  - `bun run type-check`: 0 errors.
+  - `bun run build`: All 45 application routes compiled cleanly with Next.js 16.4.5 Turbopack.
+
