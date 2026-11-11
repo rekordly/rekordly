@@ -230,3 +230,9 @@
 - Approved supplier bills can now be settled by a partial or multi-bill outgoing payment. The transaction locks and validates every bill, prevents over-settlement, and posts debit AP / credit cash rather than recognizing expense again.
 - Added supplier advances as a distinct asset subledger. Creation posts debit Supplier Advances / credit cash once; applying an advance to an approved bill locks both documents, reduces AP and the advance balance atomically, and posts debit AP / credit Supplier Advances with no second cash movement. Both creation and application are idempotent and version guarded.
 - Verification: migrations `000022` and `000023` applied without deleting the PostgreSQL volume; API health is 200; all containerized finance integration tests pass; frontend type-check and 44 Bun tests pass; `git diff --check` passes. A fresh production web build was not run because the user’s existing Next development server holds Next’s build lock.
+### Blueprint 08 — goods receipt detail (2026-11-11)
+
+- Added a tenant-scoped goods receipt detail endpoint with receipt lines and purchase-order descriptions.
+- Added a frontend detail drawer from the Receipts tab while preserving bill and return actions.
+- API image builds successfully; web type-check and 52 Bun tests pass.
+
