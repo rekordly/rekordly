@@ -1,17 +1,18 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
-import { CheckCircle, Envelope, FileText, Printer, WhatsappLogo, XCircle } from "@phosphor-icons/react";
+import { ChatCircleDots, CheckCircle, Envelope, FileText, Handshake, PaperPlaneTilt, Printer, WhatsappLogo, XCircle } from "@phosphor-icons/react";
 import { AppButton } from "@/components/ui/app-button";
 import { Alert } from "@/components/ui/alert";
 import { financeApi, formatMinorAmount } from "@/lib/money";
-import type { PublicEstimateView } from "@/types/finance";
+import type { ExternalMessage, PublicEstimateView } from "@/types/finance";
 
 export default function PublicEstimatePage({ params }: { params: Promise<{ token: string }> }) {
   const resolved = use(params);
   const token = resolved.token;
 
   const [view, setView] = useState<PublicEstimateView | null>(null);
+  const [messages, setMessages] = useState<ExternalMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -19,14 +20,20 @@ export default function PublicEstimatePage({ params }: { params: Promise<{ token
   const [comment, setComment] = useState("");
   const [responding, setResponding] = useState(false);
   const [responded, setResponded] = useState<string | null>(null);
+  const [msgText, setMsgText] = useState("");
+  const [msgSending, setMsgSending] = useState(false);
+  const [claimBanner, setClaimBanner] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
-    financeApi
-      .getPublicEstimate(token)
-      .then((res) => {
+    Promise.all([
+      financeApi.getPublicEstimate(token),
+      financeApi.listPublicMessages("estimate", token).catch(() => []),
+    ])
+      .then(([res, msgs]) => {
         if (active) {
           setView(res);
+          setMessages(msgs);
           setResponderName(res.estimate.customer_name || "");
           if (res.response_status) setResponded(res.response_status);
           setLoading(false);
@@ -42,6 +49,33 @@ export default function PublicEstimatePage({ params }: { params: Promise<{ token
       active = false;
     };
   }, [token]);
+
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!msgText.trim()) return;
+    setMsgSending(true);
+    try {
+      const m = await financeApi.postPublicMessage("estimate", token, {
+        sender_name: responderName.trim() || "Client",
+        message: msgText.trim(),
+      });
+      setMessages((prev) => [...prev, m]);
+      setMsgText("");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to send message");
+    } finally {
+      setMsgSending(false);
+    }
+  };
+
+  const handleClaim = async () => {
+    try {
+      await financeApi.claimExternalPartyLink("estimate", token);
+      setClaimBanner("Quotation linked to your Rekordly account.");
+    } catch {
+      setClaimBanner("Sign in to your Rekordly account to save this vendor relationship.");
+    }
+  };
 
   const handleRespond = async (action: "accepted" | "declined") => {
     if (!responderName.trim()) {
@@ -253,6 +287,40 @@ export default function PublicEstimatePage({ params }: { params: Promise<{ token
               </div>
             )
           )}
+          {claimBanner && <Alert status="info" description={claimBanner} />}
+
+          <div className="border-t border-border/50 pt-5 space-y-3 print:hidden">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-muted flex items-center gap-2">
+                <ChatCircleDots size={16} className="text-primary" /> Questions & Feedback ({messages.length})
+              </h3>
+              <AppButton size="sm" variant="ghost" startContent={<Handshake size={14} />} label="Claim Link" onPress={handleClaim} />
+            </div>
+            {messages.length > 0 && (
+              <div className="space-y-2">
+                {messages.map((m) => (
+                  <div key={m.id} className="rounded-2xl bg-surface-secondary/40 px-3.5 py-2.5 text-xs">
+                    <div className="flex justify-between text-[11px] text-muted mb-1">
+                      <span className="font-semibold text-foreground">{m.sender_name} ({m.sender_type})</span>
+                      <span>{new Date(m.created_at).toLocaleString()}</span>
+                    </div>
+                    <p className="text-foreground">{m.message}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+            <form onSubmit={handleSendMessage} className="flex gap-2">
+              <input
+                type="text"
+                required
+                placeholder="Ask a question about this quote..."
+                value={msgText}
+                onChange={(e) => setMsgText(e.target.value)}
+                className="flex-1 h-10 rounded-xl border border-border bg-background px-3 text-xs text-foreground"
+              />
+              <AppButton type="submit" size="sm" startContent={<PaperPlaneTilt size={14} />} label="Send" isLoading={msgSending} />
+            </form>
+          </div>
         </div>
       </div>
     </div>

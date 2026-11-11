@@ -1,22 +1,23 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowsMerge, PencilSimple, Plus, UserCircle, UsersThree } from "@phosphor-icons/react";
+import { ArrowsMerge, PencilSimple, Plus, UserCircle, UsersThree, Warning } from "@phosphor-icons/react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 
+import { Alert } from "@/components/ui/alert";
 import { AppButton } from "@/components/ui/app-button";
 import { AppRowActions } from "@/components/ui/app-row-actions";
 import { DataView } from "@/components/ui/data-view";
 import { FormDrawer } from "@/components/ui/form-drawer";
 import { EmptyState, Page, PageHeader, Segmented } from "@/components/ui/page";
 import { RecordCard } from "@/components/ui/record-card";
-import { financeApi } from "@/lib/money";
+import { financeApi, formatMinorAmount } from "@/lib/money";
 import { contactSchema, type ContactValues } from "@/lib/schemas/finance.schemas";
 import type { Contact } from "@/types/finance";
 
-import { NotesField, TextInputField } from "./fields";
+import { MoneyField, NotesField, TextInputField } from "./fields";
 import { useContacts, useFinanceAction, WorkspaceGate, type WorkspaceInfo } from "./shared";
 
 type Kind = "customers" | "suppliers";
@@ -26,40 +27,76 @@ const KIND_OPTIONS = [
   { key: "suppliers", label: "Suppliers" },
 ] as const;
 
-function ContactsContent({ workspaceId, startOpen }: WorkspaceInfo & { startOpen: boolean }) {
+function ContactsContent({ workspaceId, currency, startOpen }: WorkspaceInfo & { startOpen: boolean }) {
   const [kind, setKind] = useState<Kind>("customers");
   const [isOpen, setIsOpen] = useState(startOpen);
   const [editing, setEditing] = useState<Contact | null>(null);
   const [mergingSource, setMergingSource] = useState<Contact | null>(null);
   const [mergeTargetId, setMergeTargetId] = useState<string>("");
+  const [duplicateMatches, setDuplicateMatches] = useState<Contact[]>([]);
   const contacts = useContacts(workspaceId, kind);
   const singular = kind === "customers" ? "customer" : "supplier";
 
   const form = useForm<ContactValues>({
     resolver: zodResolver(contactSchema),
-    defaultValues: { name: "", email: "", phone: "", notes: "" },
+    defaultValues: { name: "", email: "", phone: "", opening_balance: "", notes: "" },
   });
+  const watchedName = form.watch("name");
+  const watchedEmail = form.watch("email");
+  const watchedPhone = form.watch("phone");
+
+  useEffect(() => {
+    if (!isOpen || editing) {
+      return;
+    }
+    const qName = watchedName?.trim() || "";
+    const qEmail = watchedEmail?.trim() || "";
+    const qPhone = watchedPhone?.trim() || "";
+    if (qName.length < 2 && qEmail.length < 4 && qPhone.length < 5) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      financeApi
+        .checkDuplicateContacts(workspaceId, { name: qName, email: qEmail, phone: qPhone })
+        .then((matches) => setDuplicateMatches(matches))
+        .catch(() => setDuplicateMatches([]));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [isOpen, editing, workspaceId, watchedName, watchedEmail, watchedPhone]);
+
   const close = () => {
     setIsOpen(false);
     setEditing(null);
-    form.reset({ name: "", email: "", phone: "", notes: "" });
+    setDuplicateMatches([]);
+    form.reset({ name: "", email: "", phone: "", opening_balance: "", notes: "" });
   };
   const openEdit = (contact: Contact) => {
     setEditing(contact);
+    setDuplicateMatches([]);
+    const exp = 2;
+    const rawOpen = Number(contact.opening_balance_minor || 0);
+    const openStr = rawOpen > 0 ? (rawOpen / Math.pow(10, exp)).toFixed(exp) : "";
     form.reset({
       name: contact.name,
       email: contact.email ?? "",
       phone: contact.phone ?? "",
+      opening_balance: openStr,
       notes: contact.notes ?? "",
     });
     setIsOpen(true);
   };
   const save = useFinanceAction(
     workspaceId,
-    (values: ContactValues) =>
-      editing
-        ? financeApi.updateContact(workspaceId, kind, editing.id, { ...values, party_type: editing.party_type || singular })
-        : financeApi.createContact(workspaceId, kind, { ...values, party_type: singular }),
+    (values: ContactValues) => {
+      const payload = {
+        ...values,
+        opening_balance: values.opening_balance || undefined,
+        party_type: editing ? editing.party_type || singular : singular,
+      };
+      return editing
+        ? financeApi.updateContact(workspaceId, kind, editing.id, payload)
+        : financeApi.createContact(workspaceId, kind, payload);
+    },
     { success: editing ? "Contact updated" : "Contact added", onDone: close },
   );
 
@@ -141,6 +178,12 @@ function ContactsContent({ workspaceId, startOpen }: WorkspaceInfo & { startOpen
           },
           { key: "phone", label: "Phone", render: (row) => row.phone || "—" },
           { key: "email", label: "Email", render: (row) => row.email || "—" },
+          {
+            key: "opening",
+            label: "Opening Balance",
+            align: "right",
+            render: (row) => (Number(row.opening_balance_minor || 0) > 0 ? formatMinorAmount(row.opening_balance_minor || 0, currency, 2) : "—"),
+          },
           { key: "actions", label: "", align: "right", render: rowActions },
         ]}
         renderCard={(row) => (
@@ -166,6 +209,34 @@ function ContactsContent({ workspaceId, startOpen }: WorkspaceInfo & { startOpen
         <TextInputField control={form.control} name="name" label="Name" isRequired />
         <TextInputField control={form.control} name="phone" label="Phone" type="tel" placeholder="080..." />
         <TextInputField control={form.control} name="email" label="Email" type="email" placeholder="name@example.com" />
+        <MoneyField
+          control={form.control}
+          name="opening_balance"
+          label="Opening balance"
+          currency={currency}
+          description="Brought-forward balance owed at setup (leave empty if zero)."
+        />
+        {!editing && duplicateMatches.length > 0 && (
+          <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-3 space-y-2 text-xs">
+            <div className="flex items-center gap-2 font-semibold text-amber-600">
+              <Warning size={16} weight="duotone" />
+              <span>Possible duplicate contact found ({duplicateMatches.length})</span>
+            </div>
+            <div className="space-y-1">
+              {duplicateMatches.map((m) => (
+                <div key={m.id} className="flex items-center justify-between gap-2 text-foreground">
+                  <span>
+                    {m.name} {m.phone ? `• ${m.phone}` : ""} {m.email ? `• ${m.email}` : ""}
+                  </span>
+                  <Link href={`/${m.party_type === "supplier" ? "suppliers" : "customers"}/${m.id}`} className="text-primary font-semibold hover:underline">
+                    Open
+                  </Link>
+                </div>
+              ))}
+            </div>
+            <Alert status="warning" description="Open the existing record above or continue only if this is genuinely a separate contact." />
+          </div>
+        )}
         <NotesField control={form.control} name="notes" label="Notes" />
       </FormDrawer>
 

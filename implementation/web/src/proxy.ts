@@ -23,6 +23,7 @@ export function proxy(request: NextRequest) {
     pathname.startsWith("/api") ||
     pathname.startsWith("/favicon") ||
     pathname.startsWith("/public") ||
+    pathname.startsWith("/purchase-orders/share") ||
     pathname.startsWith("/invitations") ||
     pathname.includes(".") ||
     PUBLIC_ROUTES.has(pathname)

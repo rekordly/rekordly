@@ -421,6 +421,8 @@ export interface Contact {
   email?: string | null;
   phone?: string | null;
   notes?: string | null;
+  opening_balance_minor?: MinorAmount;
+  merged_into_id?: number | null;
   is_active: boolean;
   created_at?: string;
 }
@@ -479,6 +481,15 @@ export interface PaymentDetail {
   payment_legs: PaymentLeg[];
 }
 
+export interface DocumentTaxLine {
+  id?: number;
+  name: string;
+  rate_bps: number;
+  amount_minor: MinorAmount;
+  is_compound: boolean;
+  sort_order?: number;
+}
+
 export interface Invoice extends TradeRecord {
   customer_id: number;
   customer_name: string;
@@ -489,6 +500,9 @@ export interface Invoice extends TradeRecord {
   discount_minor?: MinorAmount;
   delivery_fee_minor?: MinorAmount;
   tax_amount_minor: MinorAmount;
+  document_kind?: "invoice" | "proforma";
+  converted_from_proforma_id?: number | null;
+  outlet_id?: number | null;
   terms?: string | null;
   notes?: string | null;
 }
@@ -496,6 +510,7 @@ export interface Invoice extends TradeRecord {
 export interface InvoiceDetail {
   invoice: Invoice;
   items: InvoiceLineItem[];
+  tax_lines?: DocumentTaxLine[];
   payments?: PaymentDetail[];
 }
 
@@ -510,6 +525,8 @@ export interface Estimate {
   currency: string;
   currency_exponent: number;
   subtotal_minor: MinorAmount;
+  discount_minor?: MinorAmount;
+  delivery_fee_minor?: MinorAmount;
   tax_amount_minor: MinorAmount;
   total_amount_minor: MinorAmount;
   status: "draft" | "sent" | "accepted" | "declined" | "converted" | "expired";
@@ -526,12 +543,14 @@ export interface EstimateItem {
   description: string;
   quantity: string;
   unit_price_minor: MinorAmount;
+  discount_minor?: MinorAmount;
   amount_minor: MinorAmount;
 }
 
 export interface EstimateDetail {
   estimate: Estimate;
   items: EstimateItem[];
+  tax_lines?: DocumentTaxLine[];
 }
 
 export interface InvoiceLineItem {
@@ -540,13 +559,105 @@ export interface InvoiceLineItem {
   description: string;
   quantity: number;
   unit_price_minor: MinorAmount;
+  discount_minor?: MinorAmount;
   amount_minor: MinorAmount;
+}
+
+export interface DebitNote {
+  id: number;
+  workspace_id: number;
+  debit_note_number: string;
+  invoice_id?: number | null;
+  customer_id: number;
+  customer_name: string;
+  issue_date: string;
+  currency: string;
+  currency_exponent: number;
+  subtotal_minor: MinorAmount;
+  tax_amount_minor: MinorAmount;
+  total_amount_minor: MinorAmount;
+  paid_amount_minor: MinorAmount;
+  status: "draft" | "issued" | "paid" | "voided";
+  reason?: string | null;
+  notes?: string | null;
+  created_at: string;
+}
+
+export interface DebitNoteItem {
+  id: number;
+  debit_note_id: number;
+  description: string;
+  quantity: number;
+  unit_price_minor: MinorAmount;
+  amount_minor: MinorAmount;
+}
+
+export interface DebitNoteDetail {
+  debit_note: DebitNote;
+  items: DebitNoteItem[];
+}
+
+export interface DocumentVersion {
+  id: number;
+  document_type: string;
+  document_id: number;
+  version_number: number;
+  change_summary: string;
+  created_at: string;
+}
+
+export interface ExternalPaymentEvidence {
+  id: number;
+  document_type: "invoice" | "debit_note";
+  document_id: number;
+  payer_name: string;
+  payer_email?: string | null;
+  amount_minor: MinorAmount;
+  payment_date: string;
+  payment_method: string;
+  reference?: string | null;
+  notes?: string | null;
+  status: "pending" | "approved" | "rejected";
+  review_note?: string | null;
+  created_at: string;
+}
+
+export interface ExternalMessage {
+  id: number;
+  document_type: string;
+  document_id: number;
+  sender_type: "guest" | "team";
+  sender_name: string;
+  sender_email?: string | null;
+  message: string;
+  created_at: string;
+}
+
+export interface ExternalPartyLink {
+  id: number;
+  workspace_id: number;
+  workspace_name: string;
+  counterparty_id: number;
+  counterparty_name: string;
+  source_document_type: string;
+  source_document_id: number;
+  status: string;
+  claimed_at: string;
+}
+
+export interface PurchaseOrderShareView {
+  token?: string;
+  status: string;
+  supplier_email?: string | null;
+  expires_at: string;
+  order: PurchaseOrder;
 }
 
 export interface PublicInvoiceView {
   workspace_name: string;
   invoice: Invoice;
   items: InvoiceLineItem[];
+  tax_lines?: DocumentTaxLine[];
   expires_at: string;
 }
 
@@ -701,6 +812,8 @@ export interface PublicEstimateView {
 export interface PublicStatementView {
   workspace_name: string;
   customer: Contact;
+  opening_balance_minor?: MinorAmount;
+  opening_balance_entry?: { description: string; amount_minor: MinorAmount; date: string } | null;
   from_date?: string;
   to_date?: string;
   invoices: Invoice[];
@@ -727,6 +840,7 @@ export interface WorkspaceMemberRow {
   user_id: number;
   role_id: number;
   is_owner: boolean;
+  outlet_scope?: { outlet_id?: number; outlet_ids?: number[] };
   status: string;
   joined_at: string;
   display_name?: string | null;

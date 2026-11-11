@@ -34,12 +34,20 @@ const SETTINGS_TABS = [
 const PERMISSION_CATALOG = [
   { code: "money.view", label: "View accounts & transactions" },
   { code: "money.create", label: "Record income & expenses" },
-  { code: "sales.view", label: "View sales & invoices" },
-  { code: "sales.create", label: "Create sales & invoices" },
-  { code: "purchases.view", label: "View purchases & suppliers" },
+  { code: "money.void", label: "Void posted transactions" },
+  { code: "sales.view", label: "View sales & payments" },
+  { code: "sales.create", label: "Record sales & payments" },
+  { code: "purchases.view", label: "View purchases & bills" },
+  { code: "purchases.create", label: "Create purchases & bills" },
+  { code: "invoices.view", label: "View invoices, estimates & proformas" },
+  { code: "invoices.create", label: "Create invoices, estimates & debit notes" },
+  { code: "reconcile.manage", label: "Run bank & cash reconciliation" },
+  { code: "contacts.view", label: "View customers & suppliers" },
+  { code: "contacts.manage", label: "Edit & merge customers/suppliers" },
   { code: "inventory.view_quantity", label: "View stock quantities" },
-  { code: "reports.view_basic", label: "View reports & tax readiness" },
-  { code: "settings.manage", label: "Manage workspace settings" },
+  { code: "reports.view_basic", label: "View financial reports & budgets" },
+  { code: "reports.tax", label: "Manage tax readiness & VAT settings" },
+  { code: "settings.manage", label: "Manage workspace profile & team" },
 ];
 
 interface SessionRow {
@@ -63,6 +71,22 @@ function SettingsContent({ workspaceId }: WorkspaceInfo) {
     queryKey: ["settings-team", workspaceId],
     queryFn: () => financeApi.getWorkspaceTeam(workspaceId),
   });
+
+  const outletsQuery = useQuery({
+    queryKey: ["settings-outlets", workspaceId],
+    queryFn: () => financeApi.listOutlets(workspaceId),
+  });
+
+  const handleOutletScopeChange = async (memberId: number, value: string) => {
+    try {
+      const outletIds = value ? [Number(value)] : [];
+      await financeApi.updateMemberOutletScope(workspaceId, memberId, outletIds);
+      toast.success("Member outlet scope updated");
+      teamQuery.refetch();
+    } catch (err: unknown) {
+      toast.danger(err instanceof Error ? err.message : "Failed to update outlet scope");
+    }
+  };
 
   const sessionsQuery = useQuery({
     queryKey: ["me-sessions"],
@@ -285,17 +309,35 @@ function SettingsContent({ workspaceId }: WorkspaceInfo) {
               </h2>
             </div>
             <div className="divide-y divide-border/30">
-              {(teamQuery.data?.members ?? []).map((m) => (
-                <div key={m.id} className="flex items-center justify-between py-3 text-xs">
-                  <div>
-                    <div className="font-semibold text-foreground">{m.display_name || `User #${m.user_id}`}</div>
-                    <div className="text-muted">Joined {new Date(m.joined_at).toLocaleDateString()}</div>
+              {(teamQuery.data?.members ?? []).map((m) => {
+                const scopedId = m.outlet_scope?.outlet_ids?.[0] ?? m.outlet_scope?.outlet_id ?? "";
+                return (
+                  <div key={m.id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-xs">
+                    <div>
+                      <div className="font-semibold text-foreground">{m.display_name || `User #${m.user_id}`}</div>
+                      <div className="text-muted">Joined {new Date(m.joined_at).toLocaleDateString()}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {!m.is_owner && (outletsQuery.data?.length ?? 0) > 0 && (
+                        <select
+                          aria-label={`Outlet scope for ${m.display_name || m.user_id}`}
+                          value={String(scopedId)}
+                          onChange={(e) => handleOutletScopeChange(m.id, e.target.value)}
+                          className="h-8 rounded-xl border border-border bg-background px-2 text-xs text-foreground"
+                        >
+                          <option value="">All outlets</option>
+                          {(outletsQuery.data ?? []).map((o) => (
+                            <option key={o.id} value={o.id}>
+                              {o.name}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                      <StatusPill tone={m.is_owner ? "success" : "neutral"}>{m.role_name}</StatusPill>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <StatusPill tone={m.is_owner ? "success" : "neutral"}>{m.role_name}</StatusPill>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -428,11 +470,25 @@ function SettingsContent({ workspaceId }: WorkspaceInfo) {
                 onChange={(e) => setInviteRole(e.target.value)}
                 className="w-full h-11 px-3 rounded-2xl border border-border bg-background text-sm text-foreground"
               >
-                <option value="staff">Staff (Sales & Expenses)</option>
-                <option value="accountant">Accountant (Reports & Books)</option>
-                <option value="cashier">Cashier (Sales & Receipts)</option>
-                <option value="admin">Admin (Manage Workspace)</option>
-                <option value="viewer">Viewer (Read Only)</option>
+                {(teamQuery.data?.roles ?? []).filter((r) => r.code !== "owner").length > 0 ? (
+                  (teamQuery.data?.roles ?? [])
+                    .filter((r) => r.code !== "owner")
+                    .map((r) => (
+                      <option key={r.code} value={r.code}>
+                        {r.name}
+                      </option>
+                    ))
+                ) : (
+                  <>
+                    <option value="admin">Admin</option>
+                    <option value="accountant">Accountant / Bookkeeper</option>
+                    <option value="sales">Sales</option>
+                    <option value="cashier">Cashier</option>
+                    <option value="inventory_manager">Inventory Manager</option>
+                    <option value="procurement">Procurement</option>
+                    <option value="viewer">Viewer / Auditor</option>
+                  </>
+                )}
               </select>
             </div>
           </div>

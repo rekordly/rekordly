@@ -27,6 +27,12 @@ import type {
   GoodsReceipt, SupplierBill, SupplierAdvance, SupplierReturn, SupplierReturnLineOption, ProcurementReport, SupplierBillMatch,
   Estimate,
   EstimateDetail,
+  DebitNote,
+  DebitNoteDetail,
+  DocumentVersion,
+  ExternalMessage,
+  ExternalPartyLink,
+  ExternalPaymentEvidence,
   Invoice,
   InvoiceDetail,
   PaymentDetail,
@@ -34,6 +40,7 @@ import type {
   PublicInvoiceView,
   PublicReceiptView,
   PublicStatementView,
+  PurchaseOrderShareView,
   SalesReturn,
   CustomerCredit,
   CustomerCreditTransaction,
@@ -307,6 +314,8 @@ export const financeApi = {
     scopedGet<{
       statement: {
         customer: Contact;
+        opening_balance_minor?: number;
+        opening_balance_entry?: { description: string; amount_minor: number | string; date: string } | null;
         invoices: Invoice[];
         sales: Array<{ id: number; total_amount_minor: number; paid_amount_minor: number; currency: string; currency_exponent: number; status: string; sale_date: string; reference?: string | null }>;
         wallet_txs: WalletTransaction[];
@@ -320,6 +329,8 @@ export const financeApi = {
     scopedPatch<{ customer?: Contact; supplier?: Contact }>(workspaceId, `/api/v1/${kind}/${id}`, body),
   mergeContacts: (workspaceId: number, sourceId: number, targetId: number) =>
     scopedPost<{ counterparty: Contact }>(workspaceId, "/api/v1/counterparties/merge", { source_id: sourceId, target_id: targetId }),
+  checkDuplicateContacts: (workspaceId: number, params: { name?: string; email?: string; phone?: string }) =>
+    scopedGet<{ matches: Contact[] }>(workspaceId, "/api/v1/counterparties/check-duplicates", params).then((r) => r.matches ?? []),
 
   async listCatalogueItems(workspaceId: number, params: QueryParams = {}) {
     const result = await scopedGet<{ items: CatalogueItem[] }>(workspaceId, "/api/v1/catalogue/items", { limit: 50, ...params });
@@ -658,6 +669,60 @@ export const financeApi = {
 
   getOnboardingChecklist: (workspaceId: number) =>
     scopedGet<{ checklist: OnboardingChecklist }>(workspaceId, "/api/v1/onboarding/checklist").then((r) => r.checklist),
+  updateMemberOutletScope: (workspaceId: number, memberId: number, outletIds: number[]) =>
+    scopedPatch(workspaceId, `/api/v1/settings/team/members/${memberId}/outlet-scope`, { outlet_ids: outletIds }),
+
+  convertProformaToInvoice: (workspaceId: number, proformaId: number, finalizeNow = false, key?: string) =>
+    scopedPost<InvoiceDetail>(workspaceId, `/api/v1/proformas/${proformaId}/convert`, { finalize_now: finalizeNow }, key),
+  async listDebitNotes(workspaceId: number, params: QueryParams = {}) {
+    const res = await scopedGet<{ debit_notes: DebitNote[] }>(workspaceId, "/api/v1/debit-notes", params);
+    return res.debit_notes ?? [];
+  },
+  createDebitNote: (workspaceId: number, body: unknown, key: string) =>
+    scopedPost<DebitNoteDetail>(workspaceId, "/api/v1/debit-notes", body, key),
+  voidDebitNote: (workspaceId: number, id: number, reason: string) =>
+    scopedPost<{ debit_note: DebitNote }>(workspaceId, `/api/v1/debit-notes/${id}/void`, { reason }),
+  listDocumentVersions: (workspaceId: number, docType: string, id: number) =>
+    scopedGet<{ versions: DocumentVersion[] }>(workspaceId, `/api/v1/documents/${docType}/${id}/versions`).then((r) => r.versions ?? []),
+
+  listDocumentEvidences: (workspaceId: number, docType: string, id: number) =>
+    scopedGet<{ evidences: ExternalPaymentEvidence[] }>(workspaceId, `/api/v1/documents/${docType}/${id}/payment-evidences`).then((r) => r.evidences ?? []),
+  reviewPaymentEvidence: (workspaceId: number, evidenceId: number, status: "approved" | "rejected", note?: string) =>
+    scopedPost<{ evidence: ExternalPaymentEvidence }>(workspaceId, `/api/v1/payment-evidences/${evidenceId}/review`, { status, note }),
+  listTeamDocumentMessages: (workspaceId: number, docType: string, id: number) =>
+    scopedGet<{ messages: ExternalMessage[] }>(workspaceId, `/api/v1/documents/${docType}/${id}/messages`).then((r) => r.messages ?? []),
+  postTeamDocumentMessage: (workspaceId: number, docType: string, id: number, message: string, senderName?: string) =>
+    scopedPost<{ message: ExternalMessage }>(workspaceId, `/api/v1/documents/${docType}/${id}/messages`, { message, sender_name: senderName }).then(
+      (r) => r.message,
+    ),
+
+  claimExternalPartyLink: (documentType: string, token: string) =>
+    apiClient
+      .post<{ document_type: string; token: string }, { link: ExternalPartyLink }>("/api/v1/external-links/claim", {
+        document_type: documentType,
+        token,
+      })
+      .then((r) => r.link),
+  listMyExternalPartyLinks: () =>
+    apiClient.get<{ links: ExternalPartyLink[] }>("/api/v1/external-links").then((r) => r.links ?? []),
+
+  submitPublicPaymentEvidence: (
+    token: string,
+    body: { payer_name: string; payer_email?: string; amount: string; payment_date: string; payment_method: string; reference?: string; notes?: string },
+  ) => apiClient.post<typeof body, { evidence: ExternalPaymentEvidence }>(`/api/v1/public/invoices/${token}/payment-evidence`, body),
+  listPublicMessages: (docType: string, token: string) =>
+    apiClient.get<{ messages: ExternalMessage[] }>(`/api/v1/public/${docType}/${token}/messages`).then((r) => r.messages ?? []),
+  postPublicMessage: (docType: string, token: string, body: { sender_name: string; sender_email?: string; message: string }) =>
+    apiClient.post<typeof body, { message: ExternalMessage }>(`/api/v1/public/${docType}/${token}/messages`, body).then((r) => r.message),
+  getPublicPurchaseOrderShare: (token: string) =>
+    apiClient.get<{ share: PurchaseOrderShareView }>(`/api/v1/purchase-orders/share/${token}`).then((r) => r.share),
+  respondPublicPurchaseOrderShare: (token: string, response: "acknowledged" | "declined" | "change_requested", note?: string) =>
+    apiClient
+      .post<{ response: string; note?: string }, { share: PurchaseOrderShareView }>(`/api/v1/purchase-orders/share/${token}/respond`, {
+        response,
+        note,
+      })
+      .then((r) => r.share),
 };
 
 /** Query keys are always namespaced by workspace so one space can never render another's rows. */

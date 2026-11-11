@@ -140,6 +140,7 @@ export const contactSchema = z.object({
   name: z.string().trim().min(1, "Enter a name").max(160, "Keep this under 160 characters"),
   email: z.union([z.literal(""), z.email("Enter a valid email address")]),
   phone: shortText,
+  opening_balance: optionalAmount.optional(),
   notes,
 });
 export type ContactValues = z.infer<typeof contactSchema>;
@@ -206,9 +207,16 @@ export const invoiceAllocationSchema = z.object({
 });
 export type InvoiceAllocationValues = z.infer<typeof invoiceAllocationSchema>;
 
+export const taxLineFormSchema = z.object({
+  name: z.string().trim().min(1, "Name this tax"),
+  rate_percent: z.string().trim().regex(/^\d+(\.\d{1,2})?$/, "Enter % e.g. 7.5"),
+  is_compound: z.boolean(),
+});
+
 export const invoiceSchema = z
   .object({
     customer_id: z.string().min(1, "Choose a customer"),
+    document_kind: z.enum(["invoice", "proforma"]).optional(),
     issue_date: date("Choose the issue date"),
     due_date: date("Choose the due date"),
     tax_amount: optionalAmount,
@@ -216,12 +224,14 @@ export const invoiceSchema = z
     delivery_fee_amount: optionalAmount.optional(),
     notes,
     terms: notes,
+    tax_lines: z.array(taxLineFormSchema).optional(),
     items: z
       .array(
         z.object({
           description: z.string().trim().min(1, "Describe this item").max(200, "Keep this under 200 characters"),
           quantity: z.string().regex(/^[1-9]\d{0,5}$/, "Enter a whole quantity"),
           unit_price: amount("Enter a price"),
+          discount_amount: optionalAmount.optional(),
         }),
       )
       .min(1, "Add at least one item"),
@@ -241,12 +251,14 @@ export const estimateSchema = z.object({
   delivery_fee_amount: optionalAmount.optional(),
   notes,
   terms: notes,
+  tax_lines: z.array(taxLineFormSchema).optional(),
   items: z
     .array(
       z.object({
         description: z.string().trim().min(1, "Describe this item").max(200, "Keep this under 200 characters"),
         quantity: z.string().regex(/^[0-9]+(\.[0-9]{1,4})?$/, "Enter a valid quantity"),
         unit_price: amount("Enter a price"),
+        discount_amount: optionalAmount.optional(),
       }),
     )
     .min(1, "Add at least one item"),

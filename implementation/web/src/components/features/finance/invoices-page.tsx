@@ -7,10 +7,13 @@ import {
   ArrowRight,
   ArrowsClockwise,
   ArrowUUpLeft,
+  ChatCircleDots,
   CheckCircle,
+  ClockCounterClockwise,
   Copy,
   CreditCard,
   Envelope,
+  FilePlus,
   FileText,
   HandCoins,
   PaperPlaneTilt,
@@ -33,7 +36,7 @@ import { AppRowActions } from "@/components/ui/app-row-actions";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataView } from "@/components/ui/data-view";
 import { FormDrawer } from "@/components/ui/form-drawer";
-import { EmptyState, Page, PageHeader } from "@/components/ui/page";
+import { EmptyState, Page, PageHeader, StatusPill } from "@/components/ui/page";
 import { RecordCard } from "@/components/ui/record-card";
 import { toast } from "@heroui/react";
 import { formatDate } from "@/lib/format";
@@ -48,7 +51,7 @@ import {
   type SalesReturnValues,
   type WalletPaymentValues,
 } from "@/lib/schemas/finance.schemas";
-import type { Estimate, Invoice, InvoiceLineItem, SalesReturn } from "@/types/finance";
+import type { DebitNote, DocumentVersion, Estimate, ExternalMessage, ExternalPaymentEvidence, Invoice, InvoiceLineItem, SalesReturn } from "@/types/finance";
 
 import { MoneyField, NotesField, TextInputField } from "./fields";
 import { PaymentDrawer, type PaymentPreset } from "./payment-drawer";
@@ -59,9 +62,37 @@ type PendingAction =
   | { kind: "void"; invoice: Invoice }
   | { kind: "wallet"; invoice: Invoice }
   | { kind: "apply_credit"; invoice: Invoice; availableMinor: number }
+  | { kind: "convert_proforma"; invoice: Invoice }
   | { kind: "convert_estimate"; estimate: Estimate };
 
-const BLANK_ITEM = { description: "", quantity: "1", unit_price: "" };
+const BLANK_ITEM = { description: "", quantity: "1", unit_price: "", discount_amount: "" };
+
+function computePreviewTax(
+  taxLines: Array<{ name: string; rate_percent: string; is_compound: boolean }> | undefined,
+  flatTax: number,
+  taxableBase: number,
+): number {
+  if (!taxLines || taxLines.length === 0) return flatTax;
+  const base = Math.max(0, taxableBase);
+  let nonCompound = 0;
+  for (const tl of taxLines) {
+    if (!tl.is_compound) {
+      const pct = parseFloat(tl.rate_percent || "0") || 0;
+      nonCompound += (base * pct) / 100;
+    }
+  }
+  let compBase = base + nonCompound;
+  let total = nonCompound;
+  for (const tl of taxLines) {
+    if (tl.is_compound) {
+      const pct = parseFloat(tl.rate_percent || "0") || 0;
+      const amt = (compBase * pct) / 100;
+      compBase += amt;
+      total += amt;
+    }
+  }
+  return total;
+}
 
 const INVOICE_STEPS = [
   { step: 1, title: "Items & Pricing", description: "What are you billing for?" },
@@ -76,7 +107,7 @@ const ESTIMATE_STEPS = [
 ] as const;
 
 function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & { startOpen: boolean }) {
-  const [activeTab, setActiveTab] = useState<"invoices" | "estimates" | "returns">("invoices");
+  const [activeTab, setActiveTab] = useState<"invoices" | "estimates" | "returns" | "debit-notes">("invoices");
 
   // Invoices state
   const [isInvoiceOpen, setIsInvoiceOpen] = useState(startOpen);
@@ -93,6 +124,42 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
     queryKey: ["money", workspaceId, "sales-returns"],
     queryFn: () => financeApi.listSalesReturns(workspaceId),
   });
+
+  // Debit Notes state
+  const debitNotesQuery = useQuery({
+    queryKey: ["money", workspaceId, "debit-notes"],
+    queryFn: () => financeApi.listDebitNotes(workspaceId),
+  });
+  const [isDebitNoteOpen, setIsDebitNoteOpen] = useState(false);
+  const [dnCustomerId, setDnCustomerId] = useState("");
+  const [dnInvoiceId, setDnInvoiceId] = useState("");
+  const [dnDate, setDnDate] = useState(today());
+  const [dnReason, setDnReason] = useState("");
+  const [dnDesc, setDnDesc] = useState("");
+  const [dnAmount, setDnAmount] = useState("");
+  const [dnSaving, setDnSaving] = useState(false);
+
+  // Version history + Portal Evidence & Messages drawer
+  const [inspectTarget, setInspectTarget] = useState<{ kind: "invoice" | "estimate"; id: number; number: string; currency: string; exp: number } | null>(null);
+  const [inspectVersions, setInspectVersions] = useState<DocumentVersion[]>([]);
+  const [inspectEvidences, setInspectEvidences] = useState<ExternalPaymentEvidence[]>([]);
+  const [inspectMessages, setInspectMessages] = useState<ExternalMessage[]>([]);
+  const [teamReply, setTeamReply] = useState("");
+  const [replySending, setReplySending] = useState(false);
+
+  const openInspector = async (kind: "invoice" | "estimate", row: Invoice | Estimate) => {
+    const number = "invoice_number" in row ? row.invoice_number : row.estimate_number;
+    const docType = "invoice_number" in row ? (row.document_kind || "invoice") : "estimate";
+    setInspectTarget({ kind, id: row.id, number, currency: row.currency, exp: row.currency_exponent ?? 2 });
+    const [vers, evs, msgs] = await Promise.all([
+      financeApi.listDocumentVersions(workspaceId, docType, row.id).catch(() => []),
+      kind === "invoice" ? financeApi.listDocumentEvidences(workspaceId, "invoice", row.id).catch(() => []) : Promise.resolve([]),
+      financeApi.listTeamDocumentMessages(workspaceId, kind, row.id).catch(() => []),
+    ]);
+    setInspectVersions(vers);
+    setInspectEvidences(evs);
+    setInspectMessages(msgs);
+  };
 
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [payment, setPayment] = useState<PaymentPreset | undefined>();
@@ -169,6 +236,7 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
     resolver: zodResolver(invoiceSchema),
     defaultValues: {
       customer_id: "",
+      document_kind: "invoice",
       issue_date: today(),
       due_date: today(),
       tax_amount: "",
@@ -176,11 +244,13 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
       delivery_fee_amount: "",
       notes: "",
       terms: "Payment is due within 14 days of invoice date.",
+      tax_lines: [],
       items: [BLANK_ITEM],
     },
     mode: "onChange",
   });
   const invoiceItems = useFieldArray({ control: invoiceForm.control, name: "items" });
+  const invoiceTaxLines = useFieldArray({ control: invoiceForm.control, name: "tax_lines" });
 
   // Estimate Form
   const estimateForm = useForm<EstimateValues>({
@@ -194,11 +264,13 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
       delivery_fee_amount: "",
       notes: "This quotation is valid for 14 days from issue date.",
       terms: "Standard commercial delivery terms apply.",
+      tax_lines: [],
       items: [BLANK_ITEM],
     },
     mode: "onChange",
   });
   const estimateItems = useFieldArray({ control: estimateForm.control, name: "items" });
+  const estimateTaxLines = useFieldArray({ control: estimateForm.control, name: "tax_lines" });
 
   // Sales Return Form
   const returnForm = useForm<SalesReturnValues>({
@@ -218,6 +290,7 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
 
   // Watched invoice values
   const watchedInvItems = invoiceForm.watch("items");
+  const watchedInvTaxLines = invoiceForm.watch("tax_lines");
   const watchedInvTax = invoiceForm.watch("tax_amount");
   const watchedInvDiscount = invoiceForm.watch("discount_amount");
   const watchedInvDelivery = invoiceForm.watch("delivery_fee_amount");
@@ -225,21 +298,24 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
   const watchedInvIssueDate = invoiceForm.watch("issue_date");
   const watchedInvDueDate = invoiceForm.watch("due_date");
   const watchedInvTerms = invoiceForm.watch("terms");
+  const watchedInvKind = invoiceForm.watch("document_kind") ?? "invoice";
 
   const invSubtotal = useMemo(() => {
     return (watchedInvItems ?? []).reduce((acc, it) => {
       const q = parseFloat(it.quantity || "0");
       const p = parseFloat(it.unit_price || "0");
-      return acc + (isNaN(q) || isNaN(p) ? 0 : q * p);
+      const d = parseFloat(it.discount_amount || "0") || 0;
+      return acc + (isNaN(q) || isNaN(p) ? 0 : Math.max(0, q * p - d));
     }, 0);
   }, [watchedInvItems]);
-  const invTax = parseFloat(watchedInvTax || "0") || 0;
   const invDiscount = parseFloat(watchedInvDiscount || "0") || 0;
+  const invTax = computePreviewTax(watchedInvTaxLines, parseFloat(watchedInvTax || "0") || 0, invSubtotal - invDiscount);
   const invDelivery = parseFloat(watchedInvDelivery || "0") || 0;
   const invTotal = Math.max(0, invSubtotal - invDiscount + invTax + invDelivery);
 
   // Watched estimate values
   const watchedEstItems = estimateForm.watch("items");
+  const watchedEstTaxLines = estimateForm.watch("tax_lines");
   const watchedEstTax = estimateForm.watch("tax_amount");
   const watchedEstDiscount = estimateForm.watch("discount_amount");
   const watchedEstDelivery = estimateForm.watch("delivery_fee_amount");
@@ -252,11 +328,12 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
     return (watchedEstItems ?? []).reduce((acc, it) => {
       const q = parseFloat(it.quantity || "0");
       const p = parseFloat(it.unit_price || "0");
-      return acc + (isNaN(q) || isNaN(p) ? 0 : q * p);
+      const d = parseFloat(it.discount_amount || "0") || 0;
+      return acc + (isNaN(q) || isNaN(p) ? 0 : Math.max(0, q * p - d));
     }, 0);
   }, [watchedEstItems]);
-  const estTax = parseFloat(watchedEstTax || "0") || 0;
   const estDiscount = parseFloat(watchedEstDiscount || "0") || 0;
+  const estTax = computePreviewTax(watchedEstTaxLines, parseFloat(watchedEstTax || "0") || 0, estSubtotal - estDiscount);
   const estDelivery = parseFloat(watchedEstDelivery || "0") || 0;
   const estTotal = Math.max(0, estSubtotal - estDiscount + estTax + estDelivery);
 
@@ -360,11 +437,20 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
         {
           customer_id: Number(resolvedCustomerId) || undefined,
           customer_name: resolvedCustomerName,
+          document_kind: values.document_kind || "invoice",
           issue_date: values.issue_date,
           due_date: values.due_date,
           currency,
           status: "draft",
           tax_amount: values.tax_amount || undefined,
+          tax_lines:
+            values.tax_lines && values.tax_lines.length > 0
+              ? values.tax_lines.map((tl) => ({
+                  name: tl.name,
+                  rate_bps: Math.round((parseFloat(tl.rate_percent || "0") || 0) * 100),
+                  is_compound: tl.is_compound,
+                }))
+              : undefined,
           discount_amount: values.discount_amount || undefined,
           delivery_fee_amount: values.delivery_fee_amount || undefined,
           notes: values.notes || undefined,
@@ -373,6 +459,7 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
             description: item.description,
             quantity: Number(item.quantity),
             unit_price: item.unit_price,
+            discount_amount: item.discount_amount || undefined,
           })),
         },
         key,
@@ -418,6 +505,14 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
           currency,
           status: "draft",
           tax_amount: values.tax_amount || undefined,
+          tax_lines:
+            values.tax_lines && values.tax_lines.length > 0
+              ? values.tax_lines.map((tl) => ({
+                  name: tl.name,
+                  rate_bps: Math.round((parseFloat(tl.rate_percent || "0") || 0) * 100),
+                  is_compound: tl.is_compound,
+                }))
+              : undefined,
           discount_amount: values.discount_amount || undefined,
           delivery_fee_amount: values.delivery_fee_amount || undefined,
           notes: values.notes || undefined,
@@ -426,12 +521,22 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
             description: item.description,
             quantity: item.quantity,
             unit_price: item.unit_price,
+            discount_amount: item.discount_amount || undefined,
           })),
         },
         key,
       );
     },
     { success: "Quotation saved as draft", onDone: closeEstimateDrawer },
+  );
+
+  const convertProformaAction = useFinanceAction(
+    workspaceId,
+    (invoice: Invoice, key: string) => financeApi.convertProformaToInvoice(workspaceId, invoice.id, false, key),
+    {
+      success: "Proforma converted to standard draft invoice",
+      onDone: closePending,
+    },
   );
 
   const convertEstimateAction = useFinanceAction(
@@ -610,6 +715,23 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
           onClick: () => handleOpenShare(row),
         },
         {
+          key: "inspect",
+          label: "History & Portal Inbox",
+          icon: <ClockCounterClockwise size={16} aria-hidden="true" />,
+          onClick: () => openInspector("invoice", row),
+        },
+        ...(row.document_kind === "proforma"
+          ? [
+              {
+                key: "convert_proforma",
+                label: "Convert to Final Invoice",
+                icon: <ArrowsClockwise size={16} aria-hidden="true" />,
+                disabled: row.status === "voided",
+                onClick: () => setPending({ kind: "convert_proforma", invoice: row }),
+              },
+            ]
+          : []),
+        {
           key: "finalize",
           label: "Finalize",
           icon: <CheckCircle size={16} aria-hidden="true" />,
@@ -620,28 +742,28 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
           key: "payment",
           label: "Record payment",
           icon: <HandCoins size={16} aria-hidden="true" />,
-          disabled: row.status !== "finalized" && row.status !== "partially_paid",
+          disabled: row.document_kind === "proforma" || (row.status !== "finalized" && row.status !== "partially_paid"),
           onClick: () => openDirectPayment(row),
         },
         {
           key: "wallet",
           label: "Pay from wallet",
           icon: <Wallet size={16} aria-hidden="true" />,
-          disabled: row.status !== "finalized" && row.status !== "partially_paid",
+          disabled: row.document_kind === "proforma" || (row.status !== "finalized" && row.status !== "partially_paid"),
           onClick: () => setPending({ kind: "wallet", invoice: row }),
         },
         {
           key: "apply_credit",
           label: "Apply store credit",
           icon: <CreditCard size={16} aria-hidden="true" />,
-          disabled: row.status !== "finalized" && row.status !== "partially_paid",
+          disabled: row.document_kind === "proforma" || (row.status !== "finalized" && row.status !== "partially_paid"),
           onClick: () => handleCheckAndApplyCredit(row),
         },
         {
           key: "credit_note",
           label: "Issue Credit Note / Return",
           icon: <ArrowUUpLeft size={16} aria-hidden="true" />,
-          disabled: row.status === "draft" || row.status === "voided",
+          disabled: row.document_kind === "proforma" || row.status === "draft" || row.status === "voided",
           onClick: () => openReturnForInvoice(row),
         },
         {
@@ -666,6 +788,12 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
           label: "Share / WhatsApp",
           icon: <ShareNetwork size={16} aria-hidden="true" />,
           onClick: () => handleOpenEstimateShare(row),
+        },
+        {
+          key: "inspect",
+          label: "History & Messages",
+          icon: <ClockCounterClockwise size={16} aria-hidden="true" />,
+          onClick: () => openInspector("estimate", row),
         },
         {
           key: "convert",
@@ -709,6 +837,8 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
           <div className="flex items-center gap-2">
             {activeTab === "estimates" ? (
               <AppButton startContent={<Plus weight="bold" />} label="New quotation" onPress={() => setIsEstimateOpen(true)} />
+            ) : activeTab === "debit-notes" ? (
+              <AppButton startContent={<FilePlus weight="bold" />} label="New debit note" onPress={() => setIsDebitNoteOpen(true)} />
             ) : (
               <AppButton startContent={<Plus weight="bold" />} label="New invoice" onPress={() => setIsInvoiceOpen(true)} />
             )}
@@ -717,7 +847,7 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
       />
 
       {/* View Switcher Tabs */}
-      <div className="flex items-center gap-2 border-b border-border/40 pb-3 mb-2">
+      <div className="flex flex-wrap items-center gap-2 border-b border-border/40 pb-3 mb-2">
         <button
           type="button"
           onClick={() => setActiveTab("invoices")}
@@ -727,7 +857,7 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
               : "text-muted hover:text-foreground hover:bg-surface-secondary"
           }`}
         >
-          Invoices
+          Invoices & Proformas
         </button>
         <button
           type="button"
@@ -751,6 +881,17 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
         >
           Credit Notes & Returns
         </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("debit-notes")}
+          className={`px-3.5 py-1.5 text-xs font-semibold rounded-xl transition-all ${
+            activeTab === "debit-notes"
+              ? "bg-primary text-primary-foreground shadow-sm"
+              : "text-muted hover:text-foreground hover:bg-surface-secondary"
+          }`}
+        >
+          Debit Notes
+        </button>
       </div>
 
       {/* TAB 1: INVOICES */}
@@ -772,7 +913,16 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
             />
           }
           columns={[
-            { key: "number", label: "Invoice", render: (row) => <span className="font-medium text-foreground">{row.invoice_number}</span> },
+            {
+              key: "number",
+              label: "Invoice",
+              render: (row) => (
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-foreground">{row.invoice_number}</span>
+                  {row.document_kind === "proforma" && <StatusPill tone="warning">Proforma</StatusPill>}
+                </div>
+              ),
+            },
             { key: "customer", label: "Customer", render: (row) => row.customer_name },
             { key: "due", label: "Due", render: (row) => formatDate(row.due_date) },
             { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> },
@@ -900,6 +1050,84 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
         />
       )}
 
+      {/* TAB 4: DEBIT NOTES */}
+      {activeTab === "debit-notes" && (
+        <DataView<DebitNote>
+          title="Debit Notes & Adjustment Invoices"
+          rows={debitNotesQuery.data ?? []}
+          rowKey={(row) => row.id}
+          isLoading={debitNotesQuery.isPending}
+          isError={debitNotesQuery.isError}
+          searchPlaceholder="Search debit note # or customer"
+          getSearchText={(row) => `${row.debit_note_number} ${row.customer_name} ${row.reason ?? ""}`}
+          empty={
+            <EmptyState
+              icon={FilePlus}
+              title="No debit notes yet"
+              description="Issue a debit note to add a post-invoice surcharge or adjustment."
+              action={<AppButton startContent={<Plus weight="bold" />} label="New debit note" onPress={() => setIsDebitNoteOpen(true)} />}
+            />
+          }
+          columns={[
+            { key: "number", label: "Debit Note #", render: (row) => <span className="font-medium text-foreground">{row.debit_note_number}</span> },
+            { key: "customer", label: "Customer", render: (row) => row.customer_name },
+            { key: "reason", label: "Reason", render: (row) => row.reason || "Adjustment" },
+            { key: "date", label: "Issue Date", render: (row) => formatDate(row.issue_date) },
+            { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> },
+            {
+              key: "total",
+              label: "Amount",
+              align: "right",
+              render: (row) => (
+                <span className="tabular font-semibold">{formatMinorAmount(row.total_amount_minor, row.currency, row.currency_exponent || 2)}</span>
+              ),
+            },
+            {
+              key: "actions",
+              label: "",
+              align: "right",
+              render: (row) => (
+                <AppRowActions
+                  ariaLabel="Debit note actions"
+                  items={[
+                    {
+                      key: "void_dn",
+                      label: "Void debit note",
+                      icon: <Prohibit size={16} />,
+                      danger: true,
+                      disabled: row.status === "voided",
+                      onClick: async () => {
+                        try {
+                          await financeApi.voidDebitNote(workspaceId, row.id, "Voided from UI");
+                          toast.success("Debit note voided");
+                          debitNotesQuery.refetch();
+                        } catch (err: unknown) {
+                          toast.danger(err instanceof Error ? err.message : "Failed to void debit note");
+                        }
+                      },
+                    },
+                  ]}
+                />
+              ),
+            },
+          ]}
+          renderCard={(row) => (
+            <RecordCard
+              icon={<FilePlus size={18} aria-hidden="true" />}
+              iconClassName="bg-amber-500/15 text-amber-500"
+              reference={row.debit_note_number}
+              title={row.customer_name}
+              amount={formatMinorAmount(row.total_amount_minor, row.currency, row.currency_exponent || 2)}
+              status={<StatusBadge status={row.status} />}
+              meta={[
+                { label: "Reason", value: row.reason || "Adjustment" },
+                { label: "Date", value: formatDate(row.issue_date) },
+              ]}
+            />
+          )}
+        />
+      )}
+
       {/* MULTI-STEP INVOICE DRAWER */}
       <FormDrawer
         isOpen={isInvoiceOpen}
@@ -939,9 +1167,10 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
               {invoiceItems.fields.map((field, index) => (
                 <div key={field.id} className="space-y-3 rounded-2xl bg-surface-secondary/70 p-4 border border-border/40">
                   <TextInputField control={invoiceForm.control} name={`items.${index}.description`} label={`Item ${index + 1}`} isRequired />
-                  <div className="grid grid-cols-[1fr_2fr_auto] items-start gap-3">
+                  <div className="grid grid-cols-[1fr_2fr_2fr_auto] items-start gap-3">
                     <TextInputField control={invoiceForm.control} name={`items.${index}.quantity`} label="Qty" isRequired />
                     <MoneyField control={invoiceForm.control} name={`items.${index}.unit_price`} label="Unit price" currency={currency} isRequired />
+                    <MoneyField control={invoiceForm.control} name={`items.${index}.discount_amount`} label="Line discount" currency={currency} />
                     <div className="pt-6">
                       <AppButton isIconOnly variant="ghost" aria-label="Remove item" isDisabled={invoiceItems.fields.length === 1} onPress={() => invoiceItems.remove(index)}>
                         <Trash size={18} className="text-danger" />
@@ -1027,10 +1256,66 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
                 <TextInputField control={invoiceForm.control} name="due_date" label="Due date" type="date" isRequired />
               </div>
 
+              <div className="space-y-1.5">
+                <span className="text-xs font-semibold text-foreground block">Document Type</span>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => invoiceForm.setValue("document_kind", "invoice")}
+                    className={`h-10 rounded-xl border text-xs font-semibold transition-all ${
+                      watchedInvKind === "invoice"
+                        ? "border-primary bg-primary-soft text-primary"
+                        : "border-border bg-background text-muted"
+                    }`}
+                  >
+                    Standard Invoice
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => invoiceForm.setValue("document_kind", "proforma")}
+                    className={`h-10 rounded-xl border text-xs font-semibold transition-all ${
+                      watchedInvKind === "proforma"
+                        ? "border-primary bg-primary-soft text-primary"
+                        : "border-border bg-background text-muted"
+                    }`}
+                  >
+                    Proforma Invoice
+                  </button>
+                </div>
+              </div>
+
               <div className="grid gap-4 sm:grid-cols-3">
-                <MoneyField control={invoiceForm.control} name="tax_amount" label="Tax / VAT" currency={currency} />
-                <MoneyField control={invoiceForm.control} name="discount_amount" label="Discount" currency={currency} />
+                <MoneyField control={invoiceForm.control} name="tax_amount" label="Flat Tax (or add lines below)" currency={currency} />
+                <MoneyField control={invoiceForm.control} name="discount_amount" label="Doc Discount" currency={currency} />
                 <MoneyField control={invoiceForm.control} name="delivery_fee_amount" label="Delivery fee" currency={currency} />
+              </div>
+
+              <div className="rounded-2xl border border-border/50 bg-surface-secondary/30 p-3.5 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-foreground">Multi-Tax / Compound Tax Lines</span>
+                  <AppButton
+                    size="sm"
+                    variant="tertiary"
+                    startContent={<Plus size={14} />}
+                    label="Add tax"
+                    onPress={() => invoiceTaxLines.append({ name: "VAT", rate_percent: "7.5", is_compound: false })}
+                  />
+                </div>
+                {invoiceTaxLines.fields.map((tf, tidx) => (
+                  <div key={tf.id} className="grid grid-cols-[1.5fr_1fr_auto_auto] items-center gap-2 text-xs">
+                    <TextInputField control={invoiceForm.control} name={`tax_lines.${tidx}.name`} label="Tax name" />
+                    <TextInputField control={invoiceForm.control} name={`tax_lines.${tidx}.rate_percent`} label="Rate %" />
+                    <label className="flex items-center gap-1.5 pt-5 text-[11px] text-muted cursor-pointer">
+                      <input type="checkbox" {...invoiceForm.register(`tax_lines.${tidx}.is_compound`)} />
+                      Compound
+                    </label>
+                    <div className="pt-5">
+                      <AppButton isIconOnly size="sm" variant="ghost" aria-label="Remove tax line" onPress={() => invoiceTaxLines.remove(tidx)}>
+                        <Trash size={15} className="text-danger" />
+                      </AppButton>
+                    </div>
+                  </div>
+                ))}
               </div>
               <NotesField control={invoiceForm.control} name="terms" label="Payment terms" />
               <NotesField control={invoiceForm.control} name="notes" label="Customer notes (optional)" />
@@ -1162,9 +1447,10 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
               {estimateItems.fields.map((field, index) => (
                 <div key={field.id} className="space-y-3 rounded-2xl bg-surface-secondary/70 p-4 border border-border/40">
                   <TextInputField control={estimateForm.control} name={`items.${index}.description`} label={`Line ${index + 1}`} isRequired />
-                  <div className="grid grid-cols-[1fr_2fr_auto] items-start gap-3">
+                  <div className="grid grid-cols-[1fr_2fr_2fr_auto] items-start gap-3">
                     <TextInputField control={estimateForm.control} name={`items.${index}.quantity`} label="Qty" isRequired />
                     <MoneyField control={estimateForm.control} name={`items.${index}.unit_price`} label="Unit price" currency={currency} isRequired />
+                    <MoneyField control={estimateForm.control} name={`items.${index}.discount_amount`} label="Line discount" currency={currency} />
                     <div className="pt-6">
                       <AppButton isIconOnly variant="ghost" aria-label="Remove item" isDisabled={estimateItems.fields.length === 1} onPress={() => estimateItems.remove(index)}>
                         <Trash size={18} className="text-danger" />
@@ -1251,9 +1537,37 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
               </div>
 
               <div className="grid gap-4 sm:grid-cols-3">
-                <MoneyField control={estimateForm.control} name="tax_amount" label="Tax / VAT estimate" currency={currency} />
-                <MoneyField control={estimateForm.control} name="discount_amount" label="Discount" currency={currency} />
+                <MoneyField control={estimateForm.control} name="tax_amount" label="Flat Tax (or lines below)" currency={currency} />
+                <MoneyField control={estimateForm.control} name="discount_amount" label="Doc Discount" currency={currency} />
                 <MoneyField control={estimateForm.control} name="delivery_fee_amount" label="Delivery fee" currency={currency} />
+              </div>
+
+              <div className="rounded-2xl border border-border/50 bg-surface-secondary/30 p-3.5 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-foreground">Multi-Tax / Compound Tax Lines</span>
+                  <AppButton
+                    size="sm"
+                    variant="tertiary"
+                    startContent={<Plus size={14} />}
+                    label="Add tax"
+                    onPress={() => estimateTaxLines.append({ name: "VAT", rate_percent: "7.5", is_compound: false })}
+                  />
+                </div>
+                {estimateTaxLines.fields.map((tf, tidx) => (
+                  <div key={tf.id} className="grid grid-cols-[1.5fr_1fr_auto_auto] items-center gap-2 text-xs">
+                    <TextInputField control={estimateForm.control} name={`tax_lines.${tidx}.name`} label="Tax name" />
+                    <TextInputField control={estimateForm.control} name={`tax_lines.${tidx}.rate_percent`} label="Rate %" />
+                    <label className="flex items-center gap-1.5 pt-5 text-[11px] text-muted cursor-pointer">
+                      <input type="checkbox" {...estimateForm.register(`tax_lines.${tidx}.is_compound`)} />
+                      Compound
+                    </label>
+                    <div className="pt-5">
+                      <AppButton isIconOnly size="sm" variant="ghost" aria-label="Remove tax line" onPress={() => estimateTaxLines.remove(tidx)}>
+                        <Trash size={15} className="text-danger" />
+                      </AppButton>
+                    </div>
+                  </div>
+                ))}
               </div>
               <NotesField control={estimateForm.control} name="terms" label="Commercial terms" />
               <NotesField control={estimateForm.control} name="notes" label="Quotation notes" />
@@ -1347,6 +1661,17 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
       </FormDrawer>
 
       {/* CONFIRM DIALOGS */}
+      <ConfirmDialog
+        isOpen={pending?.kind === "convert_proforma"}
+        onOpenChange={(open) => !open && closePending()}
+        title="Convert proforma to final invoice?"
+        description="Creates a standard invoice linked to this proforma without disturbing non-posting proforma history."
+        confirmLabel="Convert proforma"
+        isDanger={false}
+        isLoading={convertProformaAction.isPending}
+        onConfirm={() => pending?.kind === "convert_proforma" && convertProformaAction.mutate(pending.invoice)}
+      />
+
       <ConfirmDialog
         isOpen={pending?.kind === "convert_estimate"}
         onOpenChange={(open) => !open && closePending()}
@@ -1606,6 +1931,216 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
         onClose={() => setPayment(undefined)}
         preset={payment}
       />
+
+      {/* CREATE DEBIT NOTE DRAWER */}
+      <FormDrawer
+        isOpen={isDebitNoteOpen}
+        onOpenChange={(open) => !open && setIsDebitNoteOpen(false)}
+        title="New Debit Note"
+        description="Issue a positive billing adjustment or post-invoice surcharge."
+        submitLabel="Issue Debit Note"
+        isSubmitting={dnSaving}
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (!dnCustomerId || !dnDesc.trim() || !dnAmount.trim()) return;
+          setDnSaving(true);
+          try {
+            await financeApi.createDebitNote(
+              workspaceId,
+              {
+                customer_id: Number(dnCustomerId),
+                invoice_id: dnInvoiceId ? Number(dnInvoiceId) : undefined,
+                issue_date: dnDate,
+                currency,
+                status: "issued",
+                reason: dnReason.trim() || "Billing adjustment",
+                items: [{ description: dnDesc.trim(), quantity: 1, unit_price: dnAmount.trim() }],
+              },
+              `dn-${Date.now()}`,
+            );
+            toast.success("Debit note issued");
+            setIsDebitNoteOpen(false);
+            setDnDesc("");
+            setDnAmount("");
+            setDnReason("");
+            debitNotesQuery.refetch();
+          } catch (err: unknown) {
+            toast.danger(err instanceof Error ? err.message : "Failed to issue debit note");
+          } finally {
+            setDnSaving(false);
+          }
+        }}
+      >
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-foreground">Customer</label>
+            <select
+              required
+              value={dnCustomerId}
+              onChange={(e) => setDnCustomerId(e.target.value)}
+              className="w-full h-11 px-3 rounded-2xl border border-border bg-background text-sm text-foreground"
+            >
+              <option value="">Choose customer...</option>
+              {(customers.data ?? []).map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-foreground">Related Invoice (Optional)</label>
+            <select
+              value={dnInvoiceId}
+              onChange={(e) => setDnInvoiceId(e.target.value)}
+              className="w-full h-11 px-3 rounded-2xl border border-border bg-background text-sm text-foreground"
+            >
+              <option value="">None (Standalone adjustment)</option>
+              {invoices.rows.map((inv) => (
+                <option key={inv.id} value={inv.id}>
+                  {inv.invoice_number} — {inv.customer_name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-foreground">Issue Date</label>
+              <input type="date" required value={dnDate} onChange={(e) => setDnDate(e.target.value)} className="w-full h-11 px-3 rounded-2xl border border-border bg-background text-sm text-foreground" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-foreground">Amount ({currency})</label>
+              <input type="text" required placeholder="0.00" value={dnAmount} onChange={(e) => setDnAmount(e.target.value)} className="w-full h-11 px-3 rounded-2xl border border-border bg-background text-sm font-mono text-foreground" />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-foreground">Adjustment Item</label>
+            <input type="text" required placeholder="e.g. Late freight surcharge" value={dnDesc} onChange={(e) => setDnDesc(e.target.value)} className="w-full h-11 px-3 rounded-2xl border border-border bg-background text-sm text-foreground" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-foreground">Reason</label>
+            <input type="text" placeholder="Optional explanation" value={dnReason} onChange={(e) => setDnReason(e.target.value)} className="w-full h-11 px-3 rounded-2xl border border-border bg-background text-sm text-foreground" />
+          </div>
+        </div>
+      </FormDrawer>
+
+      {/* HISTORY & PORTAL INBOX DRAWER */}
+      <FormDrawer
+        isOpen={inspectTarget !== null}
+        onOpenChange={(open) => !open && setInspectTarget(null)}
+        title={inspectTarget ? `${inspectTarget.number} — History & Portal` : "History & Portal"}
+        description="Revision history, client proof of payment submissions, and portal messages."
+      >
+        {inspectTarget && (
+          <div className="space-y-6 text-xs">
+            {inspectTarget.kind === "invoice" && (
+              <div className="space-y-2.5">
+                <h3 className="font-bold text-foreground uppercase tracking-wider text-[11px]">Submitted Payment Evidence ({inspectEvidences.length})</h3>
+                {inspectEvidences.length === 0 ? (
+                  <p className="text-muted">No customer payment evidence uploaded yet.</p>
+                ) : (
+                  inspectEvidences.map((ev) => (
+                    <div key={ev.id} className="rounded-2xl border border-border/60 p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-foreground">{ev.payer_name} • {ev.payment_method}</span>
+                        <StatusPill tone={ev.status === "approved" ? "success" : ev.status === "rejected" ? "danger" : "warning"}>{ev.status}</StatusPill>
+                      </div>
+                      <div className="font-mono text-foreground">{formatMinorAmount(ev.amount_minor, inspectTarget.currency, inspectTarget.exp)} on {formatDate(ev.payment_date)}</div>
+                      {ev.reference && <div className="text-muted">Ref: {ev.reference}</div>}
+                      {ev.status === "pending" && (
+                        <div className="flex gap-2 pt-1">
+                          <AppButton
+                            size="sm"
+                            label="Approve"
+                            onPress={async () => {
+                              await financeApi.reviewPaymentEvidence(workspaceId, ev.id, "approved", "Verified");
+                              setInspectEvidences((prev) => prev.map((x) => (x.id === ev.id ? { ...x, status: "approved" } : x)));
+                              toast.success("Payment evidence marked approved");
+                            }}
+                          />
+                          <AppButton
+                            size="sm"
+                            variant="ghost"
+                            label="Reject"
+                            onPress={async () => {
+                              await financeApi.reviewPaymentEvidence(workspaceId, ev.id, "rejected", "Not found in statement");
+                              setInspectEvidences((prev) => prev.map((x) => (x.id === ev.id ? { ...x, status: "rejected" } : x)));
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+
+            <div className="space-y-2.5 border-t border-border/40 pt-4">
+              <h3 className="font-bold text-foreground uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                <ChatCircleDots size={15} className="text-primary" /> Portal Messages ({inspectMessages.length})
+              </h3>
+              {inspectMessages.length === 0 ? (
+                <p className="text-muted">No portal messages on this document.</p>
+              ) : (
+                <div className="space-y-2">
+                  {inspectMessages.map((m) => (
+                    <div key={m.id} className="rounded-xl bg-surface-secondary/50 p-2.5">
+                      <div className="flex justify-between text-[11px] text-muted mb-0.5">
+                        <span className="font-semibold text-foreground">{m.sender_name} ({m.sender_type})</span>
+                        <span>{new Date(m.created_at).toLocaleString()}</span>
+                      </div>
+                      <p className="text-foreground">{m.message}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="flex gap-2 pt-1">
+                <input
+                  type="text"
+                  placeholder="Reply to customer..."
+                  value={teamReply}
+                  onChange={(e) => setTeamReply(e.target.value)}
+                  className="flex-1 h-9 rounded-xl border border-border bg-background px-3 text-xs text-foreground"
+                />
+                <AppButton
+                  size="sm"
+                  label="Reply"
+                  isLoading={replySending}
+                  onPress={async () => {
+                    if (!teamReply.trim()) return;
+                    setReplySending(true);
+                    try {
+                      const created = await financeApi.postTeamDocumentMessage(workspaceId, inspectTarget.kind, inspectTarget.id, teamReply.trim());
+                      setInspectMessages((prev) => [...prev, created]);
+                      setTeamReply("");
+                    } finally {
+                      setReplySending(false);
+                    }
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2 border-t border-border/40 pt-4">
+              <h3 className="font-bold text-foreground uppercase tracking-wider text-[11px]">Revision History ({inspectVersions.length})</h3>
+              {inspectVersions.length === 0 ? (
+                <p className="text-muted">No revisions logged yet.</p>
+              ) : (
+                <div className="divide-y divide-border/30">
+                  {inspectVersions.map((v) => (
+                    <div key={v.id} className="py-2 flex items-center justify-between">
+                      <div>
+                        <span className="font-semibold text-foreground">v{v.version_number}</span> — {v.change_summary}
+                      </div>
+                      <span className="text-[11px] text-muted">{new Date(v.created_at).toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </FormDrawer>
     </Page>
   );
 }

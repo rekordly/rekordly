@@ -55,10 +55,11 @@ export default function PublicStatementPage({ params }: { params: Promise<{ toke
     );
   }
 
-  const { workspace_name, customer, invoices, wallet_txs, from_date, to_date } = view;
+  const { workspace_name, customer, invoices, wallet_txs, from_date, to_date, opening_balance_minor } = view;
+  const openMinor = Number(opening_balance_minor ?? customer.opening_balance_minor ?? 0);
   const totalInvoiced = (invoices || []).reduce((acc, inv) => acc + Number(inv.total_amount_minor || 0), 0);
   const totalPaid = (invoices || []).reduce((acc, inv) => acc + Number(inv.paid_amount_minor || 0), 0);
-  const totalDue = totalInvoiced - totalPaid;
+  const totalDue = totalInvoiced - totalPaid + openMinor;
 
   return (
     <div className="min-h-screen bg-background py-8 px-4 print:bg-white print:p-0">
@@ -121,6 +122,15 @@ export default function PublicStatementPage({ params }: { params: Promise<{ toke
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/20 font-mono text-[11px]">
+                  {openMinor !== 0 && (
+                    <tr className="bg-surface-secondary/20">
+                      <td className="py-2.5 text-muted">Brought Forward</td>
+                      <td className="py-2.5 font-sans font-semibold text-foreground">Opening Balance</td>
+                      <td className="py-2.5 font-sans uppercase text-[10px] text-amber-600">OPENING</td>
+                      <td className="py-2.5 text-right font-bold text-foreground">{formatMinorAmount(openMinor, "NGN", 2)}</td>
+                      <td className="py-2.5 text-right text-muted">—</td>
+                    </tr>
+                  )}
                   {(invoices || []).map((inv) => (
                     <tr key={inv.id}>
                       <td className="py-2.5 text-muted">{inv.issue_date}</td>

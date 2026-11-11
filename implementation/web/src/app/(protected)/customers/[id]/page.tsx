@@ -55,6 +55,8 @@ function CustomerDetailContent({ workspaceId, currency: wsCurrency, customerId }
   const [toDate, setToDate] = useState("");
   const [statementData, setStatementData] = useState<{
     customer: Contact;
+    opening_balance_minor?: number;
+    opening_balance_entry?: { description: string; amount_minor: number | string; date: string } | null;
     invoices: Invoice[];
     sales: Array<{ id: number; total_amount_minor: number; paid_amount_minor: number; currency: string; currency_exponent: number; status: string; sale_date: string; reference?: string | null }>;
     wallet_txs: WalletTransaction[];
@@ -68,6 +70,7 @@ function CustomerDetailContent({ workspaceId, currency: wsCurrency, customerId }
   const [editName, setEditName] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [editEmail, setEditEmail] = useState("");
+  const [editOpeningBalance, setEditOpeningBalance] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
@@ -80,6 +83,8 @@ function CustomerDetailContent({ workspaceId, currency: wsCurrency, customerId }
         setEditName(res.customer.name);
         setEditPhone(res.customer.phone || "");
         setEditEmail(res.customer.email || "");
+        const rawOpen = Number(res.customer.opening_balance_minor || 0);
+        setEditOpeningBalance(rawOpen > 0 ? (rawOpen / 100).toFixed(2) : "");
         setEditNotes(res.customer.notes || "");
         setLoading(false);
       })
@@ -99,6 +104,8 @@ function CustomerDetailContent({ workspaceId, currency: wsCurrency, customerId }
         setEditName(res.customer.name);
         setEditPhone(res.customer.phone || "");
         setEditEmail(res.customer.email || "");
+        const rawOpen = Number(res.customer.opening_balance_minor || 0);
+        setEditOpeningBalance(rawOpen > 0 ? (rawOpen / 100).toFixed(2) : "");
         setEditNotes(res.customer.notes || "");
         setLoading(false);
       })
@@ -147,6 +154,7 @@ function CustomerDetailContent({ workspaceId, currency: wsCurrency, customerId }
         name: editName.trim(),
         phone: editPhone.trim(),
         email: editEmail.trim(),
+        opening_balance: editOpeningBalance.trim() || undefined,
         notes: editNotes.trim(),
         party_type: data?.customer.party_type || "customer",
       });
@@ -189,7 +197,8 @@ function CustomerDetailContent({ workspaceId, currency: wsCurrency, customerId }
 
   const totalInvoicedMinor = (invoices || []).reduce((sum, inv) => sum + Number(inv.total_amount_minor || 0), 0);
   const totalPaidMinor = (invoices || []).reduce((sum, inv) => sum + Number(inv.paid_amount_minor || 0), 0);
-  const totalOutstandingMinor = totalInvoicedMinor - totalPaidMinor;
+  const openingBalanceMinor = Number(customer.opening_balance_minor || 0);
+  const totalOutstandingMinor = totalInvoicedMinor - totalPaidMinor + openingBalanceMinor;
 
   return (
     <Page>
@@ -247,6 +256,23 @@ function CustomerDetailContent({ workspaceId, currency: wsCurrency, customerId }
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/20 font-mono text-[11px]">
+                {Number(statementData.opening_balance_minor ?? statementData.customer.opening_balance_minor ?? 0) !== 0 && (
+                  <tr className="bg-surface-secondary/20">
+                    <td className="px-3 py-2 text-muted">{statementData.opening_balance_entry?.date || "Brought Forward"}</td>
+                    <td className="px-3 py-2 font-sans font-semibold text-foreground">
+                      {statementData.opening_balance_entry?.description || "Opening Balance"}
+                    </td>
+                    <td className="px-3 py-2 uppercase text-[10px] text-amber-500">OPENING</td>
+                    <td className="px-3 py-2 text-right font-bold text-foreground">
+                      {formatMinorAmount(
+                        statementData.opening_balance_minor ?? statementData.customer.opening_balance_minor ?? 0,
+                        activeCurrency,
+                        2,
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right text-muted">—</td>
+                  </tr>
+                )}
                 {(statementData.invoices || []).map((inv) => (
                   <tr key={`inv-${inv.id}`}>
                     <td className="px-3 py-2 text-muted">{inv.issue_date}</td>
@@ -477,6 +503,16 @@ function CustomerDetailContent({ workspaceId, currency: wsCurrency, customerId }
               value={editEmail}
               onChange={(e) => setEditEmail(e.target.value)}
               className="w-full h-11 px-3 rounded-2xl border border-border bg-background text-sm text-foreground"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-foreground">Opening Balance ({activeCurrency})</label>
+            <input
+              type="text"
+              placeholder="0.00"
+              value={editOpeningBalance}
+              onChange={(e) => setEditOpeningBalance(e.target.value)}
+              className="w-full h-11 px-3 rounded-2xl border border-border bg-background text-sm font-mono text-foreground"
             />
           </div>
           <div className="space-y-1">

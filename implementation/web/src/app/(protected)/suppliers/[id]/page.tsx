@@ -37,6 +37,7 @@ function SupplierDetailContent({ workspaceId, currency: wsCurrency, supplierId }
   const [editName, setEditName] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [editEmail, setEditEmail] = useState("");
+  const [editOpeningBalance, setEditOpeningBalance] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
@@ -49,6 +50,8 @@ function SupplierDetailContent({ workspaceId, currency: wsCurrency, supplierId }
         setEditName(res.supplier.name);
         setEditPhone(res.supplier.phone || "");
         setEditEmail(res.supplier.email || "");
+        const rawOpen = Number(res.supplier.opening_balance_minor || 0);
+        setEditOpeningBalance(rawOpen > 0 ? (rawOpen / 100).toFixed(2) : "");
         setEditNotes(res.supplier.notes || "");
         setLoading(false);
       })
@@ -68,6 +71,8 @@ function SupplierDetailContent({ workspaceId, currency: wsCurrency, supplierId }
         setEditName(res.supplier.name);
         setEditPhone(res.supplier.phone || "");
         setEditEmail(res.supplier.email || "");
+        const rawOpen = Number(res.supplier.opening_balance_minor || 0);
+        setEditOpeningBalance(rawOpen > 0 ? (rawOpen / 100).toFixed(2) : "");
         setEditNotes(res.supplier.notes || "");
         setLoading(false);
       })
@@ -90,6 +95,7 @@ function SupplierDetailContent({ workspaceId, currency: wsCurrency, supplierId }
         name: editName.trim(),
         phone: editPhone.trim(),
         email: editEmail.trim(),
+        opening_balance: editOpeningBalance.trim() || undefined,
         notes: editNotes.trim(),
         party_type: data?.supplier.party_type || "supplier",
       });
@@ -242,6 +248,10 @@ function SupplierDetailContent({ workspaceId, currency: wsCurrency, supplierId }
           <div className="space-y-1">
             <label className="text-xs font-semibold text-foreground">Email</label>
             <input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} className="w-full h-11 px-3 rounded-2xl border border-border bg-background text-sm text-foreground" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-foreground">Opening Balance ({wsCurrency || "NGN"})</label>
+            <input type="text" placeholder="0.00" value={editOpeningBalance} onChange={(e) => setEditOpeningBalance(e.target.value)} className="w-full h-11 px-3 rounded-2xl border border-border bg-background text-sm font-mono text-foreground" />
           </div>
           <div className="space-y-1">
             <label className="text-xs font-semibold text-foreground">Notes</label>
