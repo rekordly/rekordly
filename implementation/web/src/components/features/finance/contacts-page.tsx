@@ -5,6 +5,7 @@ import { Plus, UserCircle, UsersThree } from "@phosphor-icons/react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 
+import Link from "next/link";
 import { AppButton } from "@/components/ui/app-button";
 import { DataView } from "@/components/ui/data-view";
 import { FormDrawer } from "@/components/ui/form-drawer";
@@ -70,7 +71,21 @@ function ContactsContent({ workspaceId, startOpen }: WorkspaceInfo & { startOpen
           />
         }
         columns={[
-          { key: "name", label: "Name", render: (row) => <span className="font-medium text-foreground">{row.name}</span> },
+          {
+            key: "name",
+            label: "Name",
+            render: (row) =>
+              kind === "customers" ? (
+                <Link
+                  href={`/customers/${row.id}`}
+                  className="font-semibold text-primary hover:underline"
+                >
+                  {row.name}
+                </Link>
+              ) : (
+                <span className="font-medium text-foreground">{row.name}</span>
+              ),
+          },
           { key: "phone", label: "Phone", render: (row) => row.phone || "—" },
           { key: "email", label: "Email", render: (row) => row.email || "—" },
         ]}

@@ -422,6 +422,7 @@ export interface Contact {
   phone?: string | null;
   notes?: string | null;
   is_active: boolean;
+  created_at?: string;
 }
 
 interface TradeRecord {

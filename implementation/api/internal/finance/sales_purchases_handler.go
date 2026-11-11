@@ -6,14 +6,19 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/rekordly/rekordly-api/internal/db"
 )
 
 func (h *Handler) RegisterSalesPurchasesRoutes(protected *gin.RouterGroup) {
 	// Counterparties (Customers & Suppliers)
 	protected.POST("/customers", h.createCustomer)
 	protected.GET("/customers", h.listCustomers)
+	protected.GET("/customers/:id", h.getCustomer)
+	protected.GET("/customers/:id/statement", h.getCustomerStatement)
 	protected.POST("/suppliers", h.createSupplier)
 	protected.GET("/suppliers", h.listSuppliers)
+	protected.GET("/suppliers/:id", h.getSupplier)
 
 	// Sales
 	protected.POST("/sales", h.createSale)
@@ -84,6 +89,123 @@ func (h *Handler) listCustomers(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"customers": customers}})
 }
 
+// @Summary Get customer counterparty details
+// @Description Fetches details, balances, and history summary for an external customer.
+// @Tags counterparties
+// @Produce json
+// @Param id path int true "Customer ID"
+// @Success 200 {object} map[string]any
+// @Router /api/v1/customers/{id} [get]
+func (h *Handler) getCustomer(c *gin.Context) {
+	wsCtx, err := GetWorkspaceContext(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+		return
+	}
+
+	custID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_ID", "message": "Invalid customer ID"}})
+		return
+	}
+
+	customer, err := h.service.GetCounterparty(c.Request.Context(), wsCtx.WorkspaceID, custID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "Customer not found"}})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": err.Error()}})
+		return
+	}
+
+	// Fetch customer's open invoices
+	invoices, _ := h.service.queries.ListInvoices(c.Request.Context(), db.ListInvoicesParams{
+		WorkspaceID: wsCtx.WorkspaceID,
+		CustomerID:  pgtype.Int8{Int64: customer.ID, Valid: true},
+		Limit:       20,
+	})
+
+	// Fetch customer's recent sales
+	sales, _ := h.service.queries.ListSales(c.Request.Context(), db.ListSalesParams{
+		WorkspaceID: wsCtx.WorkspaceID,
+		CustomerID:  pgtype.Int8{Int64: customer.ID, Valid: true},
+		Limit:       20,
+	})
+
+	// Fetch customer's wallet balance
+	wallet, _ := h.service.queries.GetCustomerWallet(c.Request.Context(), db.GetCustomerWalletParams{
+		WorkspaceID: wsCtx.WorkspaceID,
+		CustomerID:  customer.ID,
+		Currency:    "NGN",
+	})
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": gin.H{
+			"customer": customer,
+			"wallet":   wallet,
+			"invoices": invoices,
+			"sales":    sales,
+		},
+	})
+}
+
+// @Summary Get customer statement of account
+// @Description Compiles all invoices, sales, returns, and wallet movements for an account statement.
+// @Tags counterparties
+// @Produce json
+// @Param id path int true "Customer ID"
+// @Param from_date query string false "From Date (YYYY-MM-DD)"
+// @Param to_date query string false "To Date (YYYY-MM-DD)"
+// @Success 200 {object} map[string]any
+// @Router /api/v1/customers/{id}/statement [get]
+func (h *Handler) getCustomerStatement(c *gin.Context) {
+	wsCtx, err := GetWorkspaceContext(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+		return
+	}
+
+	custID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_ID", "message": "Invalid customer ID"}})
+		return
+	}
+
+	customer, err := h.service.GetCounterparty(c.Request.Context(), wsCtx.WorkspaceID, custID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "Customer not found"}})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": err.Error()}})
+		return
+	}
+
+	invoices, _ := h.service.queries.ListInvoices(c.Request.Context(), db.ListInvoicesParams{
+		WorkspaceID: wsCtx.WorkspaceID,
+		CustomerID:  pgtype.Int8{Int64: customer.ID, Valid: true},
+		Limit:       100,
+	})
+
+	walletTxs, _ := h.service.queries.ListWalletTransactions(c.Request.Context(), db.ListWalletTransactionsParams{
+		WorkspaceID: wsCtx.WorkspaceID,
+		CustomerID:  customer.ID,
+		Limit:       100,
+	})
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": gin.H{
+			"statement": gin.H{
+				"customer":    customer,
+				"invoices":    invoices,
+				"wallet_txs":  walletTxs,
+				"as_of_date":  c.DefaultQuery("to_date", ""),
+			},
+		},
+	})
+}
+
 // @Summary Create supplier counterparty
 // @Description Creates an external supplier record for the active workspace.
 // @Tags counterparties
@@ -135,6 +257,50 @@ func (h *Handler) listSuppliers(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"suppliers": suppliers}})
+}
+
+// @Summary Get supplier counterparty details
+// @Description Fetches details and bills for an external supplier.
+// @Tags counterparties
+// @Produce json
+// @Param id path int true "Supplier ID"
+// @Success 200 {object} map[string]any
+// @Router /api/v1/suppliers/{id} [get]
+func (h *Handler) getSupplier(c *gin.Context) {
+	wsCtx, err := GetWorkspaceContext(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+		return
+	}
+
+	suppID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_ID", "message": "Invalid supplier ID"}})
+		return
+	}
+
+	supplier, err := h.service.GetCounterparty(c.Request.Context(), wsCtx.WorkspaceID, suppID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "Supplier not found"}})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": err.Error()}})
+		return
+	}
+
+	purchases, _ := h.service.queries.ListPurchases(c.Request.Context(), db.ListPurchasesParams{
+		WorkspaceID: wsCtx.WorkspaceID,
+		SupplierID:  pgtype.Int8{Int64: supplier.ID, Valid: true},
+		Limit:       20,
+	})
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": gin.H{
+			"supplier":  supplier,
+			"purchases": purchases,
+		},
+	})
 }
 
 // @Summary Create a sale

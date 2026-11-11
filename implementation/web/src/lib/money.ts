@@ -270,6 +270,27 @@ export const financeApi = {
     const result = await scopedGet<Record<string, Contact[]>>(workspaceId, `/api/v1/${kind}`);
     return result[kind] ?? [];
   },
+  getContact: (workspaceId: number, kind: "customers" | "suppliers", id: number) =>
+    scopedGet<{ customer?: Contact; supplier?: Contact; wallet?: CustomerWallet; invoices?: Invoice[]; sales?: unknown[]; purchases?: unknown[] }>(
+      workspaceId,
+      `/api/v1/${kind}/${id}`,
+    ).then((r) => r.customer || r.supplier || null),
+  getCustomerDetail: (workspaceId: number, id: number) =>
+    scopedGet<{
+      customer: Contact;
+      wallet: CustomerWallet | null;
+      invoices: Invoice[];
+      sales: Array<{ id: number; total_amount_minor: number; paid_amount_minor: number; status: string; sale_date: { Time: string }; reference?: { String: string } }>;
+    }>(workspaceId, `/api/v1/customers/${id}`),
+  getCustomerStatement: (workspaceId: number, id: number, params: QueryParams = {}) =>
+    scopedGet<{
+      statement: {
+        customer: Contact;
+        invoices: Invoice[];
+        wallet_txs: WalletTransaction[];
+        as_of_date: string;
+      };
+    }>(workspaceId, `/api/v1/customers/${id}/statement`, params).then((r) => r.statement),
   createContact: (workspaceId: number, kind: "customers" | "suppliers", body: unknown) =>
     scopedPost(workspaceId, `/api/v1/${kind}`, body),
 
