@@ -20,6 +20,8 @@ type CreateGoodsReceiptInput struct {
 	PurchaseOrderID  int64                   `json:"purchase_order_id" binding:"required"`
 	LocationID       int64                   `json:"location_id"`
 	ReceiptReference string                  `json:"receipt_reference"`
+	DeliveryReference string                 `json:"delivery_reference"`
+	ServiceAccepted  bool                    `json:"service_accepted"`
 	ReceivedOn       string                  `json:"received_on" binding:"required"`
 	Lines            []GoodsReceiptLineInput `json:"lines" binding:"required"`
 	IdempotencyKey   string                  `json:"idempotency_key"`
@@ -27,6 +29,8 @@ type CreateGoodsReceiptInput struct {
 type GoodsReceiptLineInput struct {
 	PurchaseOrderLineID int64  `json:"purchase_order_line_id"`
 	AcceptedQuantity    string `json:"accepted_quantity"`
+	ActualUnitCost      string `json:"actual_unit_cost"`
+	Notes               string `json:"notes"`
 }
 type GoodsReceiptView struct {
 	ID                  int64  `json:"id"`
@@ -34,6 +38,24 @@ type GoodsReceiptView struct {
 	PurchaseOrderStatus string `json:"purchase_order_status"`
 	ReceivedOn          string `json:"received_on"`
 	TotalMinor          string `json:"total_minor"`
+	DeliveryReference   *string `json:"delivery_reference,omitempty"`
+	ServiceAccepted     bool `json:"service_accepted"`
+}
+type GoodsReceiptLineView struct {
+	ID int64 `json:"id"`
+	PurchaseOrderLineID int64 `json:"purchase_order_line_id"`
+	ProductID *int64 `json:"product_id,omitempty"`
+	Description string `json:"description"`
+	AcceptedQuantity string `json:"accepted_quantity"`
+	UnitCostMinor string `json:"unit_cost_minor"`
+	ActualUnitCostMinor string `json:"actual_unit_cost_minor"`
+	LineTotalMinor string `json:"line_total_minor"`
+	Notes *string `json:"notes,omitempty"`
+}
+type GoodsReceiptDetailView struct {
+	GoodsReceiptView
+	ReceiptReference *string `json:"receipt_reference,omitempty"`
+	Lines []GoodsReceiptLineView `json:"lines"`
 }
 type ReceiptOptionLine struct {
 	PurchaseOrderLineID int64  `json:"purchase_order_line_id"`
@@ -94,6 +116,10 @@ func (s *Service) ReceiptOptions(ctx context.Context, ws, purchaseOrderID int64)
 func (s *Service) CreateGoodsReceipt(ctx context.Context, ws, user int64, in CreateGoodsReceiptInput) (GoodsReceiptView, error) {
 	key := strings.TrimSpace(in.IdempotencyKey)
 	in.ReceiptReference = strings.TrimSpace(in.ReceiptReference)
+<<<<<<< Updated upstream
+=======
+	in.DeliveryReference = strings.TrimSpace(in.DeliveryReference)
+>>>>>>> Stashed changes
 	if in.PurchaseOrderID <= 0 || key == "" || len(key) > 200 || len(in.Lines) == 0 || len(in.Lines) > 100 {
 		return GoodsReceiptView{}, errors.New("purchase order, receipt lines and idempotency key are required")
 	}
@@ -157,6 +183,8 @@ func (s *Service) CreateGoodsReceipt(ctx context.Context, ws, user int64, in Cre
 		line  db.GetReceiptPurchaseOrderLinesForUpdateRow
 		qty   decimal.Decimal
 		total int64
+		unitCost int64
+		notes string
 	}, 0, len(in.Lines))
 	for _, input := range in.Lines {
 		line, ok := byID[input.PurchaseOrderLineID]
@@ -171,7 +199,14 @@ func (s *Service) CreateGoodsReceipt(ctx context.Context, ws, user int64, in Cre
 		if previous[line.ID].Add(qty).GreaterThan(line.Quantity) {
 			return GoodsReceiptView{}, errors.New("receipt quantity exceeds the open purchase order quantity")
 		}
-		total, e := requestLineTotal(line.ExpectedUnitCostMinor, qty)
+		unitCost := line.ExpectedUnitCostMinor
+		if strings.TrimSpace(input.ActualUnitCost) != "" {
+			unitCost, e = ParseMajorToMinor(strings.TrimSpace(input.ActualUnitCost), int(po.CurrencyExponent))
+			if e != nil || unitCost < 0 {
+				return GoodsReceiptView{}, errors.New("actual unit cost is invalid")
+			}
+		}
+		total, e := requestLineTotal(unitCost, qty)
 		if e != nil {
 			return GoodsReceiptView{}, e
 		}
@@ -187,14 +222,16 @@ func (s *Service) CreateGoodsReceipt(ctx context.Context, ws, user int64, in Cre
 			line  db.GetReceiptPurchaseOrderLinesForUpdateRow
 			qty   decimal.Decimal
 			total int64
-		}{line, qty, total})
+			unitCost int64
+			notes string
+		}{line, qty, total, unitCost, strings.TrimSpace(input.Notes)})
 	}
-	receipt, err := q.CreateGoodsReceipt(ctx, db.CreateGoodsReceiptParams{WorkspaceID: ws, PurchaseOrderID: po.ID, ReceiptReference: optionalPgText(in.ReceiptReference), ReceivedOn: pgtype.Date{Time: date, Valid: true}, IdempotencyKey: key, CreatedByUserID: user, LocationID: pgtype.Int8{Int64: location.ID, Valid: true}})
+	receipt, err := q.CreateGoodsReceipt(ctx, db.CreateGoodsReceiptParams{WorkspaceID: ws, PurchaseOrderID: po.ID, ReceiptReference: optionalPgText(in.ReceiptReference), DeliveryReference: optionalText(in.DeliveryReference), ServiceAccepted: in.ServiceAccepted, ReceivedOn: pgtype.Date{Time: date, Valid: true}, IdempotencyKey: key, CreatedByUserID: user, LocationID: pgtype.Int8{Int64: location.ID, Valid: true}})
 	if err != nil {
 		return GoodsReceiptView{}, err
 	}
 	for _, item := range prepared {
-		rl, e := q.CreateGoodsReceiptLine(ctx, db.CreateGoodsReceiptLineParams{WorkspaceID: ws, GoodsReceiptID: receipt.ID, PurchaseOrderLineID: item.line.ID, ProductID: item.line.ProductID, AcceptedQuantity: item.qty, UnitCostMinor: item.line.ExpectedUnitCostMinor, LineTotalMinor: item.total})
+		rl, e := q.CreateGoodsReceiptLine(ctx, db.CreateGoodsReceiptLineParams{WorkspaceID: ws, GoodsReceiptID: receipt.ID, PurchaseOrderLineID: item.line.ID, ProductID: item.line.ProductID, AcceptedQuantity: item.qty, UnitCostMinor: item.unitCost, ActualUnitCostMinor: pgtype.Int8{Int64: item.unitCost, Valid: true}, LineTotalMinor: item.total, LineNotes: optionalText(item.notes)})
 		if e != nil {
 			return GoodsReceiptView{}, e
 		}
@@ -239,7 +276,28 @@ func (s *Service) CreateGoodsReceipt(ctx context.Context, ws, user int64, in Cre
 	if err = tx.Commit(ctx); err != nil {
 		return GoodsReceiptView{}, err
 	}
-	return GoodsReceiptView{ID: receipt.ID, PurchaseOrderID: po.ID, PurchaseOrderStatus: updated.Status, ReceivedOn: date.Format("2006-01-02"), TotalMinor: fmt.Sprintf("%d", total)}, nil
+	return GoodsReceiptView{ID: receipt.ID, PurchaseOrderID: po.ID, PurchaseOrderStatus: updated.Status, ReceivedOn: date.Format("2006-01-02"), TotalMinor: fmt.Sprintf("%d", total), DeliveryReference: nullableText(receipt.DeliveryReference), ServiceAccepted: receipt.ServiceAccepted}, nil
+}
+
+func (s *Service) GetGoodsReceipt(ctx context.Context, ws, id int64) (GoodsReceiptDetailView, error) {
+	row, err := s.queries.GetGoodsReceiptDetail(ctx, db.GetGoodsReceiptDetailParams{WorkspaceID: ws, ID: id})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return GoodsReceiptDetailView{}, ErrNotFound
+	}
+	if err != nil {
+		return GoodsReceiptDetailView{}, err
+	}
+	var lines []GoodsReceiptLineView
+	if len(row.Lines) > 0 {
+		if err := json.Unmarshal(row.Lines, &lines); err != nil {
+			return GoodsReceiptDetailView{}, err
+		}
+	}
+	return GoodsReceiptDetailView{
+		GoodsReceiptView: GoodsReceiptView{ID: row.ID, PurchaseOrderID: row.PurchaseOrderID, ReceivedOn: row.ReceivedOn.Time.Format("2006-01-02"), DeliveryReference: nullableText(row.DeliveryReference), ServiceAccepted: row.ServiceAccepted},
+		ReceiptReference: nullableText(row.ReceiptReference),
+		Lines: lines,
+	}, nil
 }
 
 func (s *Service) postReceiptGRNI(ctx context.Context, q *db.Queries, ws int64, receipt db.GoodsReceipt, po db.PurchaseOrder, date time.Time, stock, expense, total int64) error {
