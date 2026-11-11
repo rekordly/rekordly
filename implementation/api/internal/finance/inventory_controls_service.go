@@ -63,7 +63,7 @@ type CreateStockCountInput struct {
 	Lines          []StockCountLineInput `json:"lines"`
 	IdempotencyKey string                `json:"idempotency_key"`
 }
-type StockCountView struct {
+type InventoryStockCountView struct {
 	ID                 int64  `json:"id"`
 	Number             string `json:"count_number"`
 	LocationID         int64  `json:"location_id"`
@@ -314,22 +314,22 @@ func (s *Service) CreateInventoryTransfer(ctx context.Context, workspaceID, user
 	return InventoryTransferView{ID: id, Number: number, SourceLocationID: in.SourceLocationID, DestinationLocationID: in.DestinationLocationID, Status: "received"}, nil
 }
 
-func (s *Service) CreateStockCount(ctx context.Context, workspaceID, userID int64, in CreateStockCountInput) (StockCountView, error) {
+func (s *Service) CreateStockCount(ctx context.Context, workspaceID, userID int64, in CreateStockCountInput) (InventoryInventoryStockCountView, error) {
 	key := strings.TrimSpace(in.IdempotencyKey)
 	if key == "" || in.LocationID <= 0 || len(in.Lines) == 0 {
-		return StockCountView{}, errors.New("location, count lines and idempotency key are required")
+		return InventoryStockCountView{}, errors.New("location, count lines and idempotency key are required")
 	}
 	countedAt := time.Now().UTC()
 	if strings.TrimSpace(in.CountedAt) != "" {
 		parsed, e := time.Parse("2006-01-02", strings.TrimSpace(in.CountedAt))
 		if e != nil {
-			return StockCountView{}, errors.New("count date must be YYYY-MM-DD")
+			return InventoryStockCountView{}, errors.New("count date must be YYYY-MM-DD")
 		}
 		countedAt = parsed
 	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
-		return StockCountView{}, err
+		return InventoryStockCountView{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := s.queries.WithTx(tx)
@@ -338,19 +338,19 @@ func (s *Service) CreateStockCount(ctx context.Context, workspaceID, userID int6
 	var existingLocation int64
 	var existingStatus string
 	if e := tx.QueryRow(ctx, "SELECT id,count_number,location_id,status FROM stock_counts WHERE workspace_id=$1 AND idempotency_key=$2", workspaceID, key).Scan(&countID, &number, &existingLocation, &existingStatus); e == nil {
-		return StockCountView{ID: countID, Number: number, LocationID: existingLocation, Status: existingStatus}, nil
+		return InventoryStockCountView{ID: countID, Number: number, LocationID: existingLocation, Status: existingStatus}, nil
 	} else if !errors.Is(e, pgx.ErrNoRows) {
-		return StockCountView{}, e
+		return InventoryStockCountView{}, e
 	}
 	if _, err = q.GetInventoryLocation(ctx, db.GetInventoryLocationParams{WorkspaceID: workspaceID, ID: in.LocationID}); err != nil {
-		return StockCountView{}, ErrNotFound
+		return InventoryStockCountView{}, ErrNotFound
 	}
 	number, err = nextInventoryDocumentNumber(ctx, tx, workspaceID, "stock_counts", "CNT")
 	if err != nil {
-		return StockCountView{}, err
+		return InventoryStockCountView{}, err
 	}
 	if err = tx.QueryRow(ctx, "INSERT INTO stock_counts(workspace_id,count_number,location_id,status,counted_at,notes,idempotency_key,created_by_user_id) VALUES($1,$2,$3,'completed',$4,$5,$6,$7) RETURNING id", workspaceID, number, in.LocationID, countedAt, optionalText(in.Notes), key, userID).Scan(&countID); err != nil {
-		return StockCountView{}, err
+		return InventoryStockCountView{}, err
 	}
 	currency := "NGN"
 	var base string
@@ -362,15 +362,15 @@ func (s *Service) CreateStockCount(ctx context.Context, workspaceID, userID int6
 	increaseTotal, decreaseTotal := int64(0), int64(0)
 	for _, line := range in.Lines {
 		if line.ProductID <= 0 {
-			return StockCountView{}, errors.New("invalid product")
+			return InventoryStockCountView{}, errors.New("invalid product")
 		}
 		qty, _, e := parseRequestQuantity(line.CountedQuantity)
 		if e != nil {
-			return StockCountView{}, e
+			return InventoryStockCountView{}, e
 		}
 		product, e := q.GetProductByID(ctx, db.GetProductByIDParams{WorkspaceID: workspaceID, ID: line.ProductID})
 		if e != nil || product.Kind != "stock_tracked" {
-			return StockCountView{}, errors.New("stock counts require stock-tracked products")
+			return InventoryStockCountView{}, errors.New("stock counts require stock-tracked products")
 		}
 		var expected decimal.Decimal
 		var onValue int64
@@ -379,21 +379,21 @@ func (s *Service) CreateStockCount(ctx context.Context, workspaceID, userID int6
 			expected = decimal.Zero
 			onValue = 0
 		} else if e != nil {
-			return StockCountView{}, e
+			return InventoryStockCountView{}, e
 		}
 		delta := qty.Sub(expected)
 		unit := int64(0)
 		if strings.TrimSpace(line.UnitCost) != "" {
 			unit, e = ParseMajorToMinor(line.UnitCost, exponent)
 			if e != nil {
-				return StockCountView{}, e
+				return InventoryStockCountView{}, e
 			}
 		} else if expected.GreaterThan(decimal.Zero) {
 			unit = decimal.NewFromInt(onValue).Div(expected).IntPart()
 		}
 		value, e := requestLineTotal(unit, delta.Abs())
 		if e != nil {
-			return StockCountView{}, e
+			return InventoryStockCountView{}, e
 		}
 		if delta.IsNegative() {
 			decreaseTotal, e = CheckedAdd(decreaseTotal, value)
@@ -401,10 +401,10 @@ func (s *Service) CreateStockCount(ctx context.Context, workspaceID, userID int6
 			increaseTotal, e = CheckedAdd(increaseTotal, value)
 		}
 		if e != nil {
-			return StockCountView{}, e
+			return InventoryStockCountView{}, e
 		}
 		if _, e = tx.Exec(ctx, "INSERT INTO stock_count_lines(workspace_id,count_id,product_id,expected_quantity,counted_quantity,variance_quantity,unit_cost_minor) VALUES($1,$2,$3,$4,$5,$6,$7)", workspaceID, countID, line.ProductID, expected, qty, delta, unit); e != nil {
-			return StockCountView{}, e
+			return InventoryStockCountView{}, e
 		}
 		if delta.IsZero() {
 			continue
@@ -414,42 +414,42 @@ func (s *Service) CreateStockCount(ctx context.Context, workspaceID, userID int6
 			signedValue = -value
 		}
 		if _, e = q.CreateInventoryMovement(ctx, db.CreateInventoryMovementParams{WorkspaceID: workspaceID, ProductID: line.ProductID, LocationID: pgtype.Int8{Int64: in.LocationID, Valid: true}, MovementType: "stock_count", SourceType: "stock_count", SourceID: pgtype.Int8{Int64: countID, Valid: true}, QuantityDelta: delta, ValueDeltaMinor: signedValue, OccurredOn: pgtype.Date{Time: countedAt, Valid: true}}); e != nil {
-			return StockCountView{}, e
+			return InventoryStockCountView{}, e
 		}
 		if _, e = q.ApplyInventoryBalanceDelta(ctx, db.ApplyInventoryBalanceDeltaParams{WorkspaceID: workspaceID, LocationID: in.LocationID, ProductID: line.ProductID, QuantityOnHand: delta, ValueOnHandMinor: signedValue}); e != nil {
 			if delta.GreaterThan(decimal.Zero) {
 				if _, e = q.UpsertInventoryBalance(ctx, db.UpsertInventoryBalanceParams{WorkspaceID: workspaceID, LocationID: in.LocationID, ProductID: line.ProductID, QuantityOnHand: delta, ValueOnHandMinor: value}); e != nil {
-					return StockCountView{}, e
+					return InventoryStockCountView{}, e
 				}
 			} else {
-				return StockCountView{}, errors.New("stock changed before count")
+				return InventoryStockCountView{}, errors.New("stock changed before count")
 			}
 		}
 	}
 	entry, e := q.CreateLedgerEntry(ctx, db.CreateLedgerEntryParams{WorkspaceID: workspaceID, SourceType: "stock_count_variance", SourceID: countID, EntryDate: pgtype.Date{Time: countedAt, Valid: true}, Currency: currency, CurrencyExponent: int32(exponent), Description: optionalPgText("Stock count variance")})
 	if e != nil {
-		return StockCountView{}, e
+		return InventoryStockCountView{}, e
 	}
 	if increaseTotal > 0 {
 		if _, e = q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{LedgerEntryID: entry.ID, WorkspaceID: workspaceID, AccountClass: "asset", DebitMinor: increaseTotal, Description: optionalPgText("Stock count increase")}); e != nil {
-			return StockCountView{}, e
+			return InventoryStockCountView{}, e
 		}
 		if _, e = q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{LedgerEntryID: entry.ID, WorkspaceID: workspaceID, AccountClass: "expense", CreditMinor: increaseTotal, Description: optionalPgText("Stock count offset")}); e != nil {
-			return StockCountView{}, e
+			return InventoryStockCountView{}, e
 		}
 	}
 	if decreaseTotal > 0 {
 		if _, e = q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{LedgerEntryID: entry.ID, WorkspaceID: workspaceID, AccountClass: "expense", DebitMinor: decreaseTotal, Description: optionalPgText("Stock count loss")}); e != nil {
-			return StockCountView{}, e
+			return InventoryStockCountView{}, e
 		}
 		if _, e = q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{LedgerEntryID: entry.ID, WorkspaceID: workspaceID, AccountClass: "asset", CreditMinor: decreaseTotal, Description: optionalPgText("Stock count reduction")}); e != nil {
-			return StockCountView{}, e
+			return InventoryStockCountView{}, e
 		}
 	}
 	if err = tx.Commit(ctx); err != nil {
-		return StockCountView{}, err
+		return InventoryStockCountView{}, err
 	}
-	return StockCountView{ID: countID, Number: number, LocationID: in.LocationID, Status: "completed", TotalVarianceMinor: fmt.Sprint(increaseTotal + decreaseTotal)}, nil
+	return InventoryStockCountView{ID: countID, Number: number, LocationID: in.LocationID, Status: "completed", TotalVarianceMinor: fmt.Sprint(increaseTotal + decreaseTotal)}, nil
 }
 
 func optionalText(value string) *string {

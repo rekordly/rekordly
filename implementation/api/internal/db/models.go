@@ -136,15 +136,17 @@ type EvidenceAsset struct {
 }
 
 type GoodsReceipt struct {
-	ID               int64              `json:"id"`
-	WorkspaceID      int64              `json:"workspace_id"`
-	PurchaseOrderID  int64              `json:"purchase_order_id"`
-	ReceiptReference pgtype.Text        `json:"receipt_reference"`
-	ReceivedOn       pgtype.Date        `json:"received_on"`
-	IdempotencyKey   string             `json:"idempotency_key"`
-	CreatedByUserID  int64              `json:"created_by_user_id"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	LocationID       pgtype.Int8        `json:"location_id"`
+	ID                int64              `json:"id"`
+	WorkspaceID       int64              `json:"workspace_id"`
+	PurchaseOrderID   int64              `json:"purchase_order_id"`
+	ReceiptReference  pgtype.Text        `json:"receipt_reference"`
+	ReceivedOn        pgtype.Date        `json:"received_on"`
+	IdempotencyKey    string             `json:"idempotency_key"`
+	CreatedByUserID   int64              `json:"created_by_user_id"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	LocationID        pgtype.Int8        `json:"location_id"`
+	DeliveryReference pgtype.Text        `json:"delivery_reference"`
+	ServiceAccepted   bool               `json:"service_accepted"`
 }
 
 type GoodsReceiptLine struct {
@@ -156,6 +158,8 @@ type GoodsReceiptLine struct {
 	AcceptedQuantity    decimal.Decimal `json:"accepted_quantity"`
 	UnitCostMinor       int64           `json:"unit_cost_minor"`
 	LineTotalMinor      int64           `json:"line_total_minor"`
+	ActualUnitCostMinor pgtype.Int8     `json:"actual_unit_cost_minor"`
+	LineNotes           pgtype.Text     `json:"line_notes"`
 }
 
 type IdempotencyRecord struct {
@@ -172,6 +176,28 @@ type IdempotencyRecord struct {
 	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+type InventoryAdjustment struct {
+	ID               int64              `json:"id"`
+	WorkspaceID      int64              `json:"workspace_id"`
+	AdjustmentNumber string             `json:"adjustment_number"`
+	LocationID       int64              `json:"location_id"`
+	ReasonCode       string             `json:"reason_code"`
+	Notes            pgtype.Text        `json:"notes"`
+	IdempotencyKey   string             `json:"idempotency_key"`
+	CreatedByUserID  int64              `json:"created_by_user_id"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
+type InventoryAdjustmentLine struct {
+	ID             int64           `json:"id"`
+	WorkspaceID    int64           `json:"workspace_id"`
+	AdjustmentID   int64           `json:"adjustment_id"`
+	ProductID      int64           `json:"product_id"`
+	QuantityDelta  decimal.Decimal `json:"quantity_delta"`
+	UnitCostMinor  int64           `json:"unit_cost_minor"`
+	TotalCostMinor int64           `json:"total_cost_minor"`
 }
 
 type InventoryBalance struct {
@@ -240,6 +266,28 @@ type InventoryOpeningEntry struct {
 	IdempotencyKey  string             `json:"idempotency_key"`
 	CreatedByUserID int64              `json:"created_by_user_id"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
+type InventoryTransfer struct {
+	ID                    int64              `json:"id"`
+	WorkspaceID           int64              `json:"workspace_id"`
+	TransferNumber        string             `json:"transfer_number"`
+	SourceLocationID      int64              `json:"source_location_id"`
+	DestinationLocationID int64              `json:"destination_location_id"`
+	Status                string             `json:"status"`
+	Notes                 pgtype.Text        `json:"notes"`
+	IdempotencyKey        string             `json:"idempotency_key"`
+	CreatedByUserID       int64              `json:"created_by_user_id"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+}
+
+type InventoryTransferLine struct {
+	ID            int64           `json:"id"`
+	WorkspaceID   int64           `json:"workspace_id"`
+	TransferID    int64           `json:"transfer_id"`
+	ProductID     int64           `json:"product_id"`
+	Quantity      decimal.Decimal `json:"quantity"`
+	UnitCostMinor int64           `json:"unit_cost_minor"`
 }
 
 type Invitation struct {
@@ -795,6 +843,20 @@ type PurchaseOrderLine struct {
 type PurchaseOrderSequence struct {
 	WorkspaceID int64 `json:"workspace_id"`
 	NextValue   int64 `json:"next_value"`
+}
+
+type PurchaseOrderShare struct {
+	ID              int64              `json:"id"`
+	WorkspaceID     int64              `json:"workspace_id"`
+	PurchaseOrderID int64              `json:"purchase_order_id"`
+	TokenHash       string             `json:"token_hash"`
+	SupplierEmail   pgtype.Text        `json:"supplier_email"`
+	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
+	Status          string             `json:"status"`
+	ResponseNote    pgtype.Text        `json:"response_note"`
+	CreatedByUserID int64              `json:"created_by_user_id"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	RespondedAt     pgtype.Timestamptz `json:"responded_at"`
 }
 
 type PurchaseRequest struct {

@@ -13,17 +13,19 @@ import (
 )
 
 const createGoodsReceipt = `-- name: CreateGoodsReceipt :one
-INSERT INTO goods_receipts(workspace_id,purchase_order_id,receipt_reference,received_on,idempotency_key,created_by_user_id,location_id) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id, workspace_id, purchase_order_id, receipt_reference, received_on, idempotency_key, created_by_user_id, created_at, location_id
+INSERT INTO goods_receipts(workspace_id,purchase_order_id,receipt_reference,delivery_reference,service_accepted,received_on,idempotency_key,created_by_user_id,location_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id, workspace_id, purchase_order_id, receipt_reference, received_on, idempotency_key, created_by_user_id, created_at, location_id, delivery_reference, service_accepted
 `
 
 type CreateGoodsReceiptParams struct {
-	WorkspaceID      int64       `json:"workspace_id"`
-	PurchaseOrderID  int64       `json:"purchase_order_id"`
-	ReceiptReference pgtype.Text `json:"receipt_reference"`
-	ReceivedOn       pgtype.Date `json:"received_on"`
-	IdempotencyKey   string      `json:"idempotency_key"`
-	CreatedByUserID  int64       `json:"created_by_user_id"`
-	LocationID       pgtype.Int8 `json:"location_id"`
+	WorkspaceID       int64       `json:"workspace_id"`
+	PurchaseOrderID   int64       `json:"purchase_order_id"`
+	ReceiptReference  pgtype.Text `json:"receipt_reference"`
+	DeliveryReference pgtype.Text `json:"delivery_reference"`
+	ServiceAccepted   bool        `json:"service_accepted"`
+	ReceivedOn        pgtype.Date `json:"received_on"`
+	IdempotencyKey    string      `json:"idempotency_key"`
+	CreatedByUserID   int64       `json:"created_by_user_id"`
+	LocationID        pgtype.Int8 `json:"location_id"`
 }
 
 func (q *Queries) CreateGoodsReceipt(ctx context.Context, arg CreateGoodsReceiptParams) (GoodsReceipt, error) {
@@ -31,6 +33,8 @@ func (q *Queries) CreateGoodsReceipt(ctx context.Context, arg CreateGoodsReceipt
 		arg.WorkspaceID,
 		arg.PurchaseOrderID,
 		arg.ReceiptReference,
+		arg.DeliveryReference,
+		arg.ServiceAccepted,
 		arg.ReceivedOn,
 		arg.IdempotencyKey,
 		arg.CreatedByUserID,
@@ -47,12 +51,14 @@ func (q *Queries) CreateGoodsReceipt(ctx context.Context, arg CreateGoodsReceipt
 		&i.CreatedByUserID,
 		&i.CreatedAt,
 		&i.LocationID,
+		&i.DeliveryReference,
+		&i.ServiceAccepted,
 	)
 	return i, err
 }
 
 const createGoodsReceiptLine = `-- name: CreateGoodsReceiptLine :one
-INSERT INTO goods_receipt_lines(workspace_id,goods_receipt_id,purchase_order_line_id,product_id,accepted_quantity,unit_cost_minor,line_total_minor) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id, workspace_id, goods_receipt_id, purchase_order_line_id, product_id, accepted_quantity, unit_cost_minor, line_total_minor
+INSERT INTO goods_receipt_lines(workspace_id,goods_receipt_id,purchase_order_line_id,product_id,accepted_quantity,unit_cost_minor,actual_unit_cost_minor,line_total_minor,line_notes) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id, workspace_id, goods_receipt_id, purchase_order_line_id, product_id, accepted_quantity, unit_cost_minor, line_total_minor, actual_unit_cost_minor, line_notes
 `
 
 type CreateGoodsReceiptLineParams struct {
@@ -62,7 +68,9 @@ type CreateGoodsReceiptLineParams struct {
 	ProductID           pgtype.Int8     `json:"product_id"`
 	AcceptedQuantity    decimal.Decimal `json:"accepted_quantity"`
 	UnitCostMinor       int64           `json:"unit_cost_minor"`
+	ActualUnitCostMinor pgtype.Int8     `json:"actual_unit_cost_minor"`
 	LineTotalMinor      int64           `json:"line_total_minor"`
+	LineNotes           pgtype.Text     `json:"line_notes"`
 }
 
 func (q *Queries) CreateGoodsReceiptLine(ctx context.Context, arg CreateGoodsReceiptLineParams) (GoodsReceiptLine, error) {
@@ -73,7 +81,9 @@ func (q *Queries) CreateGoodsReceiptLine(ctx context.Context, arg CreateGoodsRec
 		arg.ProductID,
 		arg.AcceptedQuantity,
 		arg.UnitCostMinor,
+		arg.ActualUnitCostMinor,
 		arg.LineTotalMinor,
+		arg.LineNotes,
 	)
 	var i GoodsReceiptLine
 	err := row.Scan(
@@ -85,6 +95,8 @@ func (q *Queries) CreateGoodsReceiptLine(ctx context.Context, arg CreateGoodsRec
 		&i.AcceptedQuantity,
 		&i.UnitCostMinor,
 		&i.LineTotalMinor,
+		&i.ActualUnitCostMinor,
+		&i.LineNotes,
 	)
 	return i, err
 }
@@ -119,7 +131,7 @@ func (q *Queries) CreateInventoryReceiptMovement(ctx context.Context, arg Create
 }
 
 const getGoodsReceiptByIdempotency = `-- name: GetGoodsReceiptByIdempotency :one
-SELECT id, workspace_id, purchase_order_id, receipt_reference, received_on, idempotency_key, created_by_user_id, created_at, location_id FROM goods_receipts WHERE workspace_id=$1 AND idempotency_key=$2
+SELECT id, workspace_id, purchase_order_id, receipt_reference, received_on, idempotency_key, created_by_user_id, created_at, location_id, delivery_reference, service_accepted FROM goods_receipts WHERE workspace_id=$1 AND idempotency_key=$2
 `
 
 type GetGoodsReceiptByIdempotencyParams struct {
@@ -140,19 +152,23 @@ func (q *Queries) GetGoodsReceiptByIdempotency(ctx context.Context, arg GetGoods
 		&i.CreatedByUserID,
 		&i.CreatedAt,
 		&i.LocationID,
+		&i.DeliveryReference,
+		&i.ServiceAccepted,
 	)
 	return i, err
 }
 
 const getGoodsReceiptDetail = `-- name: GetGoodsReceiptDetail :one
-SELECT gr.id, gr.workspace_id, gr.purchase_order_id, gr.receipt_reference, gr.received_on, gr.idempotency_key, gr.created_by_user_id, gr.created_at, gr.location_id, COALESCE(jsonb_agg(jsonb_build_object(
+SELECT gr.id, gr.workspace_id, gr.purchase_order_id, gr.receipt_reference, gr.received_on, gr.idempotency_key, gr.created_by_user_id, gr.created_at, gr.location_id, gr.delivery_reference, gr.service_accepted, COALESCE(jsonb_agg(jsonb_build_object(
   'id', grl.id,
   'purchase_order_line_id', grl.purchase_order_line_id,
   'product_id', grl.product_id,
   'description', pol.description,
   'accepted_quantity', grl.accepted_quantity,
   'unit_cost_minor', grl.unit_cost_minor,
-  'line_total_minor', grl.line_total_minor
+  'actual_unit_cost_minor', COALESCE(grl.actual_unit_cost_minor, grl.unit_cost_minor),
+  'line_total_minor', grl.line_total_minor,
+  'line_notes', grl.line_notes
 ) ORDER BY grl.id) FILTER (WHERE grl.id IS NOT NULL), '[]'::jsonb) AS lines
 FROM goods_receipts gr
 LEFT JOIN goods_receipt_lines grl ON grl.goods_receipt_id = gr.id AND grl.workspace_id = gr.workspace_id
@@ -167,16 +183,18 @@ type GetGoodsReceiptDetailParams struct {
 }
 
 type GetGoodsReceiptDetailRow struct {
-	ID               int64              `json:"id"`
-	WorkspaceID      int64              `json:"workspace_id"`
-	PurchaseOrderID  int64              `json:"purchase_order_id"`
-	ReceiptReference pgtype.Text        `json:"receipt_reference"`
-	ReceivedOn       pgtype.Date        `json:"received_on"`
-	IdempotencyKey   string             `json:"idempotency_key"`
-	CreatedByUserID  int64              `json:"created_by_user_id"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	LocationID       pgtype.Int8        `json:"location_id"`
-	Lines            interface{}        `json:"lines"`
+	ID                int64              `json:"id"`
+	WorkspaceID       int64              `json:"workspace_id"`
+	PurchaseOrderID   int64              `json:"purchase_order_id"`
+	ReceiptReference  pgtype.Text        `json:"receipt_reference"`
+	ReceivedOn        pgtype.Date        `json:"received_on"`
+	IdempotencyKey    string             `json:"idempotency_key"`
+	CreatedByUserID   int64              `json:"created_by_user_id"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	LocationID        pgtype.Int8        `json:"location_id"`
+	DeliveryReference pgtype.Text        `json:"delivery_reference"`
+	ServiceAccepted   bool               `json:"service_accepted"`
+	Lines             interface{}        `json:"lines"`
 }
 
 func (q *Queries) GetGoodsReceiptDetail(ctx context.Context, arg GetGoodsReceiptDetailParams) (GetGoodsReceiptDetailRow, error) {
@@ -192,6 +210,8 @@ func (q *Queries) GetGoodsReceiptDetail(ctx context.Context, arg GetGoodsReceipt
 		&i.CreatedByUserID,
 		&i.CreatedAt,
 		&i.LocationID,
+		&i.DeliveryReference,
+		&i.ServiceAccepted,
 		&i.Lines,
 	)
 	return i, err
@@ -246,7 +266,7 @@ func (q *Queries) GetReceiptPurchaseOrderLinesForUpdate(ctx context.Context, arg
 }
 
 const listGoodsReceipts = `-- name: ListGoodsReceipts :many
-SELECT id, workspace_id, purchase_order_id, receipt_reference, received_on, idempotency_key, created_by_user_id, created_at, location_id FROM goods_receipts WHERE workspace_id=$1 AND ($3::bigint IS NULL OR id < $3) ORDER BY id DESC LIMIT $2
+SELECT id, workspace_id, purchase_order_id, receipt_reference, received_on, idempotency_key, created_by_user_id, created_at, location_id, delivery_reference, service_accepted FROM goods_receipts WHERE workspace_id=$1 AND ($3::bigint IS NULL OR id < $3) ORDER BY id DESC LIMIT $2
 `
 
 type ListGoodsReceiptsParams struct {
@@ -274,6 +294,8 @@ func (q *Queries) ListGoodsReceipts(ctx context.Context, arg ListGoodsReceiptsPa
 			&i.CreatedByUserID,
 			&i.CreatedAt,
 			&i.LocationID,
+			&i.DeliveryReference,
+			&i.ServiceAccepted,
 		); err != nil {
 			return nil, err
 		}
