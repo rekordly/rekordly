@@ -47,10 +47,143 @@ export interface InventoryBalance {
   product_name: string;
   product_kind: "stock_tracked" | "service" | "non_stock";
   quantity_on_hand: string;
+  reserved_quantity: string;
+  available_quantity: string;
+  in_transit_quantity: string;
   value_on_hand_minor: MinorAmount;
   average_cost_minor: string;
   costing_method: "weighted_average";
   version: number;
+}
+
+export interface InventoryOutlet {
+  id: number;
+  workspace_id: number;
+  name: string;
+  location_type: "outlet" | "warehouse" | "store" | "other";
+  code?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  is_default: boolean;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProductOption {
+  id: number;
+  product_id: number;
+  name: string;
+  position: number;
+  values: string[];
+}
+
+export interface ProductVariant {
+  id: number;
+  product_id: number;
+  name: string;
+  sku?: string | null;
+  barcode?: string | null;
+  selling_price_minor: MinorAmount;
+  cost_price_minor: MinorAmount;
+  currency: string;
+  currency_exponent: number;
+  is_default: boolean;
+  is_active: boolean;
+  option_values?: Record<string, string>;
+}
+
+export interface StockReservation {
+  id: number;
+  location_id: number;
+  location_name?: string;
+  product_id: number;
+  product_name?: string;
+  variant_id?: number | null;
+  order_id?: number | null;
+  quantity: string;
+  status: "active" | "fulfilled" | "released" | "expired";
+  expires_at?: string | null;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StockTransferLine {
+  id: number;
+  product_id: number;
+  product_name: string;
+  variant_id?: number | null;
+  variant_name?: string | null;
+  quantity_requested: string;
+  quantity_dispatched: string;
+  quantity_received: string;
+  unit_cost_minor: number;
+}
+
+export interface StockTransfer {
+  id: number;
+  transfer_number: string;
+  source_location_id: number;
+  source_location_name: string;
+  destination_location_id: number;
+  destination_location_name: string;
+  status: "draft" | "dispatched" | "received" | "cancelled";
+  dispatched_at?: string | null;
+  received_at?: string | null;
+  notes?: string | null;
+  lines?: StockTransferLine[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StockCountLine {
+  id: number;
+  product_id: number;
+  product_name: string;
+  variant_id?: number | null;
+  variant_name?: string | null;
+  expected_quantity: string;
+  counted_quantity?: string | null;
+  variance_quantity: string;
+  unit_cost_minor: number;
+}
+
+export interface StockCount {
+  id: number;
+  count_number: string;
+  location_id: number;
+  location_name: string;
+  scope: "full" | "category" | "custom";
+  status: "draft" | "in_progress" | "completed" | "cancelled";
+  counted_at?: string | null;
+  notes?: string | null;
+  lines?: StockCountLine[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StockAdjustmentLine {
+  id: number;
+  product_id: number;
+  product_name: string;
+  variant_id?: number | null;
+  variant_name?: string | null;
+  quantity_delta: string;
+  unit_cost_minor: number;
+  total_cost_minor: number;
+}
+
+export interface StockAdjustment {
+  id: number;
+  adjustment_number: string;
+  location_id: number;
+  location_name: string;
+  reason_code: "damage" | "spoilage" | "shrinkage" | "internal_use" | "correction" | "other";
+  notes?: string | null;
+  lines?: StockAdjustmentLine[];
+  created_at: string;
+  updated_at: string;
 }
 
 export interface PurchaseRequestLine {

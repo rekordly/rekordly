@@ -9,6 +9,13 @@ import type {
   Contact,
   CatalogueItem,
   InventoryBalance,
+  InventoryOutlet,
+  ProductOption,
+  ProductVariant,
+  StockReservation,
+  StockTransfer,
+  StockCount,
+  StockAdjustment,
   PurchaseRequest,
   PurchaseOrder,
   ReceiptOptionLine,
@@ -219,6 +226,14 @@ function scopedPost<T>(workspaceId: number, path: string, body: unknown, idempot
   });
 }
 
+function scopedPatch<T>(workspaceId: number, path: string, body: unknown): Promise<T> {
+  return apiClient.patch<unknown, T>(path, body, { headers: workspaceHeaders(workspaceId) });
+}
+
+function scopedPut<T>(workspaceId: number, path: string, body: unknown): Promise<T> {
+  return apiClient.put<unknown, T>(path, body, { headers: workspaceHeaders(workspaceId) });
+}
+
 export const RECORD_PAGE_SIZE = 25;
 
 export type RecordResource = "transactions" | "sales" | "purchases" | "payments" | "invoices";
@@ -262,6 +277,76 @@ export const financeApi = {
   },
   createOpeningStock: (workspaceId: number, body: unknown, key: string) =>
     scopedPost<{ balance: InventoryBalance }>(workspaceId, "/api/v1/inventory/opening-stock", body, key),
+
+  async listOutlets(workspaceId: number, params: QueryParams = {}) {
+    const result = await scopedGet<{ locations: InventoryOutlet[] }>(workspaceId, "/api/v1/inventory/locations", params);
+    return result.locations ?? [];
+  },
+  createOutlet: (workspaceId: number, body: unknown) =>
+    scopedPost<{ location: InventoryOutlet }>(workspaceId, "/api/v1/inventory/locations", body),
+  updateOutlet: (workspaceId: number, id: number, body: unknown) =>
+    scopedPatch<{ location: InventoryOutlet }>(workspaceId, `/api/v1/inventory/locations/${id}`, body),
+
+  async listProductOptions(workspaceId: number, productId: number) {
+    const result = await scopedGet<{ options: ProductOption[] }>(workspaceId, `/api/v1/catalogue/items/${productId}/options`);
+    return result.options ?? [];
+  },
+  createProductOption: (workspaceId: number, productId: number, body: unknown) =>
+    scopedPost<{ option: ProductOption }>(workspaceId, `/api/v1/catalogue/items/${productId}/options`, body),
+  async listProductVariants(workspaceId: number, productId: number) {
+    const result = await scopedGet<{ variants: ProductVariant[] }>(workspaceId, `/api/v1/catalogue/items/${productId}/variants`);
+    return result.variants ?? [];
+  },
+  createProductVariant: (workspaceId: number, productId: number, body: unknown) =>
+    scopedPost<{ variant: ProductVariant }>(workspaceId, `/api/v1/catalogue/items/${productId}/variants`, body),
+  updateProductVariant: (workspaceId: number, productId: number, variantId: number, body: unknown) =>
+    scopedPatch<{ variant: ProductVariant }>(workspaceId, `/api/v1/catalogue/items/${productId}/variants/${variantId}`, body),
+
+  async listStockReservations(workspaceId: number, params: QueryParams = {}) {
+    const result = await scopedGet<{ reservations: StockReservation[] }>(workspaceId, "/api/v1/inventory/reservations", params);
+    return result.reservations ?? [];
+  },
+  createStockReservation: (workspaceId: number, body: unknown, key: string) =>
+    scopedPost<{ reservation: StockReservation }>(workspaceId, "/api/v1/inventory/reservations", body, key),
+  releaseStockReservation: (workspaceId: number, id: number) =>
+    scopedPost<{ reservation: StockReservation }>(workspaceId, `/api/v1/inventory/reservations/${id}/release`, {}),
+  issueSaleStock: (workspaceId: number, body: unknown, key: string) =>
+    scopedPost<{ balance: InventoryBalance; cogs_minor: number; ledger_entry_id: number }>(workspaceId, "/api/v1/inventory/issue-sale", body, key),
+
+  async listStockTransfers(workspaceId: number, params: QueryParams = {}) {
+    const result = await scopedGet<{ transfers: StockTransfer[] }>(workspaceId, "/api/v1/inventory/transfers", params);
+    return result.transfers ?? [];
+  },
+  getStockTransfer: (workspaceId: number, id: number) =>
+    scopedGet<{ transfer: StockTransfer }>(workspaceId, `/api/v1/inventory/transfers/${id}`),
+  createStockTransfer: (workspaceId: number, body: unknown, key: string) =>
+    scopedPost<{ transfer: StockTransfer }>(workspaceId, "/api/v1/inventory/transfers", body, key),
+  dispatchStockTransfer: (workspaceId: number, id: number, body: unknown) =>
+    scopedPost<{ transfer: StockTransfer }>(workspaceId, `/api/v1/inventory/transfers/${id}/dispatch`, body),
+  receiveStockTransfer: (workspaceId: number, id: number, body: unknown) =>
+    scopedPost<{ transfer: StockTransfer }>(workspaceId, `/api/v1/inventory/transfers/${id}/receive`, body),
+
+  async listStockCounts(workspaceId: number, params: QueryParams = {}) {
+    const result = await scopedGet<{ counts: StockCount[] }>(workspaceId, "/api/v1/inventory/counts", params);
+    return result.counts ?? [];
+  },
+  getStockCount: (workspaceId: number, id: number) =>
+    scopedGet<{ count: StockCount }>(workspaceId, `/api/v1/inventory/counts/${id}`),
+  startStockCount: (workspaceId: number, body: unknown, key: string) =>
+    scopedPost<{ count: StockCount }>(workspaceId, "/api/v1/inventory/counts", body, key),
+  recordStockCountLines: (workspaceId: number, id: number, body: unknown) =>
+    scopedPut<{ count: StockCount }>(workspaceId, `/api/v1/inventory/counts/${id}/lines`, body),
+  approveStockCount: (workspaceId: number, id: number, body: unknown) =>
+    scopedPost<{ count: StockCount }>(workspaceId, `/api/v1/inventory/counts/${id}/approve`, body),
+
+  async listStockAdjustments(workspaceId: number, params: QueryParams = {}) {
+    const result = await scopedGet<{ adjustments: StockAdjustment[] }>(workspaceId, "/api/v1/inventory/adjustments", params);
+    return result.adjustments ?? [];
+  },
+  getStockAdjustment: (workspaceId: number, id: number) =>
+    scopedGet<{ adjustment: StockAdjustment }>(workspaceId, `/api/v1/inventory/adjustments/${id}`),
+  createStockAdjustment: (workspaceId: number, body: unknown, key: string) =>
+    scopedPost<{ adjustment: StockAdjustment }>(workspaceId, "/api/v1/inventory/adjustments", body, key),
 
   async listPurchaseRequests(workspaceId: number, params: QueryParams = {}) {
     const result = await scopedGet<{ requests: PurchaseRequest[] }>(workspaceId, "/api/v1/purchase-requests", { limit: 50, ...params });

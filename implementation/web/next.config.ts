@@ -11,6 +11,9 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  turbopack: {
+    root: "C:/Users/Emperor/Documents/Code",
+  },
   output: "standalone",
   poweredByHeader: false,
   async headers() {

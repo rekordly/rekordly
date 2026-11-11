@@ -203,6 +203,14 @@ export class RekordlyApiClient {
     return this.request<TResponseData>("put", path, body, options);
   }
 
+  public patch<TRequest, TResponseData>(
+    path: string,
+    body: TRequest,
+    options?: ApiRequestOptions,
+  ): Promise<TResponseData> {
+    return this.request<TResponseData>("patch", path, body, options);
+  }
+
   public delete<TResponseData>(path: string, options?: ApiRequestOptions): Promise<TResponseData> {
     return this.request<TResponseData>("delete", path, undefined, options);
   }

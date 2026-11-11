@@ -49,12 +49,71 @@ const quantity = z
 
 export const openingStockSchema = z.object({
   product_id: z.string().min(1, "Choose a stock product"),
+  location_id: z.string().optional(),
   quantity,
   unit_cost: amount("Enter the unit cost"),
   effective_on: date(),
   reason: z.string().trim().min(1, "Explain this opening balance").max(500, "Keep this under 500 characters"),
 });
 export type OpeningStockValues = z.infer<typeof openingStockSchema>;
+
+export const outletSchema = z.object({
+  name: z.string().trim().min(1, "Enter an outlet name").max(100, "Keep under 100 characters"),
+  location_type: z.enum(["outlet", "warehouse", "store", "other"]),
+  code: z.string().trim().max(30).optional(),
+  address: z.string().trim().max(255).optional(),
+  phone: z.string().trim().max(50).optional(),
+});
+export type OutletValues = z.infer<typeof outletSchema>;
+
+export const productOptionSchema = z.object({
+  name: z.string().trim().min(1, "Enter an option name (e.g. Size, Color)").max(100),
+  values: z.string().trim().min(1, "Enter comma-separated values (e.g. Small, Medium, Large)"),
+});
+export type ProductOptionValues = z.infer<typeof productOptionSchema>;
+
+export const productVariantSchema = z.object({
+  name: z.string().trim().min(1, "Enter variant name").max(100),
+  selling_price: amount("Enter selling price"),
+  cost_price: z.string().trim().optional(),
+  sku: z.string().trim().max(80).optional(),
+  barcode: z.string().trim().max(80).optional(),
+});
+export type ProductVariantValues = z.infer<typeof productVariantSchema>;
+
+export const stockReservationSchema = z.object({
+  product_id: z.string().min(1, "Choose a product"),
+  location_id: z.string().optional(),
+  quantity,
+  notes: notes,
+});
+export type StockReservationValues = z.infer<typeof stockReservationSchema>;
+
+export const stockTransferSchema = z.object({
+  source_location_id: z.string().min(1, "Choose source location"),
+  destination_location_id: z.string().min(1, "Choose destination location"),
+  product_id: z.string().min(1, "Choose a product to transfer"),
+  quantity: quantity,
+  notes: notes,
+});
+export type StockTransferValues = z.infer<typeof stockTransferSchema>;
+
+export const stockCountSchema = z.object({
+  location_id: z.string().min(1, "Choose location to audit"),
+  scope: z.enum(["full", "category", "custom"]),
+  notes: notes,
+});
+export type StockCountValues = z.infer<typeof stockCountSchema>;
+
+export const stockAdjustmentSchema = z.object({
+  location_id: z.string().min(1, "Choose location"),
+  reason_code: z.enum(["damage", "spoilage", "shrinkage", "internal_use", "correction", "other"]),
+  product_id: z.string().min(1, "Choose product"),
+  quantity_delta: z.string().trim().min(1, "Enter quantity delta (e.g. -2 for damage, +1 for found)"),
+  unit_cost: z.string().trim().optional(),
+  notes: notes,
+});
+export type StockAdjustmentValues = z.infer<typeof stockAdjustmentSchema>;
 
 export const purchaseRequestSchema = z.object({
   supplier_id: z.string(),
