@@ -329,3 +329,30 @@
   - `bun run type-check`: 0 errors.
   - `bun run build`: All 45 application routes compiled cleanly with Next.js 16.4.5 Turbopack.
 
+## 11 November 2026 — Customer History, Account Statement & Bank Reconciliation Engine
+
+- Implemented customer history, statement of account, and the complete bank reconciliation engine:
+  1. Customer Detail & Statement of Account (Blueprint 05):
+     - Added `GET /api/v1/customers/:id` returning customer details, wallet balance, open invoices, and recent direct sales.
+     - Added `GET /api/v1/customers/:id/statement` compiling a formal date-bounded statement of account with line-item invoices, payments, and wallet ledger entries.
+     - Added `GET /api/v1/suppliers/:id` returning supplier details and recent purchases.
+     - Built customer detail route `src/app/(protected)/customers/[id]/page.tsx` with summary cards (Wallet Balance, Total Invoiced, Outstanding Due), contact details, recent invoice history, and an interactive printable "Statement of Account" overlay with `window.print()`.
+     - Linked customer names directly to `/customers/[id]` from the contacts listing table (`contacts-page.tsx`).
+  2. Bank & Cash Reconciliation Engine (Blueprint 04):
+     - Migration `000043_bank_reconciliation.sql`: Added `bank_reconciliations` table (tracking `money_account_id`, `statement_date`, `statement_balance_minor`, `ledger_balance_minor`, `difference_minor`, status lifecycle) and `bank_reconciliation_matches` table (for matching cleared transactions).
+     - Generated sqlc queries and Go models in `internal/db/finance_bank_reconciliation.sql.go`.
+     - Implemented Go service (`internal/finance/bank_reconciliation_service.go`) and handlers (`internal/finance/bank_reconciliation_handler.go`) with endpoints:
+       - `GET /api/v1/reconciliations`: List reconciliation periods.
+       - `POST /api/v1/reconciliations`: Start a new reconciliation against an account statement.
+       - `GET /api/v1/reconciliations/:id`: Get reconciliation details with matched and unmatched transactions.
+       - `POST /api/v1/reconciliations/:id/commands/match`: Mark a transaction as cleared.
+       - `POST /api/v1/reconciliations/:id/commands/unmatch`: Remove a transaction match.
+       - `POST /api/v1/reconciliations/:id/commands/complete`: Finalize a balanced zero-difference reconciliation.
+     - Frontend UI in `accounts-page.tsx`: Added a 3rd tab "Bank Reconciliation" with reconciliation history, status pills, difference spotlight (green for balanced zero difference, rose for discrepancy), and "Start Reconciliation" drawer.
+- Verification:
+  - Dockerized `go vet ./...` passed with 0 errors.
+  - `bun test` passed 52/52 tests.
+  - `bun run type-check` passed with 0 errors.
+  - Next.js production build (`next build`) compiled 45 routes cleanly with Turbopack.
+
+
