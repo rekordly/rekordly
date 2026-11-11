@@ -51,13 +51,16 @@ function ContactsContent({ workspaceId, startOpen }: WorkspaceInfo & { startOpen
         description="The customers you sell to and the suppliers you buy from."
         actions={<AppButton startContent={<Plus weight="bold" />} label={`Add ${singular}`} onPress={() => setIsOpen(true)} />}
       />
+      <Segmented aria-label="Contact type" options={KIND_OPTIONS} value={kind} onChange={setKind} />
       <DataView<Contact>
+        key={kind}
         title={kind === "customers" ? "Customers" : "Suppliers"}
         rows={contacts.data ?? []}
         rowKey={(row) => row.id}
         isLoading={contacts.isPending}
         isError={contacts.isError}
-        toolbar={<Segmented size="sm" aria-label="Contact type" options={KIND_OPTIONS} value={kind} onChange={setKind} />}
+        searchPlaceholder={`Search ${kind}`}
+        getSearchText={(row) => `${row.name} ${row.phone ?? ""} ${row.email ?? ""}`}
         empty={
           <EmptyState
             icon={UsersThree}

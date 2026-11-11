@@ -41,6 +41,7 @@ WHERE workspace_id = $1
   AND (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status'))
   AND (sqlc.narg('customer_id')::bigint IS NULL OR customer_id = sqlc.narg('customer_id'))
   AND (sqlc.narg('before_id')::bigint IS NULL OR id < sqlc.narg('before_id'))
+  AND (sqlc.narg('search')::text IS NULL OR customer_name ILIKE '%' || sqlc.narg('search')::text || '%' OR reference ILIKE '%' || sqlc.narg('search')::text || '%')
 ORDER BY sale_date DESC, id DESC
 LIMIT $2;
 
@@ -88,6 +89,7 @@ WHERE workspace_id = $1
   AND (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status'))
   AND (sqlc.narg('supplier_id')::bigint IS NULL OR supplier_id = sqlc.narg('supplier_id'))
   AND (sqlc.narg('before_id')::bigint IS NULL OR id < sqlc.narg('before_id'))
+  AND (sqlc.narg('search')::text IS NULL OR supplier_name ILIKE '%' || sqlc.narg('search')::text || '%' OR reference ILIKE '%' || sqlc.narg('search')::text || '%')
 ORDER BY purchase_date DESC, id DESC
 LIMIT $2;
 
@@ -137,6 +139,7 @@ WHERE workspace_id = $1
   AND (sqlc.narg('linked_record_type')::text IS NULL OR linked_record_type = sqlc.narg('linked_record_type'))
   AND (sqlc.narg('linked_record_id')::bigint IS NULL OR linked_record_id = sqlc.narg('linked_record_id'))
   AND (sqlc.narg('before_id')::bigint IS NULL OR id < sqlc.narg('before_id'))
+  AND (sqlc.narg('search')::text IS NULL OR counterparty_name ILIKE '%' || sqlc.narg('search')::text || '%' OR reference ILIKE '%' || sqlc.narg('search')::text || '%')
 ORDER BY payment_date DESC, id DESC
 LIMIT $2;
 
@@ -149,6 +152,18 @@ INSERT INTO payment_legs (
 
 -- name: ListPaymentLegsByPaymentID :many
 SELECT * FROM payment_legs
+WHERE payment_id = $1 AND workspace_id = $2
+ORDER BY id ASC;
+
+-- name: CreatePaymentAllocation :one
+INSERT INTO payment_allocations (
+    payment_id, workspace_id, document_type, document_id, amount_minor
+) VALUES (
+    $1, $2, $3, $4, $5
+) RETURNING *;
+
+-- name: ListPaymentAllocationsByPaymentID :many
+SELECT * FROM payment_allocations
 WHERE payment_id = $1 AND workspace_id = $2
 ORDER BY id ASC;
 

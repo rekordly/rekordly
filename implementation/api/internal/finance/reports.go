@@ -15,6 +15,22 @@ import (
 
 const maxSummaryWindow = 366 * 2 * 24 * time.Hour
 
+const maxSearchLength = 100
+
+var searchEscaper = strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`)
+
+// searchParam bounds a list search and makes LIKE wildcards match literally.
+func searchParam(raw string) pgtype.Text {
+	term := []rune(strings.TrimSpace(raw))
+	if len(term) == 0 {
+		return pgtype.Text{}
+	}
+	if len(term) > maxSearchLength {
+		term = term[:maxSearchLength]
+	}
+	return pgtype.Text{String: searchEscaper.Replace(string(term)), Valid: true}
+}
+
 // MonthlyFinance is one month of ledger income and expense. Money is a JSON string.
 type MonthlyFinance struct {
 	Month        string `json:"month"`

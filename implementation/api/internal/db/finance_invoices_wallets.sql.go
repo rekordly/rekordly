@@ -319,6 +319,48 @@ func (q *Queries) GetInvoiceByID(ctx context.Context, arg GetInvoiceByIDParams) 
 	return i, err
 }
 
+const getInvoiceByIDForUpdate = `-- name: GetInvoiceByIDForUpdate :one
+SELECT id, workspace_id, customer_id, customer_name, invoice_number, issue_date, due_date, subtotal_minor, tax_amount_minor, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, terms, idempotency_key, created_by_user_id, finalized_at, voided_at, void_reason, created_at, updated_at FROM invoices
+WHERE id = $1 AND workspace_id = $2
+FOR UPDATE
+`
+
+type GetInvoiceByIDForUpdateParams struct {
+	ID          int64 `json:"id"`
+	WorkspaceID int64 `json:"workspace_id"`
+}
+
+func (q *Queries) GetInvoiceByIDForUpdate(ctx context.Context, arg GetInvoiceByIDForUpdateParams) (Invoice, error) {
+	row := q.db.QueryRow(ctx, getInvoiceByIDForUpdate, arg.ID, arg.WorkspaceID)
+	var i Invoice
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.CustomerID,
+		&i.CustomerName,
+		&i.InvoiceNumber,
+		&i.IssueDate,
+		&i.DueDate,
+		&i.SubtotalMinor,
+		&i.TaxAmountMinor,
+		&i.TotalAmountMinor,
+		&i.PaidAmountMinor,
+		&i.Currency,
+		&i.CurrencyExponent,
+		&i.Status,
+		&i.Notes,
+		&i.Terms,
+		&i.IdempotencyKey,
+		&i.CreatedByUserID,
+		&i.FinalizedAt,
+		&i.VoidedAt,
+		&i.VoidReason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getInvoiceByIdempotency = `-- name: GetInvoiceByIdempotency :one
 SELECT id, workspace_id, customer_id, customer_name, invoice_number, issue_date, due_date, subtotal_minor, tax_amount_minor, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, terms, idempotency_key, created_by_user_id, finalized_at, voided_at, void_reason, created_at, updated_at FROM invoices
 WHERE workspace_id = $1 AND idempotency_key = $2 AND status <> 'voided'
@@ -487,6 +529,7 @@ WHERE workspace_id = $1
   AND ($5::text IS NULL OR status = $5)
   AND ($6::bigint IS NULL OR customer_id = $6)
   AND ($7::bigint IS NULL OR id < $7)
+  AND ($8::text IS NULL OR invoice_number ILIKE '%' || $8::text || '%' OR customer_name ILIKE '%' || $8::text || '%')
 ORDER BY issue_date DESC, id DESC
 LIMIT $2
 `
@@ -499,6 +542,7 @@ type ListInvoicesParams struct {
 	Status      pgtype.Text `json:"status"`
 	CustomerID  pgtype.Int8 `json:"customer_id"`
 	BeforeID    pgtype.Int8 `json:"before_id"`
+	Search      pgtype.Text `json:"search"`
 }
 
 func (q *Queries) ListInvoices(ctx context.Context, arg ListInvoicesParams) ([]Invoice, error) {
@@ -510,6 +554,7 @@ func (q *Queries) ListInvoices(ctx context.Context, arg ListInvoicesParams) ([]I
 		arg.Status,
 		arg.CustomerID,
 		arg.BeforeID,
+		arg.Search,
 	)
 	if err != nil {
 		return nil, err

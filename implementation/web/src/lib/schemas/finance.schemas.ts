@@ -30,6 +30,53 @@ export const categorySchema = z.object({
 });
 export type CategoryValues = z.infer<typeof categorySchema>;
 
+export const catalogueItemSchema = z.object({
+  name: z.string().trim().min(1, "Enter an item name").max(200, "Keep this under 200 characters"),
+  kind: z.enum(["service", "non_stock", "stock_tracked"], { message: "Choose what you sell" }),
+  status: z.enum(["active", "draft"]),
+  unit_name: z.string().trim().min(1, "Enter a unit").max(40, "Keep this under 40 characters"),
+  selling_price: amount("Enter a selling price"),
+  sku: z.string().trim().max(80, "Keep this under 80 characters"),
+  description: notes,
+});
+export type CatalogueItemValues = z.infer<typeof catalogueItemSchema>;
+
+const quantity = z
+  .string()
+  .trim()
+  .regex(/^\d+(\.\d{1,4})?$/, "Enter a quantity with up to 4 decimal places")
+  .refine((value) => /[1-9]/.test(value), "Quantity must be more than zero");
+
+export const openingStockSchema = z.object({
+  product_id: z.string().min(1, "Choose a stock product"),
+  quantity,
+  unit_cost: amount("Enter the unit cost"),
+  effective_on: date(),
+  reason: z.string().trim().min(1, "Explain this opening balance").max(500, "Keep this under 500 characters"),
+});
+export type OpeningStockValues = z.infer<typeof openingStockSchema>;
+
+export const purchaseRequestSchema = z.object({
+  supplier_id: z.string(),
+  needed_by: z.union([z.literal(""), date("Choose a valid date")]),
+  reason: z.string().trim().min(1, "Explain why this is needed").max(1000, "Keep this under 1000 characters"),
+  reference: shortText,
+	priority: z.enum(["low", "normal", "high", "urgent"]),
+  lines: z
+    .array(
+      z.object({
+        product_id: z.string(),
+        description: z.string().trim().min(1, "Describe what is needed").max(240, "Keep this under 240 characters"),
+        quantity,
+        unit_name: z.string().trim().min(1, "Enter a unit").max(40, "Keep this under 40 characters"),
+        estimated_unit_price: amount("Enter an estimated unit price"),
+      }),
+    )
+    .min(1, "Add at least one request line")
+    .max(100, "A request can have at most 100 lines"),
+});
+export type PurchaseRequestValues = z.infer<typeof purchaseRequestSchema>;
+
 export const contactSchema = z.object({
   name: z.string().trim().min(1, "Enter a name").max(160, "Keep this under 160 characters"),
   email: z.union([z.literal(""), z.email("Enter a valid email address")]),
@@ -60,6 +107,17 @@ export const paymentSchema = z.object({
   notes,
 });
 export type PaymentValues = z.infer<typeof paymentSchema>;
+
+export const invoiceAllocationSchema = z.object({
+  customer_id: z.string().min(1, "Choose a customer"),
+  date: date(),
+  amount: amount(),
+  account_id: z.string().min(1, "Choose the account that received it"),
+  allocations: z.record(z.string(), optionalAmount),
+  reference: shortText,
+  notes,
+});
+export type InvoiceAllocationValues = z.infer<typeof invoiceAllocationSchema>;
 
 export const invoiceSchema = z
   .object({

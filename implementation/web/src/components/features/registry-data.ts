@@ -3,11 +3,11 @@ import type { FeatureDefinition, FeatureId } from "../../types/features.ts";
 export const FEATURE_REGISTRY_MAP: Record<FeatureId, FeatureDefinition> = {
   "ai-capture": {
     id: "ai-capture",
-    name: "AI Capture",
-    shortName: "Capture",
-    headline: "Type what happened in plain words",
+    name: "Guided records",
+    shortName: "Guided record",
+    headline: "Save a draft before it affects your books",
     description:
-      "Convert short natural-language sentences into structured income, expense, sale, or invoice drafts with human confirmation.",
+      "Create a careful draft with purpose, supporting evidence, linked documents and a server-calculated preview before confirmation.",
     category: "capture",
     route: "/capture",
     iconName: "Sparkle",
@@ -21,42 +21,42 @@ export const FEATURE_REGISTRY_MAP: Record<FeatureId, FeatureDefinition> = {
         "Available in both Personal and Business. Drafts must be explicitly confirmed before posting.",
     },
     primaryAction: {
-      label: "Type what happened",
-      shortLabel: "Capture",
-      iconName: "Sparkle",
+      label: "Create guided record",
+      shortLabel: "Guided record",
+      iconName: "PencilSimple",
       kind: "primary",
     },
     emptyState: {
       business: {
-        title: "No business entries yet",
+        title: "No guided records yet",
         description:
-          "Type what happened in everyday words to generate a structured draft. Every AI draft requires your explicit review and confirmation before posting to the ledger.",
-        actionLabel: "Type what happened",
-        tip: "Example: \"Received 45,000 NGN cash from Tunde for bulk rice delivery today\"",
+          "Create a careful money draft whenever you need a receipt, a linked document, or a preview before posting.",
+        actionLabel: "Create guided record",
+        tip: "Use Sales or Purchases when you need to create those commercial documents themselves.",
       },
       personal: {
-        title: "No personal entries yet",
+        title: "No guided records yet",
         description:
-          "Describe personal spending or income naturally. Rekordly classifies categories and accounts without accounting jargon.",
-        actionLabel: "Type what happened",
-        tip: "Example: \"Spent 8,500 NGN on fuel with GTBank debit card\"",
+          "Create a personal draft with evidence and a reviewable preview before it affects your totals.",
+        actionLabel: "Create guided record",
+        tip: "Use Activity for quick, immediately confirmed income, expenses and transfers.",
       },
       all: {
-        title: "Consolidated capture inbox",
+        title: "Guided record inbox",
         description:
-          "Review suggested drafts across your Personal and Business spaces. Drafts are never mixed between spaces.",
-        actionLabel: "Type what happened",
+          "Review saved drafts across your Personal and Business spaces. Drafts are never mixed between spaces.",
+        actionLabel: "Create guided record",
         tip: "Select a target workspace to confirm and post drafts.",
       },
     },
     planGate: {
       tier: "free",
-      limitLabel: "AI Capture credits",
-      limitUnit: "credits / month",
+      limitLabel: "Guided records",
+      limitUnit: "drafts / month",
       enforcementNote:
-        "Every natural-language parse checks available plan credits before processing. Manual form fallback is always available.",
+        "Drafts remain reviewable until explicitly confirmed. A future AI parser will have its own credit and consent rules.",
     },
-    tags: ["ai", "natural-language", "drafts", "universal-add", "capture"],
+    tags: ["drafts", "evidence", "review", "universal-add", "guided-record"],
     supportsOfflineDrafts: true,
     requiresConfirmation: true,
   },

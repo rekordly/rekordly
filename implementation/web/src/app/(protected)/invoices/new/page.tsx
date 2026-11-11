@@ -1,12 +1,5 @@
-import type { Metadata } from "next";
-
-import { InvoicesPage } from "@/components/features/finance/invoices-page";
-
-export const metadata: Metadata = {
-  title: "New invoice — Rekordly",
-  description: "Create an invoice.",
-};
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return <InvoicesPage startOpen />;
+  redirect("/invoices");
 }

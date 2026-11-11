@@ -37,8 +37,26 @@ func (h *Handler) RegisterRoutes(group *gin.RouterGroup) {
 	protected.GET("/transactions/:id", h.getTransaction)
 	protected.POST("/transactions/:id/void", h.voidTransaction)
 
+	// Blueprint 03 money capture drafts, previews and confirmation commands.
+	h.RegisterMoneyCaptureRoutes(protected)
+	h.RegisterMixedMoneyRoutes(protected)
+
 	// Sales, Purchases, Counterparties, Payments
 	h.RegisterSalesPurchasesRoutes(protected)
+
+	// Product and service catalogue. Stock commands are registered separately
+	// once immutable movements and costing are implemented.
+	h.RegisterCatalogueRoutes(protected)
+	h.RegisterInventoryRoutes(protected)
+
+	// Blueprint 08 begins with non-posting purchase requests and approvals.
+	h.RegisterProcurementRoutes(protected)
+	h.RegisterPurchaseOrderRoutes(protected)
+	h.RegisterGoodsReceiptRoutes(protected)
+	h.RegisterSupplierBillRoutes(protected)
+	h.RegisterSupplierAdvanceRoutes(protected)
+	h.RegisterSupplierReturnRoutes(protected)
+	protected.GET("/reports/procurement", h.procurementReport)
 
 	// Invoices and Customer Wallets
 	h.RegisterInvoicesWalletsRoutes(protected)
@@ -153,8 +171,17 @@ func (h *Handler) listCategories(c *gin.Context) {
 		return
 	}
 
+	// Existing workspaces created before category seeding was connected may have
+	// no categories. This idempotent initializer fixes that on first use.
+	if err := h.service.SeedDefaultCategories(c.Request.Context(), wsCtx.WorkspaceID, wsCtx.Kind); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "CATEGORY_SETUP_FAILED", "message": "Failed to prepare categories"}})
+		return
+	}
+
 	direction := c.Query("direction")
-	scope := c.Query("scope")
+	// Categories never cross Personal and Business workspaces, even if a caller
+	// sends a different scope query parameter.
+	scope := wsCtx.Kind
 
 	categories, err := h.service.ListCategories(c.Request.Context(), wsCtx.WorkspaceID, direction, scope)
 	if err != nil {

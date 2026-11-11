@@ -12,7 +12,7 @@ import { today, useAccountOptions, useFinanceAction } from "./shared";
 
 export interface PaymentPreset {
   direction: "incoming" | "outgoing";
-  linkedType: "sale" | "purchase";
+  linkedType: "sale" | "purchase" | "invoice" | "supplier_bill";
   linkedId: number;
   partyName: string;
   summary: string;

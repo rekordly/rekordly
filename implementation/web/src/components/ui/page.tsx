@@ -111,7 +111,7 @@ export function Segmented<T extends string>({
     <div
       role="tablist"
       aria-label={ariaLabel}
-      className={`inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-full bg-default p-1 scrollbar-none ${className}`}
+      className={`inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-full bg-segment p-1 scrollbar-none ${className}`}
     >
       {options.map((opt) => {
         const active = opt.key === value;
@@ -152,7 +152,7 @@ export function Segmented<T extends string>({
 export function LinkTabs({ tabs }: { tabs: { label: string; href: string; icon?: PhosphorIcon }[] }) {
   const pathname = usePathname();
   return (
-    <nav className="inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-full bg-default p-1 scrollbar-none">
+    <nav className="inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-full bg-segment p-1 scrollbar-none">
       {tabs.map((tab) => {
         const active = pathname === tab.href;
         const TabIcon = tab.icon;

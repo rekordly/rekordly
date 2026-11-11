@@ -802,6 +802,7 @@ WHERE workspace_id = $1
   AND ($5::text IS NULL OR status = $5)
   AND ($6::text IS NULL OR direction = $6)
   AND ($7::bigint IS NULL OR id < $7)
+  AND ($8::text IS NULL OR purpose ILIKE '%' || $8::text || '%' OR counterparty_name ILIKE '%' || $8::text || '%' OR reference ILIKE '%' || $8::text || '%')
 ORDER BY effective_date DESC, id DESC
 LIMIT $2
 `
@@ -814,6 +815,7 @@ type ListMoneyTransactionsParams struct {
 	Status      pgtype.Text `json:"status"`
 	Direction   pgtype.Text `json:"direction"`
 	BeforeID    pgtype.Int8 `json:"before_id"`
+	Search      pgtype.Text `json:"search"`
 }
 
 func (q *Queries) ListMoneyTransactions(ctx context.Context, arg ListMoneyTransactionsParams) ([]MoneyTransaction, error) {
@@ -825,6 +827,7 @@ func (q *Queries) ListMoneyTransactions(ctx context.Context, arg ListMoneyTransa
 		arg.Status,
 		arg.Direction,
 		arg.BeforeID,
+		arg.Search,
 	)
 	if err != nil {
 		return nil, err

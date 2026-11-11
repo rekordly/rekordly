@@ -28,6 +28,9 @@ type Config struct {
 	GoogleJWKSURL          string
 	GoogleIssuer           string
 	FrontendBaseURL        string
+	CloudinaryCloudName    string
+	CloudinaryAPIKey       string
+	CloudinaryAPISecret    string
 }
 
 func Load() (Config, error) {
@@ -66,6 +69,9 @@ func Load() (Config, error) {
 		GoogleJWKSURL:          v.GetString("GOOGLE_JWKS_URL"),
 		GoogleIssuer:           v.GetString("GOOGLE_ISSUER"),
 		FrontendBaseURL:        v.GetString("FRONTEND_BASE_URL"),
+		CloudinaryCloudName:    v.GetString("CLOUDINARY_CLOUD_NAME"),
+		CloudinaryAPIKey:       v.GetString("CLOUDINARY_API_KEY"),
+		CloudinaryAPISecret:    v.GetString("CLOUDINARY_API_SECRET"),
 	}
 
 	if cfg.DatabaseURL == "" {
@@ -98,6 +104,16 @@ func Load() (Config, error) {
 	}
 	if configured != 0 && configured != len(googleValues) {
 		return Config{}, fmt.Errorf("GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and GOOGLE_REDIRECT_URL must be configured together")
+	}
+	cloudinaryValues := []string{cfg.CloudinaryCloudName, cfg.CloudinaryAPIKey, cfg.CloudinaryAPISecret}
+	cloudinaryConfigured := 0
+	for _, value := range cloudinaryValues {
+		if value != "" {
+			cloudinaryConfigured++
+		}
+	}
+	if cloudinaryConfigured != 0 && cloudinaryConfigured != len(cloudinaryValues) {
+		return Config{}, fmt.Errorf("CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET must be configured together")
 	}
 	if err := validateDatabaseEnvironment(cfg.Environment, cfg.DatabaseURL); err != nil {
 		return Config{}, err

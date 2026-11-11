@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -21,6 +22,7 @@ var (
 	ErrNegativeLegAmount     = errors.New("payment leg amount must be greater than zero")
 	ErrAlreadyFullyPaid      = errors.New("record is already fully paid")
 	ErrCannotPayVoidedRecord = errors.New("cannot record payment against a voided record")
+	ErrInvalidAllocation     = errors.New("invalid payment allocation")
 )
 
 // ---------------- Counterparties (External Customers / Suppliers) ----------------
@@ -270,6 +272,7 @@ func (s *Service) GetSale(ctx context.Context, workspaceID, saleID int64) (SaleD
 }
 
 type ListSalesFilter struct {
+	Search     string `form:"search"`
 	FromDate   string `form:"from"`
 	ToDate     string `form:"to"`
 	Status     string `form:"status"`
@@ -312,6 +315,7 @@ func (s *Service) ListSales(ctx context.Context, workspaceID int64, f ListSalesF
 	}
 
 	return s.queries.ListSales(ctx, db.ListSalesParams{
+		Search:      searchParam(f.Search),
 		WorkspaceID: workspaceID,
 		Limit:       limit,
 		FromDate:    fromDateParam,
@@ -524,6 +528,7 @@ func (s *Service) GetPurchase(ctx context.Context, workspaceID, purchaseID int64
 }
 
 type ListPurchasesFilter struct {
+	Search     string `form:"search"`
 	FromDate   string `form:"from"`
 	ToDate     string `form:"to"`
 	Status     string `form:"status"`
@@ -566,6 +571,7 @@ func (s *Service) ListPurchases(ctx context.Context, workspaceID int64, f ListPu
 	}
 
 	return s.queries.ListPurchases(ctx, db.ListPurchasesParams{
+		Search:      searchParam(f.Search),
 		WorkspaceID: workspaceID,
 		Limit:       limit,
 		FromDate:    fromDateParam,
@@ -584,27 +590,42 @@ type PaymentLegInput struct {
 	AmountMajor    string `json:"amount"` // optional
 }
 
+// PaymentAllocationInput is intentionally document-specific. A payment leg says
+// where cash moved; an allocation says which obligation it settles.
+type PaymentAllocationInput struct {
+	DocumentType string `json:"document_type" binding:"required"`
+	DocumentID   int64  `json:"document_id" binding:"required"`
+	AmountMinor  int64  `json:"amount_minor"`
+	Amount       string `json:"amount"`
+}
+
 type CreatePaymentInput struct {
-	Direction        string            `json:"direction" binding:"required"` // incoming (customer), outgoing (supplier)
-	PaymentDate      string            `json:"payment_date" binding:"required"`
-	TotalAmountMinor int64             `json:"total_amount_minor"`
-	TotalAmount      string            `json:"amount"` // optional
-	Currency         string            `json:"currency"`
-	CounterpartyID   *int64            `json:"counterparty_id"`
-	CounterpartyName string            `json:"counterparty_name"`
-	LinkedRecordType string            `json:"linked_record_type"` // sale, purchase
-	LinkedRecordID   *int64            `json:"linked_record_id"`
-	PaymentLegs      []PaymentLegInput `json:"payment_legs" binding:"required"`
-	Notes            string            `json:"notes"`
-	Reference        string            `json:"reference"`
-	IdempotencyKey   string            `json:"idempotency_key"`
+	Direction        string                   `json:"direction" binding:"required"` // incoming (customer), outgoing (supplier)
+	PaymentDate      string                   `json:"payment_date" binding:"required"`
+	TotalAmountMinor int64                    `json:"total_amount_minor"`
+	TotalAmount      string                   `json:"amount"` // optional
+	Currency         string                   `json:"currency"`
+	CounterpartyID   *int64                   `json:"counterparty_id"`
+	CounterpartyName string                   `json:"counterparty_name"`
+	LinkedRecordType string                   `json:"linked_record_type"` // sale, purchase, invoice
+	LinkedRecordID   *int64                   `json:"linked_record_id"`
+	Allocations      []PaymentAllocationInput `json:"allocations"`
+	PaymentLegs      []PaymentLegInput        `json:"payment_legs" binding:"required"`
+	Notes            string                   `json:"notes"`
+	Reference        string                   `json:"reference"`
+	IdempotencyKey   string                   `json:"idempotency_key"`
+	// SupplierAdvance is only set by CreateSupplierAdvance. Keeping it out of
+	// the public JSON shape prevents the general payment endpoint from quietly
+	// changing a cash expense into a supplier prepayment.
+	SupplierAdvance bool `json:"-"`
 }
 
 type PaymentDetail struct {
-	Payment db.Payment      `json:"payment"`
-	Legs    []db.PaymentLeg `json:"payment_legs"`
-	Ledger  *db.LedgerEntry `json:"ledger_entry,omitempty"`
-	Lines   []db.LedgerLine `json:"ledger_lines,omitempty"`
+	Payment     db.Payment             `json:"payment"`
+	Legs        []db.PaymentLeg        `json:"payment_legs"`
+	Allocations []db.PaymentAllocation `json:"allocations,omitempty"`
+	Ledger      *db.LedgerEntry        `json:"ledger_entry,omitempty"`
+	Lines       []db.LedgerLine        `json:"ledger_lines,omitempty"`
 }
 
 func (s *Service) CreatePayment(ctx context.Context, workspaceID, userID int64, in CreatePaymentInput) (PaymentDetail, error) {
@@ -741,11 +762,28 @@ func (s *Service) createPaymentInternal(ctx context.Context, qtx *db.Queries, wo
 		}
 	}
 
-	// Linked Record and Overpayment Protection!
+	// Linked record and allocation validation. A legacy linked record remains
+	// supported for one-document payments; allocations are the extensible form.
 	var linkedTypeParam pgtype.Text
 	var linkedIDParam pgtype.Int8
+	type validatedAllocation struct {
+		documentType string
+		documentID   int64
+		amountMinor  int64
+	}
+	validatedAllocations := make([]validatedAllocation, 0, len(in.Allocations)+1)
+	settlesSupplierBill := false
+	createsSupplierAdvance := in.SupplierAdvance
+	if createsSupplierAdvance {
+		if dir != "outgoing" || !cpIDParam.Valid || len(in.Allocations) > 0 || strings.TrimSpace(in.LinkedRecordType) != "" || in.LinkedRecordID != nil {
+			return PaymentDetail{}, fmt.Errorf("%w: supplier advance must be an unallocated outgoing supplier payment", ErrInvalidAllocation)
+		}
+	}
 
 	linkedType := strings.ToLower(strings.TrimSpace(in.LinkedRecordType))
+	if len(in.Allocations) > 0 && (linkedType != "" || in.LinkedRecordID != nil) {
+		return PaymentDetail{}, fmt.Errorf("%w: use either a linked record or allocations, not both", ErrInvalidAllocation)
+	}
 	if linkedType != "" && in.LinkedRecordID != nil && *in.LinkedRecordID > 0 {
 		linkedTypeParam = pgtype.Text{String: linkedType, Valid: true}
 		linkedIDParam = pgtype.Int8{Int64: *in.LinkedRecordID, Valid: true}
@@ -808,6 +846,207 @@ func (s *Service) createPaymentInternal(ctx context.Context, qtx *db.Queries, wo
 			if err != nil {
 				return PaymentDetail{}, fmt.Errorf("update purchase paid amount: %w", err)
 			}
+
+		case "invoice":
+			if dir != "incoming" {
+				return PaymentDetail{}, ErrForbiddenRecord
+			}
+			invoice, err := qtx.GetInvoiceByIDForUpdate(ctx, db.GetInvoiceByIDForUpdateParams{
+				ID:          *in.LinkedRecordID,
+				WorkspaceID: workspaceID,
+			})
+			if err != nil {
+				return PaymentDetail{}, ErrForbiddenRecord
+			}
+			if invoice.Status == "voided" || invoice.Status == "draft" {
+				return PaymentDetail{}, ErrCannotPayVoidedRecord
+			}
+			if invoice.Currency != currency {
+				return PaymentDetail{}, fmt.Errorf("%w: invoice and payment currencies must match", ErrInvalidCurrency)
+			}
+			if cpIDParam.Valid && cpIDParam.Int64 != invoice.CustomerID {
+				return PaymentDetail{}, ErrForbiddenParty
+			}
+			outstanding := invoice.TotalAmountMinor - invoice.PaidAmountMinor
+			if outstanding <= 0 {
+				return PaymentDetail{}, ErrAlreadyFullyPaid
+			}
+			if totalMinor > outstanding {
+				return PaymentDetail{}, fmt.Errorf("%w: payment %d exceeds invoice outstanding %d", ErrOverpayment, totalMinor, outstanding)
+			}
+			cpIDParam = pgtype.Int8{Int64: invoice.CustomerID, Valid: true}
+			cpName = invoice.CustomerName
+			if _, err = qtx.UpdateInvoicePaidAmount(ctx, db.UpdateInvoicePaidAmountParams{
+				ID:              invoice.ID,
+				WorkspaceID:     workspaceID,
+				PaidAmountMinor: totalMinor,
+			}); err != nil {
+				return PaymentDetail{}, fmt.Errorf("update invoice paid amount: %w", err)
+			}
+			validatedAllocations = append(validatedAllocations, validatedAllocation{
+				documentType: "invoice", documentID: invoice.ID, amountMinor: totalMinor,
+			})
+
+		case "supplier_bill":
+			if dir != "outgoing" {
+				return PaymentDetail{}, ErrForbiddenRecord
+			}
+			bill, billErr := qtx.GetSupplierBillForUpdate(ctx, db.GetSupplierBillForUpdateParams{ID: *in.LinkedRecordID, WorkspaceID: workspaceID})
+			if billErr != nil {
+				return PaymentDetail{}, ErrForbiddenRecord
+			}
+			if bill.Status == "paid" {
+				return PaymentDetail{}, ErrAlreadyFullyPaid
+			}
+			if bill.Status != "approved" && bill.Status != "partially_paid" {
+				return PaymentDetail{}, ErrForbiddenRecord
+			}
+			if bill.Currency != currency || totalMinor > bill.OutstandingMinor {
+				return PaymentDetail{}, ErrOverpayment
+			}
+			if cpIDParam.Valid && cpIDParam.Int64 != bill.SupplierID {
+				return PaymentDetail{}, ErrForbiddenParty
+			}
+			party, partyErr := qtx.GetCounterpartyByID(ctx, db.GetCounterpartyByIDParams{ID: bill.SupplierID, WorkspaceID: workspaceID})
+			if partyErr != nil {
+				return PaymentDetail{}, ErrForbiddenParty
+			}
+			cpIDParam, cpName = pgtype.Int8{Int64: bill.SupplierID, Valid: true}, party.Name
+			if _, billErr = qtx.SettleSupplierBill(ctx, db.SettleSupplierBillParams{WorkspaceID: workspaceID, ID: bill.ID, OutstandingMinor: totalMinor}); billErr != nil {
+				return PaymentDetail{}, ErrOverpayment
+			}
+			validatedAllocations = append(validatedAllocations, validatedAllocation{documentType: "supplier_bill", documentID: bill.ID, amountMinor: totalMinor})
+			settlesSupplierBill = true
+
+		default:
+			return PaymentDetail{}, ErrForbiddenRecord
+		}
+	}
+
+	if len(in.Allocations) > 0 {
+		requested := append([]PaymentAllocationInput(nil), in.Allocations...)
+		sort.Slice(requested, func(i, j int) bool {
+			if requested[i].DocumentType == requested[j].DocumentType {
+				return requested[i].DocumentID < requested[j].DocumentID
+			}
+			return requested[i].DocumentType < requested[j].DocumentType
+		})
+
+		var allocatedTotal int64
+		if dir == "outgoing" {
+			var allocationSupplierID int64
+			for index, allocation := range requested {
+				if strings.ToLower(strings.TrimSpace(allocation.DocumentType)) != "supplier_bill" || allocation.DocumentID <= 0 {
+					return PaymentDetail{}, fmt.Errorf("%w: outgoing allocations must be supplier bills", ErrInvalidAllocation)
+				}
+				if index > 0 && allocation.DocumentID == requested[index-1].DocumentID {
+					return PaymentDetail{}, fmt.Errorf("%w: a bill may appear only once", ErrInvalidAllocation)
+				}
+				amount := allocation.AmountMinor
+				if strings.TrimSpace(allocation.Amount) != "" {
+					parsed, parseErr := ParseMajorToMinor(allocation.Amount, exponent)
+					if parseErr != nil {
+						return PaymentDetail{}, parseErr
+					}
+					amount = parsed
+				}
+				if amount <= 0 {
+					return PaymentDetail{}, fmt.Errorf("%w: allocation amount must be greater than zero", ErrInvalidAllocation)
+				}
+				bill, billErr := qtx.GetSupplierBillForUpdate(ctx, db.GetSupplierBillForUpdateParams{ID: allocation.DocumentID, WorkspaceID: workspaceID})
+				if billErr != nil || (bill.Status != "approved" && bill.Status != "partially_paid") || bill.Currency != currency {
+					return PaymentDetail{}, ErrForbiddenRecord
+				}
+				if index == 0 {
+					allocationSupplierID = bill.SupplierID
+					if cpIDParam.Valid && cpIDParam.Int64 != bill.SupplierID {
+						return PaymentDetail{}, ErrForbiddenParty
+					}
+					cpIDParam = pgtype.Int8{Int64: bill.SupplierID, Valid: true}
+					party, partyErr := qtx.GetCounterpartyByID(ctx, db.GetCounterpartyByIDParams{ID: bill.SupplierID, WorkspaceID: workspaceID})
+					if partyErr != nil {
+						return PaymentDetail{}, ErrForbiddenParty
+					}
+					cpName = party.Name
+				} else if bill.SupplierID != allocationSupplierID {
+					return PaymentDetail{}, fmt.Errorf("%w: all allocated bills must belong to one supplier", ErrInvalidAllocation)
+				}
+				if amount > bill.OutstandingMinor || allocatedTotal > totalMinor-amount {
+					return PaymentDetail{}, ErrOverpayment
+				}
+				if _, billErr = qtx.SettleSupplierBill(ctx, db.SettleSupplierBillParams{WorkspaceID: workspaceID, ID: bill.ID, OutstandingMinor: amount}); billErr != nil {
+					return PaymentDetail{}, ErrOverpayment
+				}
+				allocatedTotal += amount
+				validatedAllocations = append(validatedAllocations, validatedAllocation{documentType: "supplier_bill", documentID: bill.ID, amountMinor: amount})
+			}
+			if allocatedTotal != totalMinor {
+				return PaymentDetail{}, fmt.Errorf("%w: allocation total must equal payment total", ErrInvalidAllocation)
+			}
+			settlesSupplierBill = true
+		} else {
+			if dir != "incoming" {
+				return PaymentDetail{}, fmt.Errorf("%w: unsupported allocation direction", ErrInvalidAllocation)
+			}
+			var allocationCustomerID int64
+			for index, allocation := range requested {
+				if strings.ToLower(strings.TrimSpace(allocation.DocumentType)) != "invoice" || allocation.DocumentID <= 0 {
+					return PaymentDetail{}, fmt.Errorf("%w: only invoice allocations are currently supported", ErrInvalidAllocation)
+				}
+				if index > 0 && allocation.DocumentID == requested[index-1].DocumentID {
+					return PaymentDetail{}, fmt.Errorf("%w: an invoice may appear only once", ErrInvalidAllocation)
+				}
+				amount := allocation.AmountMinor
+				if strings.TrimSpace(allocation.Amount) != "" {
+					parsed, parseErr := ParseMajorToMinor(allocation.Amount, exponent)
+					if parseErr != nil {
+						return PaymentDetail{}, parseErr
+					}
+					amount = parsed
+				}
+				if amount <= 0 {
+					return PaymentDetail{}, fmt.Errorf("%w: allocation amount must be greater than zero", ErrInvalidAllocation)
+				}
+
+				invoice, invoiceErr := qtx.GetInvoiceByIDForUpdate(ctx, db.GetInvoiceByIDForUpdateParams{ID: allocation.DocumentID, WorkspaceID: workspaceID})
+				if invoiceErr != nil {
+					return PaymentDetail{}, ErrForbiddenRecord
+				}
+				if invoice.Status == "voided" || invoice.Status == "draft" {
+					return PaymentDetail{}, ErrCannotPayVoidedRecord
+				}
+				if invoice.Currency != currency {
+					return PaymentDetail{}, fmt.Errorf("%w: invoice and payment currencies must match", ErrInvalidCurrency)
+				}
+				if index == 0 {
+					allocationCustomerID = invoice.CustomerID
+					if cpIDParam.Valid && cpIDParam.Int64 != allocationCustomerID {
+						return PaymentDetail{}, ErrForbiddenParty
+					}
+					cpIDParam = pgtype.Int8{Int64: allocationCustomerID, Valid: true}
+					cpName = invoice.CustomerName
+				} else if invoice.CustomerID != allocationCustomerID {
+					return PaymentDetail{}, fmt.Errorf("%w: all allocated invoices must belong to one customer", ErrInvalidAllocation)
+				}
+				outstanding := invoice.TotalAmountMinor - invoice.PaidAmountMinor
+				if outstanding <= 0 {
+					return PaymentDetail{}, ErrAlreadyFullyPaid
+				}
+				if amount > outstanding {
+					return PaymentDetail{}, fmt.Errorf("%w: allocation %d exceeds invoice outstanding %d", ErrOverpayment, amount, outstanding)
+				}
+				if allocatedTotal > totalMinor-amount {
+					return PaymentDetail{}, fmt.Errorf("%w: allocations exceed payment total", ErrInvalidAllocation)
+				}
+				if _, invoiceErr = qtx.UpdateInvoicePaidAmount(ctx, db.UpdateInvoicePaidAmountParams{ID: invoice.ID, WorkspaceID: workspaceID, PaidAmountMinor: amount}); invoiceErr != nil {
+					return PaymentDetail{}, fmt.Errorf("update invoice paid amount: %w", invoiceErr)
+				}
+				allocatedTotal += amount
+				validatedAllocations = append(validatedAllocations, validatedAllocation{documentType: "invoice", documentID: invoice.ID, amountMinor: amount})
+			}
+			if allocatedTotal != totalMinor {
+				return PaymentDetail{}, fmt.Errorf("%w: allocation total must equal payment total", ErrInvalidAllocation)
+			}
 		}
 	}
 
@@ -835,6 +1074,18 @@ func (s *Service) createPaymentInternal(ctx context.Context, qtx *db.Queries, wo
 	})
 	if err != nil {
 		return PaymentDetail{}, fmt.Errorf("create payment record: %w", err)
+	}
+
+	createdAllocations := make([]db.PaymentAllocation, 0, len(validatedAllocations))
+	for _, allocation := range validatedAllocations {
+		created, createErr := qtx.CreatePaymentAllocation(ctx, db.CreatePaymentAllocationParams{
+			PaymentID: paymentRecord.ID, WorkspaceID: workspaceID, DocumentType: allocation.documentType,
+			DocumentID: allocation.documentID, AmountMinor: allocation.amountMinor,
+		})
+		if createErr != nil {
+			return PaymentDetail{}, fmt.Errorf("create payment allocation: %w", createErr)
+		}
+		createdAllocations = append(createdAllocations, created)
 	}
 
 	// Create payment legs and update money account balances
@@ -867,9 +1118,13 @@ func (s *Service) createPaymentInternal(ctx context.Context, qtx *db.Queries, wo
 	}
 
 	// Create balanced double-entry ledger entry
+	ledgerSourceType := "sale"
+	if createsSupplierAdvance {
+		ledgerSourceType = "supplier_advance"
+	}
 	entry, err := qtx.CreateLedgerEntry(ctx, db.CreateLedgerEntryParams{
 		WorkspaceID:      workspaceID,
-		SourceType:       "sale",
+		SourceType:       ledgerSourceType,
 		SourceID:         paymentRecord.ID,
 		EntryDate:        paymentRecord.PaymentDate,
 		Currency:         paymentRecord.Currency,
@@ -901,15 +1156,22 @@ func (s *Service) createPaymentInternal(ctx context.Context, qtx *db.Queries, wo
 			ledgerLines = append(ledgerLines, l)
 		}
 
-		// Credit: Accounts Receivable / Revenue
+		// A settlement of an already-finalized invoice clears Accounts
+		// Receivable. It may never create revenue for a second time.
+		creditClass := "revenue"
+		creditDescription := "Payment received from " + cpName
+		if linkedType == "invoice" || len(validatedAllocations) > 0 {
+			creditClass = "asset"
+			creditDescription = "Settlement of Accounts Receivable: " + cpName
+		}
 		creditLine, err := qtx.CreateLedgerLine(ctx, db.CreateLedgerLineParams{
 			LedgerEntryID: entry.ID,
 			WorkspaceID:   workspaceID,
 			AccountID:     pgtype.Int8{Valid: false},
-			AccountClass:  "revenue",
+			AccountClass:  creditClass,
 			DebitMinor:    0,
 			CreditMinor:   totalMinor,
-			Description:   optionalPgText("Payment received from " + cpName),
+			Description:   optionalPgText(creditDescription),
 		})
 		if err != nil {
 			return PaymentDetail{}, err
@@ -917,15 +1179,25 @@ func (s *Service) createPaymentInternal(ctx context.Context, qtx *db.Queries, wo
 		ledgerLines = append(ledgerLines, creditLine)
 	} else {
 		// Outgoing payment:
-		// Debit: Accounts Payable / Expense
+		// A supplier-bill settlement clears Accounts Payable. Other outgoing
+		// payments keep the historic expense treatment.
+		debitClass := "expense"
+		debitDescription := "Payment to " + cpName
+		if settlesSupplierBill {
+			debitClass = "liability"
+			debitDescription = "Settlement of Accounts Payable: " + cpName
+		} else if createsSupplierAdvance {
+			debitClass = "asset"
+			debitDescription = "Supplier advance: " + cpName
+		}
 		debitLine, err := qtx.CreateLedgerLine(ctx, db.CreateLedgerLineParams{
 			LedgerEntryID: entry.ID,
 			WorkspaceID:   workspaceID,
 			AccountID:     pgtype.Int8{Valid: false},
-			AccountClass:  "expense",
+			AccountClass:  debitClass,
 			DebitMinor:    totalMinor,
 			CreditMinor:   0,
-			Description:   optionalPgText("Payment to " + cpName),
+			Description:   optionalPgText(debitDescription),
 		})
 		if err != nil {
 			return PaymentDetail{}, err
@@ -961,10 +1233,11 @@ func (s *Service) createPaymentInternal(ctx context.Context, qtx *db.Queries, wo
 	}
 
 	return PaymentDetail{
-		Payment: paymentRecord,
-		Legs:    createdLegs,
-		Ledger:  &entry,
-		Lines:   ledgerLines,
+		Payment:     paymentRecord,
+		Legs:        createdLegs,
+		Allocations: createdAllocations,
+		Ledger:      &entry,
+		Lines:       ledgerLines,
 	}, nil
 }
 
@@ -986,14 +1259,23 @@ func (s *Service) GetPayment(ctx context.Context, workspaceID, paymentID int64) 
 	if err != nil {
 		return PaymentDetail{}, err
 	}
+	allocations, err := s.queries.ListPaymentAllocationsByPaymentID(ctx, db.ListPaymentAllocationsByPaymentIDParams{
+		PaymentID:   pmt.ID,
+		WorkspaceID: workspaceID,
+	})
+	if err != nil {
+		return PaymentDetail{}, err
+	}
 
 	return PaymentDetail{
-		Payment: pmt,
-		Legs:    legs,
+		Payment:     pmt,
+		Legs:        legs,
+		Allocations: allocations,
 	}, nil
 }
 
 type ListPaymentsFilter struct {
+	Search           string `form:"search"`
 	FromDate         string `form:"from"`
 	ToDate           string `form:"to"`
 	Direction        string `form:"direction"`
@@ -1042,6 +1324,7 @@ func (s *Service) ListPayments(ctx context.Context, workspaceID int64, f ListPay
 	}
 
 	return s.queries.ListPayments(ctx, db.ListPaymentsParams{
+		Search:           searchParam(f.Search),
 		WorkspaceID:      workspaceID,
 		Limit:            limit,
 		FromDate:         fromDateParam,

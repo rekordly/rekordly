@@ -1,6 +1,6 @@
 "use client";
 
-import { ProgressBar } from "@heroui/react";
+import { ProgressCircle } from "@heroui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Plus, Target, Trash } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
@@ -34,19 +34,20 @@ function BudgetProgress({ workspaceId, budget }: { workspaceId: number; budget: 
     queryKey: [...moneyKeys.workspace(workspaceId), "budget-status", budget.id],
     queryFn: () => financeApi.budgetStatus(workspaceId, budget.id),
   });
-  if (!status.data) return <div className="h-2 w-full animate-pulse rounded-full bg-default" />;
+  if (!status.data) return <div className="size-6 animate-pulse rounded-full bg-default" />;
   const { usage_basis_points: basisPoints, is_over_budget: isOver, usage_percentage_formatted: percent, actual_spending_minor: spent } = status.data;
   return (
-    <div className="min-w-44 space-y-1.5">
-      <ProgressBar aria-label={`${budget.name} used`} value={Math.min(basisPoints / 100, 100)} color={isOver ? "danger" : basisPoints >= 8000 ? "warning" : "success"} size="sm">
-        <ProgressBar.Track>
-          <ProgressBar.Fill />
-        </ProgressBar.Track>
-      </ProgressBar>
-      <p className="tabular text-xs text-muted">
+    <div className="flex items-center gap-2.5">
+      <ProgressCircle aria-label={`${budget.name} used`} value={Math.min(basisPoints / 100, 100)} color={isOver ? "danger" : basisPoints >= 8000 ? "warning" : "success"} size="sm">
+        <ProgressCircle.Track>
+          <ProgressCircle.TrackCircle />
+          <ProgressCircle.FillCircle />
+        </ProgressCircle.Track>
+      </ProgressCircle>
+      <span className="tabular text-xs whitespace-nowrap text-muted">
         {money(spent, budget)} spent · {percent}
-        {isOver ? <StatusPill tone="danger" className="ml-2">Over</StatusPill> : null}
-      </p>
+      </span>
+      {isOver ? <StatusPill tone="danger">Over</StatusPill> : null}
     </div>
   );
 }
@@ -118,7 +119,9 @@ function BudgetsContent({ workspaceId, currency, isBusiness }: WorkspaceInfo) {
         actions={<AppButton startContent={<Plus weight="bold" />} label="New budget" onPress={() => setIsOpen(true)} />}
       />
       <DataView<Budget>
-        title="Your budgets"
+        title="Budgets"
+        searchPlaceholder="Search budgets"
+        getSearchText={(row) => row.name}
         rows={budgets.data ?? []}
         rowKey={(row) => row.id}
         isLoading={budgets.isPending}

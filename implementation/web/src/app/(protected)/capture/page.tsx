@@ -1,21 +1,6 @@
-import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
-import { MoneyCaptureForm } from "@/components/features/money-capture-form";
-import { Page, PageHeader } from "@/components/ui/page";
-
-export const metadata: Metadata = {
-  title: "AI Capture — Rekordly",
-  description: "Type what happened in everyday words to generate verified financial drafts.",
-};
-
+/** Record creation now opens in place from the app shell. */
 export default function CapturePage() {
-  return (
-    <Page>
-      <PageHeader
-        title="Record what happened"
-        description="Start with a confirmed manual record. AI-assisted capture will use this same review path."
-      />
-      <MoneyCaptureForm />
-    </Page>
-  );
+  redirect("/transactions");
 }

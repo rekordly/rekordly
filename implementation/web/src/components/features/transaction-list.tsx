@@ -7,15 +7,14 @@ import { AppButton } from "@/components/ui/app-button";
 import { AppRowActions } from "@/components/ui/app-row-actions";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataView } from "@/components/ui/data-view";
-import { FormDrawer } from "@/components/ui/form-drawer";
 import { EmptyState, Page, PageHeader } from "@/components/ui/page";
 import { RecordCard } from "@/components/ui/record-card";
 import { formatDate } from "@/lib/format";
 import { moneyApi } from "@/lib/money";
+import { useUIStore } from "@/stores/ui-store";
 import type { MoneyTransaction } from "@/types/finance";
 
 import { money, StatusBadge, useFinanceAction, useRecords, WorkspaceGate, type WorkspaceInfo } from "./finance/shared";
-import { MoneyCaptureForm, type CaptureDirection } from "./money-capture-form";
 
 const DIRECTION_STYLE = {
   money_in: { icon: ArrowDownLeft, box: "bg-primary-soft text-primary", sign: "+" },
@@ -23,30 +22,26 @@ const DIRECTION_STYLE = {
   transfer: { icon: ArrowsLeftRight, box: "bg-secondary-soft text-secondary-soft-foreground", sign: "" },
 } as const;
 
-function TransactionsContent({
-  workspaceId,
-  initialDirection,
-  startOpen,
-}: WorkspaceInfo & { initialDirection?: CaptureDirection; startOpen: boolean }) {
-  const [isOpen, setIsOpen] = useState(startOpen);
+function TransactionsContent({ workspaceId }: WorkspaceInfo) {
   const [voiding, setVoiding] = useState<MoneyTransaction | null>(null);
+  const openMoneyRecord = useUIStore((state) => state.openMoneyRecord);
   const transactions = useRecords<MoneyTransaction>("transactions", workspaceId);
 
   const voidTransaction = useFinanceAction(
     workspaceId,
     (transaction: MoneyTransaction, idempotencyKey: string) =>
       moneyApi.voidTransaction({ workspaceId, idempotencyKey, id: transaction.id, reason: "Corrected from transaction history" }),
-    { success: "Transaction voided", onDone: () => setVoiding(null) },
+    { success: "Record voided", onDone: () => setVoiding(null) },
   );
 
   const amount = (row: MoneyTransaction) => `${DIRECTION_STYLE[row.direction].sign}${money(row.amount_minor, row)}`;
   const actions = (row: MoneyTransaction) => (
     <AppRowActions
-      ariaLabel="Transaction actions"
+      ariaLabel="Record actions"
       items={[
         {
           key: "void",
-          label: "Void transaction",
+          label: "Void record",
           icon: <Trash size={16} aria-hidden="true" />,
           danger: true,
           disabled: row.status !== "posted",
@@ -59,26 +54,25 @@ function TransactionsContent({
   return (
     <Page>
       <PageHeader
-        title="Transactions"
-        description="Confirmed income, expenses, transfers, and drafts for the active workspace."
-        actions={<AppButton startContent={<Plus weight="bold" />} label="Record transaction" onPress={() => setIsOpen(true)} />}
+        title="Records"
+        description="Money that came in, went out, or moved between your accounts."
+        actions={<AppButton startContent={<Plus weight="bold" />} label="Add record" onPress={() => openMoneyRecord("money_out")} />}
       />
 
       <DataView<MoneyTransaction>
-        title="Recent activity"
+        title="Records"
         rows={transactions.rows}
         rowKey={(row) => row.id}
         isLoading={transactions.isPending}
         isError={transactions.isError}
-        hasMore={transactions.hasNextPage}
-        isLoadingMore={transactions.isFetchingNextPage}
-        onLoadMore={() => void transactions.fetchNextPage()}
+        server={transactions.controls}
+        searchPlaceholder="Search description or name"
         empty={
           <EmptyState
             icon={Receipt}
             title="No transactions yet"
             description="Record your first income, expense, or transfer to start the history."
-            action={<AppButton startContent={<Plus weight="bold" />} label="Record transaction" onPress={() => setIsOpen(true)} />}
+            action={<AppButton startContent={<Plus weight="bold" />} label="Add record" onPress={() => openMoneyRecord("money_out")} />}
           />
         }
         columns={[
@@ -92,7 +86,7 @@ function TransactionsContent({
                   <span className={`grid size-8 shrink-0 place-items-center rounded-xl ${DIRECTION_STYLE[row.direction].box}`}>
                     <Icon size={16} aria-hidden="true" />
                   </span>
-                  <span className="font-medium text-foreground">{row.purpose || "Transaction"}</span>
+                  <span className="font-medium text-foreground">{row.purpose || "Record"}</span>
                 </span>
               );
             },
@@ -110,7 +104,7 @@ function TransactionsContent({
               icon={<Icon size={18} aria-hidden="true" />}
               iconClassName={DIRECTION_STYLE[row.direction].box}
               reference={row.reference || `#${row.id}`}
-              title={row.purpose || "Transaction"}
+              title={row.purpose || "Record"}
               amount={amount(row)}
               status={<StatusBadge status={row.status} />}
               meta={[
@@ -123,16 +117,12 @@ function TransactionsContent({
         }}
       />
 
-      <FormDrawer isOpen={isOpen} onOpenChange={setIsOpen} title="Record money" description="Save a confirmed income, expense, or transfer.">
-        <MoneyCaptureForm bare initialDirection={initialDirection} onCreated={() => setIsOpen(false)} />
-      </FormDrawer>
-
       <ConfirmDialog
         isOpen={voiding !== null}
         onOpenChange={(open) => !open && setVoiding(null)}
-        title="Void this transaction?"
+        title="Void this record?"
         description="It stays in your history marked as voided, and a reversing entry is posted. This cannot be undone."
-        confirmLabel="Void transaction"
+        confirmLabel="Void record"
         isLoading={voidTransaction.isPending}
         onConfirm={() => voiding && voidTransaction.mutate(voiding)}
       />
@@ -140,17 +130,11 @@ function TransactionsContent({
   );
 }
 
-export function TransactionList({
-  initialDirection,
-  startOpen = false,
-}: {
-  initialDirection?: CaptureDirection;
-  startOpen?: boolean;
-}) {
+export function TransactionList() {
   return (
     <WorkspaceGate>
       {(workspace) => (
-        <TransactionsContent key={workspace.workspaceId} {...workspace} initialDirection={initialDirection} startOpen={startOpen} />
+        <TransactionsContent key={workspace.workspaceId} {...workspace} />
       )}
     </WorkspaceGate>
   );

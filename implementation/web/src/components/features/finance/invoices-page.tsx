@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CheckCircle, FileText, Plus, Prohibit, Trash, Wallet } from "@phosphor-icons/react";
+import { CheckCircle, FileText, HandCoins, Plus, Prohibit, Trash, Wallet } from "@phosphor-icons/react";
 import { useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 
@@ -19,6 +19,7 @@ import { invoiceSchema, walletPaymentSchema, type InvoiceValues, type WalletPaym
 import type { Invoice } from "@/types/finance";
 
 import { MoneyField, NotesField, SelectField, TextInputField } from "./fields";
+import { PaymentDrawer, type PaymentPreset } from "./payment-drawer";
 import { money, StatusBadge, today, useContacts, useFinanceAction, useRecords, WorkspaceGate, type WorkspaceInfo } from "./shared";
 
 type PendingAction = { kind: "finalize" | "void" | "wallet"; invoice: Invoice };
@@ -28,6 +29,7 @@ const BLANK_ITEM = { description: "", quantity: "1", unit_price: "" };
 function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & { startOpen: boolean }) {
   const [isOpen, setIsOpen] = useState(startOpen);
   const [pending, setPending] = useState<PendingAction | null>(null);
+  const [payment, setPayment] = useState<PaymentPreset | undefined>();
   const invoices = useRecords<Invoice>("invoices", workspaceId);
   const customers = useContacts(workspaceId, "customers");
 
@@ -89,12 +91,20 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
       financeApi.payInvoiceFromWallet(workspaceId, invoice.id, amount, invoice.currency, key),
     { success: "Paid from customer wallet", onDone: closePending },
   );
+  const openDirectPayment = (invoice: Invoice) => setPayment({
+    direction: "incoming",
+    linkedType: "invoice",
+    linkedId: invoice.id,
+    partyName: invoice.customer_name,
+    summary: `${invoice.invoice_number}: ${money(invoice.paid_amount_minor, invoice)} paid of ${money(invoice.total_amount_minor, invoice)}. This clears the invoice receivable; it does not create sales revenue again.`,
+  });
 
   const actions = (row: Invoice) => (
     <AppRowActions
       ariaLabel="Invoice actions"
       items={[
         { key: "finalize", label: "Finalize", icon: <CheckCircle size={16} aria-hidden="true" />, disabled: row.status !== "draft", onClick: () => setPending({ kind: "finalize", invoice: row }) },
+        { key: "payment", label: "Record payment", icon: <HandCoins size={16} aria-hidden="true" />, disabled: row.status !== "finalized" && row.status !== "partially_paid", onClick: () => openDirectPayment(row) },
         { key: "wallet", label: "Pay from wallet", icon: <Wallet size={16} aria-hidden="true" />, disabled: row.status !== "finalized" && row.status !== "partially_paid", onClick: () => setPending({ kind: "wallet", invoice: row }) },
         { key: "void", label: "Void invoice", icon: <Prohibit size={16} aria-hidden="true" />, danger: true, disabled: row.status !== "draft" && row.status !== "finalized", onClick: () => setPending({ kind: "void", invoice: row }) },
       ]}
@@ -109,14 +119,13 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
         actions={<AppButton startContent={<Plus weight="bold" />} label="New invoice" onPress={() => setIsOpen(true)} />}
       />
       <DataView<Invoice>
-        title="Recent invoices"
+        title="Invoices"
         rows={invoices.rows}
         rowKey={(row) => row.id}
         isLoading={invoices.isPending}
         isError={invoices.isError}
-        hasMore={invoices.hasNextPage}
-        isLoadingMore={invoices.isFetchingNextPage}
-        onLoadMore={() => void invoices.fetchNextPage()}
+        server={invoices.controls}
+        searchPlaceholder="Search number or customer"
         empty={
           <EmptyState
             icon={FileText}
@@ -228,6 +237,7 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
       >
         <MoneyField control={walletForm.control} name="amount" label="Amount" currency={pending?.invoice.currency ?? currency} isRequired description="Check the wallet balance on the Wallets page first." />
       </FormDrawer>
+      <PaymentDrawer workspaceId={workspaceId} currency={currency} isOpen={payment !== undefined} onClose={() => setPayment(undefined)} preset={payment} />
     </Page>
   );
 }

@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 
 import { NetworkBanner } from "./network-banner";
+import { QuickRecordDrawer } from "./quick-record-drawer";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
 
@@ -18,6 +19,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <main className="flex-1 px-4 pt-2 pb-10 sm:px-6 lg:px-8">{children}</main>
         </div>
       </div>
+      <QuickRecordDrawer />
     </div>
   );
 }

@@ -663,6 +663,7 @@ func (s *Service) GetInvoice(ctx context.Context, workspaceID, invoiceID int64) 
 }
 
 type ListInvoicesFilter struct {
+	Search     string `form:"search"`
 	FromDate   string `form:"from"`
 	ToDate     string `form:"to"`
 	Status     string `form:"status"`
@@ -705,6 +706,7 @@ func (s *Service) ListInvoices(ctx context.Context, workspaceID int64, f ListInv
 	}
 
 	return s.queries.ListInvoices(ctx, db.ListInvoicesParams{
+		Search:      searchParam(f.Search),
 		WorkspaceID: workspaceID,
 		Limit:       limit,
 		FromDate:    fromDateParam,

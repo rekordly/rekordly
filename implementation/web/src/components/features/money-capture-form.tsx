@@ -22,8 +22,8 @@ import { createIdempotencyKey } from "@/lib/utils";
 import { useActiveWorkspace } from "@/stores/workspace-store";
 
 const DIRECTION_OPTIONS = [
-  { key: "money_in", label: "Money in" },
-  { key: "money_out", label: "Money out" },
+  { key: "money_in", label: "Income" },
+  { key: "money_out", label: "Expense" },
   { key: "transfer", label: "Transfer" },
 ] as const;
 
@@ -35,10 +35,12 @@ export type CaptureDirection = MoneyCaptureValues["direction"];
 
 export function MoneyCaptureForm({
   onCreated,
+  onCancel,
   bare = false,
   initialDirection = "money_out",
 }: {
   onCreated?: () => void;
+  onCancel?: () => void;
   /** Render without its own card, for use inside a drawer. */
   bare?: boolean;
   initialDirection?: CaptureDirection;
@@ -57,17 +59,19 @@ export function MoneyCaptureForm({
 
   // Keyed by workspace: switching spaces resets the form, so accounts picked in
   // one workspace can never be submitted against another.
-  return <CaptureForm key={workspaceId} workspaceId={workspaceId} onCreated={onCreated} bare={bare} initialDirection={initialDirection} />;
+  return <CaptureForm key={workspaceId} workspaceId={workspaceId} onCreated={onCreated} onCancel={onCancel} bare={bare} initialDirection={initialDirection} />;
 }
 
 function CaptureForm({
   workspaceId,
   onCreated,
+  onCancel,
   bare,
   initialDirection,
 }: {
   workspaceId: number;
   onCreated?: () => void;
+  onCancel?: () => void;
   bare: boolean;
   initialDirection: CaptureDirection;
 }) {
@@ -173,7 +177,7 @@ function CaptureForm({
           render={({ field }) => (
             <div>
               <p className="mb-2 text-[13px] font-medium text-foreground">What happened?</p>
-              <Segmented aria-label="Transaction type" options={DIRECTION_OPTIONS} value={field.value} onChange={field.onChange} />
+              <Segmented aria-label="Record type" options={DIRECTION_OPTIONS} value={field.value} onChange={field.onChange} />
             </div>
           )}
         />
@@ -251,7 +255,7 @@ function CaptureForm({
               render={({ field }) => (
                 <AppSelect
                   label="Category"
-                  placeholder="Choose category"
+                  placeholder={categories.isPending ? "Loading categories…" : categories.isError ? "Categories could not load" : "Choose category"}
                   options={(categories.data ?? []).map((category) => ({ key: String(category.id), label: category.name }))}
                   selectedKey={field.value || undefined}
                   onSelectionChange={field.onChange}
@@ -287,7 +291,7 @@ function CaptureForm({
         />
 
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-          <AppButton variant="ghost" label="Cancel" onPress={() => router.back()} />
+          <AppButton variant="ghost" label="Cancel" onPress={onCancel ?? (() => router.back())} />
           <AppButton
             type="submit"
             size="lg"

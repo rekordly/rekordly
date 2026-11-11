@@ -26,3 +26,19 @@ func TestResolveSummaryWindow(t *testing.T) {
 		t.Fatal("expected an invalid date to fail")
 	}
 }
+
+func TestSearchParam(t *testing.T) {
+	if searchParam("   ").Valid {
+		t.Fatal("blank search must not filter")
+	}
+	if got := searchParam(" 50%_off ").String; got != `50\%\_off` {
+		t.Fatalf("wildcards must be escaped, got %q", got)
+	}
+	long := make([]rune, 500)
+	for i := range long {
+		long[i] = 'a'
+	}
+	if got := len(searchParam(string(long)).String); got != maxSearchLength {
+		t.Fatalf("search must be bounded, got %d", got)
+	}
+}

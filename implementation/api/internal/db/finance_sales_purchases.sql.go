@@ -125,6 +125,43 @@ func (q *Queries) CreatePayment(ctx context.Context, arg CreatePaymentParams) (P
 	return i, err
 }
 
+const createPaymentAllocation = `-- name: CreatePaymentAllocation :one
+INSERT INTO payment_allocations (
+    payment_id, workspace_id, document_type, document_id, amount_minor
+) VALUES (
+    $1, $2, $3, $4, $5
+) RETURNING id, payment_id, workspace_id, document_type, document_id, amount_minor, created_at
+`
+
+type CreatePaymentAllocationParams struct {
+	PaymentID    int64  `json:"payment_id"`
+	WorkspaceID  int64  `json:"workspace_id"`
+	DocumentType string `json:"document_type"`
+	DocumentID   int64  `json:"document_id"`
+	AmountMinor  int64  `json:"amount_minor"`
+}
+
+func (q *Queries) CreatePaymentAllocation(ctx context.Context, arg CreatePaymentAllocationParams) (PaymentAllocation, error) {
+	row := q.db.QueryRow(ctx, createPaymentAllocation,
+		arg.PaymentID,
+		arg.WorkspaceID,
+		arg.DocumentType,
+		arg.DocumentID,
+		arg.AmountMinor,
+	)
+	var i PaymentAllocation
+	err := row.Scan(
+		&i.ID,
+		&i.PaymentID,
+		&i.WorkspaceID,
+		&i.DocumentType,
+		&i.DocumentID,
+		&i.AmountMinor,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const createPaymentLeg = `-- name: CreatePaymentLeg :one
 INSERT INTO payment_legs (
     payment_id, workspace_id, money_account_id, amount_minor
@@ -585,6 +622,45 @@ func (q *Queries) ListCounterparties(ctx context.Context, arg ListCounterparties
 	return items, nil
 }
 
+const listPaymentAllocationsByPaymentID = `-- name: ListPaymentAllocationsByPaymentID :many
+SELECT id, payment_id, workspace_id, document_type, document_id, amount_minor, created_at FROM payment_allocations
+WHERE payment_id = $1 AND workspace_id = $2
+ORDER BY id ASC
+`
+
+type ListPaymentAllocationsByPaymentIDParams struct {
+	PaymentID   int64 `json:"payment_id"`
+	WorkspaceID int64 `json:"workspace_id"`
+}
+
+func (q *Queries) ListPaymentAllocationsByPaymentID(ctx context.Context, arg ListPaymentAllocationsByPaymentIDParams) ([]PaymentAllocation, error) {
+	rows, err := q.db.Query(ctx, listPaymentAllocationsByPaymentID, arg.PaymentID, arg.WorkspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PaymentAllocation{}
+	for rows.Next() {
+		var i PaymentAllocation
+		if err := rows.Scan(
+			&i.ID,
+			&i.PaymentID,
+			&i.WorkspaceID,
+			&i.DocumentType,
+			&i.DocumentID,
+			&i.AmountMinor,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPaymentLegsByPaymentID = `-- name: ListPaymentLegsByPaymentID :many
 SELECT id, payment_id, workspace_id, money_account_id, amount_minor, created_at FROM payment_legs
 WHERE payment_id = $1 AND workspace_id = $2
@@ -633,6 +709,7 @@ WHERE workspace_id = $1
   AND ($7::text IS NULL OR linked_record_type = $7)
   AND ($8::bigint IS NULL OR linked_record_id = $8)
   AND ($9::bigint IS NULL OR id < $9)
+  AND ($10::text IS NULL OR counterparty_name ILIKE '%' || $10::text || '%' OR reference ILIKE '%' || $10::text || '%')
 ORDER BY payment_date DESC, id DESC
 LIMIT $2
 `
@@ -647,6 +724,7 @@ type ListPaymentsParams struct {
 	LinkedRecordType pgtype.Text `json:"linked_record_type"`
 	LinkedRecordID   pgtype.Int8 `json:"linked_record_id"`
 	BeforeID         pgtype.Int8 `json:"before_id"`
+	Search           pgtype.Text `json:"search"`
 }
 
 func (q *Queries) ListPayments(ctx context.Context, arg ListPaymentsParams) ([]Payment, error) {
@@ -660,6 +738,7 @@ func (q *Queries) ListPayments(ctx context.Context, arg ListPaymentsParams) ([]P
 		arg.LinkedRecordType,
 		arg.LinkedRecordID,
 		arg.BeforeID,
+		arg.Search,
 	)
 	if err != nil {
 		return nil, err
@@ -706,6 +785,7 @@ WHERE workspace_id = $1
   AND ($5::text IS NULL OR status = $5)
   AND ($6::bigint IS NULL OR supplier_id = $6)
   AND ($7::bigint IS NULL OR id < $7)
+  AND ($8::text IS NULL OR supplier_name ILIKE '%' || $8::text || '%' OR reference ILIKE '%' || $8::text || '%')
 ORDER BY purchase_date DESC, id DESC
 LIMIT $2
 `
@@ -718,6 +798,7 @@ type ListPurchasesParams struct {
 	Status      pgtype.Text `json:"status"`
 	SupplierID  pgtype.Int8 `json:"supplier_id"`
 	BeforeID    pgtype.Int8 `json:"before_id"`
+	Search      pgtype.Text `json:"search"`
 }
 
 func (q *Queries) ListPurchases(ctx context.Context, arg ListPurchasesParams) ([]Purchase, error) {
@@ -729,6 +810,7 @@ func (q *Queries) ListPurchases(ctx context.Context, arg ListPurchasesParams) ([
 		arg.Status,
 		arg.SupplierID,
 		arg.BeforeID,
+		arg.Search,
 	)
 	if err != nil {
 		return nil, err
@@ -776,6 +858,7 @@ WHERE workspace_id = $1
   AND ($5::text IS NULL OR status = $5)
   AND ($6::bigint IS NULL OR customer_id = $6)
   AND ($7::bigint IS NULL OR id < $7)
+  AND ($8::text IS NULL OR customer_name ILIKE '%' || $8::text || '%' OR reference ILIKE '%' || $8::text || '%')
 ORDER BY sale_date DESC, id DESC
 LIMIT $2
 `
@@ -788,6 +871,7 @@ type ListSalesParams struct {
 	Status      pgtype.Text `json:"status"`
 	CustomerID  pgtype.Int8 `json:"customer_id"`
 	BeforeID    pgtype.Int8 `json:"before_id"`
+	Search      pgtype.Text `json:"search"`
 }
 
 func (q *Queries) ListSales(ctx context.Context, arg ListSalesParams) ([]Sale, error) {
@@ -799,6 +883,7 @@ func (q *Queries) ListSales(ctx context.Context, arg ListSalesParams) ([]Sale, e
 		arg.Status,
 		arg.CustomerID,
 		arg.BeforeID,
+		arg.Search,
 	)
 	if err != nil {
 		return nil, err

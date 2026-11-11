@@ -124,3 +124,109 @@
 - 9 November 2026 follow-up: CSRF. rekordly_csrf stays host-only on the API because the storefront/domain blueprint places storefronts on businessname.rekordly.com; the API now returns the token from sign-in, refresh and GET /me (CORS-limited) and the web app keeps it in memory. Finance writes authenticated by cookie now require a valid X-CSRF-Token (403 CSRF_INVALID), verified against the session digest. Verified with Go tests, 43 web tests and live forged/valid requests against the local API.
 
 - 9 November 2026 follow-up: finance UI on the implemented backend. Ported legacy StatCard and record cards to HeroUI v3, added DataView (table default, cards toggle, phones always cards), FormDrawer, ConfirmDialog (AlertDialog) and recharts charts. Screens wired for dashboard, reports, accounts, categories, contacts, sales, purchases, payments, invoices, wallets, budgets and tax. Added GET /api/v1/reports/summary (SQL aggregates, money as strings) and decimal-string inputs for budgets, invoice tax, wallet payments and opening balances. Google sign-in now completes through /auth/google/callback; no client library, because the server already runs authorization-code with PKCE.
+
+## 10 November 2026 — Blueprint 03 offline draft vertical slice
+
+- Added a per-user, per-workspace IndexedDB queue using the approved `idb` package. It stores only bounded local draft intent and no sessions, CSRF tokens, OTPs or private delivery URLs.
+- A Capture form used while offline now saves an explicitly local `offline` draft with stable client-command and idempotency identifiers. It never finalizes a financial record while disconnected.
+- Built the Sync screen around the actual local queue: queued, syncing, needs-review, permanent-failure and server-saved states; reconnection/manual sync uploads only a server draft. It intentionally requires a fresh server accounting preview and an explicit online confirmation before posting.
+- Closed the server replay gap: a repeated `(workspace_id, client_command_id)` returns the exact original draft only when the normalized intent matches. A changed payload returns `IDEMPOTENCY_CONFLICT`; the unique index covers concurrent tabs.
+- Added finance integration coverage for offline command replay, changed-intent rejection and single-row persistence.
+- Verification passed: `bun run type-check`, `bun run lint`, `bun test` (44 tests), `bun run build`, `sqlc vet`, `git diff --check`, and containerized `go test -count=1 ./internal/finance`.
+- Deferred: the Blueprint 03 Review inbox is still a placeholder; local staged attachment blobs, offline capability/plan manifest, and service-worker/PWA delivery remain gated rather than being misrepresented as supported.
+
+## 10 November 2026 — Blueprint 03 purpose, links and review inbox
+
+- Added a workspace-scoped `GET /money-record-drafts/:id` API route backed by the existing tenant-scoped query. The integration test proves another workspace cannot load the draft.
+- Replaced the placeholder Review page with a real inbox for AI-assisted `needs_review` drafts and offline-synced `saved` drafts. Users see the normalized amount and server-calculated accounting preview, then explicitly confirm once; there is no client posting path.
+- Added a safe edit handoff from Review to Capture. Capture loads the server draft by ID, preserves an offline origin when it is edited, refreshes the deterministic preview and uses the existing version guard.
+- Capture now asks the user to state the economic purpose instead of deriving it silently from direction. Purpose choices are limited by Personal/Business scope and incoming/outgoing direction; counterparty and category requirements change with the selected purpose.
+- Replaced free-form document IDs with workspace-scoped Sale, Purchase and Invoice selectors. The backend still validates the typed target under the active workspace before persisting the link.
+- Rebuilt only the API/migration containers; migration completion and API health were verified. No database volume or existing data was removed. The Next.js app remains local Bun only.
+- Verification passed: `bun run type-check`, `bun run lint`, `bun test` (44 passing), `bun run build`, `git diff --check`, containerized finance tests, API `health/live` (200), plus local Bun `/review` and `/capture` (200).
+
+## 10 November 2026 — Blueprint 03 offline staged evidence
+
+- Offline capture now accepts bounded receipt evidence before a server draft exists. PDF, JPEG, PNG and WebP files are client-checked against the same 10 MB policy the API enforces.
+- Each staged binary is an IndexedDB Blob in a separate evidence store, keyed to its local command. The visible queue stores only safe filename/type/size metadata; it never persists a signed upload URL, provider credential, auth cookie, CSRF token or object URL.
+- Sync first creates/replays the immutable server draft, then uploads and verifies each private receipt. A queue item becomes `synced` only when every staged receipt is registered; failure keeps the blob for a retry/review and retains the already-created server draft ID to avoid a second draft.
+- Each receipt is marked locally registered immediately after the server confirms it, so a later failure in a multi-receipt batch retries only the unfinished files.
+- Reopening a server draft now returns its existing link and evidence metadata with the workspace-scoped draft. Capture restores that supporting context after a Review edit handoff without exposing private delivery URLs.
+- Runtime check: the local API currently has no `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY` or `CLOUDINARY_API_SECRET`. The secure evidence flow is implemented and correctly returns unavailable until all three deployment-owned values are supplied; no credentials were printed or committed.
+- Added an integration test proving a draft detail returns its own workspace-scoped links/evidence and that the same draft is unavailable from another workspace.
+- The Review inbox now shows the private-evidence count/status and linked-document count next to the server-calculated preview before confirmation; it still shows no provider delivery URL.
+
+## 11 November 2026 — Blueprint 08 inventory costing and PO acknowledgement
+
+- Added migration `000025_inventory_balances_opening_stock.sql`: workspace-scoped inventory locations, explicit weighted-average costing settings, immutable opening-stock entries, location/source-aware movements and transactional inventory balances.
+- Goods receipts now resolve a business location, persist the location on the receipt/movement, and atomically increment the product/location quantity and value balance while keeping the existing GRNI posting.
+- Added `POST /api/v1/inventory/opening-stock` and `GET /api/v1/inventory/balances`. Opening stock validates stock-tracked products, exact decimal quantity/cost, idempotency and tenant scope, then posts Inventory debit / Opening-equity credit in one transaction.
+- Added supplier acknowledgement as a versioned PO command (`issued -> acknowledged`) and allowed acknowledged POs to proceed to receiving. The acknowledgement is operational only and creates no financial effect.
+- Replaced the Inventory catalogue placeholder with a real stock-on-hand section and opening-stock drawer; balances show location, quantity, value and weighted-average policy.
+- Verification passed: migration applied without deleting the PostgreSQL volume, API health 200, containerized finance integration tests (including opening-stock idempotency/ledger balance), `bun run type-check`, `bun test` (44 passing), production `bun run build`, and `git diff --check`.
+
+## 11 November 2026 — Blueprint 08 supplier returns and direct AP bills
+
+- Added migration `000026_supplier_returns_credits_refunds.sql` for immutable supplier returns, supplier credits, supplier refunds, signed inventory return movements and safe balance decrements.
+- A supplier return locks the receipt line and inventory balance, checks eligible quantity and on-hand stock, reduces stock at the original receipt cost, and posts a balanced return journal atomically. Replays are idempotent.
+- Added supplier credit notes against approved bills. They reduce Accounts Payable without creating cash or recognizing a second expense.
+- Added supplier cash refunds against valid supplier-credit balances and a workspace-owned money account; the credit balance and refund journal commit atomically.
+- Added return options/list endpoints and a Procurement Returns tab with a return drawer.
+- Added migration `000027_direct_supplier_bills.sql`. Supplier bills can now be receipt-backed or direct expense/service bills with currency, due date, description and account class. Direct approval posts Expense/Asset debit and AP credit; overdue status is derived from due date.
+- Verification passed: migrations 000026/000027 applied without deleting PostgreSQL data, API health 200, focused return/direct-bill tests, full containerized finance tests, frontend type-check, 44 Bun tests, production build, and `git diff --check`.
+
+## 11 November 2026 — Blueprint 08 procurement report surface
+
+- Added `GET /api/v1/reports/procurement`, with tenant-scoped server aggregates for open PO commitments, unbilled receipts/GRNI, AP outstanding and overdue balances, and unapplied supplier advances.
+- Added a Procurement Reports tab that renders those values from the live API rather than fabricated client totals.
+- Rebuilt the API without touching the PostgreSQL volume; migrations through `000027` are applied and the full finance suite remains green.
+- Added workspace-authorized evidence access: the API returns a five-minute Cloudinary authenticated-download URL only for a verified asset owned by the active workspace. The URL is never stored; Capture and Review request it only when the user presses Open. Local Cloudinary configuration was verified by presence only and the rebuilt API now exposes the route.
+- The Capture and Sync UI now disclose staged receipt state and let the user remove a receipt before the local draft is saved. No offline action can confirm or post a financial record.
+- Verification passed: frontend type-check, ESLint, 44 Bun tests, production build, `git diff --check`, and local Bun `/capture` HTTP 200.
+- Added direct invoice settlement from the invoice screen. A finalised or partly-paid invoice can receive an incoming payment through the existing split-payment drawer; the server locks the invoice, prevents a customer mismatch, duplicate-idempotency settlement and overpayment, then atomically updates its paid amount. Its ledger is debit cash/bank asset and credit Accounts Receivable asset, so payment never recognises revenue a second time. The dedicated integration test covers partial payment, replay and overpayment rejection.
+- Added the payment-allocation backbone. `payment_allocations` separates the cash movement from the documents it settles and backfills pre-existing linked payments. A new incoming receipt can atomically allocate across multiple invoices for one customer: deterministic invoice locks, exact allocation-total validation, overpayment protection and transaction rollback prevent partial or cross-customer settlement. The service returns allocations with payment detail; the multi-invoice integration test passes against the configured database.
+- Added the Payments-page allocation drawer: choose a customer and receiving account, enter the receipt, auto-allocate oldest due invoices or set each amount manually, then confirm only when the full receipt is allocated. The client uses decimal strings and bigint only for display/suggestions; the API revalidates current invoice balances, customer, currency and totals inside its transaction.
+- Fixed a Zod v4 startup failure in the capture flow: `moneyRecordDraftSchema` now uses `safeExtend()` because its base money schema already has a transfer cross-field refinement. Direct module loading, type-check, lint, 44 frontend tests and local protected-route checks pass.
+- Corrected the misleading Capture product language and navigation. Capture is now labelled Guided record: a manual draft-and-preview workflow for evidence, links, mixed expenses and explicit confirmation; it does not claim to parse natural-language purchases until a real AI parser exists. Guided record, Review drafts and Offline drafts are in Personal and Business navigation. Add actions now use static prop-driven routes (`/transactions/new/income`, `/expense`, `/transfer`), while draft editing uses `/capture/drafts/:draftId`; UI state is no longer carried in those query strings.
+
+## 10 November 2026 — Preview resilience and in-place record creation
+
+- Fixed the Capture preview crash caused by an older API response serializing an empty `warnings` slice as `null`. The Go contract now emits `[]` for empty preview collections, the client normalizes legacy responses at the API boundary, and both preview surfaces retain a defensive array guard.
+- Rebuilt the API/migration images without removing the PostgreSQL volume. The replacement API container is healthy at `/health/live`.
+- Consolidated the normal money-entry experience into one app-shell drawer. The Add menu and command menu open income, expense or transfer in place, preserve the current page/filter state, and do not use a `/new`, `/capture`, or query-string route to carry UI state.
+- Activity is now the user-facing name for the cash-movement list. A payment remains a contextual settlement of an existing sale, purchase or invoice; it is not a second generic way to add cash. Sales, invoices and contacts continue to use drawers opened from their own list pages.
+- Removed Guided record, Review drafts and Offline drafts from the primary navigation. Their underlying review/offline workflows remain available for existing drafts, but they no longer compete with the normal add-record journey.
+- Verification passed: TypeScript, ESLint, 44 Bun tests, `git diff --check`, production build completion, and API health (200).
+
+## 10 November 2026 — Unified records and category initialization
+
+- Replaced the ambiguous Activity label with Records. Income, Expense and Transfer are now the same terms in Personal and Business spaces; workspace kind changes the books they affect, not the meaning of the action.
+- Confirmed the empty category selector was a real backend wiring gap: default categories existed but were never initialized for a workspace. The category endpoint now performs an idempotent first-use initialization and only returns categories valid for the active Personal or Business workspace.
+- Business defaults include Sales Revenue, Service Revenue and Other Income; Personal defaults include Salary / Wage and Other Income. Shared and space-appropriate expense defaults are supplied for each workspace; no personal-only category appears in a business selector, or vice versa.
+
+## 10 November 2026 — Blueprint 07 catalogue foundation
+
+- Replaced the Inventory placeholder with a real, Business-only Products & services page. It lists saved catalogue items, supports local search and opens an in-place drawer to add an item without losing the current page state.
+- Added an immutable-migration catalogue model: workspace-scoped products and default variants; unique SKU/barcode rules per workspace; indexed cursor-capable list queries; prices stored as `BIGINT` minor units with an ISO currency/exponent snapshot.
+- The API accepts ordinary decimal strings, parses them with the existing exact minor-unit parser, requires an idempotency key for creation and returns the original item on a retry. The integration test proves exact NGN conversion, idempotent retry and tenant isolation.
+- Catalogue creation deliberately has no quantity, valuation, stock movement, ledger or sale/purchase side effect. A stock-tracked product is an item prepared for the later opening-stock/movement workflow, not a claim that stock is already active.
+- Verification passed: generated SQLC code, Docker migration/API rebuild without removing PostgreSQL data, API health (200), containerized `TestCatalogue` integration tests, `bun run build`, `bun test` (44 passing), and `git diff --check`.
+
+## 10 November 2026 — Blueprint 08 purchase-request foundation
+
+- Added a Business-only Procurement page for creating multi-line purchase-request drafts, selecting an existing supplier/catalogue item where useful, submitting the frozen version and approving it as an owner.
+- Added workspace-scoped request, line and command-idempotency tables. Quantities use PostgreSQL `NUMERIC(18,4)` and the already-declared `shopspring/decimal` SQLC mapping; money remains exact `BIGINT` minor units.
+- A request’s server-calculated estimate is rounded deterministically to the currency minor unit. Creation, submit and approval use idempotency keys and optimistic document versions; the integration test covers retry, changed-payload rejection, state transitions and cross-workspace rejection.
+- Request creation/submission/approval intentionally has no stock, GL, payable, expense, cash, supplier message or PO effect. It is operational approval groundwork only.
+
+- Purchase-order follow-up: Procurement now lets a user create a PO draft from an approved request and view it on its own Purchase orders tab. The API snapshots approved request lines and supports draft/submitted/approved/issued state transitions with an atomic number at issue; receiving, supplier sending and all posting effects remain unavailable.
+- Purchase-order lifecycle completion: submit, approve and issue now require a workspace-scoped idempotency key and expected document version. Replays return the current PO without advancing it twice; a key reused for another PO/command/version is rejected. Issuing assigns one atomic, non-reused `PO-######` number and still creates no stock, payable, expense, cash or ledger posting. The Procurement UI exposes only the valid next action for an owner and refreshes the real list after each command.
+- Goods-receipt foundation: issued POs now expose their open line quantities in an in-place receipt drawer. Posting accepted quantities locks the PO, rejects over-receipt, inserts immutable receipt lines and stock movements for stock-tracked items, updates the PO receipt status, and creates a balanced Inventory/GRNI (or expense/GRNI) entry in the same transaction. It remains deliberately separate from supplier billing and payment.
+- Supplier-bill/AP foundation: Procurement now lists posted receipts and lets a user create a supplier-bill draft from one. Approval is versioned/idempotent and posts a balanced GRNI debit / Accounts Payable credit. Bills and receipt records are visible in their own Procurement tabs; this slice does not imply payment or stock creation from a bill.
+
+## Blueprint 08 request decisions, supplier settlements and advances — 11 November 2026
+
+- Purchase requests now carry a server-validated priority and have an append-only, workspace-scoped decision timeline. Owners can request changes or reject with a required reason; a changed request can be resubmitted as a new version. This remains non-posting. The Procurement UI exposes priority and reasoned decision drawers instead of irreversible one-click actions.
+- Approved supplier bills can now be settled by a partial or multi-bill outgoing payment. The transaction locks and validates every bill, prevents over-settlement, and posts debit AP / credit cash rather than recognizing expense again.
+- Added supplier advances as a distinct asset subledger. Creation posts debit Supplier Advances / credit cash once; applying an advance to an approved bill locks both documents, reduces AP and the advance balance atomically, and posts debit AP / credit Supplier Advances with no second cash movement. Both creation and application are idempotent and version guarded.
+- Verification: migrations `000022` and `000023` applied without deleting the PostgreSQL volume; API health is 200; all containerized finance integration tests pass; frontend type-check and 44 Bun tests pass; `git diff --check` passes. A fresh production web build was not run because the user’s existing Next development server holds Next’s build lock.

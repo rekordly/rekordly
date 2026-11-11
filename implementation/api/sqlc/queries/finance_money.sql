@@ -74,6 +74,7 @@ WHERE workspace_id = $1
   AND (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status'))
   AND (sqlc.narg('direction')::text IS NULL OR direction = sqlc.narg('direction'))
   AND (sqlc.narg('before_id')::bigint IS NULL OR id < sqlc.narg('before_id'))
+  AND (sqlc.narg('search')::text IS NULL OR purpose ILIKE '%' || sqlc.narg('search')::text || '%' OR counterparty_name ILIKE '%' || sqlc.narg('search')::text || '%' OR reference ILIKE '%' || sqlc.narg('search')::text || '%')
 ORDER BY effective_date DESC, id DESC
 LIMIT $2;
 

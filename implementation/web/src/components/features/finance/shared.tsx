@@ -1,15 +1,17 @@
 "use client";
 
 import { toast } from "@heroui/react";
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useRef, type ReactNode } from "react";
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { Alert } from "@/components/ui/alert";
 import { AppButton } from "@/components/ui/app-button";
+import type { ServerListControls } from "@/components/ui/data-view";
 import { StatusPill, type StatusTone } from "@/components/ui/page";
 import { capitalise } from "@/lib/format";
-import { financeApi, formatMinorAmount, listRecords, moneyApi, moneyKeys, RECORD_PAGE_SIZE, type RecordResource } from "@/lib/money";
+import { financeApi, formatMinorAmount, listRecords, moneyApi, moneyKeys, type RecordResource } from "@/lib/money";
 import { createIdempotencyKey } from "@/lib/utils";
+import { useUIStore } from "@/stores/ui-store";
 import { useActiveWorkspace } from "@/stores/workspace-store";
 import type { MinorAmount } from "@/types/finance";
 
@@ -53,21 +55,55 @@ export function WorkspaceGate({
   return <>{children({ workspaceId: active.id, currency: active.base_currency, isBusiness: mode === "business" })}</>;
 }
 
-/** Cursor-paged list for one workspace. */
-export function useRecords<T extends { id: number }>(
-  resource: RecordResource,
-  workspaceId: number,
-  params: Record<string, string | undefined> = {},
-) {
+/** One workspace's list, searched and paged on the server by cursor. */
+export function useRecords<T extends { id: number }>(resource: RecordResource, workspaceId: number) {
+  const pageSize = useUIStore((state) => state.pageSize);
+  const [search, setSearch] = useState("");
+  const [submittedSearch, setSubmittedSearch] = useState("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSubmittedSearch(search.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
   const query = useInfiniteQuery({
-    queryKey: [...moneyKeys.workspace(workspaceId), resource, params],
-    queryFn: ({ pageParam }) => listRecords<T>(workspaceId, resource, { ...params, before_id: pageParam }),
+    queryKey: [...moneyKeys.workspace(workspaceId), resource, submittedSearch, pageSize],
+    queryFn: ({ pageParam }) =>
+      listRecords<T>(workspaceId, resource, { limit: pageSize, search: submittedSearch || undefined, before_id: pageParam }),
     initialPageParam: undefined as number | undefined,
-    getNextPageParam: (lastPage) =>
-      lastPage.length === RECORD_PAGE_SIZE ? lastPage[lastPage.length - 1]?.id : undefined,
+    getNextPageParam: (lastPage) => (lastPage.length === pageSize ? lastPage[lastPage.length - 1]?.id : undefined),
+    placeholderData: keepPreviousData,
   });
-  const rows = useMemo(() => query.data?.pages.flat() ?? [], [query.data]);
-  return { ...query, rows };
+
+  // A new search or page size starts again at page one.
+  const listIdentity = `${submittedSearch}|${pageSize}`;
+  const [position, setPosition] = useState({ listIdentity, index: 0 });
+  const pageIndex = position.listIdentity === listIdentity ? position.index : 0;
+  const pages = query.data?.pages ?? [];
+  const goTo = (index: number) => setPosition({ listIdentity, index });
+
+  const onNext = async () => {
+    if (pageIndex + 1 < pages.length) {
+      goTo(pageIndex + 1);
+      return;
+    }
+    const result = await query.fetchNextPage();
+    // A full last page can be followed by nothing; stay put rather than show a blank page.
+    if ((result.data?.pages.at(-1)?.length ?? 0) > 0) goTo(pageIndex + 1);
+  };
+
+  const controls: ServerListControls = {
+    search,
+    onSearchChange: setSearch,
+    page: pageIndex + 1,
+    hasPrevious: pageIndex > 0,
+    hasNext: pageIndex + 1 < pages.length || query.hasNextPage,
+    onPrevious: () => goTo(pageIndex - 1),
+    onNext: () => void onNext(),
+    isChanging: query.isFetchingNextPage || query.isPlaceholderData,
+  };
+
+  return { ...query, rows: pages[pageIndex] ?? [], controls };
 }
 
 /** A workspace write: one idempotency key per attempt, then fresh figures everywhere. */

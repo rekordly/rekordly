@@ -107,7 +107,7 @@ function TaxContent({ workspaceId, currency, isBusiness }: WorkspaceInfo) {
 
       {report.isError ? <Alert status="error" description="Unable to load the tax report for this workspace." /> : null}
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard tag="Taxable sales" tone="success" gradient compact isLoading={report.isPending} title={show(data?.output_vat.taxable_sales_minor)} description={`${data?.output_vat.total_count ?? 0} records`} icon={<ArrowDownLeft size={22} />} />
         <StatCard tag="Output VAT" tone="primary" gradient compact isLoading={report.isPending} title={show(data?.output_vat.output_vat_minor)} description="Charged on sales" icon={<Percent size={22} />} />
         <StatCard tag="Input VAT" tone="secondary" gradient compact isLoading={report.isPending} title={show(data?.input_vat.input_vat_minor)} description={`${data?.input_vat.purchases_count ?? 0} purchases`} icon={<ArrowUpRight size={22} />} />

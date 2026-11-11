@@ -74,19 +74,20 @@ function WalletsContent({ workspaceId, currency }: WorkspaceInfo) {
       <PageHeader
         title="Customer wallets"
         description="Money customers have paid in advance, held for them until it is used."
-        actions={<AppButton startContent={<Plus weight="bold" />} label="Record deposit" isDisabled={customerId === null} onPress={() => setIsOpen(true)} />}
+        actions={
+          <>
+            <AppSelect
+              aria-label="Customer"
+              placeholder={customers.isPending ? "Loading customers…" : "Choose a customer"}
+              options={(customers.data ?? []).map((customer) => ({ key: String(customer.id), label: customer.name }))}
+              selectedKey={selected || undefined}
+              onSelectionChange={setSelected}
+              className="w-56"
+            />
+            <AppButton startContent={<Plus weight="bold" />} label="Record deposit" isDisabled={customerId === null} onPress={() => setIsOpen(true)} />
+          </>
+        }
       />
-
-      <DashboardCard>
-        <AppSelect
-          label="Customer"
-          placeholder={customers.isPending ? "Loading customers…" : "Choose a customer"}
-          options={(customers.data ?? []).map((customer) => ({ key: String(customer.id), label: customer.name }))}
-          selectedKey={selected || undefined}
-          onSelectionChange={setSelected}
-          className="max-w-md"
-        />
-      </DashboardCard>
 
       {customerId === null ? (
         <DashboardCard className="p-0">
@@ -94,7 +95,7 @@ function WalletsContent({ workspaceId, currency }: WorkspaceInfo) {
         </DashboardCard>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-3">
             <StatCard
               tag="Available balance"
               gradient
@@ -107,6 +108,8 @@ function WalletsContent({ workspaceId, currency }: WorkspaceInfo) {
           </div>
           <DataView<WalletTransaction>
             title="Wallet history"
+            searchPlaceholder="Search reference"
+            getSearchText={(row) => `${row.transaction_type} ${row.reference ?? ""} ${row.notes ?? ""}`}
             rows={ledger.data ?? []}
             rowKey={(row) => row.id}
             isLoading={ledger.isPending}

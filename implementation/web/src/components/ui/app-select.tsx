@@ -81,7 +81,7 @@ export function AppSelect({
           <Select.Value className="text-xs truncate font-medium text-foreground" />
           <Select.Indicator className="text-muted shrink-0" />
         </Select.Trigger>
-        <Select.Popover className="w-(--trigger-width) min-w-[180px] max-h-72 overflow-y-auto rounded-2xl border border-border bg-overlay p-1 shadow-2xl backdrop-blur-xl z-50">
+        <Select.Popover className="w-(--trigger-width) min-w-20 max-h-72 overflow-y-auto rounded-2xl border border-border bg-overlay p-1 shadow-2xl backdrop-blur-xl z-50">
           <ListBox className="outline-none space-y-0.5">
             {options.map((opt) => (
               <ListBox.Item

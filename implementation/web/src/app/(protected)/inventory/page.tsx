@@ -1,2 +1,10 @@
-import { ModulePlaceholder } from "@/components/layout/module-placeholder";
-export default function InventoryPage() { return <ModulePlaceholder title="Inventory" description="Keep products, stock, movements, and counts in view." permission="inventory.view_quantity" actionLabel="Add product" />; }
+import { PermissionGuard } from "@/components/auth/can";
+import { CataloguePage } from "@/components/features/finance/catalogue-page";
+
+export default function InventoryPage() {
+  return (
+    <PermissionGuard permission="inventory.view_quantity">
+      <CataloguePage />
+    </PermissionGuard>
+  );
+}

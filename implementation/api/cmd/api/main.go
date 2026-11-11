@@ -48,7 +48,11 @@ func main() {
 		os.Exit(1)
 	}
 	authHandler := auth.NewHandler(authService, googleOIDC, cfg.Environment == "production")
-	financeService := finance.NewService(pool)
+	financeService := finance.NewService(pool, finance.WithCloudinaryEvidence(finance.CloudinaryEvidenceConfig{
+		CloudName: cfg.CloudinaryCloudName,
+		APIKey: cfg.CloudinaryAPIKey,
+		APISecret: cfg.CloudinaryAPISecret,
+	}))
 	financeAuthMiddleware := finance.AuthAndWorkspaceMiddleware(pool, authService)
 	financeHandler := finance.NewHandler(financeService, financeAuthMiddleware)
 

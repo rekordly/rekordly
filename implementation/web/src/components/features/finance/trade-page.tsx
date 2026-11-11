@@ -156,14 +156,13 @@ function TradeContent({ workspaceId, currency, kind, startOpen }: WorkspaceInfo 
         actions={<AppButton startContent={<Plus weight="bold" />} label={copy.add} onPress={() => setIsOpen(true)} />}
       />
       <DataView<TradeRow>
-        title={`Recent ${copy.title.toLowerCase()}`}
+        title={copy.title}
         rows={rows}
         rowKey={(row) => row.id}
         isLoading={records.isPending}
         isError={records.isError}
-        hasMore={records.hasNextPage}
-        isLoadingMore={records.isFetchingNextPage}
-        onLoadMore={() => void records.fetchNextPage()}
+        server={records.controls}
+        searchPlaceholder={`Search ${copy.party.toLowerCase()} or reference`}
         empty={
           <EmptyState
             icon={Icon}

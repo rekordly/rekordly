@@ -540,7 +540,7 @@ Suggested cross-space examples:
 - Business pays owner drawing.
 - Owner pays business expense personally.
 
-System may propose two linked records, but user confirms each affected space. One workspace cannot directly post into another without owner authority and explicit confirmation.
+For an owner who has authority to both spaces, a mixed expense is a single explicit, atomic owner command. It never merges journals: each workspace keeps its own record and expense category. The paying workspace posts its expense portion and a Due-from receivable for the other portion; the owing workspace posts its expense portion and a Due-to payable. A later reimbursement may be partial, but atomically posts `Dr Due-to / Cr cash` in the owing workspace and `Dr cash / Cr Due-from` in the paying workspace. Row locking, a settlement version and idempotency prevent duplicate or excessive settlement.
 
 ## 32. Data and reconciliation reports
 

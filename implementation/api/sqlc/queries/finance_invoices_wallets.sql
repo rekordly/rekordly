@@ -12,6 +12,11 @@ INSERT INTO invoices (
 SELECT * FROM invoices
 WHERE id = $1 AND workspace_id = $2;
 
+-- name: GetInvoiceByIDForUpdate :one
+SELECT * FROM invoices
+WHERE id = $1 AND workspace_id = $2
+FOR UPDATE;
+
 -- name: GetInvoiceByIdempotency :one
 SELECT * FROM invoices
 WHERE workspace_id = $1 AND idempotency_key = $2 AND status <> 'voided';
@@ -28,6 +33,7 @@ WHERE workspace_id = $1
   AND (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status'))
   AND (sqlc.narg('customer_id')::bigint IS NULL OR customer_id = sqlc.narg('customer_id'))
   AND (sqlc.narg('before_id')::bigint IS NULL OR id < sqlc.narg('before_id'))
+  AND (sqlc.narg('search')::text IS NULL OR invoice_number ILIKE '%' || sqlc.narg('search')::text || '%' OR customer_name ILIKE '%' || sqlc.narg('search')::text || '%')
 ORDER BY issue_date DESC, id DESC
 LIMIT $2;
 

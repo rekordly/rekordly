@@ -28,6 +28,11 @@ const PERIODS = [
 
 type Period = (typeof PERIODS)[number]["key"];
 
+const SECTIONS = [
+  { key: "charts", label: "Charts" },
+  { key: "recent", label: "Recent activity" },
+] as const;
+
 function monthLabel(month: string): string {
   return format(parse(month, "yyyy-MM", new Date()), "MMM yy");
 }
@@ -35,14 +40,13 @@ function monthLabel(month: string): string {
 function WorkspaceOverview({
   workspace,
   months,
-  showName,
   showRecent,
 }: {
   workspace: AuthorizedWorkspace;
   months: number;
-  showName: boolean;
   showRecent: boolean;
 }) {
+  const [section, setSection] = useState<"charts" | "recent">("charts");
   const fromDate = format(startOfMonth(subMonths(new Date(), months - 1)), "yyyy-MM-dd");
   const summary = useQuery({
     queryKey: [...moneyKeys.workspace(workspace.id), "summary", fromDate],
@@ -66,14 +70,16 @@ function WorkspaceOverview({
 
   return (
     <section className="space-y-5">
-      {showName ? <SectionHeader title={workspace.name} description={workspace.kind === "business" ? "Business" : "Personal"} /> : null}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard tag="Income" tone="success" gradient compact isLoading={isLoading} title={show(data?.income_minor)} icon={<ArrowDownLeft size={22} />} />
         <StatCard tag="Expenses" tone="danger" gradient compact isLoading={isLoading} title={show(data?.expense_minor)} icon={<ArrowUpRight size={22} />} />
         <StatCard tag="Net" tone="primary" gradient compact isLoading={isLoading} title={show(data?.net_minor)} icon={<ChartLineUp size={22} />} />
         <StatCard tag="Cash balance" tone="secondary" gradient compact isLoading={isLoading} title={show(data?.cash_balance_minor)} description="Across active accounts" icon={<Vault size={22} />} />
       </div>
 
+      {showRecent ? <Segmented aria-label="Dashboard sections" options={SECTIONS} value={section} onChange={setSection} /> : null}
+
+      {section === "charts" ? (
       <div className="grid gap-4 xl:grid-cols-3">
         <DashboardCard className="xl:col-span-2">
           <SectionHeader title="Income and expenses" className="mb-4" />
@@ -96,8 +102,7 @@ function WorkspaceOverview({
           )}
         </DashboardCard>
       </div>
-
-      {showRecent ? (
+      ) : (
         <DashboardCard className="p-0">
           <SectionHeader
             title="Recent activity"
@@ -129,15 +134,17 @@ function WorkspaceOverview({
             </p>
           )}
         </DashboardCard>
-      ) : null}
+      )}
     </section>
   );
 }
 
-/** Dashboard and reports. "All spaces" shows each owned space side by side, never a browser-side total. */
+/** Dashboard and reports. "All spaces" tabs through each owned space; it never totals money in the browser. */
 export function FinanceOverview({ title, description, showRecent }: { title: string; description: string; showRecent: boolean }) {
   const { inScope } = useActiveWorkspace();
   const [period, setPeriod] = useState<Period>("6");
+  const [shownId, setShownId] = useState("");
+  const shown = inScope.find((workspace) => String(workspace.id) === shownId) ?? inScope[0];
 
   return (
     <Page>
@@ -146,15 +153,15 @@ export function FinanceOverview({ title, description, showRecent }: { title: str
         description={description}
         actions={<Segmented size="sm" aria-label="Period" options={PERIODS} value={period} onChange={setPeriod} />}
       />
-      {inScope.map((workspace) => (
-        <WorkspaceOverview
-          key={workspace.id}
-          workspace={workspace}
-          months={Number(period)}
-          showName={inScope.length > 1}
-          showRecent={showRecent}
+      {inScope.length > 1 ? (
+        <Segmented
+          aria-label="Space"
+          options={inScope.map((workspace) => ({ key: String(workspace.id), label: workspace.name }))}
+          value={String(shown?.id ?? "")}
+          onChange={setShownId}
         />
-      ))}
+      ) : null}
+      {shown ? <WorkspaceOverview key={shown.id} workspace={shown} months={Number(period)} showRecent={showRecent} /> : null}
     </Page>
   );
 }

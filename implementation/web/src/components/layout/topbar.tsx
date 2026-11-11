@@ -2,12 +2,9 @@
 
 import { Avatar, Badge, Dropdown, ListBox, Popover } from "@heroui/react";
 import { Bell, BellSlash, Checks, GearSix, List, Plus, SidebarSimple, SignOut } from "@phosphor-icons/react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
 
 import { AppButton } from "@/components/ui/app-button";
-import { AppModal } from "@/components/ui/app-modal";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { getInitials } from "@/components/ui/user-avatar";
 import { signOut } from "@/components/providers/session-provider";
@@ -37,8 +34,8 @@ export function Topbar() {
   const toggleSidebar = useUIStore((state) => state.toggleSidebar);
   const toggleMobileDrawer = useUIStore((state) => state.toggleMobileDrawer);
   const isSidebarCollapsed = useUIStore((state) => state.isSidebarCollapsed);
+  const openMoneyRecord = useUIStore((state) => state.openMoneyRecord);
   const { scope, addActions } = useNavigation();
-  const [showAdd, setShowAdd] = useState(false);
 
   return (
     <header className="sticky top-0 z-30 flex h-[72px] shrink-0 items-center gap-3 border-b border-border/40 bg-overlay/80 px-4 backdrop-blur-xl sm:px-6 lg:px-8">
@@ -60,20 +57,36 @@ export function Topbar() {
       </div>
 
       <div className="flex items-center gap-1.5">
-        <AppButton
-          isIconOnly
-          aria-label="Add"
-          className="sm:hidden"
-          onPress={() => setShowAdd(true)}
-        >
-          <Plus size={20} weight="bold" />
-        </AppButton>
-        <AppButton
-          className="hidden sm:inline-flex"
-          label="Add"
-          startContent={<Plus weight="bold" />}
-          onPress={() => setShowAdd(true)}
-        />
+        <Dropdown>
+          <Dropdown.Trigger
+            aria-label="Add"
+            className="inline-flex size-9 cursor-pointer items-center justify-center gap-2 rounded-full bg-accent text-sm font-medium text-accent-foreground outline-none hover:opacity-90 sm:h-10 sm:w-auto sm:px-5"
+          >
+            <Plus size={18} weight="bold" aria-hidden="true" />
+            <span className="hidden sm:inline">Add</span>
+          </Dropdown.Trigger>
+          <Dropdown.Popover placement="bottom end" className="w-[280px] rounded-2xl bg-overlay p-1.5">
+            <Dropdown.Menu aria-label="Add" onAction={(key) => {
+              const action = addActions.find((item) => item.direction === String(key));
+              if (action) openMoneyRecord(action.direction);
+            }}>
+              {addActions.map((action) => {
+                const ActionIcon = action.icon;
+                return (
+                  <Dropdown.Item key={action.direction} id={action.direction} textValue={action.label} className="flex items-center gap-3 rounded-xl px-2.5 py-2">
+                    <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary">
+                      <ActionIcon size={18} aria-hidden="true" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-[13px] font-medium text-foreground">{action.label}</span>
+                      <span className="block truncate text-xs text-muted">{action.description}</span>
+                    </span>
+                  </Dropdown.Item>
+                );
+              })}
+            </Dropdown.Menu>
+          </Dropdown.Popover>
+        </Dropdown>
 
         <ThemeToggle />
 
@@ -179,20 +192,6 @@ export function Topbar() {
         </Dropdown>
       </div>
 
-      <AppModal isOpen={showAdd} onOpenChange={setShowAdd} title={`Add to ${modeLabel(scope.mode)}`} size="sm">
-        <div className="grid gap-2 pb-2">
-          {addActions.map((action) => (
-            <Link
-              key={action.href}
-              href={action.href}
-              onClick={() => setShowAdd(false)}
-              className="rounded-2xl bg-surface-secondary px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-primary-soft hover:text-primary-soft-foreground"
-            >
-              {action.label}
-            </Link>
-          ))}
-        </div>
-      </AppModal>
     </header>
   );
 }

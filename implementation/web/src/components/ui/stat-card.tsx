@@ -37,13 +37,14 @@ const ICON: Readonly<Record<StatTone, string>> = {
   default: "bg-default text-foreground",
 };
 
+/** Light fades to the card surface; dark runs to a deeper shade of the same colour. */
 const GRADIENT: Readonly<Record<StatTone, string>> = {
-  primary: "from-primary-soft",
-  secondary: "from-secondary-soft",
-  warning: "from-warning-soft",
-  danger: "from-danger-soft",
-  success: "from-success-soft",
-  default: "from-default",
+  primary: "from-stat-green-from to-stat-green-to",
+  success: "from-stat-green-from to-stat-green-to",
+  secondary: "from-stat-orange-from to-stat-orange-to",
+  warning: "from-stat-orange-from to-stat-orange-to",
+  danger: "from-stat-red-from to-stat-red-to",
+  default: "from-stat-neutral-from to-stat-neutral-to",
 };
 
 export function StatCard({
@@ -57,27 +58,31 @@ export function StatCard({
   isLoading = false,
   className = "",
 }: StatCardProps) {
+  const iconBox = (size: string) => (
+    <span className={`grid shrink-0 place-items-center rounded-2xl ${ICON[tone]} ${size}`}>{icon}</span>
+  );
+
   return (
     <Card
       className={`gap-0 rounded-3xl border-0 shadow-none ${compact ? "p-4" : "p-5 sm:p-6"} ${
-        gradient ? `bg-linear-to-b ${GRADIENT[tone]} to-surface` : "bg-surface"
+        gradient ? `bg-linear-to-b ${GRADIENT[tone]}` : "bg-surface"
       } ${className}`}
     >
-      <span className={`w-fit rounded-full px-2.5 py-0.5 text-[11px] font-medium uppercase ${TAG[tone]}`}>{tag}</span>
+      {/* On phones the card is narrow, so the icon moves up beside the tag and the amount gets the full width. */}
+      <div className="flex items-center justify-between gap-2">
+        <span className={`w-fit rounded-full px-2 py-0.5 text-[11px] font-medium whitespace-nowrap normal-case sm:px-2.5 sm:uppercase ${TAG[tone]}`}>{tag}</span>
+        {icon ? <span className="sm:hidden">{iconBox("size-8 [&_svg]:size-4")}</span> : null}
+      </div>
       <div className={`flex items-center justify-between gap-4 ${compact ? "mt-3" : "mt-5"}`}>
         <div className="min-w-0">
           {isLoading ? (
-            <span className="block h-7 w-32 animate-pulse rounded-lg bg-default" />
+            <span className="block h-7 w-32 max-w-full animate-pulse rounded-lg bg-default" />
           ) : (
-            <h2 className={`tabular truncate font-bold tracking-tight ${compact ? "text-lg" : "text-[22px]"}`}>{title}</h2>
+            <h2 className={`tabular font-bold tracking-tight [overflow-wrap:anywhere] ${compact ? "text-[19px]" : "text-[22px]"}`}>{title}</h2>
           )}
-          {description ? <p className="mt-1 text-xs text-muted">{description}</p> : null}
+          {description ? <p className="mt-1 text-xs text-foreground/70">{description}</p> : null}
         </div>
-        {icon ? (
-          <span className={`grid shrink-0 place-items-center rounded-2xl ${ICON[tone]} ${compact ? "size-11" : "size-14"}`}>
-            {icon}
-          </span>
-        ) : null}
+        {icon ? <span className="hidden sm:block">{iconBox(compact ? "size-11" : "size-14")}</span> : null}
       </div>
     </Card>
   );

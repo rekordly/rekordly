@@ -197,8 +197,9 @@ describe("Rekordly V2 Feature Registry & Frontend Foundation Suite", () => {
     assert.equal(captureFeature.supportsOfflineDrafts, true);
     assert.equal(captureFeature.requiresConfirmation, true);
     assert.ok(
-      captureFeature.planGate?.enforcementNote.includes("checks available plan credits"),
+      captureFeature.planGate?.enforcementNote.includes("explicitly confirmed"),
     );
+    assert.equal(captureFeature.name, "Guided records");
 
     const offlineSync = getFeature("offline-sync");
     assert.ok(offlineSync.planGate?.limitUnit.includes("100 pending actions"));

@@ -1,0 +1,11 @@
+-- A bill is an AP document, separate from receipt/stock and from payment.
+ALTER TABLE ledger_entries DROP CONSTRAINT ledger_entries_source_type_check;
+ALTER TABLE ledger_entries ADD CONSTRAINT ledger_entries_source_type_check CHECK (source_type IN ('money_transaction','sale','purchase','invoice_payment','deposit','wallet_payment','reversal','adjustment','goods_receipt','supplier_bill'));
+CREATE TABLE supplier_bills (
+ id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, workspace_id BIGINT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+ goods_receipt_id BIGINT NOT NULL REFERENCES goods_receipts(id) ON DELETE RESTRICT, supplier_id BIGINT NOT NULL REFERENCES counterparties(id) ON DELETE RESTRICT,
+ supplier_invoice_number TEXT NOT NULL, bill_date DATE NOT NULL, due_date DATE, currency CHAR(3) NOT NULL CHECK(currency ~ '^[A-Z]{3}$'), currency_exponent INTEGER NOT NULL CHECK(currency_exponent BETWEEN 0 AND 4), total_minor BIGINT NOT NULL CHECK(total_minor>0), outstanding_minor BIGINT NOT NULL CHECK(outstanding_minor>=0 AND outstanding_minor<=total_minor), status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','approved','partially_paid','paid','voided')), version INTEGER NOT NULL DEFAULT 1 CHECK(version>0), idempotency_key TEXT NOT NULL, created_by_user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT, approved_by_user_id BIGINT REFERENCES users(id) ON DELETE SET NULL, approved_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+ UNIQUE(workspace_id,goods_receipt_id), UNIQUE(workspace_id,idempotency_key), UNIQUE(workspace_id,supplier_id,supplier_invoice_number)
+);
+CREATE INDEX supplier_bills_workspace_status_due_idx ON supplier_bills(workspace_id,status,due_date,id DESC);
+CREATE TABLE supplier_bill_commands (id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, workspace_id BIGINT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE, supplier_bill_id BIGINT NOT NULL REFERENCES supplier_bills(id) ON DELETE CASCADE, command TEXT NOT NULL CHECK(command='approve'), expected_version INTEGER NOT NULL, idempotency_key TEXT NOT NULL, actor_user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), UNIQUE(workspace_id,idempotency_key));

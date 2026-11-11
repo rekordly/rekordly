@@ -20,6 +20,116 @@ export interface MoneyCategory {
   is_active: boolean;
 }
 
+/** A business catalogue item with its default sellable variant. */
+export interface CatalogueItem {
+  id: number;
+  workspace_id: number;
+  name: string;
+  description?: string | null;
+  kind: "service" | "non_stock" | "stock_tracked";
+  status: "draft" | "active" | "archived";
+  unit_name: string;
+  default_variant_id: number;
+  sku?: string | null;
+  barcode?: string | null;
+  selling_price_minor: MinorAmount;
+  currency: string;
+  currency_exponent: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InventoryBalance {
+  id: number;
+  location_id: number;
+  location_name: string;
+  product_id: number;
+  product_name: string;
+  product_kind: "stock_tracked" | "service" | "non_stock";
+  quantity_on_hand: string;
+  value_on_hand_minor: MinorAmount;
+  average_cost_minor: string;
+  costing_method: "weighted_average";
+  version: number;
+}
+
+export interface PurchaseRequestLine {
+  id: number;
+  product_id?: number | null;
+  description: string;
+  quantity: string;
+  unit_name: string;
+  estimated_unit_price_minor: string;
+  estimated_line_total_minor: string;
+}
+
+/** A non-posting procurement request. It is not a purchase, bill or receipt. */
+export interface PurchaseRequest {
+  id: number;
+  supplier_id?: number | null;
+  status: "draft" | "submitted" | "approved" | "rejected" | "changes_requested" | "cancelled";
+  version: number;
+  needed_by?: string | null;
+  reason: string;
+  reference?: string | null;
+  priority: "low" | "normal" | "high" | "urgent";
+  latest_decision_reason?: string | null;
+  currency: string;
+  currency_exponent: number;
+  estimated_total_minor: string;
+  created_by_user_id: number;
+  submitted_at?: string | null;
+  approved_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  lines?: PurchaseRequestLine[];
+  decisions?: Array<{
+    id: number;
+    command: "submit" | "approve" | "reject" | "request_changes" | "cancel";
+    request_version: number;
+    reason?: string | null;
+    actor_user_id: number;
+    created_at: string;
+  }>;
+}
+
+/** A non-posting supplier commitment created from an approved request. */
+export interface PurchaseOrder {
+  id: number;
+  source_purchase_request_id: number;
+  status: "draft" | "submitted" | "approved" | "issued" | "acknowledged" | "partially_received" | "fully_received" | "cancelled" | "partially_cancelled" | "closed";
+  version: number;
+  order_number?: string | null;
+  currency: string;
+  currency_exponent: number;
+  total_minor: string;
+  cancellation_reason?: string | null;
+  closed_reason?: string | null;
+}
+
+export interface ReceiptOptionLine {
+  purchase_order_line_id: number;
+  description: string;
+  remaining_quantity: string;
+}
+export interface GoodsReceipt { id:number; purchase_order_id:number; received_on:string; receipt_reference?:string|null; }
+export interface SupplierBill { id:number; goods_receipt_id:number; goods_receipt_linked?:boolean; bill_type?:"receipt"|"direct_expense"|"direct_service"; due_date?:string|null; overdue?:boolean; status:"draft"|"approved"|"partially_paid"|"paid"|"voided"; version:number; total_minor:string; outstanding_minor:string; }
+export interface SupplierAdvance {
+  id: number;
+  supplier_id: number;
+  payment_id: number;
+  currency: string;
+  currency_exponent: number;
+  original_minor: string;
+  available_minor: string;
+  status: "open" | "partially_applied" | "applied" | "refunded" | "voided";
+  version: number;
+}
+export interface SupplierReturn { id:number; supplier_id:number; goods_receipt_id:number; status:"posted"|"cancelled"; total_minor:string; }
+export interface SupplierReturnLineOption { id:number; product_name:string; remaining_quantity:string; unit_cost_minor:string; }
+export interface ProcurementReport { as_of_date:string; open_purchase_order_count:number; open_purchase_order_minor:string; unbilled_receipt_count:number; grni_minor:string; ap_outstanding_minor:string; ap_overdue_minor:string; unapplied_advance_count:number; unapplied_advance_minor:string; }
+export interface SupplierBillMatch { bill_id:number; receipt_id:number; ordered_minor:string; received_minor:string; billed_minor:string; open_to_bill_minor:string; variance_minor:string; result:string; requires_review:boolean; }
+
 export interface MoneyTransaction {
   id: number;
   direction: "money_in" | "money_out" | "transfer";
@@ -38,6 +148,114 @@ export interface MoneyTransaction {
   is_void: boolean;
   created_at: string;
   posted_at?: string;
+}
+
+/** A linked, cross-workspace expense. Amounts and ids stay as API strings. */
+export interface MixedMoneyGroup {
+  id: string;
+  personal_workspace_id: string;
+  business_workspace_id: string;
+  paying_workspace_id: string;
+  paying_money_account_id: string;
+  personal_money_record_id: string | null;
+  business_money_record_id: string | null;
+  currency: string;
+  currency_exponent: number;
+  total_amount_minor: string;
+  personal_amount_minor: string;
+  business_amount_minor: string;
+  reimbursed_amount_minor: string;
+  outstanding_amount_minor: string;
+  effective_date: string;
+  status: "open" | "settled" | "reversed";
+  settlement_version: number;
+}
+
+export interface MixedMoneyConfirmation {
+  group: MixedMoneyGroup;
+  was_duplicate: boolean;
+}
+
+export interface MixedMoneyReimbursementResult {
+  group: MixedMoneyGroup;
+  reimbursement: { id: string; amount_minor: string; currency: string; effective_date: string };
+  was_duplicate: boolean;
+}
+
+export interface MoneyRecordDraft {
+  id: string;
+  workspace_id: string;
+  state: "saved" | "needs_review" | "confirmed" | "discarded" | "failed";
+  version: number;
+  entry_method: "manual" | "ai_assisted" | "import" | "offline";
+  direction: "money_in" | "money_out" | "transfer";
+  scope_type: "personal" | "business" | "transfer" | "mixed";
+  purpose: string;
+  amount_minor: string;
+  currency: string;
+  currency_exponent: number;
+  effective_date: string;
+  money_account_id: string | null;
+  destination_account_id: string | null;
+  category_id: string | null;
+  counterparty_name: string | null;
+  description: string | null;
+  reference: string | null;
+  confirmed_record_id: string | null;
+}
+
+export interface MoneyRecordPreview {
+  draft_id: string;
+  version: number;
+  can_confirm: boolean;
+  balance_effect: string;
+  accounting_effects: string[];
+  warnings: string[];
+}
+
+export interface EvidenceAsset {
+  id: string;
+  asset_id: string;
+  storage_provider: string;
+  delivery_type: string;
+  original_file_name: string;
+  byte_size: string;
+  mime_type: string;
+  status: string;
+}
+
+export interface MoneyRecordDraftLink {
+  id: string;
+  draft_id: string;
+  link_type: string;
+  linked_record_id: string;
+  allocated_amount_minor: string | null;
+}
+
+export interface EvidenceUploadAuthorization {
+  provider: "cloudinary";
+  upload_url: string;
+  api_key: string;
+  timestamp: string;
+  signature: string;
+  folder: string;
+  public_id: string;
+  type: "authenticated";
+  resource_type: "auto";
+  max_bytes: string;
+  expires_at: string;
+}
+
+export interface EvidenceAccess {
+  url: string;
+  expires_at: string;
+}
+
+export interface MoneyRecordConfirmation {
+  draft: MoneyRecordDraft;
+  record: { id: string; status: string; amount_minor: string; currency: string; currency_exponent: number };
+  evidence: EvidenceAsset[];
+  was_duplicate: boolean;
 }
 
 export interface Contact {

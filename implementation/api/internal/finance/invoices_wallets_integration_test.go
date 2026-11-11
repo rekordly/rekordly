@@ -163,6 +163,136 @@ func TestCustomerWallet_DepositAndInvoicePayment_NoNegativeWallet(t *testing.T) 
 	require.Equal(t, int64(0), walletEmpty.BalanceMinor)
 }
 
+func TestDirectInvoicePaymentClearsReceivableWithoutNewRevenue(t *testing.T) {
+	pool := testPool(t)
+	wsID, userID := createTestWorkspace(t, pool, "direct-invoice-payment")
+	svc := finance.NewService(pool)
+	ctx := context.Background()
+
+	bank, err := svc.CreateAccount(ctx, wsID, finance.CreateAccountInput{Name: "Invoice bank", AccountType: "bank", Currency: "NGN"})
+	require.NoError(t, err)
+	customer, err := svc.CreateCounterparty(ctx, wsID, finance.CreateCounterpartyInput{Name: "Invoice customer", PartyType: "customer"})
+	require.NoError(t, err)
+	created, err := svc.CreateInvoice(ctx, wsID, userID, finance.CreateInvoiceInput{
+		CustomerID: customer.ID, IssueDate: "2026-11-10", DueDate: "2026-11-30", Currency: "NGN", Status: "finalized",
+		Items: []finance.InvoiceItemInput{{Description: "Design work", Quantity: 1, UnitPriceMinor: 1_000_000}},
+	})
+	require.NoError(t, err)
+
+	paid, err := svc.CreatePayment(ctx, wsID, userID, finance.CreatePaymentInput{
+		Direction: "incoming", PaymentDate: "2026-11-10", TotalAmountMinor: 400_000, Currency: "NGN",
+		LinkedRecordType: "invoice", LinkedRecordID: &created.Invoice.ID,
+		PaymentLegs:    []finance.PaymentLegInput{{MoneyAccountID: bank.ID, AmountMinor: 400_000}},
+		IdempotencyKey: "invoice-payment-001",
+	})
+	require.NoError(t, err)
+	require.Len(t, paid.Lines, 2)
+	require.Equal(t, "asset", paid.Lines[0].AccountClass)
+	require.Equal(t, "asset", paid.Lines[1].AccountClass)
+	require.Equal(t, int64(400_000), paid.Lines[0].DebitMinor)
+	require.Equal(t, int64(400_000), paid.Lines[1].CreditMinor)
+
+	invoiceDetail, err := svc.GetInvoice(ctx, wsID, created.Invoice.ID)
+	require.NoError(t, err)
+	require.Equal(t, "partially_paid", invoiceDetail.Invoice.Status)
+	require.Equal(t, int64(400_000), invoiceDetail.Invoice.PaidAmountMinor)
+
+	duplicate, err := svc.CreatePayment(ctx, wsID, userID, finance.CreatePaymentInput{
+		Direction: "incoming", PaymentDate: "2026-11-10", TotalAmountMinor: 400_000, Currency: "NGN",
+		LinkedRecordType: "invoice", LinkedRecordID: &created.Invoice.ID,
+		PaymentLegs:    []finance.PaymentLegInput{{MoneyAccountID: bank.ID, AmountMinor: 400_000}},
+		IdempotencyKey: "invoice-payment-001",
+	})
+	require.NoError(t, err)
+	require.Equal(t, paid.Payment.ID, duplicate.Payment.ID)
+
+	invoiceDetail, err = svc.GetInvoice(ctx, wsID, created.Invoice.ID)
+	require.NoError(t, err)
+	require.Equal(t, int64(400_000), invoiceDetail.Invoice.PaidAmountMinor)
+
+	_, err = svc.CreatePayment(ctx, wsID, userID, finance.CreatePaymentInput{
+		Direction: "incoming", PaymentDate: "2026-11-10", TotalAmountMinor: 700_000, Currency: "NGN",
+		LinkedRecordType: "invoice", LinkedRecordID: &created.Invoice.ID,
+		PaymentLegs: []finance.PaymentLegInput{{MoneyAccountID: bank.ID, AmountMinor: 700_000}},
+	})
+	require.ErrorIs(t, err, finance.ErrOverpayment)
+}
+
+func TestCustomerReceiptAllocatesAtomicallyAcrossInvoices(t *testing.T) {
+	pool := testPool(t)
+	wsID, userID := createTestWorkspace(t, pool, "multi-invoice-allocation")
+	svc := finance.NewService(pool)
+	ctx := context.Background()
+
+	bank, err := svc.CreateAccount(ctx, wsID, finance.CreateAccountInput{Name: "Collection account", AccountType: "bank", Currency: "NGN"})
+	require.NoError(t, err)
+	customer, err := svc.CreateCounterparty(ctx, wsID, finance.CreateCounterpartyInput{Name: "Allocated customer", PartyType: "customer"})
+	require.NoError(t, err)
+	otherCustomer, err := svc.CreateCounterparty(ctx, wsID, finance.CreateCounterpartyInput{Name: "Other customer", PartyType: "customer"})
+	require.NoError(t, err)
+
+	createInvoice := func(customerID int64, amount int64) int64 {
+		detail, createErr := svc.CreateInvoice(ctx, wsID, userID, finance.CreateInvoiceInput{
+			CustomerID: customerID, IssueDate: "2026-11-10", DueDate: "2026-11-30", Currency: "NGN", Status: "finalized",
+			Items: []finance.InvoiceItemInput{{Description: "Allocated service", Quantity: 1, UnitPriceMinor: amount}},
+		})
+		require.NoError(t, createErr)
+		return detail.Invoice.ID
+	}
+	firstInvoiceID := createInvoice(customer.ID, 600_000)
+	secondInvoiceID := createInvoice(customer.ID, 400_000)
+	foreignInvoiceID := createInvoice(otherCustomer.ID, 100_000)
+
+	paid, err := svc.CreatePayment(ctx, wsID, userID, finance.CreatePaymentInput{
+		Direction: "incoming", PaymentDate: "2026-11-10", TotalAmountMinor: 1_000_000, Currency: "NGN",
+		PaymentLegs: []finance.PaymentLegInput{{MoneyAccountID: bank.ID, AmountMinor: 1_000_000}},
+		Allocations: []finance.PaymentAllocationInput{
+			{DocumentType: "invoice", DocumentID: secondInvoiceID, AmountMinor: 400_000},
+			{DocumentType: "invoice", DocumentID: firstInvoiceID, AmountMinor: 600_000},
+		},
+		IdempotencyKey: "multi-invoice-receipt-001",
+	})
+	require.NoError(t, err)
+	require.Len(t, paid.Allocations, 2)
+	require.Len(t, paid.Lines, 2)
+	require.Equal(t, "asset", paid.Lines[0].AccountClass)
+	require.Equal(t, "asset", paid.Lines[1].AccountClass)
+
+	for _, invoiceID := range []int64{firstInvoiceID, secondInvoiceID} {
+		detail, getErr := svc.GetInvoice(ctx, wsID, invoiceID)
+		require.NoError(t, getErr)
+		require.Equal(t, "paid", detail.Invoice.Status)
+	}
+
+	replayed, err := svc.CreatePayment(ctx, wsID, userID, finance.CreatePaymentInput{
+		Direction: "incoming", PaymentDate: "2026-11-10", TotalAmountMinor: 1_000_000, Currency: "NGN",
+		PaymentLegs: []finance.PaymentLegInput{{MoneyAccountID: bank.ID, AmountMinor: 1_000_000}},
+		Allocations: []finance.PaymentAllocationInput{
+			{DocumentType: "invoice", DocumentID: firstInvoiceID, AmountMinor: 600_000},
+			{DocumentType: "invoice", DocumentID: secondInvoiceID, AmountMinor: 400_000},
+		},
+		IdempotencyKey: "multi-invoice-receipt-001",
+	})
+	require.NoError(t, err)
+	require.Equal(t, paid.Payment.ID, replayed.Payment.ID)
+	require.Len(t, replayed.Allocations, 2)
+
+	// A cross-customer allocation must roll back its earlier invoice lock/update too.
+	thirdInvoiceID := createInvoice(customer.ID, 100_000)
+	_, err = svc.CreatePayment(ctx, wsID, userID, finance.CreatePaymentInput{
+		Direction: "incoming", PaymentDate: "2026-11-10", TotalAmountMinor: 200_000, Currency: "NGN",
+		PaymentLegs: []finance.PaymentLegInput{{MoneyAccountID: bank.ID, AmountMinor: 200_000}},
+		Allocations: []finance.PaymentAllocationInput{
+			{DocumentType: "invoice", DocumentID: thirdInvoiceID, AmountMinor: 100_000},
+			{DocumentType: "invoice", DocumentID: foreignInvoiceID, AmountMinor: 100_000},
+		},
+	})
+	require.ErrorIs(t, err, finance.ErrInvalidAllocation)
+	thirdInvoice, err := svc.GetInvoice(ctx, wsID, thirdInvoiceID)
+	require.NoError(t, err)
+	require.Equal(t, int64(0), thirdInvoice.Invoice.PaidAmountMinor)
+}
+
 func TestVoidInvoice_ReversalLedgerAndProtection(t *testing.T) {
 	pool := testPool(t)
 	wsID, userID := createTestWorkspace(t, pool, "void-inv-test")

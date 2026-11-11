@@ -118,6 +118,19 @@
   --brand-panel-foreground: #ffffff;
   --brand-panel-accent: var(--rk-secondary-500);
 
+  /* Segmented tabs must show on both the page and a white card. */
+  --segment: #e8e8e5;
+
+  /* Stat cards: a soft colour fading to the card surface. */
+  --stat-green-from: var(--rk-primary-50);
+  --stat-green-to: var(--surface);
+  --stat-red-from: #ffebeb;
+  --stat-red-to: var(--surface);
+  --stat-orange-from: var(--rk-secondary-50);
+  --stat-orange-to: var(--surface);
+  --stat-neutral-from: #fafaf9;
+  --stat-neutral-to: var(--surface);
+
   /* Chart series (fixed order) */
   --chart-1: var(--rk-primary-500);
   --chart-2: var(--rk-secondary-500);
@@ -193,6 +206,17 @@
   --brand-panel-foreground: #ffffff;
   --brand-panel-accent: var(--rk-secondary-500);
 
+  --segment: #2b2925;
+
+  --stat-green-from: #12702a;
+  --stat-green-to: var(--rk-primary-900);
+  --stat-red-from: #8f2424;
+  --stat-red-to: #4a1111;
+  --stat-orange-from: #a35a06;
+  --stat-orange-to: var(--rk-secondary-900);
+  --stat-neutral-from: #35332f;
+  --stat-neutral-to: #1b1a18;
+
   --chart-1: var(--rk-primary-400);
   --chart-2: var(--rk-secondary-400);
   --chart-3: #3987e5;
@@ -239,6 +263,16 @@
   --color-brand-panel: var(--brand-panel);
   --color-brand-panel-foreground: var(--brand-panel-foreground);
   --color-brand-panel-accent: var(--brand-panel-accent);
+
+  --color-segment: var(--segment);
+  --color-stat-green-from: var(--stat-green-from);
+  --color-stat-green-to: var(--stat-green-to);
+  --color-stat-red-from: var(--stat-red-from);
+  --color-stat-red-to: var(--stat-red-to);
+  --color-stat-orange-from: var(--stat-orange-from);
+  --color-stat-orange-to: var(--stat-orange-to);
+  --color-stat-neutral-from: var(--stat-neutral-from);
+  --color-stat-neutral-to: var(--stat-neutral-to);
 
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);

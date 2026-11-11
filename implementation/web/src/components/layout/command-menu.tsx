@@ -1,22 +1,25 @@
 "use client";
 
 import { Kbd, Modal } from "@heroui/react";
-import { ArrowUpRight, MagnifyingGlass, Plus, type Icon as PhosphorIcon } from "@phosphor-icons/react";
+import { ArrowUpRight, MagnifyingGlass, type Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { useNavigation } from "./use-navigation";
+import { useUIStore, type MoneyRecordDirection } from "@/stores/ui-store";
 
 interface Command {
   key: string;
   label: string;
   description: string;
-  href: string;
+  href?: string;
+  direction?: MoneyRecordDirection;
   icon: PhosphorIcon;
 }
 
 export function CommandMenu() {
   const router = useRouter();
+  const openMoneyRecord = useUIStore((state) => state.openMoneyRecord);
   const { groups, addActions } = useNavigation();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -33,11 +36,11 @@ export function CommandMenu() {
         })),
       ),
       ...addActions.map((action) => ({
-        key: `add-${action.href}`,
+        key: `add-${action.direction}`,
         label: action.label,
-        description: "Add",
-        href: action.href,
-        icon: Plus,
+        description: action.description,
+        direction: action.direction,
+        icon: action.icon,
       })),
     ],
     [addActions, groups],
@@ -64,8 +67,9 @@ export function CommandMenu() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  const choose = (href: string) => {
-    router.push(href);
+  const choose = (command: Command) => {
+    if (command.direction) openMoneyRecord(command.direction);
+    else if (command.href) router.push(command.href);
     setOpen(false);
     setQuery("");
   };
@@ -104,7 +108,7 @@ export function CommandMenu() {
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   onKeyDown={(event) => {
-                    if (event.key === "Enter" && visible[0]) choose(visible[0].href);
+                    if (event.key === "Enter" && visible[0]) choose(visible[0]);
                   }}
                   placeholder="Search pages and actions…"
                   aria-label="Search pages and actions"
@@ -123,7 +127,7 @@ export function CommandMenu() {
                       <button
                         type="button"
                         key={item.key}
-                        onClick={() => choose(item.href)}
+                        onClick={() => choose(item)}
                         className="group flex w-full cursor-pointer items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition-colors hover:bg-surface-secondary"
                       >
                         <span className="grid size-10 place-items-center rounded-xl bg-default text-foreground">

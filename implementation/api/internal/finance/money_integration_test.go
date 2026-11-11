@@ -102,6 +102,28 @@ func TestMoneyAccountsAndCategories(t *testing.T) {
 	require.Len(t, cats, 1)
 }
 
+func TestDefaultCategoriesAreIdempotentAndWorkspaceScoped(t *testing.T) {
+	pool := testPool(t)
+	wsID, _ := createTestWorkspace(t, pool, "default-categories")
+	svc := finance.NewService(pool)
+	ctx := context.Background()
+
+	require.NoError(t, svc.SeedDefaultCategories(ctx, wsID, "business"))
+	require.NoError(t, svc.SeedDefaultCategories(ctx, wsID, "business"))
+
+	income, err := svc.ListCategories(ctx, wsID, "money_in", "business")
+	require.NoError(t, err)
+	require.Len(t, income, 3)
+	require.Equal(t, []string{"Other Income", "Sales Revenue", "Service Revenue"}, []string{income[0].Name, income[1].Name, income[2].Name})
+
+	expenses, err := svc.ListCategories(ctx, wsID, "money_out", "business")
+	require.NoError(t, err)
+	require.NotEmpty(t, expenses)
+	for _, category := range expenses {
+		require.NotEqual(t, "personal", category.Scope)
+	}
+}
+
 func TestMoneyTransaction_MoneyIn_DoubleEntryBalances(t *testing.T) {
 	pool := testPool(t)
 	wsID, userID := createTestWorkspace(t, pool, "money-in-test")

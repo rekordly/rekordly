@@ -2,7 +2,9 @@
 // the add menu and the command menu.
 
 import {
-  Bell,
+  ArrowDownLeft,
+  ArrowsLeftRight,
+  ArrowUpRight,
   Calculator,
   ChartLineUp,
   FileText,
@@ -10,6 +12,7 @@ import {
   HandCoins,
   House,
   Receipt,
+  ClipboardText,
   ShoppingCart,
   SquaresFour,
   Storefront,
@@ -37,8 +40,10 @@ export interface NavGroup {
 }
 
 export interface AddAction {
+  direction: "money_in" | "money_out" | "transfer";
   label: string;
-  href: string;
+  description: string;
+  icon: PhosphorIcon;
 }
 
 const NAVIGATION: Readonly<Record<ShellMode, NavGroup[]>> = {
@@ -47,7 +52,7 @@ const NAVIGATION: Readonly<Record<ShellMode, NavGroup[]>> = {
       title: "Overview",
       items: [
         { label: "Home", href: "/dashboard", icon: House },
-        { label: "Activity", href: "/transactions", icon: Receipt },
+        { label: "Records", href: "/transactions", icon: Receipt },
       ],
     },
     {
@@ -65,13 +70,12 @@ const NAVIGATION: Readonly<Record<ShellMode, NavGroup[]>> = {
       title: "Overview",
       items: [
         { label: "Home", href: "/dashboard", icon: House },
-        { label: "Review", href: "/review", icon: Bell },
       ],
     },
     {
       title: "Money",
       items: [
-        { label: "Money", href: "/transactions", icon: Receipt, permission: PERMISSIONS.MONEY_VIEW },
+        { label: "Records", href: "/transactions", icon: Receipt, permission: PERMISSIONS.MONEY_VIEW },
         { label: "Sales", href: "/sales", icon: Receipt, permission: PERMISSIONS.SALES_VIEW },
         { label: "Purchases", href: "/purchases", icon: ShoppingCart, permission: PERMISSIONS.PURCHASES_VIEW },
         { label: "Invoices", href: "/invoices", icon: FileText },
@@ -84,6 +88,7 @@ const NAVIGATION: Readonly<Record<ShellMode, NavGroup[]>> = {
     {
       title: "Operations",
       items: [
+        { label: "Procurement", href: "/procurement", icon: ClipboardText, permission: PERMISSIONS.PURCHASES_VIEW },
         { label: "Inventory", href: "/inventory", icon: SquaresFour, permission: PERMISSIONS.INVENTORY_VIEW_QUANTITY },
         { label: "Storefront", href: "/store", icon: Storefront, permission: PERMISSIONS.STOREFRONT_VIEW },
         { label: "Contacts", href: "/customers", icon: UsersThree },
@@ -103,7 +108,7 @@ const NAVIGATION: Readonly<Record<ShellMode, NavGroup[]>> = {
       items: [
         { label: "Home", href: "/dashboard", icon: House },
         { label: "Summary", href: "/reports", icon: ChartLineUp },
-        { label: "Activity", href: "/transactions", icon: Receipt },
+        { label: "Records", href: "/transactions", icon: Receipt },
       ],
     },
   ],
@@ -115,19 +120,15 @@ const ACCOUNT_GROUP: NavGroup = {
 };
 
 const PERSONAL_ADD_ACTIONS: AddAction[] = [
-  { label: "Add income", href: "/transactions/new?type=income" },
-  { label: "Add expense", href: "/transactions/new?type=expense" },
-  { label: "Transfer money", href: "/transactions/new?type=transfer" },
-  { label: "Import records", href: "/transactions/import" },
+  { direction: "money_in", label: "Income", description: "Money you received", icon: ArrowDownLeft },
+  { direction: "money_out", label: "Expense", description: "Money you spent", icon: ArrowUpRight },
+  { direction: "transfer", label: "Transfer", description: "Between your accounts", icon: ArrowsLeftRight },
 ];
 
 const BUSINESS_ADD_ACTIONS: AddAction[] = [
-  { label: "Record money in", href: "/transactions/new?type=income" },
-  { label: "Record money out", href: "/transactions/new?type=expense" },
-  { label: "New sale", href: "/sales/new" },
-  { label: "New invoice", href: "/invoices/new" },
-  { label: "Record customer payment", href: "/sales/payments/new" },
-  { label: "Add customer", href: "/customers/new" },
+  { direction: "money_in", label: "Income", description: "Money you received", icon: ArrowDownLeft },
+  { direction: "money_out", label: "Expense", description: "Money you spent", icon: ArrowUpRight },
+  { direction: "transfer", label: "Transfer", description: "Move money between accounts", icon: ArrowsLeftRight },
 ];
 
 export function navigationFor(mode: ShellMode, can: (permission: Permission) => boolean): NavGroup[] {

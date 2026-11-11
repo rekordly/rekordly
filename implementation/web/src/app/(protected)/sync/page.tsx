@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { FeatureScaffold } from "@/components/features";
+import { OfflineSyncWorkspace } from "@/components/features/offline-sync-workspace";
 
 export const metadata: Metadata = {
   title: "Offline Drafts & Sync — Rekordly",
@@ -7,5 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function SyncPage() {
-  return <FeatureScaffold featureId="offline-sync" defaultSpace="business" />;
+  return <OfflineSyncWorkspace />;
 }

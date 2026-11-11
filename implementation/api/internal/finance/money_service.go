@@ -30,13 +30,24 @@ type Service struct {
 	pool             *pgxpool.Pool
 	queries          *db.Queries
 	planLimitChecker PlanLimitChecker
+	evidenceUploader EvidenceUploadAuthorizer
 }
 
-func NewService(pool *pgxpool.Pool) *Service {
-	return &Service{
+type ServiceOption func(*Service)
+
+func WithCloudinaryEvidence(config CloudinaryEvidenceConfig) ServiceOption {
+	return func(service *Service) { service.evidenceUploader = NewCloudinaryEvidenceAuthorizer(config) }
+}
+
+func NewService(pool *pgxpool.Pool, options ...ServiceOption) *Service {
+	service := &Service{
 		pool:    pool,
 		queries: db.New(pool),
 	}
+	for _, option := range options {
+		option(service)
+	}
+	return service
 }
 
 // ---------------- Money Accounts ----------------
@@ -170,6 +181,9 @@ func (s *Service) ListCategories(ctx context.Context, workspaceID int64, directi
 }
 
 func (s *Service) SeedDefaultCategories(ctx context.Context, workspaceID int64, spaceKind string) error {
+	if spaceKind != "personal" && spaceKind != "business" {
+		return errors.New("default categories require a personal or business workspace")
+	}
 	defaults := []struct {
 		Name         string
 		Direction    string
@@ -191,6 +205,9 @@ func (s *Service) SeedDefaultCategories(ctx context.Context, workspaceID int64, 
 	}
 
 	for _, d := range defaults {
+		if d.Scope != "both" && d.Scope != spaceKind {
+			continue
+		}
 		_, err := s.queries.CreateCategory(ctx, db.CreateCategoryParams{
 			WorkspaceID:  workspaceID,
 			Name:         d.Name,
@@ -871,6 +888,7 @@ func (s *Service) GetTransaction(ctx context.Context, workspaceID, transactionID
 }
 
 type ListTransactionsFilter struct {
+	Search    string `form:"search"`
 	FromDate  string `form:"from"`
 	ToDate    string `form:"to"`
 	Status    string `form:"status"`
@@ -911,6 +929,7 @@ func (s *Service) ListTransactions(ctx context.Context, workspaceID int64, f Lis
 	}
 
 	return s.queries.ListMoneyTransactions(ctx, db.ListMoneyTransactionsParams{
+		Search:      searchParam(f.Search),
 		WorkspaceID: workspaceID,
 		Limit:       limit,
 		FromDate:    fromDateParam,

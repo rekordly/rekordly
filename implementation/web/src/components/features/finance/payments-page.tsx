@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDownLeft, ArrowUpRight, HandCoins, Plus } from "@phosphor-icons/react";
+import { ArrowDownLeft, ArrowUpRight, HandCoins, ListChecks, Plus } from "@phosphor-icons/react";
 import { useState } from "react";
 
 import { AppButton } from "@/components/ui/app-button";
@@ -11,10 +11,12 @@ import { formatDate } from "@/lib/format";
 import type { Payment } from "@/types/finance";
 
 import { PaymentDrawer } from "./payment-drawer";
+import { InvoiceAllocationDrawer } from "./invoice-allocation-drawer";
 import { money, StatusBadge, useRecords, WorkspaceGate, type WorkspaceInfo } from "./shared";
 
 function PaymentsContent({ workspaceId, currency, startOpen }: WorkspaceInfo & { startOpen: boolean }) {
   const [isOpen, setIsOpen] = useState(startOpen);
+  const [isAllocationOpen, setIsAllocationOpen] = useState(false);
   const payments = useRecords<Payment>("payments", workspaceId);
 
   const directionLabel = (row: Payment) => (row.direction === "incoming" ? "Received" : "Paid out");
@@ -24,17 +26,21 @@ function PaymentsContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
       <PageHeader
         title="Payments"
         description="Money received from customers and paid to suppliers."
-        actions={<AppButton startContent={<Plus weight="bold" />} label="Record payment" onPress={() => setIsOpen(true)} />}
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <AppButton variant="secondary" startContent={<ListChecks weight="bold" />} label="Allocate receipt" onPress={() => setIsAllocationOpen(true)} />
+            <AppButton startContent={<Plus weight="bold" />} label="Record payment" onPress={() => setIsOpen(true)} />
+          </div>
+        }
       />
       <DataView<Payment>
-        title="Recent payments"
+        title="Payments"
         rows={payments.rows}
         rowKey={(row) => row.id}
         isLoading={payments.isPending}
         isError={payments.isError}
-        hasMore={payments.hasNextPage}
-        isLoadingMore={payments.isFetchingNextPage}
-        onLoadMore={() => void payments.fetchNextPage()}
+        server={payments.controls}
+        searchPlaceholder="Search name or reference"
         empty={
           <EmptyState
             icon={HandCoins}
@@ -63,6 +69,7 @@ function PaymentsContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
         )}
       />
       <PaymentDrawer workspaceId={workspaceId} currency={currency} isOpen={isOpen} onClose={() => setIsOpen(false)} />
+      <InvoiceAllocationDrawer workspaceId={workspaceId} currency={currency} isOpen={isAllocationOpen} onClose={() => setIsAllocationOpen(false)} />
     </Page>
   );
 }

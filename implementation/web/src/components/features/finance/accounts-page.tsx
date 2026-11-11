@@ -9,7 +9,7 @@ import { useForm } from "react-hook-form";
 import { AppButton } from "@/components/ui/app-button";
 import { DataView } from "@/components/ui/data-view";
 import { FormDrawer } from "@/components/ui/form-drawer";
-import { EmptyState, Page, PageHeader, StatusPill } from "@/components/ui/page";
+import { EmptyState, Page, PageHeader, Segmented, StatusPill } from "@/components/ui/page";
 import { RecordCard } from "@/components/ui/record-card";
 import { capitalise } from "@/lib/format";
 import { financeApi, moneyApi, moneyKeys } from "@/lib/money";
@@ -18,6 +18,11 @@ import type { MoneyAccount, MoneyCategory } from "@/types/finance";
 
 import { MoneyField, SelectField, TextInputField } from "./fields";
 import { money, useFinanceAction, WorkspaceGate, type WorkspaceInfo } from "./shared";
+
+const TABS = [
+  { key: "accounts", label: "Accounts" },
+  { key: "categories", label: "Categories" },
+] as const;
 
 const ACCOUNT_TYPES = [
   { key: "cash", label: "Cash" },
@@ -38,6 +43,7 @@ function typeLabel(type: string) {
 }
 
 function AccountsContent({ workspaceId, currency, isBusiness }: WorkspaceInfo) {
+  const [tab, setTab] = useState<"accounts" | "categories">("accounts");
   const [drawer, setDrawer] = useState<"account" | "category" | null>(null);
   const accounts = useQuery({ queryKey: moneyKeys.accounts(workspaceId), queryFn: () => moneyApi.listAccounts({ workspaceId }) });
   const categories = useQuery({ queryKey: moneyKeys.categories(workspaceId, "all"), queryFn: () => moneyApi.listCategories({ workspaceId }) });
@@ -80,15 +86,22 @@ function AccountsContent({ workspaceId, currency, isBusiness }: WorkspaceInfo) {
         title="Accounts"
         description="Where your money lives, and how you group it."
         actions={
-          <>
-            <AppButton variant="tertiary" startContent={<Tag />} label="Add category" onPress={() => setDrawer("category")} />
+          tab === "accounts" ? (
             <AppButton startContent={<Plus weight="bold" />} label="Add account" onPress={() => setDrawer("account")} />
-          </>
+          ) : (
+            <AppButton startContent={<Plus weight="bold" />} label="Add category" onPress={() => setDrawer("category")} />
+          )
         }
       />
 
+      <Segmented aria-label="Accounts sections" options={TABS} value={tab} onChange={setTab} />
+
+      {tab === "accounts" ? (
       <DataView<MoneyAccount>
+        key="accounts"
         title="Money accounts"
+        searchPlaceholder="Search accounts"
+        getSearchText={(row) => `${row.name} ${row.account_type}`}
         rows={accounts.data ?? []}
         rowKey={(row) => row.id}
         isLoading={accounts.isPending}
@@ -119,8 +132,12 @@ function AccountsContent({ workspaceId, currency, isBusiness }: WorkspaceInfo) {
         )}
       />
 
+      ) : (
       <DataView<MoneyCategory>
+        key="categories"
         title="Categories"
+        searchPlaceholder="Search categories"
+        getSearchText={(row) => row.name}
         rows={categories.data ?? []}
         rowKey={(row) => row.id}
         isLoading={categories.isPending}
@@ -135,6 +152,7 @@ function AccountsContent({ workspaceId, currency, isBusiness }: WorkspaceInfo) {
           <RecordCard icon={<Tag size={18} aria-hidden="true" />} reference={capitalise(row.scope)} title={row.name} amount={typeLabel(row.direction)} />
         )}
       />
+      )}
 
       <FormDrawer
         isOpen={drawer === "account"}

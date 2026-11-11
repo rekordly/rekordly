@@ -471,7 +471,9 @@ Mixed posting uses one server command and one database transaction when both wor
 7. Write linked audit events in both workspaces.
 8. Commit all or roll back all.
 
-The accounting rulebook must define the exact due-to/from treatment for each paying-account ownership case before implementation. The UI states which account paid and how each book is affected.
+**Approved rule (10 November 2026):** the paying workspace records its own expense portion plus a Due-from receivable for the other workspace's portion; the non-paying workspace records its expense portion plus a Due-to payable to the paying workspace. If Personal pays, Personal posts `Dr Personal expense`, `Dr Due from Business`, `Cr Personal cash`, while Business posts `Dr Business expense`, `Cr Due to Owner`. If Business pays, the entries are symmetric. The UI states which account paid and how each book is affected.
+
+Reimbursement is one atomic cross-workspace settlement command: the owing workspace posts `Dr Due-to / Cr cash`; the paying workspace posts `Dr cash / Cr Due-from`. It may settle a partial amount, but server-side row locking, a settlement version and an idempotency key prevent overpayment or duplicate settlement.
 
 ### Mixed flow diagram
 
@@ -991,6 +993,7 @@ Draft payload is validated and size-bounded; sensitive free text is minimized.
 | `POST /v1/workspaces/{id}/commands/confirm-money-record` | Confirm/post record |
 | `POST /v1/workspaces/{id}/commands/transfer-money` | Atomic transfer |
 | `POST /v1/owner/commands/confirm-mixed-record` | Atomic linked Personal/Business posting |
+| `POST /v1/owner/mixed-money-groups/{id}/commands/reimburse` | Atomic partial or full Due-to/Due-from settlement |
 | `POST /v1/workspaces/{id}/money-records/{record}/commands/reverse` | Reverse confirmed record |
 | `POST /v1/workspaces/{id}/money-records/{record}/commands/correct` | Reversal/replacement workflow |
 | `GET /v1/workspaces/{id}/money-records` | Cursor/date/filter list |
@@ -1080,6 +1083,8 @@ Metadata may include scope kind, direction, purpose class, entry method and fail
 - Failure in either workspace rolls back both.
 - User lacking access to either workspace cannot post mixed record.
 - All summary shows linked records without merging journals.
+- Paying and owing books retain separate records and separate expense categories.
+- Reimbursement can be partial; a guarded settlement version and outstanding cap prevent duplicate or excessive settlement.
 
 ### Posting/idempotency
 

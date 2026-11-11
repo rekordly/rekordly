@@ -7,14 +7,29 @@ import type {
   Budget,
   BudgetStatus,
   Contact,
+  CatalogueItem,
+  InventoryBalance,
+  PurchaseRequest,
+  PurchaseOrder,
+  ReceiptOptionLine,
+  GoodsReceipt, SupplierBill, SupplierAdvance, SupplierReturn, SupplierReturnLineOption, ProcurementReport, SupplierBillMatch,
   CustomerWallet,
   FinanceSummary,
+  MixedMoneyConfirmation,
+  MixedMoneyReimbursementResult,
   MoneyAccount,
   MoneyCategory,
+  MoneyRecordConfirmation,
+  MoneyRecordDraft,
+  MoneyRecordDraftLink,
+  MoneyRecordPreview,
   MoneyTransaction,
   TaxReadinessReport,
   TaxSettings,
   WalletTransaction,
+  EvidenceAsset,
+  EvidenceAccess,
+  EvidenceUploadAuthorization,
 } from "@/types/finance";
 
 export type { MoneyAccount, MoneyCategory, MoneyTransaction } from "@/types/finance";
@@ -101,6 +116,90 @@ export const moneyApi = {
       { headers: { ...workspaceHeaders(workspaceId), "Idempotency-Key": idempotencyKey } },
     );
   },
+
+  confirmMixedExpense({
+    activeWorkspaceId,
+    idempotencyKey,
+    ...body
+  }: {
+    activeWorkspaceId: number;
+    idempotencyKey: string;
+    personal_workspace_id: number;
+    business_workspace_id: number;
+    paying_workspace_id: number;
+    paying_money_account_id: number;
+    amount: string;
+    personal_amount: string;
+    business_amount: string;
+    currency: string;
+    effective_date: string;
+    personal_category_id: number;
+    business_category_id: number;
+    description?: string;
+    reference?: string;
+  }) {
+    return apiClient.post<typeof body, MixedMoneyConfirmation>("/api/v1/owner/commands/confirm-mixed-record", body, {
+      headers: { ...workspaceHeaders(activeWorkspaceId), "Idempotency-Key": idempotencyKey },
+    });
+  },
+
+  reimburseMixedExpense({
+    activeWorkspaceId,
+    groupId,
+    idempotencyKey,
+    ...body
+  }: {
+    activeWorkspaceId: number;
+    groupId: string;
+    idempotencyKey: string;
+    from_workspace_id: number;
+    to_workspace_id: number;
+    from_money_account_id: number;
+    to_money_account_id: number;
+    amount: string;
+    effective_date: string;
+    expected_version: number;
+    reference?: string;
+  }) {
+    return apiClient.post<typeof body, MixedMoneyReimbursementResult>(
+      `/api/v1/owner/mixed-money-groups/${groupId}/commands/reimburse`,
+      body,
+      { headers: { ...workspaceHeaders(activeWorkspaceId), "Idempotency-Key": idempotencyKey } },
+    );
+  },
+
+  createMoneyRecordDraft: (workspaceId: number, body: unknown) =>
+    scopedPost<{ draft: MoneyRecordDraft }>(workspaceId, "/api/v1/money-record-drafts", body),
+  listMoneyRecordDrafts: (workspaceId: number, state?: MoneyRecordDraft["state"]) =>
+    scopedGet<{ drafts: MoneyRecordDraft[] }>(workspaceId, "/api/v1/money-record-drafts", { state, limit: 50 }),
+  getMoneyRecordDraft: (workspaceId: number, draftId: string) =>
+    scopedGet<{ draft: MoneyRecordDraft; links: MoneyRecordDraftLink[]; evidence: EvidenceAsset[] }>(workspaceId, `/api/v1/money-record-drafts/${draftId}`),
+  updateMoneyRecordDraft: (workspaceId: number, draftId: string, body: unknown) =>
+    apiClient.put<unknown, { draft: MoneyRecordDraft }>(`/api/v1/money-record-drafts/${draftId}`, body, {
+      headers: workspaceHeaders(workspaceId),
+    }),
+  async previewMoneyRecordDraft(workspaceId: number, draftId: string) {
+    const result = await scopedPost<{ preview: MoneyRecordPreview }>(workspaceId, `/api/v1/money-record-drafts/${draftId}/preview`, {});
+    // The API contract uses arrays. Normalizing at the transport boundary also
+    // protects a deployed web client from older API containers that sent null.
+    return {
+      preview: {
+        ...result.preview,
+        accounting_effects: Array.isArray(result.preview.accounting_effects) ? result.preview.accounting_effects : [],
+        warnings: Array.isArray(result.preview.warnings) ? result.preview.warnings : [],
+      },
+    };
+  },
+  confirmMoneyRecord: (workspaceId: number, draftId: string, expectedVersion: number, key: string) =>
+    scopedPost<MoneyRecordConfirmation>(workspaceId, "/api/v1/commands/confirm-money-record", { draft_id: Number(draftId), expected_version: expectedVersion }, key),
+  createMoneyRecordDraftLink: (workspaceId: number, draftId: string, body: unknown) =>
+    scopedPost(workspaceId, `/api/v1/money-record-drafts/${draftId}/links`, body),
+  authorizeEvidenceUpload: (workspaceId: number, draftId: string, body: { file_name: string; mime_type: string; size_bytes: string }) =>
+    scopedPost<{ upload: EvidenceUploadAuthorization }>(workspaceId, `/api/v1/money-record-drafts/${draftId}/attachments/upload-authorizations`, body),
+  registerEvidenceAsset: (workspaceId: number, draftId: string, body: { asset_id: string; file_name: string; size_bytes: string; mime_type: string; sha256_hash?: string }) =>
+    scopedPost<{ evidence: EvidenceAsset }>(workspaceId, `/api/v1/money-record-drafts/${draftId}/evidence`, body),
+  getEvidenceAccess: (workspaceId: number, evidenceId: string) =>
+    scopedGet<{ access: EvidenceAccess }>(workspaceId, `/api/v1/evidence/${evidenceId}/access`),
 };
 
 // ─── Workspace-scoped requests ────────────────────────────────────────
@@ -150,6 +249,82 @@ export const financeApi = {
   },
   createContact: (workspaceId: number, kind: "customers" | "suppliers", body: unknown) =>
     scopedPost(workspaceId, `/api/v1/${kind}`, body),
+
+  async listCatalogueItems(workspaceId: number, params: QueryParams = {}) {
+    const result = await scopedGet<{ items: CatalogueItem[] }>(workspaceId, "/api/v1/catalogue/items", { limit: 50, ...params });
+    return result.items ?? [];
+  },
+  createCatalogueItem: (workspaceId: number, body: unknown, key: string) =>
+    scopedPost(workspaceId, "/api/v1/catalogue/items", body, key),
+  async listInventoryBalances(workspaceId: number) {
+    const result = await scopedGet<{ balances: InventoryBalance[] }>(workspaceId, "/api/v1/inventory/balances");
+    return result.balances ?? [];
+  },
+  createOpeningStock: (workspaceId: number, body: unknown, key: string) =>
+    scopedPost<{ balance: InventoryBalance }>(workspaceId, "/api/v1/inventory/opening-stock", body, key),
+
+  async listPurchaseRequests(workspaceId: number, params: QueryParams = {}) {
+    const result = await scopedGet<{ requests: PurchaseRequest[] }>(workspaceId, "/api/v1/purchase-requests", { limit: 50, ...params });
+    return result.requests ?? [];
+  },
+  createPurchaseRequest: (workspaceId: number, body: unknown, key: string) =>
+    scopedPost<{ request: PurchaseRequest }>(workspaceId, "/api/v1/purchase-requests", body, key),
+  submitPurchaseRequest: (workspaceId: number, id: number, expectedVersion: number, key: string) =>
+    scopedPost<{ request: PurchaseRequest }>(workspaceId, `/api/v1/purchase-requests/${id}/commands/submit`, { expected_version: expectedVersion }, key),
+  approvePurchaseRequest: (workspaceId: number, id: number, expectedVersion: number, key: string) =>
+    scopedPost<{ request: PurchaseRequest }>(workspaceId, `/api/v1/purchase-requests/${id}/commands/approve`, { expected_version: expectedVersion }, key),
+  rejectPurchaseRequest: (workspaceId: number, id: number, expectedVersion: number, reason: string, key: string) =>
+    scopedPost<{ request: PurchaseRequest }>(workspaceId, `/api/v1/purchase-requests/${id}/commands/reject`, { expected_version: expectedVersion, reason }, key),
+  requestPurchaseRequestChanges: (workspaceId: number, id: number, expectedVersion: number, reason: string, key: string) =>
+    scopedPost<{ request: PurchaseRequest }>(workspaceId, `/api/v1/purchase-requests/${id}/commands/request-changes`, { expected_version: expectedVersion, reason }, key),
+  cancelPurchaseRequest: (workspaceId: number, id: number, expectedVersion: number, reason: string, key: string) =>
+    scopedPost<{ request: PurchaseRequest }>(workspaceId, `/api/v1/purchase-requests/${id}/commands/cancel`, { expected_version: expectedVersion, reason }, key),
+  async listPurchaseOrders(workspaceId: number, params: QueryParams = {}) {
+    const result = await scopedGet<{ orders: PurchaseOrder[] }>(workspaceId, "/api/v1/purchase-orders", { limit: 50, ...params });
+    return result.orders ?? [];
+  },
+  createPurchaseOrder: (workspaceId: number, purchaseRequestId: number, key: string) =>
+    scopedPost<{ order: PurchaseOrder }>(workspaceId, "/api/v1/purchase-orders", { purchase_request_id: purchaseRequestId }, key),
+  advancePurchaseOrder: (
+    workspaceId: number,
+    id: number,
+    expectedVersion: number,
+    command: "submitted" | "approved" | "issued",
+    key: string,
+  ) =>
+    scopedPost<{ order: PurchaseOrder }>(workspaceId, `/api/v1/purchase-orders/${id}/commands/${command}`, { expected_version: expectedVersion }, key),
+  resolvePurchaseOrder: (workspaceId: number, id: number, expectedVersion: number, command: "cancel" | "cancel_remainder" | "close", reason: string, key: string) =>
+    scopedPost<{ order: PurchaseOrder }>(workspaceId, `/api/v1/purchase-orders/${id}/commands/${command}`, { expected_version: expectedVersion, reason }, key),
+  receiptOptions: async (workspaceId: number, purchaseOrderId: number) => {
+    const result = await scopedGet<{ lines: ReceiptOptionLine[] }>(workspaceId, `/api/v1/purchase-orders/${purchaseOrderId}/receipt-options`);
+    return result.lines ?? [];
+  },
+  createGoodsReceipt: (workspaceId: number, body: unknown, key: string) => scopedPost(workspaceId, "/api/v1/goods-receipts", body, key),
+  async listGoodsReceipts(workspaceId:number){const r=await scopedGet<{receipts:GoodsReceipt[]}>(workspaceId,"/api/v1/goods-receipts");return r.receipts??[]},
+  async listSupplierBills(workspaceId:number){const r=await scopedGet<{bills:SupplierBill[]}>(workspaceId,"/api/v1/supplier-bills");return r.bills??[]},
+  createSupplierBill:(workspaceId:number,body:unknown,key:string)=>scopedPost<{bill:SupplierBill}>(workspaceId,"/api/v1/supplier-bills",body,key),
+  approveSupplierBill:(workspaceId:number,id:number,expectedVersion:number,key:string)=>scopedPost<{bill:SupplierBill}>(workspaceId,`/api/v1/supplier-bills/${id}/commands/approve`,{expected_version:expectedVersion},key),
+  supplierBillMatch: (workspaceId: number, id: number) => scopedGet<SupplierBillMatch>(workspaceId, `/api/v1/supplier-bills/${id}/match`),
+  async listSupplierAdvances(workspaceId: number) {
+    const result = await scopedGet<{ advances: SupplierAdvance[] }>(workspaceId, "/api/v1/supplier-advances", { limit: 50 });
+    return result.advances ?? [];
+  },
+  createSupplierAdvance: (workspaceId: number, body: unknown, key: string) =>
+    scopedPost<{ advance: SupplierAdvance }>(workspaceId, "/api/v1/supplier-advances", body, key),
+  applySupplierAdvance: (workspaceId: number, advanceId: number, body: unknown, key: string) =>
+    scopedPost(workspaceId, `/api/v1/supplier-advances/${advanceId}/commands/apply`, body, key),
+  async listSupplierReturns(workspaceId: number) {
+    const result = await scopedGet<{ returns: SupplierReturn[] }>(workspaceId, "/api/v1/supplier-returns");
+    return result.returns ?? [];
+  },
+  async listReturnOptions(workspaceId: number, receiptId: number) {
+    const result = await scopedGet<{ lines: SupplierReturnLineOption[] }>(workspaceId, `/api/v1/goods-receipts/${receiptId}/return-options`);
+    return result.lines ?? [];
+  },
+  createSupplierReturn: (workspaceId: number, body: unknown, key: string) => scopedPost<{ return: SupplierReturn }>(workspaceId, "/api/v1/supplier-returns", body, key),
+  createSupplierCredit: (workspaceId: number, body: unknown, key: string) => scopedPost(workspaceId, "/api/v1/supplier-credits", body, key),
+  createSupplierRefund: (workspaceId: number, body: unknown, key: string) => scopedPost(workspaceId, "/api/v1/supplier-refunds", body, key),
+  procurementReport: (workspaceId: number, asOf?: string) => scopedGet<ProcurementReport>(workspaceId, "/api/v1/reports/procurement", asOf ? { as_of: asOf } : {}),
 
   createSale: (workspaceId: number, body: unknown, key: string) => scopedPost(workspaceId, "/api/v1/sales", body, key),
   createPurchase: (workspaceId: number, body: unknown, key: string) =>
