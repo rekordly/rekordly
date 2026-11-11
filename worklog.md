@@ -410,3 +410,27 @@
 
 
 
+
+
+## 2026-11-11 — Blueprint 08 (Purchasing, Procurement & Payables) Full Closure
+- Implemented all remaining Blueprint 08 backend and frontend capabilities across `implementation/api` and `implementation/web`:
+  1. Direct Purchase Orders, Draft Editing/Duplication & Issued Revisions (Blueprint 08 §§7, 10):
+     - Migration `000047_blueprint_08_completion.sql` & sqlc (`finance_procurement_completion.sql`): dropped NOT NULL on `purchase_orders.source_purchase_request_id` & `purchase_order_lines.source_purchase_request_line_id`, added `outlet_id`, `expected_date`, `payment_terms`, `notes`, line-level `discount_minor` & `tax_amount_minor`, and `purchase_order_versions`.
+     - Added `CreateDirectPurchaseOrder`, `UpdatePurchaseOrderDraft` (`PATCH /purchase-orders/:id`), `DuplicatePurchaseOrder` (`POST /purchase-orders/:id/duplicate`), `RevisePurchaseOrder` (`POST /purchase-orders/:id/revise` storing `purchase_order_versions` snapshot and preventing quantity reduction below already received quantities), and `ListPurchaseOrderVersions` (`GET /purchase-orders/:id/versions`) in `purchase_order_service.go` / `purchase_order_handler.go`.
+  2. Extended Goods Receipts — Unplanned Receipts, Rejected Qty, Batch/Serial/Expiry & Landed Cost Allocation (Blueprint 08 §§11, 12, 15):
+     - Extended `goods_receipts` (`source_type`, `supplier_id`, `reason`, `currency`, `currency_exponent`, `landed_cost_minor`) and `goods_receipt_lines` (`rejected_quantity`, `batch_number`, `expiry_date`, `serial_numbers`, `landed_cost_minor`, `effective_unit_cost_minor`).
+     - Added unplanned receipt support (`PurchaseOrderID == 0`), rejected quantity logging (excluded from available stock), serial count matching against accepted whole units, over-receipt policy enforcement (`allow_over_receipt`), and proportional landed cost allocation with residual rounding into inventory value and GRNI in `goods_receipt_service.go`.
+  3. Supplier Bill Lines, Partial/Multi-Receipt Billing, Duplicate Detection, Tolerance/PPV Accounting, Credits & Reversal (Blueprint 08 §§17–24):
+     - Replaced receipt unique constraint on `supplier_bills` with partial/multi-receipt support via `supplier_bill_lines`, normalized duplicate `(workspace_id, supplier_id, lower(btrim(supplier_invoice_number)))` detection returning `SUPPLIER_BILL_DUPLICATE` (`409 Conflict`), and extended `supplier_bill_commands` (`approve`, `reject`, `dispute`, `reverse`, `apply_credit`).
+     - Updated `ApproveSupplierBill` to check `price_variance_tolerance_bps` / explicit `AcceptVariance` and post balanced Purchase Price Variance and Input Tax Recoverable ledger entries alongside GRNI and AP. Added `TransitionSupplierBill` (`reject`, `dispute`, `reverse`) and `ApplySupplierCreditToBill` (`POST /supplier-bills/:id/commands/apply-credit`), plus `GET /supplier-credits` and `GET /supplier-refunds` in `supplier_return_handler.go`.
+  4. Blueprint 08 RBAC Permissions, Outlet Scoping & Reconciliation Reports (Blueprint 08 §§33, 40):
+     - Seeded all 14 granular `purchases.*` permissions into `role_permissions` (Migration `000047`) and `auth.RoleTemplateDefinitions()` (`me.go`), and enforced `requireProcurementPermission` and `enforceProcurementOutletScope` across all procurement handlers.
+     - Extended `GetProcurementReport` (`procurement_report_service.go`) with `ap_aging` (`current`, `1–30`, `31–60`, `61+` days), `aged_grni`, `variance_bills`, `unapplied_credit_count`/`minor`, and `pending_returns`.
+  5. Complete Procurement Frontend (`procurement-page.tsx`, `procurement-drawers.tsx`, `src/types/finance.ts`, `src/lib/money.ts`):
+     - Replaced hardcoded `is_owner` gates with `hasWorkspacePermission`, wired `PurchaseOrderEditorDrawer` (create/edit/revise + duplicate), `ExtendedGoodsReceiptDrawer` (PO & unplanned receipts with location, delivery ref, landed cost, batch/expiry/serials, rejected qty), `GoodsReceiptDetailDrawer` (with attachments), `ReceiptBillDrawer` (editable line qty/price/discount/tax), `BillActionDrawer` (reject/dispute/reverse/apply-credit + variance approval), `ApprovalPolicyDrawer`, Supplier Credits & Refunds lists, and `ProcurementReportsPanel`.
+- Verification Suite:
+  - Live PostgreSQL migration (`000047_blueprint_08_completion.sql`) & `go vet ./...` + `go test -count=1 ./...`: all packages passed (`internal/auth`, `internal/config`, `internal/database`, `internal/finance`, `internal/server`) including new tests in `internal/finance/blueprint_08_completion_integration_test.go`.
+  - `bun run type-check`: 0 errors.
+  - `bun run lint`: 0 errors.
+  - `bun test`: 52/52 tests passed across 4 files.
+  - `bun run build`: Next.js production build succeeded cleanly.

@@ -2,21 +2,24 @@ package finance
 
 import (
 	"errors"
-	"github.com/gin-gonic/gin"
 	"net/http"
 	"strconv"
+
+	"github.com/gin-gonic/gin"
 )
 
 func (h *Handler) RegisterSupplierReturnRoutes(g *gin.RouterGroup) {
 	g.POST("/supplier-returns", h.createSupplierReturn)
 	g.GET("/supplier-returns", h.listSupplierReturns)
 	g.GET("/goods-receipts/:id/return-options", h.returnOptions)
+	g.GET("/supplier-credits", h.listSupplierCredits)
 	g.POST("/supplier-credits", h.createSupplierCredit)
+	g.GET("/supplier-refunds", h.listSupplierRefunds)
 	g.POST("/supplier-refunds", h.createSupplierRefund)
 }
 
 func (h *Handler) listSupplierReturns(c *gin.Context) {
-	ws, ok := businessWorkspace(c)
+	ws, ok := requireProcurementPermission(c, "purchases.view", "purchases.return", "purchases.create")
 	if !ok {
 		return
 	}
@@ -27,8 +30,35 @@ func (h *Handler) listSupplierReturns(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"returns": rows}})
 }
+
+func (h *Handler) listSupplierCredits(c *gin.Context) {
+	ws, ok := requireProcurementPermission(c, "purchases.view", "purchases.return", "purchases.pay_supplier", "purchases.create")
+	if !ok {
+		return
+	}
+	rows, err := h.service.ListSupplierCredits(c.Request.Context(), ws.WorkspaceID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "Failed to list supplier credits"}})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"credits": rows}})
+}
+
+func (h *Handler) listSupplierRefunds(c *gin.Context) {
+	ws, ok := requireProcurementPermission(c, "purchases.view", "purchases.return", "purchases.pay_supplier", "purchases.create")
+	if !ok {
+		return
+	}
+	rows, err := h.service.ListSupplierRefunds(c.Request.Context(), ws.WorkspaceID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "Failed to list supplier refunds"}})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"refunds": rows}})
+}
+
 func (h *Handler) returnOptions(c *gin.Context) {
-	ws, ok := businessWorkspace(c)
+	ws, ok := requireProcurementPermission(c, "purchases.view", "purchases.return", "purchases.create")
 	if !ok {
 		return
 	}
@@ -46,7 +76,7 @@ func (h *Handler) returnOptions(c *gin.Context) {
 }
 
 func (h *Handler) createSupplierReturn(c *gin.Context) {
-	ws, ok := businessWorkspace(c)
+	ws, ok := requireProcurementPermission(c, "purchases.return")
 	if !ok {
 		return
 	}
@@ -71,7 +101,7 @@ func (h *Handler) createSupplierReturn(c *gin.Context) {
 }
 
 func (h *Handler) createSupplierCredit(c *gin.Context) {
-	ws, ok := businessWorkspace(c)
+	ws, ok := requireProcurementPermission(c, "purchases.return", "purchases.approve_bill")
 	if !ok {
 		return
 	}
@@ -96,7 +126,7 @@ func (h *Handler) createSupplierCredit(c *gin.Context) {
 }
 
 func (h *Handler) createSupplierRefund(c *gin.Context) {
-	ws, ok := businessWorkspace(c)
+	ws, ok := requireProcurementPermission(c, "purchases.return", "purchases.pay_supplier", "purchases.manage_advance")
 	if !ok {
 		return
 	}

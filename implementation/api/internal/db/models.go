@@ -390,7 +390,7 @@ type ExternalPaymentEvidence struct {
 type GoodsReceipt struct {
 	ID                int64              `json:"id"`
 	WorkspaceID       int64              `json:"workspace_id"`
-	PurchaseOrderID   int64              `json:"purchase_order_id"`
+	PurchaseOrderID   pgtype.Int8        `json:"purchase_order_id"`
 	ReceiptReference  pgtype.Text        `json:"receipt_reference"`
 	ReceivedOn        pgtype.Date        `json:"received_on"`
 	IdempotencyKey    string             `json:"idempotency_key"`
@@ -399,19 +399,32 @@ type GoodsReceipt struct {
 	LocationID        pgtype.Int8        `json:"location_id"`
 	DeliveryReference pgtype.Text        `json:"delivery_reference"`
 	ServiceAccepted   bool               `json:"service_accepted"`
+	SupplierID        pgtype.Int8        `json:"supplier_id"`
+	SourceType        string             `json:"source_type"`
+	Reason            pgtype.Text        `json:"reason"`
+	Currency          string             `json:"currency"`
+	CurrencyExponent  int32              `json:"currency_exponent"`
+	LandedCostMinor   int64              `json:"landed_cost_minor"`
 }
 
 type GoodsReceiptLine struct {
-	ID                  int64           `json:"id"`
-	WorkspaceID         int64           `json:"workspace_id"`
-	GoodsReceiptID      int64           `json:"goods_receipt_id"`
-	PurchaseOrderLineID int64           `json:"purchase_order_line_id"`
-	ProductID           pgtype.Int8     `json:"product_id"`
-	AcceptedQuantity    decimal.Decimal `json:"accepted_quantity"`
-	UnitCostMinor       int64           `json:"unit_cost_minor"`
-	LineTotalMinor      int64           `json:"line_total_minor"`
-	ActualUnitCostMinor pgtype.Int8     `json:"actual_unit_cost_minor"`
-	LineNotes           pgtype.Text     `json:"line_notes"`
+	ID                     int64           `json:"id"`
+	WorkspaceID            int64           `json:"workspace_id"`
+	GoodsReceiptID         int64           `json:"goods_receipt_id"`
+	PurchaseOrderLineID    pgtype.Int8     `json:"purchase_order_line_id"`
+	ProductID              pgtype.Int8     `json:"product_id"`
+	AcceptedQuantity       decimal.Decimal `json:"accepted_quantity"`
+	UnitCostMinor          int64           `json:"unit_cost_minor"`
+	LineTotalMinor         int64           `json:"line_total_minor"`
+	ActualUnitCostMinor    pgtype.Int8     `json:"actual_unit_cost_minor"`
+	LineNotes              pgtype.Text     `json:"line_notes"`
+	Description            pgtype.Text     `json:"description"`
+	RejectedQuantity       decimal.Decimal `json:"rejected_quantity"`
+	BatchNumber            pgtype.Text     `json:"batch_number"`
+	ExpiryDate             pgtype.Date     `json:"expiry_date"`
+	SerialNumbers          []string        `json:"serial_numbers"`
+	LandedCostMinor        int64           `json:"landed_cost_minor"`
+	EffectiveUnitCostMinor pgtype.Int8     `json:"effective_unit_cost_minor"`
 }
 
 type IdempotencyRecord struct {
@@ -996,11 +1009,15 @@ type PaymentReceipt struct {
 }
 
 type ProcurementApprovalPolicy struct {
-	WorkspaceID            int64              `json:"workspace_id"`
-	ApprovalThresholdMinor int64              `json:"approval_threshold_minor"`
-	AllowSelfApproval      bool               `json:"allow_self_approval"`
-	UpdatedByUserID        pgtype.Int8        `json:"updated_by_user_id"`
-	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+	WorkspaceID               int64              `json:"workspace_id"`
+	ApprovalThresholdMinor    int64              `json:"approval_threshold_minor"`
+	AllowSelfApproval         bool               `json:"allow_self_approval"`
+	UpdatedByUserID           pgtype.Int8        `json:"updated_by_user_id"`
+	UpdatedAt                 pgtype.Timestamptz `json:"updated_at"`
+	PriceVarianceToleranceBps int32              `json:"price_variance_tolerance_bps"`
+	QtyVarianceToleranceBps   int32              `json:"qty_variance_tolerance_bps"`
+	AllowUnplannedReceipt     bool               `json:"allow_unplanned_receipt"`
+	AllowOverReceipt          bool               `json:"allow_over_receipt"`
 }
 
 type ProcurementAttachment struct {
@@ -1094,7 +1111,7 @@ type Purchase struct {
 type PurchaseOrder struct {
 	ID                      int64              `json:"id"`
 	WorkspaceID             int64              `json:"workspace_id"`
-	SourcePurchaseRequestID int64              `json:"source_purchase_request_id"`
+	SourcePurchaseRequestID pgtype.Int8        `json:"source_purchase_request_id"`
 	SupplierID              pgtype.Int8        `json:"supplier_id"`
 	Status                  string             `json:"status"`
 	Version                 int32              `json:"version"`
@@ -1113,6 +1130,10 @@ type PurchaseOrder struct {
 	ClosedReason            pgtype.Text        `json:"closed_reason"`
 	AcknowledgedAt          pgtype.Timestamptz `json:"acknowledged_at"`
 	AcknowledgementNote     pgtype.Text        `json:"acknowledgement_note"`
+	OutletID                pgtype.Int8        `json:"outlet_id"`
+	ExpectedDate            pgtype.Date        `json:"expected_date"`
+	PaymentTerms            pgtype.Text        `json:"payment_terms"`
+	Notes                   pgtype.Text        `json:"notes"`
 }
 
 type PurchaseOrderCommandLog struct {
@@ -1141,13 +1162,15 @@ type PurchaseOrderLine struct {
 	ID                          int64           `json:"id"`
 	WorkspaceID                 int64           `json:"workspace_id"`
 	PurchaseOrderID             int64           `json:"purchase_order_id"`
-	SourcePurchaseRequestLineID int64           `json:"source_purchase_request_line_id"`
+	SourcePurchaseRequestLineID pgtype.Int8     `json:"source_purchase_request_line_id"`
 	ProductID                   pgtype.Int8     `json:"product_id"`
 	Description                 string          `json:"description"`
 	Quantity                    decimal.Decimal `json:"quantity"`
 	UnitName                    string          `json:"unit_name"`
 	ExpectedUnitCostMinor       int64           `json:"expected_unit_cost_minor"`
 	LineTotalMinor              int64           `json:"line_total_minor"`
+	DiscountMinor               int64           `json:"discount_minor"`
+	TaxAmountMinor              int64           `json:"tax_amount_minor"`
 }
 
 type PurchaseOrderSequence struct {
@@ -1167,6 +1190,17 @@ type PurchaseOrderShare struct {
 	CreatedByUserID int64              `json:"created_by_user_id"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	RespondedAt     pgtype.Timestamptz `json:"responded_at"`
+}
+
+type PurchaseOrderVersion struct {
+	ID              int64              `json:"id"`
+	WorkspaceID     int64              `json:"workspace_id"`
+	PurchaseOrderID int64              `json:"purchase_order_id"`
+	Version         int32              `json:"version"`
+	Snapshot        []byte             `json:"snapshot"`
+	ChangeReason    pgtype.Text        `json:"change_reason"`
+	ChangedByUserID int64              `json:"changed_by_user_id"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 }
 
 type PurchaseRequest struct {
@@ -1191,6 +1225,7 @@ type PurchaseRequest struct {
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 	Priority             string             `json:"priority"`
 	LatestDecisionReason pgtype.Text        `json:"latest_decision_reason"`
+	OutletID             pgtype.Int8        `json:"outlet_id"`
 }
 
 type PurchaseRequestCommandLog struct {
@@ -1487,6 +1522,15 @@ type SupplierBill struct {
 	BillType              string             `json:"bill_type"`
 	ExpenseAccountClass   string             `json:"expense_account_class"`
 	Description           pgtype.Text        `json:"description"`
+	OutletID              pgtype.Int8        `json:"outlet_id"`
+	TaxAmountMinor        int64              `json:"tax_amount_minor"`
+	DiscountMinor         int64              `json:"discount_minor"`
+	VarianceMinor         int64              `json:"variance_minor"`
+	CreditedMinor         int64              `json:"credited_minor"`
+	MatchStatus           string             `json:"match_status"`
+	DisputeReason         pgtype.Text        `json:"dispute_reason"`
+	ReversedAt            pgtype.Timestamptz `json:"reversed_at"`
+	ReversalReason        pgtype.Text        `json:"reversal_reason"`
 }
 
 type SupplierBillCommand struct {
@@ -1498,6 +1542,32 @@ type SupplierBillCommand struct {
 	IdempotencyKey  string             `json:"idempotency_key"`
 	ActorUserID     int64              `json:"actor_user_id"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
+type SupplierBillCreditApplication struct {
+	ID               int64              `json:"id"`
+	WorkspaceID      int64              `json:"workspace_id"`
+	SupplierBillID   int64              `json:"supplier_bill_id"`
+	SupplierCreditID int64              `json:"supplier_credit_id"`
+	AmountMinor      int64              `json:"amount_minor"`
+	IdempotencyKey   string             `json:"idempotency_key"`
+	AppliedByUserID  int64              `json:"applied_by_user_id"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
+type SupplierBillLine struct {
+	ID                  int64              `json:"id"`
+	WorkspaceID         int64              `json:"workspace_id"`
+	SupplierBillID      int64              `json:"supplier_bill_id"`
+	GoodsReceiptLineID  pgtype.Int8        `json:"goods_receipt_line_id"`
+	PurchaseOrderLineID pgtype.Int8        `json:"purchase_order_line_id"`
+	Description         string             `json:"description"`
+	Quantity            decimal.Decimal    `json:"quantity"`
+	UnitCostMinor       int64              `json:"unit_cost_minor"`
+	DiscountMinor       int64              `json:"discount_minor"`
+	TaxAmountMinor      int64              `json:"tax_amount_minor"`
+	LineTotalMinor      int64              `json:"line_total_minor"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 }
 
 type SupplierCredit struct {

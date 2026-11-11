@@ -61,7 +61,7 @@ func (q *Queries) CreateProcurementAttachment(ctx context.Context, arg CreatePro
 }
 
 const getProcurementApprovalPolicy = `-- name: GetProcurementApprovalPolicy :one
-SELECT workspace_id, approval_threshold_minor, allow_self_approval, updated_by_user_id, updated_at FROM procurement_approval_policies WHERE workspace_id=$1
+SELECT workspace_id, approval_threshold_minor, allow_self_approval, updated_by_user_id, updated_at, price_variance_tolerance_bps, qty_variance_tolerance_bps, allow_unplanned_receipt, allow_over_receipt FROM procurement_approval_policies WHERE workspace_id=$1
 `
 
 func (q *Queries) GetProcurementApprovalPolicy(ctx context.Context, workspaceID int64) (ProcurementApprovalPolicy, error) {
@@ -73,6 +73,10 @@ func (q *Queries) GetProcurementApprovalPolicy(ctx context.Context, workspaceID 
 		&i.AllowSelfApproval,
 		&i.UpdatedByUserID,
 		&i.UpdatedAt,
+		&i.PriceVarianceToleranceBps,
+		&i.QtyVarianceToleranceBps,
+		&i.AllowUnplannedReceipt,
+		&i.AllowOverReceipt,
 	)
 	return i, err
 }
@@ -164,7 +168,7 @@ const upsertProcurementApprovalPolicy = `-- name: UpsertProcurementApprovalPolic
 INSERT INTO procurement_approval_policies(workspace_id,approval_threshold_minor,allow_self_approval,updated_by_user_id)
 VALUES($1,$2,$3,$4)
 ON CONFLICT(workspace_id) DO UPDATE SET approval_threshold_minor=EXCLUDED.approval_threshold_minor, allow_self_approval=EXCLUDED.allow_self_approval, updated_by_user_id=EXCLUDED.updated_by_user_id, updated_at=now()
-RETURNING workspace_id, approval_threshold_minor, allow_self_approval, updated_by_user_id, updated_at
+RETURNING workspace_id, approval_threshold_minor, allow_self_approval, updated_by_user_id, updated_at, price_variance_tolerance_bps, qty_variance_tolerance_bps, allow_unplanned_receipt, allow_over_receipt
 `
 
 type UpsertProcurementApprovalPolicyParams struct {
@@ -188,6 +192,10 @@ func (q *Queries) UpsertProcurementApprovalPolicy(ctx context.Context, arg Upser
 		&i.AllowSelfApproval,
 		&i.UpdatedByUserID,
 		&i.UpdatedAt,
+		&i.PriceVarianceToleranceBps,
+		&i.QtyVarianceToleranceBps,
+		&i.AllowUnplannedReceipt,
+		&i.AllowOverReceipt,
 	)
 	return i, err
 }

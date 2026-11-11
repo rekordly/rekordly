@@ -12,7 +12,7 @@ import (
 )
 
 const approveSupplierBill = `-- name: ApproveSupplierBill :one
-UPDATE supplier_bills SET status='approved',version=version+1,approved_by_user_id=$4,approved_at=now(),updated_at=now() WHERE workspace_id=$1 AND id=$2 AND version=$3 AND status='draft' RETURNING id, workspace_id, goods_receipt_id, supplier_id, supplier_invoice_number, bill_date, due_date, currency, currency_exponent, total_minor, outstanding_minor, status, version, idempotency_key, created_by_user_id, approved_by_user_id, approved_at, created_at, updated_at, bill_type, expense_account_class, description
+UPDATE supplier_bills SET status='approved',version=version+1,approved_by_user_id=$4,approved_at=now(),updated_at=now() WHERE workspace_id=$1 AND id=$2 AND version=$3 AND status='draft' RETURNING id, workspace_id, goods_receipt_id, supplier_id, supplier_invoice_number, bill_date, due_date, currency, currency_exponent, total_minor, outstanding_minor, status, version, idempotency_key, created_by_user_id, approved_by_user_id, approved_at, created_at, updated_at, bill_type, expense_account_class, description, outlet_id, tax_amount_minor, discount_minor, variance_minor, credited_minor, match_status, dispute_reason, reversed_at, reversal_reason
 `
 
 type ApproveSupplierBillParams struct {
@@ -53,12 +53,21 @@ func (q *Queries) ApproveSupplierBill(ctx context.Context, arg ApproveSupplierBi
 		&i.BillType,
 		&i.ExpenseAccountClass,
 		&i.Description,
+		&i.OutletID,
+		&i.TaxAmountMinor,
+		&i.DiscountMinor,
+		&i.VarianceMinor,
+		&i.CreditedMinor,
+		&i.MatchStatus,
+		&i.DisputeReason,
+		&i.ReversedAt,
+		&i.ReversalReason,
 	)
 	return i, err
 }
 
 const createSupplierBill = `-- name: CreateSupplierBill :one
-INSERT INTO supplier_bills(workspace_id,goods_receipt_id,supplier_id,supplier_invoice_number,bill_date,due_date,currency,currency_exponent,total_minor,outstanding_minor,idempotency_key,created_by_user_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$9,$10,$11) RETURNING id, workspace_id, goods_receipt_id, supplier_id, supplier_invoice_number, bill_date, due_date, currency, currency_exponent, total_minor, outstanding_minor, status, version, idempotency_key, created_by_user_id, approved_by_user_id, approved_at, created_at, updated_at, bill_type, expense_account_class, description
+INSERT INTO supplier_bills(workspace_id,goods_receipt_id,supplier_id,supplier_invoice_number,bill_date,due_date,currency,currency_exponent,total_minor,outstanding_minor,idempotency_key,created_by_user_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$9,$10,$11) RETURNING id, workspace_id, goods_receipt_id, supplier_id, supplier_invoice_number, bill_date, due_date, currency, currency_exponent, total_minor, outstanding_minor, status, version, idempotency_key, created_by_user_id, approved_by_user_id, approved_at, created_at, updated_at, bill_type, expense_account_class, description, outlet_id, tax_amount_minor, discount_minor, variance_minor, credited_minor, match_status, dispute_reason, reversed_at, reversal_reason
 `
 
 type CreateSupplierBillParams struct {
@@ -113,6 +122,15 @@ func (q *Queries) CreateSupplierBill(ctx context.Context, arg CreateSupplierBill
 		&i.BillType,
 		&i.ExpenseAccountClass,
 		&i.Description,
+		&i.OutletID,
+		&i.TaxAmountMinor,
+		&i.DiscountMinor,
+		&i.VarianceMinor,
+		&i.CreditedMinor,
+		&i.MatchStatus,
+		&i.DisputeReason,
+		&i.ReversedAt,
+		&i.ReversalReason,
 	)
 	return i, err
 }
@@ -143,7 +161,7 @@ func (q *Queries) CreateSupplierBillCommand(ctx context.Context, arg CreateSuppl
 }
 
 const getReceiptBillSource = `-- name: GetReceiptBillSource :one
-SELECT gr.id AS receipt_id,po.supplier_id,po.currency,po.currency_exponent,COALESCE(sum(grl.line_total_minor),0)::bigint AS total_minor FROM goods_receipts gr JOIN purchase_orders po ON po.id=gr.purchase_order_id AND po.workspace_id=gr.workspace_id JOIN goods_receipt_lines grl ON grl.goods_receipt_id=gr.id AND grl.workspace_id=gr.workspace_id WHERE gr.workspace_id=$1 AND gr.id=$2 GROUP BY gr.id,po.supplier_id,po.currency,po.currency_exponent
+SELECT gr.id AS receipt_id, COALESCE(gr.supplier_id, po.supplier_id) AS supplier_id, COALESCE(po.currency, gr.currency) AS currency, COALESCE(po.currency_exponent, gr.currency_exponent) AS currency_exponent, gr.location_id AS outlet_id, COALESCE(sum(grl.line_total_minor),0)::bigint AS total_minor FROM goods_receipts gr LEFT JOIN purchase_orders po ON po.id=gr.purchase_order_id AND po.workspace_id=gr.workspace_id JOIN goods_receipt_lines grl ON grl.goods_receipt_id=gr.id AND grl.workspace_id=gr.workspace_id WHERE gr.workspace_id=$1 AND gr.id=$2 GROUP BY gr.id, gr.supplier_id, po.supplier_id, po.currency, gr.currency, po.currency_exponent, gr.currency_exponent, gr.location_id
 `
 
 type GetReceiptBillSourceParams struct {
@@ -156,6 +174,7 @@ type GetReceiptBillSourceRow struct {
 	SupplierID       pgtype.Int8 `json:"supplier_id"`
 	Currency         string      `json:"currency"`
 	CurrencyExponent int32       `json:"currency_exponent"`
+	OutletID         pgtype.Int8 `json:"outlet_id"`
 	TotalMinor       int64       `json:"total_minor"`
 }
 
@@ -167,13 +186,14 @@ func (q *Queries) GetReceiptBillSource(ctx context.Context, arg GetReceiptBillSo
 		&i.SupplierID,
 		&i.Currency,
 		&i.CurrencyExponent,
+		&i.OutletID,
 		&i.TotalMinor,
 	)
 	return i, err
 }
 
 const getSupplierBill = `-- name: GetSupplierBill :one
-SELECT id, workspace_id, goods_receipt_id, supplier_id, supplier_invoice_number, bill_date, due_date, currency, currency_exponent, total_minor, outstanding_minor, status, version, idempotency_key, created_by_user_id, approved_by_user_id, approved_at, created_at, updated_at, bill_type, expense_account_class, description FROM supplier_bills WHERE workspace_id=$1 AND id=$2
+SELECT id, workspace_id, goods_receipt_id, supplier_id, supplier_invoice_number, bill_date, due_date, currency, currency_exponent, total_minor, outstanding_minor, status, version, idempotency_key, created_by_user_id, approved_by_user_id, approved_at, created_at, updated_at, bill_type, expense_account_class, description, outlet_id, tax_amount_minor, discount_minor, variance_minor, credited_minor, match_status, dispute_reason, reversed_at, reversal_reason FROM supplier_bills WHERE workspace_id=$1 AND id=$2
 `
 
 type GetSupplierBillParams struct {
@@ -207,12 +227,21 @@ func (q *Queries) GetSupplierBill(ctx context.Context, arg GetSupplierBillParams
 		&i.BillType,
 		&i.ExpenseAccountClass,
 		&i.Description,
+		&i.OutletID,
+		&i.TaxAmountMinor,
+		&i.DiscountMinor,
+		&i.VarianceMinor,
+		&i.CreditedMinor,
+		&i.MatchStatus,
+		&i.DisputeReason,
+		&i.ReversedAt,
+		&i.ReversalReason,
 	)
 	return i, err
 }
 
 const getSupplierBillByIdempotency = `-- name: GetSupplierBillByIdempotency :one
-SELECT id, workspace_id, goods_receipt_id, supplier_id, supplier_invoice_number, bill_date, due_date, currency, currency_exponent, total_minor, outstanding_minor, status, version, idempotency_key, created_by_user_id, approved_by_user_id, approved_at, created_at, updated_at, bill_type, expense_account_class, description FROM supplier_bills WHERE workspace_id=$1 AND idempotency_key=$2
+SELECT id, workspace_id, goods_receipt_id, supplier_id, supplier_invoice_number, bill_date, due_date, currency, currency_exponent, total_minor, outstanding_minor, status, version, idempotency_key, created_by_user_id, approved_by_user_id, approved_at, created_at, updated_at, bill_type, expense_account_class, description, outlet_id, tax_amount_minor, discount_minor, variance_minor, credited_minor, match_status, dispute_reason, reversed_at, reversal_reason FROM supplier_bills WHERE workspace_id=$1 AND idempotency_key=$2
 `
 
 type GetSupplierBillByIdempotencyParams struct {
@@ -246,6 +275,15 @@ func (q *Queries) GetSupplierBillByIdempotency(ctx context.Context, arg GetSuppl
 		&i.BillType,
 		&i.ExpenseAccountClass,
 		&i.Description,
+		&i.OutletID,
+		&i.TaxAmountMinor,
+		&i.DiscountMinor,
+		&i.VarianceMinor,
+		&i.CreditedMinor,
+		&i.MatchStatus,
+		&i.DisputeReason,
+		&i.ReversedAt,
+		&i.ReversalReason,
 	)
 	return i, err
 }
@@ -273,7 +311,7 @@ func (q *Queries) GetSupplierBillCommand(ctx context.Context, arg GetSupplierBil
 }
 
 const getSupplierBillForUpdate = `-- name: GetSupplierBillForUpdate :one
-SELECT id, workspace_id, goods_receipt_id, supplier_id, supplier_invoice_number, bill_date, due_date, currency, currency_exponent, total_minor, outstanding_minor, status, version, idempotency_key, created_by_user_id, approved_by_user_id, approved_at, created_at, updated_at, bill_type, expense_account_class, description FROM supplier_bills WHERE workspace_id=$1 AND id=$2 FOR UPDATE
+SELECT id, workspace_id, goods_receipt_id, supplier_id, supplier_invoice_number, bill_date, due_date, currency, currency_exponent, total_minor, outstanding_minor, status, version, idempotency_key, created_by_user_id, approved_by_user_id, approved_at, created_at, updated_at, bill_type, expense_account_class, description, outlet_id, tax_amount_minor, discount_minor, variance_minor, credited_minor, match_status, dispute_reason, reversed_at, reversal_reason FROM supplier_bills WHERE workspace_id=$1 AND id=$2 FOR UPDATE
 `
 
 type GetSupplierBillForUpdateParams struct {
@@ -307,12 +345,21 @@ func (q *Queries) GetSupplierBillForUpdate(ctx context.Context, arg GetSupplierB
 		&i.BillType,
 		&i.ExpenseAccountClass,
 		&i.Description,
+		&i.OutletID,
+		&i.TaxAmountMinor,
+		&i.DiscountMinor,
+		&i.VarianceMinor,
+		&i.CreditedMinor,
+		&i.MatchStatus,
+		&i.DisputeReason,
+		&i.ReversedAt,
+		&i.ReversalReason,
 	)
 	return i, err
 }
 
 const getThreeWayMatchTotals = `-- name: GetThreeWayMatchTotals :one
-SELECT COALESCE((SELECT sum(pol.line_total_minor) FROM purchase_order_lines pol WHERE pol.workspace_id=gr.workspace_id AND pol.purchase_order_id=gr.purchase_order_id),0)::bigint AS ordered_minor, COALESCE(sum(grl.line_total_minor),0)::bigint AS received_minor, COALESCE((SELECT sum(sb.total_minor) FROM supplier_bills sb WHERE sb.workspace_id=gr.workspace_id AND sb.goods_receipt_id=gr.id),0)::bigint AS billed_minor FROM goods_receipts gr JOIN goods_receipt_lines grl ON grl.goods_receipt_id=gr.id AND grl.workspace_id=gr.workspace_id WHERE gr.workspace_id=$1 AND gr.id=$2 GROUP BY gr.workspace_id,gr.purchase_order_id,gr.id
+SELECT COALESCE((SELECT sum(pol.line_total_minor) FROM purchase_order_lines pol WHERE pol.workspace_id=gr.workspace_id AND pol.purchase_order_id=gr.purchase_order_id),0)::bigint AS ordered_minor, COALESCE(sum(grl.line_total_minor),0)::bigint AS received_minor, COALESCE((SELECT sum(sb.total_minor) FROM supplier_bills sb WHERE sb.workspace_id=gr.workspace_id AND sb.goods_receipt_id=gr.id AND sb.status NOT IN ('rejected','voided','reversed')),0)::bigint AS billed_minor FROM goods_receipts gr JOIN goods_receipt_lines grl ON grl.goods_receipt_id=gr.id AND grl.workspace_id=gr.workspace_id WHERE gr.workspace_id=$1 AND gr.id=$2 GROUP BY gr.workspace_id,gr.purchase_order_id,gr.id
 `
 
 type GetThreeWayMatchTotalsParams struct {
@@ -334,7 +381,7 @@ func (q *Queries) GetThreeWayMatchTotals(ctx context.Context, arg GetThreeWayMat
 }
 
 const listSupplierBills = `-- name: ListSupplierBills :many
-SELECT id, workspace_id, goods_receipt_id, supplier_id, supplier_invoice_number, bill_date, due_date, currency, currency_exponent, total_minor, outstanding_minor, status, version, idempotency_key, created_by_user_id, approved_by_user_id, approved_at, created_at, updated_at, bill_type, expense_account_class, description FROM supplier_bills WHERE workspace_id=$1 AND ($3::bigint IS NULL OR id<$3) ORDER BY id DESC LIMIT $2
+SELECT id, workspace_id, goods_receipt_id, supplier_id, supplier_invoice_number, bill_date, due_date, currency, currency_exponent, total_minor, outstanding_minor, status, version, idempotency_key, created_by_user_id, approved_by_user_id, approved_at, created_at, updated_at, bill_type, expense_account_class, description, outlet_id, tax_amount_minor, discount_minor, variance_minor, credited_minor, match_status, dispute_reason, reversed_at, reversal_reason FROM supplier_bills WHERE workspace_id=$1 AND ($3::bigint IS NULL OR id<$3) ORDER BY id DESC LIMIT $2
 `
 
 type ListSupplierBillsParams struct {
@@ -375,6 +422,15 @@ func (q *Queries) ListSupplierBills(ctx context.Context, arg ListSupplierBillsPa
 			&i.BillType,
 			&i.ExpenseAccountClass,
 			&i.Description,
+			&i.OutletID,
+			&i.TaxAmountMinor,
+			&i.DiscountMinor,
+			&i.VarianceMinor,
+			&i.CreditedMinor,
+			&i.MatchStatus,
+			&i.DisputeReason,
+			&i.ReversedAt,
+			&i.ReversalReason,
 		); err != nil {
 			return nil, err
 		}
@@ -387,7 +443,7 @@ func (q *Queries) ListSupplierBills(ctx context.Context, arg ListSupplierBillsPa
 }
 
 const settleSupplierBill = `-- name: SettleSupplierBill :one
-UPDATE supplier_bills SET outstanding_minor=outstanding_minor-$3,status=CASE WHEN outstanding_minor-$3=0 THEN 'paid' ELSE 'partially_paid' END,version=version+1,updated_at=now() WHERE workspace_id=$1 AND id=$2 AND outstanding_minor >= $3 AND status IN ('approved','partially_paid') RETURNING id, workspace_id, goods_receipt_id, supplier_id, supplier_invoice_number, bill_date, due_date, currency, currency_exponent, total_minor, outstanding_minor, status, version, idempotency_key, created_by_user_id, approved_by_user_id, approved_at, created_at, updated_at, bill_type, expense_account_class, description
+UPDATE supplier_bills SET outstanding_minor=outstanding_minor-$3,status=CASE WHEN outstanding_minor-$3=0 THEN 'paid' ELSE 'partially_paid' END,version=version+1,updated_at=now() WHERE workspace_id=$1 AND id=$2 AND outstanding_minor >= $3 AND status IN ('approved','partially_paid') RETURNING id, workspace_id, goods_receipt_id, supplier_id, supplier_invoice_number, bill_date, due_date, currency, currency_exponent, total_minor, outstanding_minor, status, version, idempotency_key, created_by_user_id, approved_by_user_id, approved_at, created_at, updated_at, bill_type, expense_account_class, description, outlet_id, tax_amount_minor, discount_minor, variance_minor, credited_minor, match_status, dispute_reason, reversed_at, reversal_reason
 `
 
 type SettleSupplierBillParams struct {
@@ -422,6 +478,15 @@ func (q *Queries) SettleSupplierBill(ctx context.Context, arg SettleSupplierBill
 		&i.BillType,
 		&i.ExpenseAccountClass,
 		&i.Description,
+		&i.OutletID,
+		&i.TaxAmountMinor,
+		&i.DiscountMinor,
+		&i.VarianceMinor,
+		&i.CreditedMinor,
+		&i.MatchStatus,
+		&i.DisputeReason,
+		&i.ReversedAt,
+		&i.ReversalReason,
 	)
 	return i, err
 }

@@ -16,7 +16,7 @@ func (h *Handler) RegisterSupplierAdvanceRoutes(g *gin.RouterGroup) {
 }
 
 func (h *Handler) createSupplierAdvance(c *gin.Context) {
-	ws, ok := businessWorkspace(c)
+	ws, ok := requireProcurementPermission(c, "purchases.manage_advance", "purchases.pay_supplier")
 	if !ok {
 		return
 	}
@@ -37,7 +37,7 @@ func (h *Handler) createSupplierAdvance(c *gin.Context) {
 }
 
 func (h *Handler) listSupplierAdvances(c *gin.Context) {
-	ws, ok := businessWorkspace(c)
+	ws, ok := requireProcurementPermission(c, "purchases.view", "purchases.manage_advance", "purchases.pay_supplier", "purchases.create")
 	if !ok {
 		return
 	}
@@ -50,7 +50,7 @@ func (h *Handler) listSupplierAdvances(c *gin.Context) {
 }
 
 func (h *Handler) applySupplierAdvance(c *gin.Context) {
-	ws, ok := businessWorkspace(c)
+	ws, ok := requireProcurementPermission(c, "purchases.manage_advance", "purchases.pay_supplier")
 	if !ok {
 		return
 	}

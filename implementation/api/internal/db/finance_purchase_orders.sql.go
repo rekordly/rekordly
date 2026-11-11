@@ -13,7 +13,7 @@ import (
 )
 
 const advancePurchaseOrder = `-- name: AdvancePurchaseOrder :one
-UPDATE purchase_orders SET status=$4,version=version+1,approved_by_user_id=CASE WHEN $4='approved' THEN $5 ELSE approved_by_user_id END,issued_by_user_id=CASE WHEN $4='issued' THEN $5 ELSE issued_by_user_id END,issued_at=CASE WHEN $4='issued' THEN now() ELSE issued_at END,order_number=CASE WHEN $4='issued' THEN $6 ELSE order_number END,acknowledged_at=CASE WHEN $4='acknowledged' THEN now() ELSE acknowledged_at END,acknowledgement_note=CASE WHEN $4='acknowledged' THEN 'Supplier acknowledgement recorded' ELSE acknowledgement_note END,updated_at=now() WHERE workspace_id=$1 AND id=$2 AND version=$3 RETURNING id, workspace_id, source_purchase_request_id, supplier_id, status, version, order_number, currency, currency_exponent, total_minor, idempotency_key, created_by_user_id, approved_by_user_id, issued_by_user_id, issued_at, created_at, updated_at, cancellation_reason, closed_reason, acknowledged_at, acknowledgement_note
+UPDATE purchase_orders SET status=$4,version=version+1,approved_by_user_id=CASE WHEN $4='approved' THEN $5 ELSE approved_by_user_id END,issued_by_user_id=CASE WHEN $4='issued' THEN $5 ELSE issued_by_user_id END,issued_at=CASE WHEN $4='issued' THEN now() ELSE issued_at END,order_number=CASE WHEN $4='issued' THEN $6 ELSE order_number END,acknowledged_at=CASE WHEN $4='acknowledged' THEN now() ELSE acknowledged_at END,acknowledgement_note=CASE WHEN $4='acknowledged' THEN 'Supplier acknowledgement recorded' ELSE acknowledgement_note END,updated_at=now() WHERE workspace_id=$1 AND id=$2 AND version=$3 RETURNING id, workspace_id, source_purchase_request_id, supplier_id, status, version, order_number, currency, currency_exponent, total_minor, idempotency_key, created_by_user_id, approved_by_user_id, issued_by_user_id, issued_at, created_at, updated_at, cancellation_reason, closed_reason, acknowledged_at, acknowledgement_note, outlet_id, expected_date, payment_terms, notes
 `
 
 type AdvancePurchaseOrderParams struct {
@@ -57,6 +57,10 @@ func (q *Queries) AdvancePurchaseOrder(ctx context.Context, arg AdvancePurchaseO
 		&i.ClosedReason,
 		&i.AcknowledgedAt,
 		&i.AcknowledgementNote,
+		&i.OutletID,
+		&i.ExpectedDate,
+		&i.PaymentTerms,
+		&i.Notes,
 	)
 	return i, err
 }
@@ -73,8 +77,8 @@ WHERE gr.workspace_id=$1
 `
 
 type CountUnbilledReceiptsForPurchaseOrderParams struct {
-	WorkspaceID     int64 `json:"workspace_id"`
-	PurchaseOrderID int64 `json:"purchase_order_id"`
+	WorkspaceID     int64       `json:"workspace_id"`
+	PurchaseOrderID pgtype.Int8 `json:"purchase_order_id"`
 }
 
 func (q *Queries) CountUnbilledReceiptsForPurchaseOrder(ctx context.Context, arg CountUnbilledReceiptsForPurchaseOrderParams) (int64, error) {
@@ -85,12 +89,12 @@ func (q *Queries) CountUnbilledReceiptsForPurchaseOrder(ctx context.Context, arg
 }
 
 const createPurchaseOrder = `-- name: CreatePurchaseOrder :one
-INSERT INTO purchase_orders(workspace_id,source_purchase_request_id,supplier_id,currency,currency_exponent,total_minor,idempotency_key,created_by_user_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id, workspace_id, source_purchase_request_id, supplier_id, status, version, order_number, currency, currency_exponent, total_minor, idempotency_key, created_by_user_id, approved_by_user_id, issued_by_user_id, issued_at, created_at, updated_at, cancellation_reason, closed_reason, acknowledged_at, acknowledgement_note
+INSERT INTO purchase_orders(workspace_id,source_purchase_request_id,supplier_id,currency,currency_exponent,total_minor,idempotency_key,created_by_user_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id, workspace_id, source_purchase_request_id, supplier_id, status, version, order_number, currency, currency_exponent, total_minor, idempotency_key, created_by_user_id, approved_by_user_id, issued_by_user_id, issued_at, created_at, updated_at, cancellation_reason, closed_reason, acknowledged_at, acknowledgement_note, outlet_id, expected_date, payment_terms, notes
 `
 
 type CreatePurchaseOrderParams struct {
 	WorkspaceID             int64       `json:"workspace_id"`
-	SourcePurchaseRequestID int64       `json:"source_purchase_request_id"`
+	SourcePurchaseRequestID pgtype.Int8 `json:"source_purchase_request_id"`
 	SupplierID              pgtype.Int8 `json:"supplier_id"`
 	Currency                string      `json:"currency"`
 	CurrencyExponent        int32       `json:"currency_exponent"`
@@ -133,6 +137,10 @@ func (q *Queries) CreatePurchaseOrder(ctx context.Context, arg CreatePurchaseOrd
 		&i.ClosedReason,
 		&i.AcknowledgedAt,
 		&i.AcknowledgementNote,
+		&i.OutletID,
+		&i.ExpectedDate,
+		&i.PaymentTerms,
+		&i.Notes,
 	)
 	return i, err
 }
@@ -207,7 +215,7 @@ INSERT INTO purchase_order_lines(workspace_id,purchase_order_id,source_purchase_
 type CreatePurchaseOrderLineParams struct {
 	WorkspaceID                 int64           `json:"workspace_id"`
 	PurchaseOrderID             int64           `json:"purchase_order_id"`
-	SourcePurchaseRequestLineID int64           `json:"source_purchase_request_line_id"`
+	SourcePurchaseRequestLineID pgtype.Int8     `json:"source_purchase_request_line_id"`
 	ProductID                   pgtype.Int8     `json:"product_id"`
 	Description                 string          `json:"description"`
 	Quantity                    decimal.Decimal `json:"quantity"`
@@ -232,7 +240,7 @@ func (q *Queries) CreatePurchaseOrderLine(ctx context.Context, arg CreatePurchas
 }
 
 const getPurchaseOrderByID = `-- name: GetPurchaseOrderByID :one
-SELECT id, workspace_id, source_purchase_request_id, supplier_id, status, version, order_number, currency, currency_exponent, total_minor, idempotency_key, created_by_user_id, approved_by_user_id, issued_by_user_id, issued_at, created_at, updated_at, cancellation_reason, closed_reason, acknowledged_at, acknowledgement_note FROM purchase_orders WHERE workspace_id=$1 AND id=$2
+SELECT id, workspace_id, source_purchase_request_id, supplier_id, status, version, order_number, currency, currency_exponent, total_minor, idempotency_key, created_by_user_id, approved_by_user_id, issued_by_user_id, issued_at, created_at, updated_at, cancellation_reason, closed_reason, acknowledged_at, acknowledgement_note, outlet_id, expected_date, payment_terms, notes FROM purchase_orders WHERE workspace_id=$1 AND id=$2
 `
 
 type GetPurchaseOrderByIDParams struct {
@@ -265,12 +273,16 @@ func (q *Queries) GetPurchaseOrderByID(ctx context.Context, arg GetPurchaseOrder
 		&i.ClosedReason,
 		&i.AcknowledgedAt,
 		&i.AcknowledgementNote,
+		&i.OutletID,
+		&i.ExpectedDate,
+		&i.PaymentTerms,
+		&i.Notes,
 	)
 	return i, err
 }
 
 const getPurchaseOrderByIdempotency = `-- name: GetPurchaseOrderByIdempotency :one
-SELECT id, workspace_id, source_purchase_request_id, supplier_id, status, version, order_number, currency, currency_exponent, total_minor, idempotency_key, created_by_user_id, approved_by_user_id, issued_by_user_id, issued_at, created_at, updated_at, cancellation_reason, closed_reason, acknowledged_at, acknowledgement_note FROM purchase_orders WHERE workspace_id=$1 AND idempotency_key=$2
+SELECT id, workspace_id, source_purchase_request_id, supplier_id, status, version, order_number, currency, currency_exponent, total_minor, idempotency_key, created_by_user_id, approved_by_user_id, issued_by_user_id, issued_at, created_at, updated_at, cancellation_reason, closed_reason, acknowledged_at, acknowledgement_note, outlet_id, expected_date, payment_terms, notes FROM purchase_orders WHERE workspace_id=$1 AND idempotency_key=$2
 `
 
 type GetPurchaseOrderByIdempotencyParams struct {
@@ -303,17 +315,21 @@ func (q *Queries) GetPurchaseOrderByIdempotency(ctx context.Context, arg GetPurc
 		&i.ClosedReason,
 		&i.AcknowledgedAt,
 		&i.AcknowledgementNote,
+		&i.OutletID,
+		&i.ExpectedDate,
+		&i.PaymentTerms,
+		&i.Notes,
 	)
 	return i, err
 }
 
 const getPurchaseOrderBySource = `-- name: GetPurchaseOrderBySource :one
-SELECT id, workspace_id, source_purchase_request_id, supplier_id, status, version, order_number, currency, currency_exponent, total_minor, idempotency_key, created_by_user_id, approved_by_user_id, issued_by_user_id, issued_at, created_at, updated_at, cancellation_reason, closed_reason, acknowledged_at, acknowledgement_note FROM purchase_orders WHERE workspace_id=$1 AND source_purchase_request_id=$2
+SELECT id, workspace_id, source_purchase_request_id, supplier_id, status, version, order_number, currency, currency_exponent, total_minor, idempotency_key, created_by_user_id, approved_by_user_id, issued_by_user_id, issued_at, created_at, updated_at, cancellation_reason, closed_reason, acknowledged_at, acknowledgement_note, outlet_id, expected_date, payment_terms, notes FROM purchase_orders WHERE workspace_id=$1 AND source_purchase_request_id=$2
 `
 
 type GetPurchaseOrderBySourceParams struct {
-	WorkspaceID             int64 `json:"workspace_id"`
-	SourcePurchaseRequestID int64 `json:"source_purchase_request_id"`
+	WorkspaceID             int64       `json:"workspace_id"`
+	SourcePurchaseRequestID pgtype.Int8 `json:"source_purchase_request_id"`
 }
 
 func (q *Queries) GetPurchaseOrderBySource(ctx context.Context, arg GetPurchaseOrderBySourceParams) (PurchaseOrder, error) {
@@ -341,6 +357,10 @@ func (q *Queries) GetPurchaseOrderBySource(ctx context.Context, arg GetPurchaseO
 		&i.ClosedReason,
 		&i.AcknowledgedAt,
 		&i.AcknowledgementNote,
+		&i.OutletID,
+		&i.ExpectedDate,
+		&i.PaymentTerms,
+		&i.Notes,
 	)
 	return i, err
 }
@@ -368,7 +388,7 @@ func (q *Queries) GetPurchaseOrderCommand(ctx context.Context, arg GetPurchaseOr
 }
 
 const getPurchaseOrderForUpdate = `-- name: GetPurchaseOrderForUpdate :one
-SELECT id, workspace_id, source_purchase_request_id, supplier_id, status, version, order_number, currency, currency_exponent, total_minor, idempotency_key, created_by_user_id, approved_by_user_id, issued_by_user_id, issued_at, created_at, updated_at, cancellation_reason, closed_reason, acknowledged_at, acknowledgement_note FROM purchase_orders WHERE workspace_id=$1 AND id=$2 FOR UPDATE
+SELECT id, workspace_id, source_purchase_request_id, supplier_id, status, version, order_number, currency, currency_exponent, total_minor, idempotency_key, created_by_user_id, approved_by_user_id, issued_by_user_id, issued_at, created_at, updated_at, cancellation_reason, closed_reason, acknowledged_at, acknowledgement_note, outlet_id, expected_date, payment_terms, notes FROM purchase_orders WHERE workspace_id=$1 AND id=$2 FOR UPDATE
 `
 
 type GetPurchaseOrderForUpdateParams struct {
@@ -401,12 +421,16 @@ func (q *Queries) GetPurchaseOrderForUpdate(ctx context.Context, arg GetPurchase
 		&i.ClosedReason,
 		&i.AcknowledgedAt,
 		&i.AcknowledgementNote,
+		&i.OutletID,
+		&i.ExpectedDate,
+		&i.PaymentTerms,
+		&i.Notes,
 	)
 	return i, err
 }
 
 const getPurchaseOrderLines = `-- name: GetPurchaseOrderLines :many
-SELECT id, workspace_id, purchase_order_id, source_purchase_request_line_id, product_id, description, quantity, unit_name, expected_unit_cost_minor, line_total_minor FROM purchase_order_lines WHERE workspace_id=$1 AND purchase_order_id=$2 ORDER BY id ASC
+SELECT id, workspace_id, purchase_order_id, source_purchase_request_line_id, product_id, description, quantity, unit_name, expected_unit_cost_minor, line_total_minor, discount_minor, tax_amount_minor FROM purchase_order_lines WHERE workspace_id=$1 AND purchase_order_id=$2 ORDER BY id ASC
 `
 
 type GetPurchaseOrderLinesParams struct {
@@ -434,6 +458,8 @@ func (q *Queries) GetPurchaseOrderLines(ctx context.Context, arg GetPurchaseOrde
 			&i.UnitName,
 			&i.ExpectedUnitCostMinor,
 			&i.LineTotalMinor,
+			&i.DiscountMinor,
+			&i.TaxAmountMinor,
 		); err != nil {
 			return nil, err
 		}
@@ -486,7 +512,7 @@ func (q *Queries) ListPurchaseOrderEvents(ctx context.Context, arg ListPurchaseO
 }
 
 const listPurchaseOrders = `-- name: ListPurchaseOrders :many
-SELECT id, workspace_id, source_purchase_request_id, supplier_id, status, version, order_number, currency, currency_exponent, total_minor, idempotency_key, created_by_user_id, approved_by_user_id, issued_by_user_id, issued_at, created_at, updated_at, cancellation_reason, closed_reason, acknowledged_at, acknowledgement_note FROM purchase_orders WHERE workspace_id=$1 AND ($3::bigint IS NULL OR id < $3) ORDER BY id DESC LIMIT $2
+SELECT id, workspace_id, source_purchase_request_id, supplier_id, status, version, order_number, currency, currency_exponent, total_minor, idempotency_key, created_by_user_id, approved_by_user_id, issued_by_user_id, issued_at, created_at, updated_at, cancellation_reason, closed_reason, acknowledged_at, acknowledgement_note, outlet_id, expected_date, payment_terms, notes FROM purchase_orders WHERE workspace_id=$1 AND ($3::bigint IS NULL OR id < $3) ORDER BY id DESC LIMIT $2
 `
 
 type ListPurchaseOrdersParams struct {
@@ -526,6 +552,10 @@ func (q *Queries) ListPurchaseOrders(ctx context.Context, arg ListPurchaseOrders
 			&i.ClosedReason,
 			&i.AcknowledgedAt,
 			&i.AcknowledgementNote,
+			&i.OutletID,
+			&i.ExpectedDate,
+			&i.PaymentTerms,
+			&i.Notes,
 		); err != nil {
 			return nil, err
 		}
@@ -556,7 +586,7 @@ SET status=$4,
     version=version+1,
     updated_at=now()
 WHERE workspace_id=$1 AND id=$2 AND version=$3
-RETURNING id, workspace_id, source_purchase_request_id, supplier_id, status, version, order_number, currency, currency_exponent, total_minor, idempotency_key, created_by_user_id, approved_by_user_id, issued_by_user_id, issued_at, created_at, updated_at, cancellation_reason, closed_reason, acknowledged_at, acknowledgement_note
+RETURNING id, workspace_id, source_purchase_request_id, supplier_id, status, version, order_number, currency, currency_exponent, total_minor, idempotency_key, created_by_user_id, approved_by_user_id, issued_by_user_id, issued_at, created_at, updated_at, cancellation_reason, closed_reason, acknowledged_at, acknowledgement_note, outlet_id, expected_date, payment_terms, notes
 `
 
 type ResolvePurchaseOrderParams struct {
@@ -598,6 +628,10 @@ func (q *Queries) ResolvePurchaseOrder(ctx context.Context, arg ResolvePurchaseO
 		&i.ClosedReason,
 		&i.AcknowledgedAt,
 		&i.AcknowledgementNote,
+		&i.OutletID,
+		&i.ExpectedDate,
+		&i.PaymentTerms,
+		&i.Notes,
 	)
 	return i, err
 }

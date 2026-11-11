@@ -1,14 +1,19 @@
 package finance
 
 import (
-	"github.com/gin-gonic/gin"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/gin-gonic/gin"
 )
 
 func (h *Handler) RegisterPurchaseOrderRoutes(g *gin.RouterGroup) {
 	g.POST("/purchase-orders", h.createPurchaseOrder)
+	g.PATCH("/purchase-orders/:id", h.updatePurchaseOrderDraft)
+	g.POST("/purchase-orders/:id/duplicate", h.duplicatePurchaseOrder)
+	g.POST("/purchase-orders/:id/revise", h.revisePurchaseOrder)
+	g.GET("/purchase-orders/:id/versions", h.listPurchaseOrderVersions)
 	g.POST("/purchase-orders/:id/share", h.createPurchaseOrderShare)
 	g.GET("/purchase-orders", h.listPurchaseOrders)
 	g.GET("/purchase-orders/:id", h.getPurchaseOrder)
@@ -45,8 +50,9 @@ func (h *Handler) respondPurchaseOrderShare(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"share": share}})
 }
+
 func (h *Handler) getPurchaseOrder(c *gin.Context) {
-	ws, ok := businessWorkspace(c)
+	ws, ok := requireProcurementPermission(c, "purchases.view", "purchases.create_po", "purchases.create")
 	if !ok {
 		return
 	}
@@ -60,25 +66,29 @@ func (h *Handler) getPurchaseOrder(c *gin.Context) {
 		h.procurementError(c, err)
 		return
 	}
+	if po.OutletID != nil && !enforceProcurementOutletScope(c, ws, *po.OutletID) {
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"order": po}})
 }
+
 func (h *Handler) createPurchaseOrder(c *gin.Context) {
-	ws, ok := businessWorkspace(c)
+	ws, ok := requireProcurementPermission(c, "purchases.create_po", "purchases.create")
 	if !ok {
 		return
 	}
-	var in struct {
-		PurchaseRequestID int64  `json:"purchase_request_id"`
-		IdempotencyKey    string `json:"idempotency_key"`
-	}
-	if c.ShouldBindJSON(&in) != nil {
+	var in CreatePurchaseOrderInput
+	if err := c.ShouldBindJSON(&in); err != nil {
 		c.JSON(400, gin.H{"error": gin.H{"message": "Invalid request"}})
 		return
 	}
-	if in.IdempotencyKey == "" {
+	if in.OutletID != nil && !enforceProcurementOutletScope(c, ws, *in.OutletID) {
+		return
+	}
+	if strings.TrimSpace(in.IdempotencyKey) == "" {
 		in.IdempotencyKey = c.GetHeader("Idempotency-Key")
 	}
-	po, e := h.service.CreatePurchaseOrderFromRequest(c, ws.WorkspaceID, ws.UserID, in.PurchaseRequestID, in.IdempotencyKey)
+	po, e := h.service.CreateDirectPurchaseOrder(c, ws.WorkspaceID, ws.UserID, in)
 	if e != nil {
 		h.procurementError(c, e)
 		return
@@ -86,13 +96,104 @@ func (h *Handler) createPurchaseOrder(c *gin.Context) {
 	c.JSON(201, gin.H{"data": gin.H{"order": po}})
 }
 
-func (h *Handler) createPurchaseOrderShare(c *gin.Context) {
-	ws, ok := businessWorkspace(c)
+func (h *Handler) updatePurchaseOrderDraft(c *gin.Context) {
+	ws, ok := requireProcurementPermission(c, "purchases.create_po", "purchases.create")
 	if !ok {
 		return
 	}
-	if !ws.IsOwner && ws.RoleCode != "admin" && ws.RoleCode != "procurement_manager" {
-		h.procurementError(c, ErrApprovalForbidden)
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		c.JSON(400, gin.H{"error": gin.H{"message": "Invalid purchase order"}})
+		return
+	}
+	var in UpdatePurchaseOrderDraftInput
+	if err := c.ShouldBindJSON(&in); err != nil {
+		c.JSON(400, gin.H{"error": gin.H{"message": "Invalid request"}})
+		return
+	}
+	if in.OutletID != nil && !enforceProcurementOutletScope(c, ws, *in.OutletID) {
+		return
+	}
+	po, err := h.service.UpdatePurchaseOrderDraft(c, ws.WorkspaceID, ws.UserID, id, in)
+	if err != nil {
+		h.procurementError(c, err)
+		return
+	}
+	c.JSON(200, gin.H{"data": gin.H{"order": po}})
+}
+
+func (h *Handler) duplicatePurchaseOrder(c *gin.Context) {
+	ws, ok := requireProcurementPermission(c, "purchases.create_po", "purchases.create")
+	if !ok {
+		return
+	}
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		c.JSON(400, gin.H{"error": gin.H{"message": "Invalid purchase order"}})
+		return
+	}
+	var in struct {
+		IdempotencyKey string `json:"idempotency_key"`
+	}
+	_ = c.ShouldBindJSON(&in)
+	if strings.TrimSpace(in.IdempotencyKey) == "" {
+		in.IdempotencyKey = c.GetHeader("Idempotency-Key")
+	}
+	po, err := h.service.DuplicatePurchaseOrder(c, ws.WorkspaceID, ws.UserID, id, in.IdempotencyKey)
+	if err != nil {
+		h.procurementError(c, err)
+		return
+	}
+	c.JSON(201, gin.H{"data": gin.H{"order": po}})
+}
+
+func (h *Handler) revisePurchaseOrder(c *gin.Context) {
+	ws, ok := requireProcurementPermission(c, "purchases.create_po", "purchases.approve_po", "purchases.create")
+	if !ok {
+		return
+	}
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		c.JSON(400, gin.H{"error": gin.H{"message": "Invalid purchase order"}})
+		return
+	}
+	var in RevisePurchaseOrderInput
+	if err := c.ShouldBindJSON(&in); err != nil {
+		c.JSON(400, gin.H{"error": gin.H{"message": "Invalid revision payload"}})
+		return
+	}
+	if strings.TrimSpace(in.IdempotencyKey) == "" {
+		in.IdempotencyKey = c.GetHeader("Idempotency-Key")
+	}
+	po, err := h.service.RevisePurchaseOrder(c, ws.WorkspaceID, ws.UserID, id, in)
+	if err != nil {
+		h.procurementError(c, err)
+		return
+	}
+	c.JSON(200, gin.H{"data": gin.H{"order": po}})
+}
+
+func (h *Handler) listPurchaseOrderVersions(c *gin.Context) {
+	ws, ok := requireProcurementPermission(c, "purchases.view", "purchases.create_po", "purchases.create")
+	if !ok {
+		return
+	}
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		c.JSON(400, gin.H{"error": gin.H{"message": "Invalid purchase order"}})
+		return
+	}
+	versions, err := h.service.ListPurchaseOrderVersions(c, ws.WorkspaceID, id)
+	if err != nil {
+		h.procurementError(c, err)
+		return
+	}
+	c.JSON(200, gin.H{"data": gin.H{"versions": versions}})
+}
+
+func (h *Handler) createPurchaseOrderShare(c *gin.Context) {
+	ws, ok := requireProcurementPermission(c, "purchases.issue_po", "purchases.approve_po", "purchases.create_po")
+	if !ok {
 		return
 	}
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
@@ -112,8 +213,9 @@ func (h *Handler) createPurchaseOrderShare(c *gin.Context) {
 	}
 	c.JSON(http.StatusCreated, gin.H{"data": gin.H{"share": share}})
 }
+
 func (h *Handler) listPurchaseOrders(c *gin.Context) {
-	ws, ok := businessWorkspace(c)
+	ws, ok := requireProcurementPermission(c, "purchases.view", "purchases.create_po", "purchases.create")
 	if !ok {
 		return
 	}
@@ -123,15 +225,37 @@ func (h *Handler) listPurchaseOrders(c *gin.Context) {
 		h.procurementError(c, e)
 		return
 	}
+	scoped := ws.ScopedOutletIDs()
+	if len(scoped) > 0 {
+		filtered := make([]PurchaseOrderView, 0, len(rows))
+		for _, r := range rows {
+			if r.OutletID == nil || ws.IsOutletAllowed(*r.OutletID) {
+				filtered = append(filtered, r)
+			}
+		}
+		rows = filtered
+	}
 	c.JSON(200, gin.H{"data": gin.H{"orders": rows}})
 }
+
 func (h *Handler) advancePurchaseOrder(c *gin.Context) {
-	ws, ok := businessWorkspace(c)
-	if !ok {
+	cmd := c.Param("command")
+	var needed []string
+	switch cmd {
+	case "approved":
+		needed = []string{"purchases.approve_po"}
+	case "issued":
+		needed = []string{"purchases.issue_po", "purchases.approve_po"}
+	case "cancel", "cancel_remainder", "close":
+		needed = []string{"purchases.close_po", "purchases.approve_po"}
+	case "submitted", "acknowledged":
+		needed = []string{"purchases.create_po", "purchases.approve_po", "purchases.issue_po", "purchases.create"}
+	default:
+		c.JSON(400, gin.H{"error": gin.H{"message": "Invalid command"}})
 		return
 	}
-	if !ws.IsOwner && ws.RoleCode != "admin" && ws.RoleCode != "procurement_manager" {
-		h.procurementError(c, ErrApprovalForbidden)
+	ws, ok := requireProcurementPermission(c, needed...)
+	if !ok {
 		return
 	}
 	id, e := strconv.ParseInt(c.Param("id"), 10, 64)
@@ -141,11 +265,6 @@ func (h *Handler) advancePurchaseOrder(c *gin.Context) {
 		Reason          string `json:"reason"`
 	}
 	if e != nil || id < 1 || c.ShouldBindJSON(&in) != nil {
-		c.JSON(400, gin.H{"error": gin.H{"message": "Invalid command"}})
-		return
-	}
-	cmd := c.Param("command")
-	if cmd != "submitted" && cmd != "approved" && cmd != "issued" && cmd != "acknowledged" && cmd != "cancel" && cmd != "cancel_remainder" && cmd != "close" {
 		c.JSON(400, gin.H{"error": gin.H{"message": "Invalid command"}})
 		return
 	}

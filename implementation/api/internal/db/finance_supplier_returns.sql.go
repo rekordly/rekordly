@@ -83,7 +83,7 @@ func (q *Queries) ApplySupplierCreditBalance(ctx context.Context, arg ApplySuppl
 }
 
 const applySupplierCreditToBill = `-- name: ApplySupplierCreditToBill :one
-UPDATE supplier_bills SET outstanding_minor=outstanding_minor-$3,status=CASE WHEN outstanding_minor-$3=0 THEN 'paid' ELSE 'partially_paid' END,version=version+1,updated_at=now() WHERE workspace_id=$1 AND id=$2 AND outstanding_minor >= $3 AND status IN ('approved','partially_paid') RETURNING id, workspace_id, goods_receipt_id, supplier_id, supplier_invoice_number, bill_date, due_date, currency, currency_exponent, total_minor, outstanding_minor, status, version, idempotency_key, created_by_user_id, approved_by_user_id, approved_at, created_at, updated_at, bill_type, expense_account_class, description
+UPDATE supplier_bills SET outstanding_minor=outstanding_minor-$3,status=CASE WHEN outstanding_minor-$3=0 THEN 'paid' ELSE 'partially_paid' END,version=version+1,updated_at=now() WHERE workspace_id=$1 AND id=$2 AND outstanding_minor >= $3 AND status IN ('approved','partially_paid') RETURNING id, workspace_id, goods_receipt_id, supplier_id, supplier_invoice_number, bill_date, due_date, currency, currency_exponent, total_minor, outstanding_minor, status, version, idempotency_key, created_by_user_id, approved_by_user_id, approved_at, created_at, updated_at, bill_type, expense_account_class, description, outlet_id, tax_amount_minor, discount_minor, variance_minor, credited_minor, match_status, dispute_reason, reversed_at, reversal_reason
 `
 
 type ApplySupplierCreditToBillParams struct {
@@ -118,6 +118,15 @@ func (q *Queries) ApplySupplierCreditToBill(ctx context.Context, arg ApplySuppli
 		&i.BillType,
 		&i.ExpenseAccountClass,
 		&i.Description,
+		&i.OutletID,
+		&i.TaxAmountMinor,
+		&i.DiscountMinor,
+		&i.VarianceMinor,
+		&i.CreditedMinor,
+		&i.MatchStatus,
+		&i.DisputeReason,
+		&i.ReversedAt,
+		&i.ReversalReason,
 	)
 	return i, err
 }
@@ -335,7 +344,7 @@ func (q *Queries) GetInventoryBalanceForUpdate(ctx context.Context, arg GetInven
 }
 
 const getReceiptForReturn = `-- name: GetReceiptForReturn :one
-SELECT gr.id, gr.workspace_id, gr.purchase_order_id, po.supplier_id, po.currency, po.currency_exponent, gr.location_id FROM goods_receipts gr JOIN purchase_orders po ON po.id=gr.purchase_order_id AND po.workspace_id=gr.workspace_id WHERE gr.workspace_id=$1 AND gr.id=$2 FOR UPDATE
+SELECT gr.id, gr.workspace_id, gr.purchase_order_id, COALESCE(gr.supplier_id, po.supplier_id) AS supplier_id, COALESCE(po.currency, gr.currency) AS currency, COALESCE(po.currency_exponent, gr.currency_exponent) AS currency_exponent, gr.location_id FROM goods_receipts gr LEFT JOIN purchase_orders po ON po.id=gr.purchase_order_id AND po.workspace_id=gr.workspace_id WHERE gr.workspace_id=$1 AND gr.id=$2 FOR UPDATE OF gr
 `
 
 type GetReceiptForReturnParams struct {
@@ -346,7 +355,7 @@ type GetReceiptForReturnParams struct {
 type GetReceiptForReturnRow struct {
 	ID               int64       `json:"id"`
 	WorkspaceID      int64       `json:"workspace_id"`
-	PurchaseOrderID  int64       `json:"purchase_order_id"`
+	PurchaseOrderID  pgtype.Int8 `json:"purchase_order_id"`
 	SupplierID       pgtype.Int8 `json:"supplier_id"`
 	Currency         string      `json:"currency"`
 	CurrencyExponent int32       `json:"currency_exponent"`
@@ -560,7 +569,7 @@ func (q *Queries) GetSupplierReturnByIdempotency(ctx context.Context, arg GetSup
 }
 
 const getSupplierReturnSource = `-- name: GetSupplierReturnSource :one
-SELECT sr.id, sr.workspace_id, sr.supplier_id, sr.goods_receipt_id, sr.effective_on, sr.reason, sr.total_minor, sr.status, sr.idempotency_key, sr.created_by_user_id, sr.created_at, po.currency, po.currency_exponent FROM supplier_returns sr JOIN goods_receipts gr ON gr.id=sr.goods_receipt_id AND gr.workspace_id=sr.workspace_id JOIN purchase_orders po ON po.id=gr.purchase_order_id AND po.workspace_id=gr.workspace_id WHERE sr.workspace_id=$1 AND sr.id=$2
+SELECT sr.id, sr.workspace_id, sr.supplier_id, sr.goods_receipt_id, sr.effective_on, sr.reason, sr.total_minor, sr.status, sr.idempotency_key, sr.created_by_user_id, sr.created_at, COALESCE(po.currency, gr.currency) AS currency, COALESCE(po.currency_exponent, gr.currency_exponent) AS currency_exponent FROM supplier_returns sr JOIN goods_receipts gr ON gr.id=sr.goods_receipt_id AND gr.workspace_id=sr.workspace_id LEFT JOIN purchase_orders po ON po.id=gr.purchase_order_id AND po.workspace_id=gr.workspace_id WHERE sr.workspace_id=$1 AND sr.id=$2
 `
 
 type GetSupplierReturnSourceParams struct {

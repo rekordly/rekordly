@@ -6,7 +6,7 @@ import (
 )
 
 func (h *Handler) procurementReport(c *gin.Context) {
-	ws, ok := businessWorkspace(c)
+	ws, ok := requireProcurementPermission(c, "purchases.view", "reports.view_basic")
 	if !ok {
 		return
 	}

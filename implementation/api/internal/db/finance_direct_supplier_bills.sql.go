@@ -12,7 +12,7 @@ import (
 )
 
 const createDirectSupplierBill = `-- name: CreateDirectSupplierBill :one
-INSERT INTO supplier_bills(workspace_id,goods_receipt_id,supplier_id,supplier_invoice_number,bill_date,due_date,currency,currency_exponent,total_minor,outstanding_minor,bill_type,expense_account_class,description,idempotency_key,created_by_user_id) VALUES($1,NULL,$2,$3,$4,$5,$6,$7,$8,$8,$9,$10,$11,$12,$13) RETURNING id, workspace_id, goods_receipt_id, supplier_id, supplier_invoice_number, bill_date, due_date, currency, currency_exponent, total_minor, outstanding_minor, status, version, idempotency_key, created_by_user_id, approved_by_user_id, approved_at, created_at, updated_at, bill_type, expense_account_class, description
+INSERT INTO supplier_bills(workspace_id,goods_receipt_id,supplier_id,supplier_invoice_number,bill_date,due_date,currency,currency_exponent,total_minor,outstanding_minor,bill_type,expense_account_class,description,idempotency_key,created_by_user_id) VALUES($1,NULL,$2,$3,$4,$5,$6,$7,$8,$8,$9,$10,$11,$12,$13) RETURNING id, workspace_id, goods_receipt_id, supplier_id, supplier_invoice_number, bill_date, due_date, currency, currency_exponent, total_minor, outstanding_minor, status, version, idempotency_key, created_by_user_id, approved_by_user_id, approved_at, created_at, updated_at, bill_type, expense_account_class, description, outlet_id, tax_amount_minor, discount_minor, variance_minor, credited_minor, match_status, dispute_reason, reversed_at, reversal_reason
 `
 
 type CreateDirectSupplierBillParams struct {
@@ -71,12 +71,21 @@ func (q *Queries) CreateDirectSupplierBill(ctx context.Context, arg CreateDirect
 		&i.BillType,
 		&i.ExpenseAccountClass,
 		&i.Description,
+		&i.OutletID,
+		&i.TaxAmountMinor,
+		&i.DiscountMinor,
+		&i.VarianceMinor,
+		&i.CreditedMinor,
+		&i.MatchStatus,
+		&i.DisputeReason,
+		&i.ReversedAt,
+		&i.ReversalReason,
 	)
 	return i, err
 }
 
 const listOverdueSupplierBills = `-- name: ListOverdueSupplierBills :many
-SELECT id, workspace_id, goods_receipt_id, supplier_id, supplier_invoice_number, bill_date, due_date, currency, currency_exponent, total_minor, outstanding_minor, status, version, idempotency_key, created_by_user_id, approved_by_user_id, approved_at, created_at, updated_at, bill_type, expense_account_class, description FROM supplier_bills WHERE workspace_id=$1 AND due_date IS NOT NULL AND due_date < $2 AND status IN ('approved','partially_paid') ORDER BY due_date ASC,id ASC LIMIT $3
+SELECT id, workspace_id, goods_receipt_id, supplier_id, supplier_invoice_number, bill_date, due_date, currency, currency_exponent, total_minor, outstanding_minor, status, version, idempotency_key, created_by_user_id, approved_by_user_id, approved_at, created_at, updated_at, bill_type, expense_account_class, description, outlet_id, tax_amount_minor, discount_minor, variance_minor, credited_minor, match_status, dispute_reason, reversed_at, reversal_reason FROM supplier_bills WHERE workspace_id=$1 AND due_date IS NOT NULL AND due_date < $2 AND status IN ('approved','partially_paid') ORDER BY due_date ASC,id ASC LIMIT $3
 `
 
 type ListOverdueSupplierBillsParams struct {
@@ -117,6 +126,15 @@ func (q *Queries) ListOverdueSupplierBills(ctx context.Context, arg ListOverdueS
 			&i.BillType,
 			&i.ExpenseAccountClass,
 			&i.Description,
+			&i.OutletID,
+			&i.TaxAmountMinor,
+			&i.DiscountMinor,
+			&i.VarianceMinor,
+			&i.CreditedMinor,
+			&i.MatchStatus,
+			&i.DisputeReason,
+			&i.ReversedAt,
+			&i.ReversalReason,
 		); err != nil {
 			return nil, err
 		}

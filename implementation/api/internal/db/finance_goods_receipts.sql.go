@@ -13,12 +13,12 @@ import (
 )
 
 const createGoodsReceipt = `-- name: CreateGoodsReceipt :one
-INSERT INTO goods_receipts(workspace_id,purchase_order_id,receipt_reference,delivery_reference,service_accepted,received_on,idempotency_key,created_by_user_id,location_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id, workspace_id, purchase_order_id, receipt_reference, received_on, idempotency_key, created_by_user_id, created_at, location_id, delivery_reference, service_accepted
+INSERT INTO goods_receipts(workspace_id,purchase_order_id,receipt_reference,delivery_reference,service_accepted,received_on,idempotency_key,created_by_user_id,location_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id, workspace_id, purchase_order_id, receipt_reference, received_on, idempotency_key, created_by_user_id, created_at, location_id, delivery_reference, service_accepted, supplier_id, source_type, reason, currency, currency_exponent, landed_cost_minor
 `
 
 type CreateGoodsReceiptParams struct {
 	WorkspaceID       int64       `json:"workspace_id"`
-	PurchaseOrderID   int64       `json:"purchase_order_id"`
+	PurchaseOrderID   pgtype.Int8 `json:"purchase_order_id"`
 	ReceiptReference  pgtype.Text `json:"receipt_reference"`
 	DeliveryReference pgtype.Text `json:"delivery_reference"`
 	ServiceAccepted   bool        `json:"service_accepted"`
@@ -53,18 +53,24 @@ func (q *Queries) CreateGoodsReceipt(ctx context.Context, arg CreateGoodsReceipt
 		&i.LocationID,
 		&i.DeliveryReference,
 		&i.ServiceAccepted,
+		&i.SupplierID,
+		&i.SourceType,
+		&i.Reason,
+		&i.Currency,
+		&i.CurrencyExponent,
+		&i.LandedCostMinor,
 	)
 	return i, err
 }
 
 const createGoodsReceiptLine = `-- name: CreateGoodsReceiptLine :one
-INSERT INTO goods_receipt_lines(workspace_id,goods_receipt_id,purchase_order_line_id,product_id,accepted_quantity,unit_cost_minor,actual_unit_cost_minor,line_total_minor,line_notes) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id, workspace_id, goods_receipt_id, purchase_order_line_id, product_id, accepted_quantity, unit_cost_minor, line_total_minor, actual_unit_cost_minor, line_notes
+INSERT INTO goods_receipt_lines(workspace_id,goods_receipt_id,purchase_order_line_id,product_id,accepted_quantity,unit_cost_minor,actual_unit_cost_minor,line_total_minor,line_notes) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id, workspace_id, goods_receipt_id, purchase_order_line_id, product_id, accepted_quantity, unit_cost_minor, line_total_minor, actual_unit_cost_minor, line_notes, description, rejected_quantity, batch_number, expiry_date, serial_numbers, landed_cost_minor, effective_unit_cost_minor
 `
 
 type CreateGoodsReceiptLineParams struct {
 	WorkspaceID         int64           `json:"workspace_id"`
 	GoodsReceiptID      int64           `json:"goods_receipt_id"`
-	PurchaseOrderLineID int64           `json:"purchase_order_line_id"`
+	PurchaseOrderLineID pgtype.Int8     `json:"purchase_order_line_id"`
 	ProductID           pgtype.Int8     `json:"product_id"`
 	AcceptedQuantity    decimal.Decimal `json:"accepted_quantity"`
 	UnitCostMinor       int64           `json:"unit_cost_minor"`
@@ -97,6 +103,13 @@ func (q *Queries) CreateGoodsReceiptLine(ctx context.Context, arg CreateGoodsRec
 		&i.LineTotalMinor,
 		&i.ActualUnitCostMinor,
 		&i.LineNotes,
+		&i.Description,
+		&i.RejectedQuantity,
+		&i.BatchNumber,
+		&i.ExpiryDate,
+		&i.SerialNumbers,
+		&i.LandedCostMinor,
+		&i.EffectiveUnitCostMinor,
 	)
 	return i, err
 }
@@ -131,7 +144,7 @@ func (q *Queries) CreateInventoryReceiptMovement(ctx context.Context, arg Create
 }
 
 const getGoodsReceiptByIdempotency = `-- name: GetGoodsReceiptByIdempotency :one
-SELECT id, workspace_id, purchase_order_id, receipt_reference, received_on, idempotency_key, created_by_user_id, created_at, location_id, delivery_reference, service_accepted FROM goods_receipts WHERE workspace_id=$1 AND idempotency_key=$2
+SELECT id, workspace_id, purchase_order_id, receipt_reference, received_on, idempotency_key, created_by_user_id, created_at, location_id, delivery_reference, service_accepted, supplier_id, source_type, reason, currency, currency_exponent, landed_cost_minor FROM goods_receipts WHERE workspace_id=$1 AND idempotency_key=$2
 `
 
 type GetGoodsReceiptByIdempotencyParams struct {
@@ -154,20 +167,32 @@ func (q *Queries) GetGoodsReceiptByIdempotency(ctx context.Context, arg GetGoods
 		&i.LocationID,
 		&i.DeliveryReference,
 		&i.ServiceAccepted,
+		&i.SupplierID,
+		&i.SourceType,
+		&i.Reason,
+		&i.Currency,
+		&i.CurrencyExponent,
+		&i.LandedCostMinor,
 	)
 	return i, err
 }
 
 const getGoodsReceiptDetail = `-- name: GetGoodsReceiptDetail :one
-SELECT gr.id, gr.workspace_id, gr.purchase_order_id, gr.receipt_reference, gr.received_on, gr.idempotency_key, gr.created_by_user_id, gr.created_at, gr.location_id, gr.delivery_reference, gr.service_accepted, COALESCE(jsonb_agg(jsonb_build_object(
+SELECT gr.id, gr.workspace_id, gr.purchase_order_id, gr.receipt_reference, gr.received_on, gr.idempotency_key, gr.created_by_user_id, gr.created_at, gr.location_id, gr.delivery_reference, gr.service_accepted, gr.supplier_id, gr.source_type, gr.reason, gr.currency, gr.currency_exponent, gr.landed_cost_minor, COALESCE(jsonb_agg(jsonb_build_object(
   'id', grl.id,
   'purchase_order_line_id', grl.purchase_order_line_id,
   'product_id', grl.product_id,
-  'description', pol.description,
+  'description', COALESCE(grl.description, pol.description),
   'accepted_quantity', grl.accepted_quantity,
+  'rejected_quantity', grl.rejected_quantity,
   'unit_cost_minor', grl.unit_cost_minor,
   'actual_unit_cost_minor', COALESCE(grl.actual_unit_cost_minor, grl.unit_cost_minor),
+  'landed_cost_minor', grl.landed_cost_minor,
+  'effective_unit_cost_minor', COALESCE(grl.effective_unit_cost_minor, grl.actual_unit_cost_minor, grl.unit_cost_minor),
   'line_total_minor', grl.line_total_minor,
+  'batch_number', grl.batch_number,
+  'expiry_date', grl.expiry_date,
+  'serial_numbers', grl.serial_numbers,
   'line_notes', grl.line_notes
 ) ORDER BY grl.id) FILTER (WHERE grl.id IS NOT NULL), '[]'::jsonb) AS lines
 FROM goods_receipts gr
@@ -185,7 +210,7 @@ type GetGoodsReceiptDetailParams struct {
 type GetGoodsReceiptDetailRow struct {
 	ID                int64              `json:"id"`
 	WorkspaceID       int64              `json:"workspace_id"`
-	PurchaseOrderID   int64              `json:"purchase_order_id"`
+	PurchaseOrderID   pgtype.Int8        `json:"purchase_order_id"`
 	ReceiptReference  pgtype.Text        `json:"receipt_reference"`
 	ReceivedOn        pgtype.Date        `json:"received_on"`
 	IdempotencyKey    string             `json:"idempotency_key"`
@@ -194,6 +219,12 @@ type GetGoodsReceiptDetailRow struct {
 	LocationID        pgtype.Int8        `json:"location_id"`
 	DeliveryReference pgtype.Text        `json:"delivery_reference"`
 	ServiceAccepted   bool               `json:"service_accepted"`
+	SupplierID        pgtype.Int8        `json:"supplier_id"`
+	SourceType        string             `json:"source_type"`
+	Reason            pgtype.Text        `json:"reason"`
+	Currency          string             `json:"currency"`
+	CurrencyExponent  int32              `json:"currency_exponent"`
+	LandedCostMinor   int64              `json:"landed_cost_minor"`
 	Lines             interface{}        `json:"lines"`
 }
 
@@ -212,6 +243,12 @@ func (q *Queries) GetGoodsReceiptDetail(ctx context.Context, arg GetGoodsReceipt
 		&i.LocationID,
 		&i.DeliveryReference,
 		&i.ServiceAccepted,
+		&i.SupplierID,
+		&i.SourceType,
+		&i.Reason,
+		&i.Currency,
+		&i.CurrencyExponent,
+		&i.LandedCostMinor,
 		&i.Lines,
 	)
 	return i, err
@@ -266,7 +303,7 @@ func (q *Queries) GetReceiptPurchaseOrderLinesForUpdate(ctx context.Context, arg
 }
 
 const listGoodsReceipts = `-- name: ListGoodsReceipts :many
-SELECT id, workspace_id, purchase_order_id, receipt_reference, received_on, idempotency_key, created_by_user_id, created_at, location_id, delivery_reference, service_accepted FROM goods_receipts WHERE workspace_id=$1 AND ($3::bigint IS NULL OR id < $3) ORDER BY id DESC LIMIT $2
+SELECT id, workspace_id, purchase_order_id, receipt_reference, received_on, idempotency_key, created_by_user_id, created_at, location_id, delivery_reference, service_accepted, supplier_id, source_type, reason, currency, currency_exponent, landed_cost_minor FROM goods_receipts WHERE workspace_id=$1 AND ($3::bigint IS NULL OR id < $3) ORDER BY id DESC LIMIT $2
 `
 
 type ListGoodsReceiptsParams struct {
@@ -296,6 +333,12 @@ func (q *Queries) ListGoodsReceipts(ctx context.Context, arg ListGoodsReceiptsPa
 			&i.LocationID,
 			&i.DeliveryReference,
 			&i.ServiceAccepted,
+			&i.SupplierID,
+			&i.SourceType,
+			&i.Reason,
+			&i.Currency,
+			&i.CurrencyExponent,
+			&i.LandedCostMinor,
 		); err != nil {
 			return nil, err
 		}
@@ -356,12 +399,12 @@ WHERE grl.workspace_id=$1 AND gr.purchase_order_id=$2 GROUP BY grl.purchase_orde
 `
 
 type ListReceivedQuantityByPurchaseOrderLineParams struct {
-	WorkspaceID     int64 `json:"workspace_id"`
-	PurchaseOrderID int64 `json:"purchase_order_id"`
+	WorkspaceID     int64       `json:"workspace_id"`
+	PurchaseOrderID pgtype.Int8 `json:"purchase_order_id"`
 }
 
 type ListReceivedQuantityByPurchaseOrderLineRow struct {
-	PurchaseOrderLineID int64           `json:"purchase_order_line_id"`
+	PurchaseOrderLineID pgtype.Int8     `json:"purchase_order_line_id"`
 	ReceivedQuantity    decimal.Decimal `json:"received_quantity"`
 }
 
@@ -386,7 +429,7 @@ func (q *Queries) ListReceivedQuantityByPurchaseOrderLine(ctx context.Context, a
 }
 
 const updatePurchaseOrderReceiptStatus = `-- name: UpdatePurchaseOrderReceiptStatus :one
-UPDATE purchase_orders SET status=$3,version=version+1,updated_at=now() WHERE workspace_id=$1 AND id=$2 RETURNING id, workspace_id, source_purchase_request_id, supplier_id, status, version, order_number, currency, currency_exponent, total_minor, idempotency_key, created_by_user_id, approved_by_user_id, issued_by_user_id, issued_at, created_at, updated_at, cancellation_reason, closed_reason, acknowledged_at, acknowledgement_note
+UPDATE purchase_orders SET status=$3,version=version+1,updated_at=now() WHERE workspace_id=$1 AND id=$2 RETURNING id, workspace_id, source_purchase_request_id, supplier_id, status, version, order_number, currency, currency_exponent, total_minor, idempotency_key, created_by_user_id, approved_by_user_id, issued_by_user_id, issued_at, created_at, updated_at, cancellation_reason, closed_reason, acknowledged_at, acknowledgement_note, outlet_id, expected_date, payment_terms, notes
 `
 
 type UpdatePurchaseOrderReceiptStatusParams struct {
@@ -420,6 +463,10 @@ func (q *Queries) UpdatePurchaseOrderReceiptStatus(ctx context.Context, arg Upda
 		&i.ClosedReason,
 		&i.AcknowledgedAt,
 		&i.AcknowledgementNote,
+		&i.OutletID,
+		&i.ExpectedDate,
+		&i.PaymentTerms,
+		&i.Notes,
 	)
 	return i, err
 }

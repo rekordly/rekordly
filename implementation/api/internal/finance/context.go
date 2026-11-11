@@ -129,6 +129,23 @@ func requirePermission(c *gin.Context, codes ...string) (WorkspaceContext, bool)
 	return WorkspaceContext{}, false
 }
 
+func businessPermission(c *gin.Context, codes ...string) (WorkspaceContext, bool) {
+	wsCtx, ok := businessWorkspace(c)
+	if !ok {
+		return WorkspaceContext{}, false
+	}
+	if len(codes) == 0 {
+		return wsCtx, true
+	}
+	for _, code := range codes {
+		if wsCtx.HasPermission(code) {
+			return wsCtx, true
+		}
+	}
+	c.JSON(http.StatusForbidden, gin.H{"error": gin.H{"code": "FORBIDDEN", "message": "You do not have permission to perform this action"}})
+	return WorkspaceContext{}, false
+}
+
 func AuthAndWorkspaceMiddleware(pool *pgxpool.Pool, authValidator AuthSessionValidator) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		sessionToken, viaCookie := extractSessionToken(c)

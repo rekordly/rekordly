@@ -20,7 +20,7 @@ SET status = 'approved',
     approved_at = now(),
     updated_at = now()
 WHERE id = $1 AND workspace_id = $2 AND status = 'submitted' AND version = $3
-RETURNING id, workspace_id, supplier_id, status, version, needed_by, reason, reference, currency, currency_exponent, estimated_total_minor, idempotency_key, created_by_user_id, submitted_by_user_id, submitted_at, approved_by_user_id, approved_at, created_at, updated_at, priority, latest_decision_reason
+RETURNING id, workspace_id, supplier_id, status, version, needed_by, reason, reference, currency, currency_exponent, estimated_total_minor, idempotency_key, created_by_user_id, submitted_by_user_id, submitted_at, approved_by_user_id, approved_at, created_at, updated_at, priority, latest_decision_reason, outlet_id
 `
 
 type ApprovePurchaseRequestParams struct {
@@ -60,6 +60,7 @@ func (q *Queries) ApprovePurchaseRequest(ctx context.Context, arg ApprovePurchas
 		&i.UpdatedAt,
 		&i.Priority,
 		&i.LatestDecisionReason,
+		&i.OutletID,
 	)
 	return i, err
 }
@@ -70,7 +71,7 @@ INSERT INTO purchase_requests (
     currency, currency_exponent, estimated_total_minor, idempotency_key, created_by_user_id
 ) VALUES (
     $1, $2, 'draft', 1, $3, $4, $5, $6, $7, $8, $9, $10, $11
-) RETURNING id, workspace_id, supplier_id, status, version, needed_by, reason, reference, currency, currency_exponent, estimated_total_minor, idempotency_key, created_by_user_id, submitted_by_user_id, submitted_at, approved_by_user_id, approved_at, created_at, updated_at, priority, latest_decision_reason
+) RETURNING id, workspace_id, supplier_id, status, version, needed_by, reason, reference, currency, currency_exponent, estimated_total_minor, idempotency_key, created_by_user_id, submitted_by_user_id, submitted_at, approved_by_user_id, approved_at, created_at, updated_at, priority, latest_decision_reason, outlet_id
 `
 
 type CreatePurchaseRequestParams struct {
@@ -124,6 +125,7 @@ func (q *Queries) CreatePurchaseRequest(ctx context.Context, arg CreatePurchaseR
 		&i.UpdatedAt,
 		&i.Priority,
 		&i.LatestDecisionReason,
+		&i.OutletID,
 	)
 	return i, err
 }
@@ -234,7 +236,7 @@ func (q *Queries) CreatePurchaseRequestLine(ctx context.Context, arg CreatePurch
 }
 
 const getPurchaseRequestByID = `-- name: GetPurchaseRequestByID :one
-SELECT id, workspace_id, supplier_id, status, version, needed_by, reason, reference, currency, currency_exponent, estimated_total_minor, idempotency_key, created_by_user_id, submitted_by_user_id, submitted_at, approved_by_user_id, approved_at, created_at, updated_at, priority, latest_decision_reason FROM purchase_requests
+SELECT id, workspace_id, supplier_id, status, version, needed_by, reason, reference, currency, currency_exponent, estimated_total_minor, idempotency_key, created_by_user_id, submitted_by_user_id, submitted_at, approved_by_user_id, approved_at, created_at, updated_at, priority, latest_decision_reason, outlet_id FROM purchase_requests
 WHERE id = $1 AND workspace_id = $2
 `
 
@@ -268,12 +270,13 @@ func (q *Queries) GetPurchaseRequestByID(ctx context.Context, arg GetPurchaseReq
 		&i.UpdatedAt,
 		&i.Priority,
 		&i.LatestDecisionReason,
+		&i.OutletID,
 	)
 	return i, err
 }
 
 const getPurchaseRequestByIdempotency = `-- name: GetPurchaseRequestByIdempotency :one
-SELECT id, workspace_id, supplier_id, status, version, needed_by, reason, reference, currency, currency_exponent, estimated_total_minor, idempotency_key, created_by_user_id, submitted_by_user_id, submitted_at, approved_by_user_id, approved_at, created_at, updated_at, priority, latest_decision_reason FROM purchase_requests
+SELECT id, workspace_id, supplier_id, status, version, needed_by, reason, reference, currency, currency_exponent, estimated_total_minor, idempotency_key, created_by_user_id, submitted_by_user_id, submitted_at, approved_by_user_id, approved_at, created_at, updated_at, priority, latest_decision_reason, outlet_id FROM purchase_requests
 WHERE workspace_id = $1 AND idempotency_key = $2
 `
 
@@ -307,6 +310,7 @@ func (q *Queries) GetPurchaseRequestByIdempotency(ctx context.Context, arg GetPu
 		&i.UpdatedAt,
 		&i.Priority,
 		&i.LatestDecisionReason,
+		&i.OutletID,
 	)
 	return i, err
 }
@@ -336,7 +340,7 @@ func (q *Queries) GetPurchaseRequestCommandByIdempotency(ctx context.Context, ar
 }
 
 const getPurchaseRequestForUpdate = `-- name: GetPurchaseRequestForUpdate :one
-SELECT id, workspace_id, supplier_id, status, version, needed_by, reason, reference, currency, currency_exponent, estimated_total_minor, idempotency_key, created_by_user_id, submitted_by_user_id, submitted_at, approved_by_user_id, approved_at, created_at, updated_at, priority, latest_decision_reason FROM purchase_requests
+SELECT id, workspace_id, supplier_id, status, version, needed_by, reason, reference, currency, currency_exponent, estimated_total_minor, idempotency_key, created_by_user_id, submitted_by_user_id, submitted_at, approved_by_user_id, approved_at, created_at, updated_at, priority, latest_decision_reason, outlet_id FROM purchase_requests
 WHERE id = $1 AND workspace_id = $2
 FOR UPDATE
 `
@@ -371,6 +375,7 @@ func (q *Queries) GetPurchaseRequestForUpdate(ctx context.Context, arg GetPurcha
 		&i.UpdatedAt,
 		&i.Priority,
 		&i.LatestDecisionReason,
+		&i.OutletID,
 	)
 	return i, err
 }
@@ -475,7 +480,7 @@ func (q *Queries) ListPurchaseRequestDecisions(ctx context.Context, arg ListPurc
 }
 
 const listPurchaseRequests = `-- name: ListPurchaseRequests :many
-SELECT id, workspace_id, supplier_id, status, version, needed_by, reason, reference, currency, currency_exponent, estimated_total_minor, idempotency_key, created_by_user_id, submitted_by_user_id, submitted_at, approved_by_user_id, approved_at, created_at, updated_at, priority, latest_decision_reason FROM purchase_requests
+SELECT id, workspace_id, supplier_id, status, version, needed_by, reason, reference, currency, currency_exponent, estimated_total_minor, idempotency_key, created_by_user_id, submitted_by_user_id, submitted_at, approved_by_user_id, approved_at, created_at, updated_at, priority, latest_decision_reason, outlet_id FROM purchase_requests
 WHERE workspace_id = $1
   AND ($3::text IS NULL OR status = $3)
   AND ($4::bigint IS NULL OR id < $4)
@@ -526,6 +531,7 @@ func (q *Queries) ListPurchaseRequests(ctx context.Context, arg ListPurchaseRequ
 			&i.UpdatedAt,
 			&i.Priority,
 			&i.LatestDecisionReason,
+			&i.OutletID,
 		); err != nil {
 			return nil, err
 		}
@@ -544,7 +550,7 @@ SET status = $4,
     version = version + 1,
     updated_at = now()
 WHERE id = $1 AND workspace_id = $2 AND version = $3
-RETURNING id, workspace_id, supplier_id, status, version, needed_by, reason, reference, currency, currency_exponent, estimated_total_minor, idempotency_key, created_by_user_id, submitted_by_user_id, submitted_at, approved_by_user_id, approved_at, created_at, updated_at, priority, latest_decision_reason
+RETURNING id, workspace_id, supplier_id, status, version, needed_by, reason, reference, currency, currency_exponent, estimated_total_minor, idempotency_key, created_by_user_id, submitted_by_user_id, submitted_at, approved_by_user_id, approved_at, created_at, updated_at, priority, latest_decision_reason, outlet_id
 `
 
 type ResolvePurchaseRequestParams struct {
@@ -586,6 +592,7 @@ func (q *Queries) ResolvePurchaseRequest(ctx context.Context, arg ResolvePurchas
 		&i.UpdatedAt,
 		&i.Priority,
 		&i.LatestDecisionReason,
+		&i.OutletID,
 	)
 	return i, err
 }
@@ -599,7 +606,7 @@ SET status = 'submitted',
     latest_decision_reason = NULL,
     updated_at = now()
 WHERE id = $1 AND workspace_id = $2 AND status IN ('draft', 'changes_requested') AND version = $3
-RETURNING id, workspace_id, supplier_id, status, version, needed_by, reason, reference, currency, currency_exponent, estimated_total_minor, idempotency_key, created_by_user_id, submitted_by_user_id, submitted_at, approved_by_user_id, approved_at, created_at, updated_at, priority, latest_decision_reason
+RETURNING id, workspace_id, supplier_id, status, version, needed_by, reason, reference, currency, currency_exponent, estimated_total_minor, idempotency_key, created_by_user_id, submitted_by_user_id, submitted_at, approved_by_user_id, approved_at, created_at, updated_at, priority, latest_decision_reason, outlet_id
 `
 
 type SubmitPurchaseRequestParams struct {
@@ -639,6 +646,7 @@ func (q *Queries) SubmitPurchaseRequest(ctx context.Context, arg SubmitPurchaseR
 		&i.UpdatedAt,
 		&i.Priority,
 		&i.LatestDecisionReason,
+		&i.OutletID,
 	)
 	return i, err
 }

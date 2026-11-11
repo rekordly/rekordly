@@ -149,11 +149,11 @@ func RoleTemplateDefinitions() map[string]struct {
 		},
 		"admin": {
 			Name:        "Admin",
-			Permissions: []string{"money.view", "money.create", "money.void", "sales.view", "sales.create", "purchases.view", "purchases.create", "invoices.view", "invoices.create", "reconcile.manage", "contacts.view", "contacts.manage", "inventory.view_quantity", "reports.view_basic", "reports.tax", "settings.manage"},
+			Permissions: []string{"money.view", "money.create", "money.void", "sales.view", "sales.create", "purchases.view", "purchases.create", "purchases.request", "purchases.approve_request", "purchases.create_po", "purchases.approve_po", "purchases.issue_po", "purchases.receive", "purchases.receive_unplanned", "purchases.create_bill", "purchases.approve_bill", "purchases.accept_variance", "purchases.pay_supplier", "purchases.manage_advance", "purchases.return", "purchases.close_po", "invoices.view", "invoices.create", "reconcile.manage", "contacts.view", "contacts.manage", "inventory.view_quantity", "reports.view_basic", "reports.tax", "settings.manage"},
 		},
 		"accountant": {
 			Name:        "Accountant / Bookkeeper",
-			Permissions: []string{"money.view", "money.create", "money.void", "sales.view", "purchases.view", "invoices.view", "invoices.create", "reconcile.manage", "contacts.view", "contacts.manage", "reports.view_basic", "reports.tax"},
+			Permissions: []string{"money.view", "money.create", "money.void", "sales.view", "purchases.view", "purchases.create_bill", "purchases.approve_bill", "purchases.accept_variance", "purchases.pay_supplier", "purchases.manage_advance", "purchases.return", "invoices.view", "invoices.create", "reconcile.manage", "contacts.view", "contacts.manage", "reports.view_basic", "reports.tax"},
 		},
 		"sales": {
 			Name:        "Sales",
@@ -165,11 +165,11 @@ func RoleTemplateDefinitions() map[string]struct {
 		},
 		"inventory_manager": {
 			Name:        "Inventory Manager",
-			Permissions: []string{"inventory.view_quantity", "purchases.view", "sales.view", "contacts.view"},
+			Permissions: []string{"inventory.view_quantity", "purchases.view", "purchases.request", "purchases.receive", "purchases.receive_unplanned", "purchases.return", "sales.view", "contacts.view"},
 		},
 		"procurement": {
 			Name:        "Procurement",
-			Permissions: []string{"purchases.view", "purchases.create", "contacts.view", "contacts.manage", "inventory.view_quantity"},
+			Permissions: []string{"purchases.view", "purchases.create", "purchases.request", "purchases.approve_request", "purchases.create_po", "purchases.issue_po", "purchases.receive", "purchases.receive_unplanned", "purchases.create_bill", "purchases.return", "purchases.close_po", "contacts.view", "contacts.manage", "inventory.view_quantity"},
 		},
 		"viewer": {
 			Name:        "Viewer / Auditor",

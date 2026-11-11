@@ -233,6 +233,8 @@ export interface PurchaseOrderLine {
   quantity: string;
   unit_name: string;
   expected_unit_cost_minor: string;
+  discount_minor?: string;
+  tax_amount_minor?: string;
   line_total_minor: string;
 }
 export interface PurchaseOrderEvent {
@@ -243,14 +245,27 @@ export interface PurchaseOrderEvent {
   actor_user_id: number;
   created_at: string;
 }
+export interface PurchaseOrderVersion {
+  id: number;
+  version: number;
+  snapshot: unknown;
+  change_reason?: string | null;
+  changed_by_user_id: number;
+  created_at: string;
+}
 
-/** A non-posting supplier commitment created from an approved request. */
+/** A non-posting supplier commitment created from an approved request or directly. */
 export interface PurchaseOrder {
   id: number;
   source_purchase_request_id: number;
+  supplier_id?: number | null;
+  outlet_id?: number | null;
   status: "draft" | "submitted" | "approved" | "issued" | "acknowledged" | "partially_received" | "fully_received" | "cancelled" | "partially_cancelled" | "closed";
   version: number;
   order_number?: string | null;
+  expected_date?: string | null;
+  payment_terms?: string | null;
+  notes?: string | null;
   currency: string;
   currency_exponent: number;
   total_minor: string;
@@ -260,6 +275,7 @@ export interface PurchaseOrder {
   acknowledgement_note?: string | null;
   lines?: PurchaseOrderLine[];
   events?: PurchaseOrderEvent[];
+  versions?: PurchaseOrderVersion[];
 }
 
 export interface ReceiptOptionLine {
@@ -267,9 +283,77 @@ export interface ReceiptOptionLine {
   description: string;
   remaining_quantity: string;
 }
-export interface GoodsReceiptLine { id:number; purchase_order_line_id:number; product_id?:number|null; description:string; accepted_quantity:string; unit_cost_minor:string; line_total_minor:string; }
-export interface GoodsReceipt { id:number; purchase_order_id:number; received_on:string; receipt_reference?:string|null; lines?:GoodsReceiptLine[]; }
-export interface SupplierBill { id:number; goods_receipt_id:number; goods_receipt_linked?:boolean; bill_type?:"receipt"|"direct_expense"|"direct_service"; due_date?:string|null; overdue?:boolean; status:"draft"|"approved"|"partially_paid"|"paid"|"voided"; version:number; total_minor:string; outstanding_minor:string; }
+export interface GoodsReceiptLine {
+  id: number;
+  purchase_order_line_id: number;
+  product_id?: number | null;
+  description: string;
+  accepted_quantity: string;
+  rejected_quantity?: string;
+  unit_cost_minor: string;
+  actual_unit_cost_minor?: string;
+  landed_cost_minor?: string;
+  effective_unit_cost_minor?: string;
+  line_total_minor: string;
+  batch_number?: string | null;
+  expiry_date?: string | null;
+  serial_numbers?: string[];
+  notes?: string | null;
+}
+export interface GoodsReceipt {
+  id: number;
+  purchase_order_id: number;
+  supplier_id?: number | null;
+  location_id?: number | null;
+  source_type?: "po" | "unplanned";
+  reason?: string | null;
+  received_on: string;
+  currency?: string;
+  currency_exponent?: number;
+  total_minor?: string;
+  landed_cost_minor?: string;
+  receipt_reference?: string | null;
+  delivery_reference?: string | null;
+  service_accepted?: boolean;
+  lines?: GoodsReceiptLine[];
+}
+export interface SupplierBillLine {
+  id: number;
+  goods_receipt_line_id?: number | null;
+  purchase_order_line_id?: number | null;
+  description: string;
+  quantity: string;
+  unit_cost_minor: string;
+  discount_minor: string;
+  tax_amount_minor: string;
+  line_total_minor: string;
+}
+export interface SupplierBill {
+  id: number;
+  goods_receipt_id: number;
+  supplier_id?: number;
+  outlet_id?: number | null;
+  supplier_invoice_number?: string;
+  bill_date?: string;
+  goods_receipt_linked?: boolean;
+  bill_type?: "receipt" | "direct_expense" | "direct_service";
+  due_date?: string | null;
+  overdue?: boolean;
+  status: "draft" | "approved" | "disputed" | "rejected" | "partially_paid" | "paid" | "reversed" | "voided";
+  version: number;
+  currency?: string;
+  currency_exponent?: number;
+  total_minor: string;
+  outstanding_minor: string;
+  tax_amount_minor?: string;
+  discount_minor?: string;
+  variance_minor?: string;
+  credited_minor?: string;
+  match_status?: string;
+  dispute_reason?: string | null;
+  reversal_reason?: string | null;
+  lines?: SupplierBillLine[];
+}
 export interface SupplierAdvance {
   id: number;
   supplier_id: number;
@@ -281,10 +365,102 @@ export interface SupplierAdvance {
   status: "open" | "partially_applied" | "applied" | "refunded" | "voided";
   version: number;
 }
-export interface SupplierReturn { id:number; supplier_id:number; goods_receipt_id:number; status:"posted"|"cancelled"; total_minor:string; }
-export interface SupplierReturnLineOption { id:number; product_name:string; remaining_quantity:string; unit_cost_minor:string; }
-export interface ProcurementReport { as_of_date:string; open_purchase_order_count:number; open_purchase_order_minor:string; ordered_minor:string; received_minor:string; unbilled_receipt_count:number; grni_minor:string; ap_outstanding_minor:string; ap_overdue_minor:string; unapplied_advance_count:number; unapplied_advance_minor:string; }
-export interface SupplierBillMatch { bill_id:number; receipt_id:number; ordered_minor:string; received_minor:string; billed_minor:string; open_to_bill_minor:string; variance_minor:string; result:string; requires_review:boolean; }
+export interface SupplierReturn { id: number; supplier_id: number; goods_receipt_id: number; status: "posted" | "cancelled"; total_minor: string; }
+export interface SupplierReturnLineOption { id: number; product_name: string; remaining_quantity: string; unit_cost_minor: string; }
+export interface SupplierCredit {
+  id: number;
+  supplier_id: number;
+  supplier_return_id?: number | null;
+  supplier_bill_id?: number | null;
+  currency?: string;
+  amount_minor: string;
+  outstanding_minor: string;
+  reason?: string;
+  status: string;
+  created_at?: string;
+}
+export interface SupplierRefund {
+  id: number;
+  supplier_id: number;
+  supplier_credit_id?: number | null;
+  supplier_advance_id?: number | null;
+  amount_minor: string;
+  currency: string;
+  refund_date: string;
+  reason: string;
+  created_at: string;
+}
+export interface ProcurementApprovalPolicy {
+  approval_threshold_minor: string;
+  allow_self_approval: boolean;
+  price_variance_tolerance_bps: number;
+  qty_variance_tolerance_bps: number;
+  allow_unplanned_receipt: boolean;
+  allow_over_receipt: boolean;
+}
+export interface ProcurementAttachment {
+  id: number;
+  purchase_request_id?: number | null;
+  purchase_order_id?: number | null;
+  goods_receipt_id?: number | null;
+  supplier_bill_id?: number | null;
+  storage_key: string;
+  file_name: string;
+  mime_type: string;
+  file_size_bytes: number;
+  created_at: string;
+}
+export interface ProcurementReport {
+  as_of_date: string;
+  open_purchase_order_count: number;
+  open_purchase_order_minor: string;
+  ordered_minor: string;
+  received_minor: string;
+  unbilled_receipt_count: number;
+  grni_minor: string;
+  ap_outstanding_minor: string;
+  ap_overdue_minor: string;
+  unapplied_advance_count: number;
+  unapplied_advance_minor: string;
+  unapplied_credit_count?: number;
+  unapplied_credit_minor?: string;
+  ap_aging?: {
+    current_minor: string;
+    days_1_30_minor: string;
+    days_31_60_minor: string;
+    days_61_plus_minor: string;
+  };
+  aged_grni?: {
+    receipt_id: number;
+    receipt_reference?: string | null;
+    purchase_order_id?: number | null;
+    supplier_id?: number | null;
+    received_on: string;
+    age_days: number;
+    grni_minor: string;
+  }[];
+  variance_bills?: {
+    id: number;
+    goods_receipt_id?: number | null;
+    supplier_id: number;
+    supplier_invoice_number: string;
+    bill_date: string;
+    total_minor: string;
+    variance_minor: string;
+    match_status: string;
+    status: string;
+  }[];
+  pending_returns?: {
+    id: number;
+    supplier_id: number;
+    goods_receipt_id: number;
+    effective_on: string;
+    total_minor: string;
+    credited_minor: string;
+    reason: string;
+  }[];
+}
+export interface SupplierBillMatch { bill_id: number; receipt_id: number; ordered_minor: string; received_minor: string; billed_minor: string; open_to_bill_minor: string; variance_minor: string; result: string; requires_review: boolean; }
 
 export interface MoneyTransaction {
   id: number;

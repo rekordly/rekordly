@@ -28,11 +28,17 @@ SELECT gr.*, COALESCE(jsonb_agg(jsonb_build_object(
   'id', grl.id,
   'purchase_order_line_id', grl.purchase_order_line_id,
   'product_id', grl.product_id,
-  'description', pol.description,
+  'description', COALESCE(grl.description, pol.description),
   'accepted_quantity', grl.accepted_quantity,
+  'rejected_quantity', grl.rejected_quantity,
   'unit_cost_minor', grl.unit_cost_minor,
   'actual_unit_cost_minor', COALESCE(grl.actual_unit_cost_minor, grl.unit_cost_minor),
+  'landed_cost_minor', grl.landed_cost_minor,
+  'effective_unit_cost_minor', COALESCE(grl.effective_unit_cost_minor, grl.actual_unit_cost_minor, grl.unit_cost_minor),
   'line_total_minor', grl.line_total_minor,
+  'batch_number', grl.batch_number,
+  'expiry_date', grl.expiry_date,
+  'serial_numbers', grl.serial_numbers,
   'line_notes', grl.line_notes
 ) ORDER BY grl.id) FILTER (WHERE grl.id IS NOT NULL), '[]'::jsonb) AS lines
 FROM goods_receipts gr

@@ -49,9 +49,23 @@ type SupplierCreditView struct {
 	SupplierID       int64  `json:"supplier_id"`
 	SupplierReturnID *int64 `json:"supplier_return_id,omitempty"`
 	SupplierBillID   *int64 `json:"supplier_bill_id,omitempty"`
+	Currency         string `json:"currency,omitempty"`
 	AmountMinor      string `json:"amount_minor"`
 	OutstandingMinor string `json:"outstanding_minor"`
+	Reason           string `json:"reason,omitempty"`
 	Status           string `json:"status"`
+	CreatedAt        string `json:"created_at,omitempty"`
+}
+type SupplierRefundView struct {
+	ID                int64  `json:"id"`
+	SupplierID        int64  `json:"supplier_id"`
+	SupplierCreditID  *int64 `json:"supplier_credit_id,omitempty"`
+	SupplierAdvanceID *int64 `json:"supplier_advance_id,omitempty"`
+	AmountMinor       string `json:"amount_minor"`
+	Currency          string `json:"currency"`
+	RefundDate        string `json:"refund_date"`
+	Reason            string `json:"reason"`
+	CreatedAt         string `json:"created_at"`
 }
 type CreateSupplierRefundInput struct {
 	SupplierCreditID  int64  `json:"supplier_credit_id"`
@@ -76,7 +90,60 @@ func supplierCreditView(v db.SupplierCredit) SupplierCreditView {
 		x := v.SupplierBillID.Int64
 		bill = &x
 	}
-	return SupplierCreditView{ID: v.ID, SupplierID: v.SupplierID, SupplierReturnID: ret, SupplierBillID: bill, AmountMinor: fmt.Sprint(v.AmountMinor), OutstandingMinor: fmt.Sprint(v.OutstandingMinor), Status: v.Status}
+	return SupplierCreditView{
+		ID:               v.ID,
+		SupplierID:       v.SupplierID,
+		SupplierReturnID: ret,
+		SupplierBillID:   bill,
+		Currency:         v.Currency,
+		AmountMinor:      fmt.Sprint(v.AmountMinor),
+		OutstandingMinor: fmt.Sprint(v.OutstandingMinor),
+		Reason:           v.Reason,
+		Status:           v.Status,
+		CreatedAt:        v.CreatedAt.Time.UTC().Format(time.RFC3339),
+	}
+}
+
+func supplierRefundView(v db.SupplierRefund) SupplierRefundView {
+	refundDate := ""
+	if v.RefundDate.Valid {
+		refundDate = v.RefundDate.Time.Format("2006-01-02")
+	}
+	return SupplierRefundView{
+		ID:                v.ID,
+		SupplierID:        v.SupplierID,
+		SupplierCreditID:  nullableInt8(v.SupplierCreditID),
+		SupplierAdvanceID: nullableInt8(v.SupplierAdvanceID),
+		AmountMinor:       fmt.Sprint(v.AmountMinor),
+		Currency:          v.Currency,
+		RefundDate:        refundDate,
+		Reason:            v.Reason,
+		CreatedAt:         v.CreatedAt.Time.UTC().Format(time.RFC3339),
+	}
+}
+
+func (s *Service) ListSupplierCredits(ctx context.Context, ws int64) ([]SupplierCreditView, error) {
+	rows, err := s.queries.ListSupplierCredits(ctx, db.ListSupplierCreditsParams{WorkspaceID: ws, Limit: 100})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]SupplierCreditView, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, supplierCreditView(row))
+	}
+	return out, nil
+}
+
+func (s *Service) ListSupplierRefunds(ctx context.Context, ws int64) ([]SupplierRefundView, error) {
+	rows, err := s.queries.ListSupplierRefunds(ctx, db.ListSupplierRefundsParams{WorkspaceID: ws, Limit: 100})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]SupplierRefundView, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, supplierRefundView(row))
+	}
+	return out, nil
 }
 
 func (s *Service) ListSupplierReturns(ctx context.Context, ws int64) ([]SupplierReturnView, error) {

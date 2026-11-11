@@ -23,8 +23,33 @@ func (h *Handler) RegisterProcurementRoutes(protected *gin.RouterGroup) {
 	protected.GET("/procurement/attachments", h.listProcurementAttachments)
 }
 
-func (h *Handler) addProcurementAttachment(c *gin.Context) {
+func requireProcurementPermission(c *gin.Context, codes ...string) (WorkspaceContext, bool) {
 	ws, ok := businessWorkspace(c)
+	if !ok {
+		return WorkspaceContext{}, false
+	}
+	if len(codes) == 0 || ws.RoleCode == "procurement_manager" {
+		return ws, true
+	}
+	for _, code := range codes {
+		if ws.HasPermission(code) {
+			return ws, true
+		}
+	}
+	c.JSON(http.StatusForbidden, gin.H{"error": gin.H{"code": "FORBIDDEN", "message": "You do not have permission to perform this action"}})
+	return WorkspaceContext{}, false
+}
+
+func enforceProcurementOutletScope(c *gin.Context, ws WorkspaceContext, outletID int64) bool {
+	if outletID <= 0 || ws.IsOutletAllowed(outletID) {
+		return true
+	}
+	c.JSON(http.StatusForbidden, gin.H{"error": gin.H{"code": "OUTLET_SCOPE_FORBIDDEN", "message": "You do not have access to this outlet/location"}})
+	return false
+}
+
+func (h *Handler) addProcurementAttachment(c *gin.Context) {
+	ws, ok := requireProcurementPermission(c, "purchases.create", "purchases.request", "purchases.create_po", "purchases.receive", "purchases.create_bill")
 	if !ok {
 		return
 	}
@@ -42,7 +67,7 @@ func (h *Handler) addProcurementAttachment(c *gin.Context) {
 }
 
 func (h *Handler) listProcurementAttachments(c *gin.Context) {
-	ws, ok := businessWorkspace(c)
+	ws, ok := requireProcurementPermission(c, "purchases.view", "purchases.request", "purchases.create")
 	if !ok {
 		return
 	}
@@ -56,7 +81,7 @@ func (h *Handler) listProcurementAttachments(c *gin.Context) {
 }
 
 func (h *Handler) getProcurementApprovalPolicy(c *gin.Context) {
-	ws, ok := businessWorkspace(c)
+	ws, ok := requireProcurementPermission(c, "purchases.view", "settings.manage", "purchases.create")
 	if !ok {
 		return
 	}
@@ -69,12 +94,8 @@ func (h *Handler) getProcurementApprovalPolicy(c *gin.Context) {
 }
 
 func (h *Handler) updateProcurementApprovalPolicy(c *gin.Context) {
-	ws, ok := businessWorkspace(c)
+	ws, ok := requireProcurementPermission(c, "settings.manage")
 	if !ok {
-		return
-	}
-	if !ws.IsOwner && ws.RoleCode != "admin" {
-		h.procurementError(c, ErrApprovalForbidden)
 		return
 	}
 	var input UpdateProcurementApprovalPolicyInput
@@ -90,12 +111,8 @@ func (h *Handler) updateProcurementApprovalPolicy(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"policy": policy}})
 }
 func (h *Handler) requestPurchaseRequestChanges(c *gin.Context) {
-	ws, ok := businessWorkspace(c)
+	ws, ok := requireProcurementPermission(c, "purchases.approve_request", "purchases.approve_po")
 	if !ok {
-		return
-	}
-	if !ws.IsOwner && ws.RoleCode != "admin" && ws.RoleCode != "procurement_manager" {
-		h.procurementError(c, ErrApprovalForbidden)
 		return
 	}
 	id, in, ok := procurementCommandInput(c)
@@ -113,12 +130,8 @@ func (h *Handler) requestPurchaseRequestChanges(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"request": request}})
 }
 func (h *Handler) rejectPurchaseRequest(c *gin.Context) {
-	ws, ok := businessWorkspace(c)
+	ws, ok := requireProcurementPermission(c, "purchases.approve_request", "purchases.approve_po")
 	if !ok {
-		return
-	}
-	if !ws.IsOwner && ws.RoleCode != "admin" && ws.RoleCode != "procurement_manager" {
-		h.procurementError(c, ErrApprovalForbidden)
 		return
 	}
 	id, in, ok := procurementCommandInput(c)
@@ -136,7 +149,7 @@ func (h *Handler) rejectPurchaseRequest(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"request": request}})
 }
 func (h *Handler) cancelPurchaseRequest(c *gin.Context) {
-	ws, ok := businessWorkspace(c)
+	ws, ok := requireProcurementPermission(c, "purchases.request", "purchases.approve_request", "purchases.create")
 	if !ok {
 		return
 	}
@@ -162,7 +175,7 @@ func (h *Handler) cancelPurchaseRequest(c *gin.Context) {
 // @Produce json
 // @Router /api/v1/purchase-requests [post]
 func (h *Handler) createPurchaseRequest(c *gin.Context) {
-	wsCtx, ok := businessWorkspace(c)
+	wsCtx, ok := requireProcurementPermission(c, "purchases.request", "purchases.create")
 	if !ok {
 		return
 	}
@@ -188,7 +201,7 @@ func (h *Handler) createPurchaseRequest(c *gin.Context) {
 // @Produce json
 // @Router /api/v1/purchase-requests [get]
 func (h *Handler) listPurchaseRequests(c *gin.Context) {
-	wsCtx, ok := businessWorkspace(c)
+	wsCtx, ok := requireProcurementPermission(c, "purchases.view", "purchases.request", "purchases.create")
 	if !ok {
 		return
 	}
@@ -212,7 +225,7 @@ func (h *Handler) listPurchaseRequests(c *gin.Context) {
 // @Produce json
 // @Router /api/v1/purchase-requests/{id}/commands/submit [post]
 func (h *Handler) submitPurchaseRequest(c *gin.Context) {
-	wsCtx, ok := businessWorkspace(c)
+	wsCtx, ok := requireProcurementPermission(c, "purchases.request", "purchases.create")
 	if !ok {
 		return
 	}
@@ -238,12 +251,8 @@ func (h *Handler) submitPurchaseRequest(c *gin.Context) {
 // @Produce json
 // @Router /api/v1/purchase-requests/{id}/commands/approve [post]
 func (h *Handler) approvePurchaseRequest(c *gin.Context) {
-	wsCtx, ok := businessWorkspace(c)
+	wsCtx, ok := requireProcurementPermission(c, "purchases.approve_request", "purchases.approve_po")
 	if !ok {
-		return
-	}
-	if !wsCtx.IsOwner && wsCtx.RoleCode != "admin" && wsCtx.RoleCode != "procurement_manager" {
-		h.procurementError(c, ErrApprovalForbidden)
 		return
 	}
 	requestID, input, ok := procurementCommandInput(c)
@@ -286,6 +295,8 @@ func (h *Handler) procurementError(c *gin.Context, err error) {
 		status, code = http.StatusConflict, "PURCHASE_REQUEST_VERSION_CONFLICT"
 	case errors.Is(err, ErrDuplicateIdempotent):
 		status, code = http.StatusConflict, "IDEMPOTENCY_CONFLICT"
+	case errors.Is(err, ErrDuplicateBill):
+		status, code = http.StatusConflict, "SUPPLIER_BILL_DUPLICATE"
 	case strings.Contains(err.Error(), "state"):
 		status, code = http.StatusConflict, "INVALID_STATE"
 	}
