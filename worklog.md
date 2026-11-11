@@ -180,6 +180,12 @@
 - Added `GET /api/v1/reports/procurement`, with tenant-scoped server aggregates for open PO commitments, unbilled receipts/GRNI, AP outstanding and overdue balances, and unapplied supplier advances.
 - Added a Procurement Reports tab that renders those values from the live API rather than fabricated client totals.
 - Rebuilt the API without touching the PostgreSQL volume; migrations through `000027` are applied and the full finance suite remains green.
+
+## 11 November 2026 — Blueprint 08 three-way matching
+
+- Supplier bill matching now derives ordered, received and billed totals from the PO/receipt/bill chain, calculates open-to-bill and variance amounts, and classifies exact, receipt-quantity variance, price/quantity variance, and overbilled states server-side.
+- Bills in Procurement now expose a three-way match drawer with the live server projection; direct bills are explicitly shown as direct and do not pretend to have a receipt match.
+- Verification passed: API rebuild/health, full containerized finance tests, frontend type-check, 44 Bun tests, production build, and `git diff --check`.
 - Added workspace-authorized evidence access: the API returns a five-minute Cloudinary authenticated-download URL only for a verified asset owned by the active workspace. The URL is never stored; Capture and Review request it only when the user presses Open. Local Cloudinary configuration was verified by presence only and the rebuilt API now exposes the route.
 - The Capture and Sync UI now disclose staged receipt state and let the user remove a receipt before the local draft is saved. No offline action can confirm or post a financial record.
 - Verification passed: frontend type-check, ESLint, 44 Bun tests, production build, `git diff --check`, and local Bun `/capture` HTTP 200.
@@ -230,9 +236,43 @@
 - Approved supplier bills can now be settled by a partial or multi-bill outgoing payment. The transaction locks and validates every bill, prevents over-settlement, and posts debit AP / credit cash rather than recognizing expense again.
 - Added supplier advances as a distinct asset subledger. Creation posts debit Supplier Advances / credit cash once; applying an advance to an approved bill locks both documents, reduces AP and the advance balance atomically, and posts debit AP / credit Supplier Advances with no second cash movement. Both creation and application are idempotent and version guarded.
 - Verification: migrations `000022` and `000023` applied without deleting the PostgreSQL volume; API health is 200; all containerized finance integration tests pass; frontend type-check and 44 Bun tests pass; `git diff --check` passes. A fresh production web build was not run because the user’s existing Next development server holds Next’s build lock.
-### Blueprint 08 — goods receipt detail (2026-11-11)
+## 11 November 2026 — Blueprint 08 supplier resolution and PO detail
 
-- Added a tenant-scoped goods receipt detail endpoint with receipt lines and purchase-order descriptions.
-- Added a frontend detail drawer from the Receipts tab while preserving bill and return actions.
-- API image builds successfully; web type-check and 52 Bun tests pass.
+- Added direct supplier-bill creation in the procurement UI for expense/service bills, including due-date and overdue display.
+- Extended supplier-credit resolution to support credits created from a posted supplier return, with a return-balance cap.
+- Added atomic supplier-advance refunds with idempotent cash-receipt posting and preserved minor-unit accounting.
+- Added purchase-order detail endpoint and frontend drawer with immutable lines and event timeline.
+- Verification: API finance tests pass; frontend type-check and all 44 Bun tests pass.
 
+## 11 November 2026 — Blueprint 08 procurement controls and evidence
+
+- Added workspace approval-policy storage and endpoints for amount thresholds and self-approval policy; high-value approvals require an owner when configured.
+- Added tenant-validated procurement attachment metadata for requests, purchase orders, receipts and supplier bills.
+- Reasserted supplier return/credit/refund ledger source types after later inventory migrations had narrowed the ledger constraint.
+- Verification: full finance Go suite, API health check, frontend type-check, 44 Bun tests and production web build pass.
+
+## 11 November 2026 — Blueprint 08 receipt identity and ordered-versus-received reporting
+
+- Added a workspace-unique supplier delivery reference constraint and normalized receipt references before posting.
+- Procurement reports now expose ordered and accepted value totals for open commitments, alongside GRNI/AP/advance balances.
+- Verification: migration/API rebuild preserved data, health returned 200, full finance tests and frontend checks passed.
+
+## 11 November 2026 — Blueprint 08 inventory adjustments and transfers
+
+- Added atomic, idempotent stock adjustments with reason codes, weighted-average valuation, signed immutable movements and balanced inventory/offset ledger entries.
+- Added atomic location-to-location stock transfers at current weighted-average cost, with paired immutable movements and on-hand guards.
+- Added Inventory UI drawers and API actions for adjustments and transfers.
+- Verification: migration `000036_inventory_adjustments_transfers.sql` applied without deleting data; focused integration test, frontend type-check and 44 tests passed.
+
+## 11 November 2026 — Blueprint 08 physical stock counts
+
+- Added idempotent physical stock counts with expected-versus-counted quantities, variance movements, weighted-average valuation and balanced ledger offsets.
+- Added the Inventory count drawer and API route.
+- Migration `000037_stock_counts.sql` is included for fresh deployments; focused inventory and frontend type checks pass.
+### Blueprint 08 — supplier PO sharing (2026-11-11)
+
+- Added expiring, hashed-token supplier share links for issued purchase orders.
+- Added public read/respond endpoints for acknowledgement, decline, and change requests; tokens are single-purpose, tenant-scoped, and cannot be reused after expiry/revocation.
+- Added owner-facing procurement action and link drawer in the web app.
+- Migration `000038_purchase_order_shares.sql` applied successfully without deleting existing data.
+- API image rebuilt and health check returned 200; Go finance tests and web type-check/Bun tests pass.

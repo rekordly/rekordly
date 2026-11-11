@@ -10,6 +10,8 @@ INSERT INTO purchase_orders(workspace_id,source_purchase_request_id,supplier_id,
 INSERT INTO purchase_order_lines(workspace_id,purchase_order_id,source_purchase_request_line_id,product_id,description,quantity,unit_name,expected_unit_cost_minor,line_total_minor) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9);
 -- name: ListPurchaseOrders :many
 SELECT * FROM purchase_orders WHERE workspace_id=$1 AND (sqlc.narg('before_id')::bigint IS NULL OR id < sqlc.narg('before_id')) ORDER BY id DESC LIMIT $2;
+-- name: GetPurchaseOrderLines :many
+SELECT * FROM purchase_order_lines WHERE workspace_id=$1 AND purchase_order_id=$2 ORDER BY id ASC;
 -- name: GetPurchaseOrderForUpdate :one
 SELECT * FROM purchase_orders WHERE workspace_id=$1 AND id=$2 FOR UPDATE;
 -- name: AdvancePurchaseOrder :one

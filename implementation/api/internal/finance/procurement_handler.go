@@ -17,6 +17,77 @@ func (h *Handler) RegisterProcurementRoutes(protected *gin.RouterGroup) {
 	protected.POST("/purchase-requests/:id/commands/reject", h.rejectPurchaseRequest)
 	protected.POST("/purchase-requests/:id/commands/request-changes", h.requestPurchaseRequestChanges)
 	protected.POST("/purchase-requests/:id/commands/cancel", h.cancelPurchaseRequest)
+	protected.GET("/procurement/approval-policy", h.getProcurementApprovalPolicy)
+	protected.PUT("/procurement/approval-policy", h.updateProcurementApprovalPolicy)
+	protected.POST("/procurement/attachments", h.addProcurementAttachment)
+	protected.GET("/procurement/attachments", h.listProcurementAttachments)
+}
+
+func (h *Handler) addProcurementAttachment(c *gin.Context) {
+	ws, ok := businessWorkspace(c)
+	if !ok {
+		return
+	}
+	var input ProcurementAttachmentInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": err.Error()}})
+		return
+	}
+	item, err := h.service.AddProcurementAttachment(c.Request.Context(), ws.WorkspaceID, ws.UserID, input)
+	if err != nil {
+		h.procurementError(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"data": gin.H{"attachment": item}})
+}
+
+func (h *Handler) listProcurementAttachments(c *gin.Context) {
+	ws, ok := businessWorkspace(c)
+	if !ok {
+		return
+	}
+	parse := func(name string) int64 { id, _ := strconv.ParseInt(c.Query(name), 10, 64); return id }
+	items, err := h.service.ListProcurementAttachments(c.Request.Context(), ws.WorkspaceID, ProcurementAttachmentInput{PurchaseRequestID: parse("purchase_request_id"), PurchaseOrderID: parse("purchase_order_id"), GoodsReceiptID: parse("goods_receipt_id"), SupplierBillID: parse("supplier_bill_id")})
+	if err != nil {
+		h.procurementError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"attachments": items}})
+}
+
+func (h *Handler) getProcurementApprovalPolicy(c *gin.Context) {
+	ws, ok := businessWorkspace(c)
+	if !ok {
+		return
+	}
+	policy, err := h.service.GetProcurementApprovalPolicy(c.Request.Context(), ws.WorkspaceID)
+	if err != nil {
+		h.procurementError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"policy": policy}})
+}
+
+func (h *Handler) updateProcurementApprovalPolicy(c *gin.Context) {
+	ws, ok := businessWorkspace(c)
+	if !ok {
+		return
+	}
+	if !ws.IsOwner && ws.RoleCode != "admin" {
+		h.procurementError(c, ErrApprovalForbidden)
+		return
+	}
+	var input UpdateProcurementApprovalPolicyInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": err.Error()}})
+		return
+	}
+	policy, err := h.service.UpdateProcurementApprovalPolicy(c.Request.Context(), ws.WorkspaceID, ws.UserID, input)
+	if err != nil {
+		h.procurementError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"policy": policy}})
 }
 func (h *Handler) requestPurchaseRequestChanges(c *gin.Context) {
 	ws, ok := businessWorkspace(c)

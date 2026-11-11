@@ -110,17 +110,17 @@ export function useRecords<T extends { id: number }>(resource: RecordResource, w
 export function useFinanceAction<TVariables>(
   workspaceId: number,
   run: (variables: TVariables, idempotencyKey: string) => Promise<unknown>,
-  options: { success: string; onDone?: () => void },
+  options: { success: string; onDone?: (data: unknown) => void },
 ) {
   const queryClient = useQueryClient();
   const idempotencyKey = useRef(createIdempotencyKey());
   return useMutation({
     mutationFn: (variables: TVariables) => run(variables, idempotencyKey.current),
-    onSuccess: () => {
+    onSuccess: (data) => {
       idempotencyKey.current = createIdempotencyKey();
       toast.success(options.success);
       void queryClient.invalidateQueries({ queryKey: moneyKeys.workspace(workspaceId) });
-      options.onDone?.();
+      options.onDone?.(data);
     },
     onError: (error: Error) => {
       toast.danger(error.message);

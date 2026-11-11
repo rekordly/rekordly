@@ -429,3 +429,71 @@ Status: **complete and verified**. Every backend authentication task (`AUTH-BE-0
 - Migrations `000026_supplier_returns_credits_refunds.sql` and `000027_direct_supplier_bills.sql` applied without deleting the database volume; API health returned HTTP 200.
 - Focused return/refund and direct-bill integration tests plus the full containerized finance suite passed.
 - `bun run type-check`, `bun test` (44 passing), `bun run build`, and `git diff --check` passed.
+
+## Blueprint 08 procurement reports and three-way matching — 11 November 2026
+
+### Task completion
+
+- PASS — server procurement report aggregates open PO commitments, unbilled receipts/GRNI, AP outstanding/overdue, and unapplied supplier advances.
+- PASS — receipt-backed bill matching derives ordered, received, billed, open-to-bill and variance values with explicit result classes; direct bills are excluded from false receipt matching.
+- PASS — Procurement UI exposes live report cards and a bill match drawer.
+
+### Evidence
+
+- API rebuild preserved data and completed migrations through `000027`; health returned HTTP 200.
+- Full containerized finance suite, frontend type-check, 44 Bun tests, production build and `git diff --check` passed.
+
+## Blueprint 08 controls, evidence and PO detail — 11 November 2026
+
+### Task completion
+
+- PASS — workspace approval policies expose amount thresholds and self-approval rules; configured high-value approvals require an owner.
+- PASS — procurement attachments are tenant-validated and can be linked to exactly one request, PO, receipt or supplier bill.
+- PASS — PO detail returns immutable lines and the command/event timeline, with a frontend detail drawer.
+- PASS — supplier-return/credit/refund ledger source types are reasserted after later inventory migrations so resolution events remain postable.
+
+### Evidence
+
+- Migration `000034_supplier_resolution_ledger_types.sql` applied without deleting the database volume; API health returned HTTP 200.
+- Full containerized finance suite, frontend type-check, 44 Bun tests and production web build passed.
+
+### Deferred
+
+- Multi-step approval chains, partial/multi-supplier request conversion, supplier guest sharing/revisions, batch/serial/expiry, count/adjustment/transfer UI, receipt evidence/reversals, multi-receipt AP, remittance/aging drill-downs, return-credit/refund UI, and export/mobile workflows remain to be implemented and verified.
+
+## Blueprint 08 receipt identity and ordered-versus-received reporting — 11 November 2026
+
+### Task completion
+
+- PASS — supplier delivery references are unique within a workspace and normalized before persistence.
+- PASS — procurement reporting includes ordered and accepted value totals for open purchase commitments.
+
+### Evidence
+
+- Migration `000035_receipt_reference_dedup.sql` applied without deleting the PostgreSQL volume; API health returned HTTP 200.
+- Full finance tests, frontend type-check, 44 Bun tests, and the production build passed.
+
+## Blueprint 08 inventory adjustments and transfers — 11 November 2026
+
+### Task completion
+
+- PASS — inventory adjustments validate stock-tracked products, prevent negative on-hand balances, write signed movements, update weighted-average balances, and post balanced ledger offsets atomically.
+- PASS — location transfers validate source stock, preserve current weighted-average cost, write paired immutable movements, update both balances atomically, and are idempotent.
+- PASS — Inventory UI exposes adjustment and transfer drawers.
+
+### Evidence
+
+- Migration `000036_inventory_adjustments_transfers.sql` applied without deleting the database volume.
+- `TestInventoryAdjustmentAndTransferAreAtomicAndIdempotent`, full finance tests, frontend type-check and 44 Bun tests passed.
+
+## Blueprint 08 physical stock counts — 11 November 2026
+
+### Task completion
+
+- PASS — a physical count locks the current balance, records expected/count/variance quantities, applies only the variance, writes immutable movement history, and posts balanced ledger offsets.
+- PASS — Count posting is idempotent and available from the Inventory page.
+
+### Evidence
+
+- Migration `000037_stock_counts.sql` applied without deleting data; API health returned HTTP 200.
+- Full finance suite and production web build passed after the count UI/API addition.

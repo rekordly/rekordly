@@ -54,12 +54,13 @@ type SupplierCreditView struct {
 	Status           string `json:"status"`
 }
 type CreateSupplierRefundInput struct {
-	SupplierCreditID int64  `json:"supplier_credit_id"`
-	MoneyAccountID   int64  `json:"money_account_id"`
-	Amount           string `json:"amount"`
-	RefundDate       string `json:"refund_date"`
-	Reason           string `json:"reason"`
-	IdempotencyKey   string `json:"idempotency_key"`
+	SupplierCreditID  int64  `json:"supplier_credit_id"`
+	SupplierAdvanceID int64  `json:"supplier_advance_id"`
+	MoneyAccountID    int64  `json:"money_account_id"`
+	Amount            string `json:"amount"`
+	RefundDate        string `json:"refund_date"`
+	Reason            string `json:"reason"`
+	IdempotencyKey    string `json:"idempotency_key"`
 }
 
 func supplierReturnView(v db.SupplierReturn) SupplierReturnView {
@@ -219,8 +220,8 @@ func (s *Service) CreateSupplierReturn(ctx context.Context, ws, user int64, in C
 
 func (s *Service) CreateSupplierCredit(ctx context.Context, ws, user int64, in CreateSupplierCreditInput) (SupplierCreditView, error) {
 	key, reason := strings.TrimSpace(in.IdempotencyKey), strings.TrimSpace(in.Reason)
-	if key == "" || reason == "" || in.SupplierBillID <= 0 {
-		return SupplierCreditView{}, errors.New("approved bill, reason and idempotency key are required")
+	if key == "" || reason == "" || (in.SupplierBillID <= 0 && in.SupplierReturnID <= 0) || (in.SupplierBillID > 0 && in.SupplierReturnID > 0) {
+		return SupplierCreditView{}, errors.New("an approved bill or supplier return, reason and idempotency key are required")
 	}
 	if old, err := s.queries.GetSupplierCreditByIdempotency(ctx, db.GetSupplierCreditByIdempotencyParams{WorkspaceID: ws, IdempotencyKey: key}); err == nil {
 		return supplierCreditView(old), nil
@@ -233,35 +234,70 @@ func (s *Service) CreateSupplierCredit(ctx context.Context, ws, user int64, in C
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := s.queries.WithTx(tx)
-	bill, err := q.GetSupplierBillForUpdate(ctx, db.GetSupplierBillForUpdateParams{WorkspaceID: ws, ID: in.SupplierBillID})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return SupplierCreditView{}, ErrNotFound
+	var supplierID int64
+	var currency string
+	var exponent int32
+	var sourceDate pgtype.Date
+	var bill db.SupplierBill
+	var returnSource db.GetSupplierReturnSourceRow
+	if in.SupplierBillID > 0 {
+		bill, err = q.GetSupplierBillForUpdate(ctx, db.GetSupplierBillForUpdateParams{WorkspaceID: ws, ID: in.SupplierBillID})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return SupplierCreditView{}, ErrNotFound
+		}
+		if err != nil {
+			return SupplierCreditView{}, err
+		}
+		if bill.Status != "approved" && bill.Status != "partially_paid" {
+			return SupplierCreditView{}, errors.New("only an approved bill can receive a supplier credit")
+		}
+		supplierID, currency, exponent, sourceDate = bill.SupplierID, bill.Currency, bill.CurrencyExponent, bill.BillDate
+	} else {
+		returnSource, err = q.GetSupplierReturnSource(ctx, db.GetSupplierReturnSourceParams{WorkspaceID: ws, ID: in.SupplierReturnID})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return SupplierCreditView{}, ErrNotFound
+		}
+		if err != nil {
+			return SupplierCreditView{}, err
+		}
+		credited, e := q.GetSupplierCreditsForReturnTotal(ctx, db.GetSupplierCreditsForReturnTotalParams{WorkspaceID: ws, SupplierReturnID: pgtype.Int8{Int64: in.SupplierReturnID, Valid: true}})
+		if e != nil {
+			return SupplierCreditView{}, e
+		}
+		supplierID, currency, exponent, sourceDate = returnSource.SupplierID, returnSource.Currency, returnSource.CurrencyExponent, returnSource.EffectiveOn
+		amount, e := ParseMajorToMinor(in.Amount, int(exponent))
+		if e != nil || amount <= 0 || amount > returnSource.TotalMinor-credited {
+			return SupplierCreditView{}, errors.New("credit exceeds supplier return balance")
+		}
 	}
-	if err != nil {
-		return SupplierCreditView{}, err
+	amount, err := ParseMajorToMinor(in.Amount, int(exponent))
+	if err != nil || amount <= 0 {
+		return SupplierCreditView{}, errors.New("credit amount must be positive")
 	}
-	if bill.Status != "approved" && bill.Status != "partially_paid" {
-		return SupplierCreditView{}, errors.New("only an approved bill can receive a supplier credit")
-	}
-	amount, err := ParseMajorToMinor(in.Amount, int(bill.CurrencyExponent))
-	if err != nil || amount <= 0 || amount > bill.OutstandingMinor {
+	if in.SupplierBillID > 0 && amount > bill.OutstandingMinor {
 		return SupplierCreditView{}, errors.New("credit exceeds bill outstanding balance")
 	}
-	credit, err := q.CreateSupplierCredit(ctx, db.CreateSupplierCreditParams{WorkspaceID: ws, SupplierID: bill.SupplierID, SupplierBillID: pgtype.Int8{Int64: bill.ID, Valid: true}, Currency: bill.Currency, CurrencyExponent: bill.CurrencyExponent, AmountMinor: amount, Reason: reason, IdempotencyKey: key, CreatedByUserID: user})
+	credit, err := q.CreateSupplierCredit(ctx, db.CreateSupplierCreditParams{WorkspaceID: ws, SupplierID: supplierID, SupplierReturnID: pgtype.Int8{Int64: in.SupplierReturnID, Valid: in.SupplierReturnID > 0}, SupplierBillID: pgtype.Int8{Int64: in.SupplierBillID, Valid: in.SupplierBillID > 0}, Currency: currency, CurrencyExponent: exponent, AmountMinor: amount, Reason: reason, IdempotencyKey: key, CreatedByUserID: user})
 	if err != nil {
 		return SupplierCreditView{}, err
 	}
-	if _, err = q.ApplySupplierCreditToBill(ctx, db.ApplySupplierCreditToBillParams{WorkspaceID: ws, ID: bill.ID, OutstandingMinor: amount}); err != nil {
-		return SupplierCreditView{}, err
+	if in.SupplierBillID > 0 {
+		if _, err = q.ApplySupplierCreditToBill(ctx, db.ApplySupplierCreditToBillParams{WorkspaceID: ws, ID: bill.ID, OutstandingMinor: amount}); err != nil {
+			return SupplierCreditView{}, err
+		}
 	}
-	entry, err := q.CreateLedgerEntry(ctx, db.CreateLedgerEntryParams{WorkspaceID: ws, SourceType: "supplier_credit", SourceID: credit.ID, EntryDate: bill.BillDate, Currency: bill.Currency, CurrencyExponent: bill.CurrencyExponent, Description: optionalPgText("Supplier credit note")})
+	entry, err := q.CreateLedgerEntry(ctx, db.CreateLedgerEntryParams{WorkspaceID: ws, SourceType: "supplier_credit", SourceID: credit.ID, EntryDate: sourceDate, Currency: currency, CurrencyExponent: exponent, Description: optionalPgText("Supplier credit note")})
 	if err != nil {
 		return SupplierCreditView{}, err
 	}
-	if _, err = q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{LedgerEntryID: entry.ID, WorkspaceID: ws, AccountClass: "liability", DebitMinor: amount, Description: optionalPgText("Reduce Accounts Payable")}); err != nil {
+	debitClass, creditDescription := "liability", "Supplier credit balance"
+	if in.SupplierReturnID > 0 {
+		debitClass, creditDescription = "asset", "Reduce return clearing balance"
+	}
+	if _, err = q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{LedgerEntryID: entry.ID, WorkspaceID: ws, AccountClass: debitClass, DebitMinor: amount, Description: optionalPgText("Reduce Accounts Payable")}); err != nil {
 		return SupplierCreditView{}, err
 	}
-	if _, err = q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{LedgerEntryID: entry.ID, WorkspaceID: ws, AccountClass: "asset", CreditMinor: amount, Description: optionalPgText("Supplier credit balance")}); err != nil {
+	if _, err = q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{LedgerEntryID: entry.ID, WorkspaceID: ws, AccountClass: "asset", CreditMinor: amount, Description: optionalPgText(creditDescription)}); err != nil {
 		return SupplierCreditView{}, err
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -272,15 +308,18 @@ func (s *Service) CreateSupplierCredit(ctx context.Context, ws, user int64, in C
 
 func (s *Service) CreateSupplierRefund(ctx context.Context, ws, user int64, in CreateSupplierRefundInput) (SupplierCreditView, error) {
 	key, reason := strings.TrimSpace(in.IdempotencyKey), strings.TrimSpace(in.Reason)
-	if in.SupplierCreditID <= 0 || in.MoneyAccountID <= 0 || key == "" || reason == "" {
-		return SupplierCreditView{}, errors.New("credit, money account, reason and idempotency key are required")
+	if (in.SupplierCreditID <= 0 && in.SupplierAdvanceID <= 0) || (in.SupplierCreditID > 0 && in.SupplierAdvanceID > 0) || in.MoneyAccountID <= 0 || key == "" || reason == "" {
+		return SupplierCreditView{}, errors.New("credit or advance, money account, reason and idempotency key are required")
 	}
 	if _, err := s.queries.GetSupplierRefundByIdempotency(ctx, db.GetSupplierRefundByIdempotencyParams{WorkspaceID: ws, IdempotencyKey: key}); err == nil {
-		credit, e := s.queries.GetSupplierCreditForUpdate(ctx, db.GetSupplierCreditForUpdateParams{WorkspaceID: ws, ID: in.SupplierCreditID})
-		if e != nil {
-			return SupplierCreditView{}, e
+		if in.SupplierCreditID > 0 {
+			credit, e := s.queries.GetSupplierCreditForUpdate(ctx, db.GetSupplierCreditForUpdateParams{WorkspaceID: ws, ID: in.SupplierCreditID})
+			if e != nil {
+				return SupplierCreditView{}, e
+			}
+			return supplierCreditView(credit), nil
 		}
-		return supplierCreditView(credit), nil
+		return SupplierCreditView{}, errors.New("refund already recorded; replay with the original source")
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return SupplierCreditView{}, err
 	}
@@ -294,41 +333,69 @@ func (s *Service) CreateSupplierRefund(ctx context.Context, ws, user int64, in C
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := s.queries.WithTx(tx)
-	credit, err := q.GetSupplierCreditForUpdate(ctx, db.GetSupplierCreditForUpdateParams{WorkspaceID: ws, ID: in.SupplierCreditID})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return SupplierCreditView{}, ErrNotFound
+	var supplierID int64
+	var currency string
+	var exponent int32
+	var outstanding int64
+	var credit db.SupplierCredit
+	var advance db.SupplierAdvance
+	if in.SupplierCreditID > 0 {
+		credit, err = q.GetSupplierCreditForUpdate(ctx, db.GetSupplierCreditForUpdateParams{WorkspaceID: ws, ID: in.SupplierCreditID})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return SupplierCreditView{}, ErrNotFound
+		}
+		if err != nil {
+			return SupplierCreditView{}, err
+		}
+		supplierID, currency, exponent, outstanding = credit.SupplierID, credit.Currency, credit.CurrencyExponent, credit.OutstandingMinor
+	} else {
+		advance, err = q.GetSupplierAdvanceForUpdate(ctx, db.GetSupplierAdvanceForUpdateParams{WorkspaceID: ws, ID: in.SupplierAdvanceID})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return SupplierCreditView{}, ErrNotFound
+		}
+		if err != nil {
+			return SupplierCreditView{}, err
+		}
+		supplierID, currency, exponent, outstanding = advance.SupplierID, advance.Currency, advance.CurrencyExponent, advance.AvailableMinor
 	}
-	if err != nil {
-		return SupplierCreditView{}, err
-	}
-	amount, err := ParseMajorToMinor(in.Amount, int(credit.CurrencyExponent))
-	if err != nil || amount <= 0 || amount > credit.OutstandingMinor {
-		return SupplierCreditView{}, errors.New("refund exceeds supplier credit balance")
+	amount, err := ParseMajorToMinor(in.Amount, int(exponent))
+	if err != nil || amount <= 0 || amount > outstanding {
+		return SupplierCreditView{}, errors.New("refund exceeds available supplier balance")
 	}
 	if _, err = q.GetMoneyAccountByID(ctx, db.GetMoneyAccountByIDParams{WorkspaceID: ws, ID: in.MoneyAccountID}); err != nil {
 		return SupplierCreditView{}, ErrForbiddenAccount
 	}
-	updated, err := q.ApplySupplierCreditBalance(ctx, db.ApplySupplierCreditBalanceParams{WorkspaceID: ws, ID: credit.ID, OutstandingMinor: amount})
-	if err != nil {
-		return SupplierCreditView{}, errors.New("supplier credit changed before refund")
+	var updatedCredit db.SupplierCredit
+	if in.SupplierCreditID > 0 {
+		updatedCredit, err = q.ApplySupplierCreditBalance(ctx, db.ApplySupplierCreditBalanceParams{WorkspaceID: ws, ID: credit.ID, OutstandingMinor: amount})
+		if err != nil {
+			return SupplierCreditView{}, errors.New("supplier credit changed before refund")
+		}
+	} else {
+		advance, err = q.RefundSupplierAdvance(ctx, db.RefundSupplierAdvanceParams{WorkspaceID: ws, ID: advance.ID, AvailableMinor: amount})
+		if err != nil {
+			return SupplierCreditView{}, errors.New("supplier advance changed before refund")
+		}
 	}
-	refund, err := q.CreateSupplierRefund(ctx, db.CreateSupplierRefundParams{WorkspaceID: ws, SupplierID: credit.SupplierID, SupplierCreditID: pgtype.Int8{Int64: credit.ID, Valid: true}, AmountMinor: amount, Currency: credit.Currency, CurrencyExponent: credit.CurrencyExponent, RefundDate: pgtype.Date{Time: date, Valid: true}, IdempotencyKey: key, Reason: reason, CreatedByUserID: user})
+	refund, err := q.CreateSupplierRefund(ctx, db.CreateSupplierRefundParams{WorkspaceID: ws, SupplierID: supplierID, SupplierCreditID: pgtype.Int8{Int64: in.SupplierCreditID, Valid: in.SupplierCreditID > 0}, SupplierAdvanceID: pgtype.Int8{Int64: in.SupplierAdvanceID, Valid: in.SupplierAdvanceID > 0}, AmountMinor: amount, Currency: currency, CurrencyExponent: exponent, RefundDate: pgtype.Date{Time: date, Valid: true}, IdempotencyKey: key, Reason: reason, CreatedByUserID: user})
 	if err != nil {
 		return SupplierCreditView{}, err
 	}
-	entry, err := q.CreateLedgerEntry(ctx, db.CreateLedgerEntryParams{WorkspaceID: ws, SourceType: "supplier_refund", SourceID: refund.ID, EntryDate: pgtype.Date{Time: date, Valid: true}, Currency: credit.Currency, CurrencyExponent: credit.CurrencyExponent, Description: optionalPgText("Supplier cash refund")})
+	entry, err := q.CreateLedgerEntry(ctx, db.CreateLedgerEntryParams{WorkspaceID: ws, SourceType: "supplier_refund", SourceID: refund.ID, EntryDate: pgtype.Date{Time: date, Valid: true}, Currency: currency, CurrencyExponent: exponent, Description: optionalPgText("Supplier cash refund")})
 	if err != nil {
 		return SupplierCreditView{}, err
 	}
 	if _, err = q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{LedgerEntryID: entry.ID, WorkspaceID: ws, AccountID: pgtype.Int8{Int64: in.MoneyAccountID, Valid: true}, AccountClass: "asset", DebitMinor: amount, Description: optionalPgText("Supplier refund received")}); err != nil {
 		return SupplierCreditView{}, err
 	}
-	if _, err = q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{LedgerEntryID: entry.ID, WorkspaceID: ws, AccountClass: "asset", CreditMinor: amount, Description: optionalPgText("Clear supplier credit")}); err != nil {
+	if _, err = q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{LedgerEntryID: entry.ID, WorkspaceID: ws, AccountClass: "asset", CreditMinor: amount, Description: optionalPgText("Clear supplier balance")}); err != nil {
 		return SupplierCreditView{}, err
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return SupplierCreditView{}, err
 	}
-	_ = updated
-	return supplierCreditView(updated), nil
+	if in.SupplierCreditID > 0 {
+		return supplierCreditView(updatedCredit), nil
+	}
+	return SupplierCreditView{SupplierID: advance.SupplierID, AmountMinor: fmt.Sprint(amount), OutstandingMinor: fmt.Sprint(advance.AvailableMinor), Status: advance.Status}, nil
 }

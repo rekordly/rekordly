@@ -43,6 +43,21 @@ WHERE workspace_id = $1
   AND status IN ('open', 'partially_applied')
 RETURNING *;
 
+-- name: RefundSupplierAdvance :one
+UPDATE supplier_advances
+SET available_minor = available_minor - $3,
+    status = CASE
+        WHEN available_minor - $3 = 0 THEN 'refunded'
+        ELSE 'partially_refunded'
+    END,
+    version = version + 1,
+    updated_at = now()
+WHERE workspace_id = $1
+  AND id = $2
+  AND available_minor >= $3
+  AND status IN ('open', 'partially_applied')
+RETURNING *;
+
 -- name: CreateSupplierAdvanceApplication :one
 INSERT INTO supplier_advance_applications (
     workspace_id, supplier_advance_id, supplier_bill_id, amount_minor,

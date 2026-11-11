@@ -638,6 +638,29 @@ type PaymentLeg struct {
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
+type ProcurementApprovalPolicy struct {
+	WorkspaceID            int64              `json:"workspace_id"`
+	ApprovalThresholdMinor int64              `json:"approval_threshold_minor"`
+	AllowSelfApproval      bool               `json:"allow_self_approval"`
+	UpdatedByUserID        pgtype.Int8        `json:"updated_by_user_id"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ProcurementAttachment struct {
+	ID                int64              `json:"id"`
+	WorkspaceID       int64              `json:"workspace_id"`
+	PurchaseRequestID pgtype.Int8        `json:"purchase_request_id"`
+	PurchaseOrderID   pgtype.Int8        `json:"purchase_order_id"`
+	GoodsReceiptID    pgtype.Int8        `json:"goods_receipt_id"`
+	SupplierBillID    pgtype.Int8        `json:"supplier_bill_id"`
+	StorageKey        string             `json:"storage_key"`
+	FileName          string             `json:"file_name"`
+	MimeType          string             `json:"mime_type"`
+	FileSizeBytes     int64              `json:"file_size_bytes"`
+	CreatedByUserID   int64              `json:"created_by_user_id"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
 type Product struct {
 	ID              int64              `json:"id"`
 	WorkspaceID     int64              `json:"workspace_id"`

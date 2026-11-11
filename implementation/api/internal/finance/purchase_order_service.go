@@ -16,18 +16,38 @@ import (
 )
 
 type PurchaseOrderView struct {
-	ID                      int64   `json:"id"`
-	SourcePurchaseRequestID int64   `json:"source_purchase_request_id"`
-	Status                  string  `json:"status"`
-	Version                 int32   `json:"version"`
-	OrderNumber             *string `json:"order_number,omitempty"`
-	Currency                string  `json:"currency"`
-	CurrencyExponent        int32   `json:"currency_exponent"`
-	TotalMinor              string  `json:"total_minor"`
-	CancellationReason      *string `json:"cancellation_reason,omitempty"`
-	ClosedReason            *string `json:"closed_reason,omitempty"`
-	AcknowledgedAt          *string `json:"acknowledged_at,omitempty"`
-	AcknowledgementNote     *string `json:"acknowledgement_note,omitempty"`
+	ID                      int64                    `json:"id"`
+	SourcePurchaseRequestID int64                    `json:"source_purchase_request_id"`
+	Status                  string                   `json:"status"`
+	Version                 int32                    `json:"version"`
+	OrderNumber             *string                  `json:"order_number,omitempty"`
+	Currency                string                   `json:"currency"`
+	CurrencyExponent        int32                    `json:"currency_exponent"`
+	TotalMinor              string                   `json:"total_minor"`
+	CancellationReason      *string                  `json:"cancellation_reason,omitempty"`
+	ClosedReason            *string                  `json:"closed_reason,omitempty"`
+	AcknowledgedAt          *string                  `json:"acknowledged_at,omitempty"`
+	AcknowledgementNote     *string                  `json:"acknowledgement_note,omitempty"`
+	Lines                   []PurchaseOrderLineView  `json:"lines,omitempty"`
+	Events                  []PurchaseOrderEventView `json:"events,omitempty"`
+}
+
+type PurchaseOrderLineView struct {
+	ID                    int64  `json:"id"`
+	ProductID             *int64 `json:"product_id,omitempty"`
+	Description           string `json:"description"`
+	Quantity              string `json:"quantity"`
+	UnitName              string `json:"unit_name"`
+	ExpectedUnitCostMinor string `json:"expected_unit_cost_minor"`
+	LineTotalMinor        string `json:"line_total_minor"`
+}
+type PurchaseOrderEventView struct {
+	ID           int64   `json:"id"`
+	EventType    string  `json:"event_type"`
+	OrderVersion int32   `json:"order_version"`
+	Note         *string `json:"note,omitempty"`
+	ActorUserID  int64   `json:"actor_user_id"`
+	CreatedAt    string  `json:"created_at"`
 }
 
 func purchaseOrderView(po db.PurchaseOrder) PurchaseOrderView {
@@ -37,6 +57,47 @@ func purchaseOrderView(po db.PurchaseOrder) PurchaseOrderView {
 		acknowledgedAt = &value
 	}
 	return PurchaseOrderView{ID: po.ID, SourcePurchaseRequestID: po.SourcePurchaseRequestID, Status: po.Status, Version: po.Version, OrderNumber: nullableText(po.OrderNumber), Currency: po.Currency, CurrencyExponent: po.CurrencyExponent, TotalMinor: strconv.FormatInt(po.TotalMinor, 10), CancellationReason: nullableText(po.CancellationReason), ClosedReason: nullableText(po.ClosedReason), AcknowledgedAt: acknowledgedAt, AcknowledgementNote: nullableText(po.AcknowledgementNote)}
+}
+
+func purchaseOrderDetail(ctx context.Context, q *db.Queries, po db.PurchaseOrder) (PurchaseOrderView, error) {
+	view := purchaseOrderView(po)
+	lines, err := q.GetPurchaseOrderLines(ctx, db.GetPurchaseOrderLinesParams{WorkspaceID: po.WorkspaceID, PurchaseOrderID: po.ID})
+	if err != nil {
+		return PurchaseOrderView{}, err
+	}
+	view.Lines = make([]PurchaseOrderLineView, 0, len(lines))
+	for _, line := range lines {
+		var productID *int64
+		if line.ProductID.Valid {
+			x := line.ProductID.Int64
+			productID = &x
+		}
+		view.Lines = append(view.Lines, PurchaseOrderLineView{ID: line.ID, ProductID: productID, Description: line.Description, Quantity: line.Quantity.String(), UnitName: line.UnitName, ExpectedUnitCostMinor: strconv.FormatInt(line.ExpectedUnitCostMinor, 10), LineTotalMinor: strconv.FormatInt(line.LineTotalMinor, 10)})
+	}
+	events, err := q.ListPurchaseOrderEvents(ctx, db.ListPurchaseOrderEventsParams{WorkspaceID: po.WorkspaceID, PurchaseOrderID: po.ID})
+	if err != nil {
+		return PurchaseOrderView{}, err
+	}
+	view.Events = make([]PurchaseOrderEventView, 0, len(events))
+	for _, event := range events {
+		var note *string
+		if event.Note.Valid {
+			note = &event.Note.String
+		}
+		view.Events = append(view.Events, PurchaseOrderEventView{ID: event.ID, EventType: event.EventType, OrderVersion: event.OrderVersion, Note: note, ActorUserID: event.ActorUserID, CreatedAt: event.CreatedAt.Time.UTC().Format(time.RFC3339)})
+	}
+	return view, nil
+}
+
+func (s *Service) GetPurchaseOrder(ctx context.Context, ws, id int64) (PurchaseOrderView, error) {
+	po, err := s.queries.GetPurchaseOrderByID(ctx, db.GetPurchaseOrderByIDParams{WorkspaceID: ws, ID: id})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return PurchaseOrderView{}, ErrNotFound
+	}
+	if err != nil {
+		return PurchaseOrderView{}, err
+	}
+	return purchaseOrderDetail(ctx, s.queries, po)
 }
 
 func (s *Service) CreatePurchaseOrderFromRequest(ctx context.Context, ws, user, requestID int64, key string) (PurchaseOrderView, error) {

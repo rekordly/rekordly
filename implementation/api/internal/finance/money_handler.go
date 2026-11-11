@@ -18,6 +18,7 @@ func NewHandler(service *Service, authMiddleware gin.HandlerFunc) *Handler {
 }
 
 func (h *Handler) RegisterRoutes(group *gin.RouterGroup) {
+	h.RegisterPurchaseOrderShareRoutes(group)
 	protected := group.Group("")
 	if h.authMiddleware != nil {
 		protected.Use(h.authMiddleware)

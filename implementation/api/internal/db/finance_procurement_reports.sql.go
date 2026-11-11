@@ -79,3 +79,22 @@ func (q *Queries) GetOpenPurchaseOrderTotals(ctx context.Context, workspaceID in
 	err := row.Scan(&i.OrderCount, &i.TotalMinor)
 	return i, err
 }
+
+const getOrderedReceivedTotals = `-- name: GetOrderedReceivedTotals :one
+SELECT COALESCE(sum(pol.line_total_minor),0)::bigint AS ordered_minor, COALESCE(sum(grl.line_total_minor),0)::bigint AS received_minor
+FROM purchase_orders po JOIN purchase_order_lines pol ON pol.purchase_order_id=po.id AND pol.workspace_id=po.workspace_id
+LEFT JOIN goods_receipt_lines grl ON grl.purchase_order_line_id=pol.id AND grl.workspace_id=pol.workspace_id
+WHERE po.workspace_id=$1 AND po.status NOT IN ('cancelled','closed')
+`
+
+type GetOrderedReceivedTotalsRow struct {
+	OrderedMinor  int64 `json:"ordered_minor"`
+	ReceivedMinor int64 `json:"received_minor"`
+}
+
+func (q *Queries) GetOrderedReceivedTotals(ctx context.Context, workspaceID int64) (GetOrderedReceivedTotalsRow, error) {
+	row := q.db.QueryRow(ctx, getOrderedReceivedTotals, workspaceID)
+	var i GetOrderedReceivedTotalsRow
+	err := row.Scan(&i.OrderedMinor, &i.ReceivedMinor)
+	return i, err
+}

@@ -1,7 +1,7 @@
 -- name: GetGoodsReceiptByIdempotency :one
 SELECT * FROM goods_receipts WHERE workspace_id=$1 AND idempotency_key=$2;
 -- name: CreateGoodsReceipt :one
-INSERT INTO goods_receipts(workspace_id,purchase_order_id,receipt_reference,received_on,idempotency_key,created_by_user_id,location_id) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *;
+INSERT INTO goods_receipts(workspace_id,purchase_order_id,receipt_reference,delivery_reference,service_accepted,received_on,idempotency_key,created_by_user_id,location_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *;
 -- name: GetReceiptPurchaseOrderLinesForUpdate :many
 SELECT pol.id,pol.product_id,pol.description,pol.quantity,pol.expected_unit_cost_minor,
   (SELECT p.kind FROM products p WHERE p.id=pol.product_id AND p.workspace_id=pol.workspace_id) AS product_kind
@@ -15,7 +15,7 @@ SELECT grl.purchase_order_line_id,COALESCE(sum(grl.accepted_quantity),0)::numeri
 FROM goods_receipt_lines grl JOIN goods_receipts gr ON gr.id=grl.goods_receipt_id
 WHERE grl.workspace_id=$1 AND gr.purchase_order_id=$2 GROUP BY grl.purchase_order_line_id;
 -- name: CreateGoodsReceiptLine :one
-INSERT INTO goods_receipt_lines(workspace_id,goods_receipt_id,purchase_order_line_id,product_id,accepted_quantity,unit_cost_minor,line_total_minor) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *;
+INSERT INTO goods_receipt_lines(workspace_id,goods_receipt_id,purchase_order_line_id,product_id,accepted_quantity,unit_cost_minor,actual_unit_cost_minor,line_total_minor,line_notes) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *;
 -- name: CreateInventoryReceiptMovement :exec
 INSERT INTO inventory_movements(workspace_id,product_id,goods_receipt_line_id,location_id,movement_type,source_type,source_id,quantity_delta,value_delta_minor,occurred_on) VALUES($1,$2,$3,$4,'receipt','goods_receipt',$5,$6,$7,$8);
 -- name: UpdatePurchaseOrderReceiptStatus :one
@@ -31,7 +31,9 @@ SELECT gr.*, COALESCE(jsonb_agg(jsonb_build_object(
   'description', pol.description,
   'accepted_quantity', grl.accepted_quantity,
   'unit_cost_minor', grl.unit_cost_minor,
-  'line_total_minor', grl.line_total_minor
+  'actual_unit_cost_minor', COALESCE(grl.actual_unit_cost_minor, grl.unit_cost_minor),
+  'line_total_minor', grl.line_total_minor,
+  'line_notes', grl.line_notes
 ) ORDER BY grl.id) FILTER (WHERE grl.id IS NOT NULL), '[]'::jsonb) AS lines
 FROM goods_receipts gr
 LEFT JOIN goods_receipt_lines grl ON grl.goods_receipt_id = gr.id AND grl.workspace_id = gr.workspace_id

@@ -277,6 +277,9 @@ export const financeApi = {
   },
   createOpeningStock: (workspaceId: number, body: unknown, key: string) =>
     scopedPost<{ balance: InventoryBalance }>(workspaceId, "/api/v1/inventory/opening-stock", body, key),
+  createInventoryAdjustment: (workspaceId: number, body: unknown, key: string) => scopedPost(workspaceId, "/api/v1/inventory/adjustments", body, key),
+  createInventoryTransfer: (workspaceId: number, body: unknown, key: string) => scopedPost(workspaceId, "/api/v1/inventory/transfers", body, key),
+  createStockCount: (workspaceId: number, body: unknown, key: string) => scopedPost(workspaceId, "/api/v1/inventory/counts", body, key),
 
   async listOutlets(workspaceId: number, params: QueryParams = {}) {
     const result = await scopedGet<{ locations: InventoryOutlet[] }>(workspaceId, "/api/v1/inventory/locations", params);
@@ -368,6 +371,9 @@ export const financeApi = {
     const result = await scopedGet<{ orders: PurchaseOrder[] }>(workspaceId, "/api/v1/purchase-orders", { limit: 50, ...params });
     return result.orders ?? [];
   },
+  getPurchaseOrder: (workspaceId: number, id: number) => scopedGet<{ order: PurchaseOrder }>(workspaceId, `/api/v1/purchase-orders/${id}`).then((result) => result.order),
+  createPurchaseOrderShare: (workspaceId: number, id: number, body: { supplier_email?: string; expires_in_days?: number }, key: string) =>
+    scopedPost<{ share: { token: string; expires_at: string; status: string }; order: PurchaseOrder }>(workspaceId, `/api/v1/purchase-orders/${id}/share`, body, key),
   createPurchaseOrder: (workspaceId: number, purchaseRequestId: number, key: string) =>
     scopedPost<{ order: PurchaseOrder }>(workspaceId, "/api/v1/purchase-orders", { purchase_request_id: purchaseRequestId }, key),
   advancePurchaseOrder: (

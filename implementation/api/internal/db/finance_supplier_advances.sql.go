@@ -317,3 +317,46 @@ func (q *Queries) ListSupplierAdvances(ctx context.Context, arg ListSupplierAdva
 	}
 	return items, nil
 }
+
+const refundSupplierAdvance = `-- name: RefundSupplierAdvance :one
+UPDATE supplier_advances
+SET available_minor = available_minor - $3,
+    status = CASE
+        WHEN available_minor - $3 = 0 THEN 'refunded'
+        ELSE 'partially_refunded'
+    END,
+    version = version + 1,
+    updated_at = now()
+WHERE workspace_id = $1
+  AND id = $2
+  AND available_minor >= $3
+  AND status IN ('open', 'partially_applied')
+RETURNING id, workspace_id, supplier_id, payment_id, currency, currency_exponent, original_minor, available_minor, status, version, created_by_user_id, created_at, updated_at
+`
+
+type RefundSupplierAdvanceParams struct {
+	WorkspaceID    int64 `json:"workspace_id"`
+	ID             int64 `json:"id"`
+	AvailableMinor int64 `json:"available_minor"`
+}
+
+func (q *Queries) RefundSupplierAdvance(ctx context.Context, arg RefundSupplierAdvanceParams) (SupplierAdvance, error) {
+	row := q.db.QueryRow(ctx, refundSupplierAdvance, arg.WorkspaceID, arg.ID, arg.AvailableMinor)
+	var i SupplierAdvance
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.SupplierID,
+		&i.PaymentID,
+		&i.Currency,
+		&i.CurrencyExponent,
+		&i.OriginalMinor,
+		&i.AvailableMinor,
+		&i.Status,
+		&i.Version,
+		&i.CreatedByUserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
