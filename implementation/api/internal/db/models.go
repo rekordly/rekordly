@@ -105,6 +105,27 @@ type Counterparty struct {
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
+type CustomerCredit struct {
+	ID           int64              `json:"id"`
+	WorkspaceID  int64              `json:"workspace_id"`
+	CustomerID   int64              `json:"customer_id"`
+	Currency     string             `json:"currency"`
+	BalanceMinor int64              `json:"balance_minor"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
+type CustomerCreditTransaction struct {
+	ID          int64              `json:"id"`
+	WorkspaceID int64              `json:"workspace_id"`
+	CreditID    int64              `json:"credit_id"`
+	Direction   string             `json:"direction"`
+	AmountMinor int64              `json:"amount_minor"`
+	SourceType  string             `json:"source_type"`
+	SourceID    pgtype.Int8        `json:"source_id"`
+	Notes       pgtype.Text        `json:"notes"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
 type CustomerWallet struct {
 	ID               int64              `json:"id"`
 	WorkspaceID      int64              `json:"workspace_id"`
@@ -1006,6 +1027,43 @@ type Sale struct {
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 	SubtotalMinor    pgtype.Int8        `json:"subtotal_minor"`
 	TaxAmountMinor   int64              `json:"tax_amount_minor"`
+}
+
+type SalesReturn struct {
+	ID               int64              `json:"id"`
+	WorkspaceID      int64              `json:"workspace_id"`
+	ReturnNumber     string             `json:"return_number"`
+	SaleID           pgtype.Int8        `json:"sale_id"`
+	InvoiceID        pgtype.Int8        `json:"invoice_id"`
+	CustomerID       pgtype.Int8        `json:"customer_id"`
+	CustomerName     string             `json:"customer_name"`
+	ReturnDate       pgtype.Date        `json:"return_date"`
+	Currency         string             `json:"currency"`
+	CurrencyExponent int32              `json:"currency_exponent"`
+	SubtotalMinor    int64              `json:"subtotal_minor"`
+	TaxAmountMinor   int64              `json:"tax_amount_minor"`
+	TotalAmountMinor int64              `json:"total_amount_minor"`
+	Reason           string             `json:"reason"`
+	Status           string             `json:"status"`
+	ActionTaken      string             `json:"action_taken"`
+	CreatedByUserID  pgtype.Int8        `json:"created_by_user_id"`
+	IdempotencyKey   pgtype.Text        `json:"idempotency_key"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+type SalesReturnItem struct {
+	ID               int64              `json:"id"`
+	SalesReturnID    int64              `json:"sales_return_id"`
+	WorkspaceID      int64              `json:"workspace_id"`
+	Description      string             `json:"description"`
+	CatalogueItemID  pgtype.Int8        `json:"catalogue_item_id"`
+	Quantity         decimal.Decimal    `json:"quantity"`
+	UnitPriceMinor   int64              `json:"unit_price_minor"`
+	AmountMinor      int64              `json:"amount_minor"`
+	RestockInventory bool               `json:"restock_inventory"`
+	OutletID         pgtype.Int8        `json:"outlet_id"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 }
 
 type Session struct {

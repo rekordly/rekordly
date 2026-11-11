@@ -540,6 +540,58 @@ export interface PublicReceiptView {
   invoice?: Invoice | null;
 }
 
+export interface SalesReturn {
+  id: number;
+  workspace_id: number;
+  return_number: string;
+  sale_id?: number | null;
+  invoice_id?: number | null;
+  customer_id?: number | null;
+  customer_name: string;
+  return_date: string;
+  currency: string;
+  currency_exponent: number;
+  subtotal_minor: MinorAmount;
+  tax_amount_minor: MinorAmount;
+  total_amount_minor: MinorAmount;
+  reason: string;
+  status: "draft" | "issued" | "applied" | "refunded" | "voided";
+  action_taken: "customer_credit" | "refund" | "invoice_reduction";
+  created_at: string;
+}
+
+export interface SalesReturnItem {
+  id: number;
+  sales_return_id: number;
+  description: string;
+  catalogue_item_id?: number | null;
+  quantity: string;
+  unit_price_minor: MinorAmount;
+  amount_minor: MinorAmount;
+  restock_inventory: boolean;
+  outlet_id?: number | null;
+}
+
+export interface CustomerCredit {
+  id: number;
+  workspace_id: number;
+  customer_id: number;
+  currency: string;
+  balance_minor: MinorAmount;
+  updated_at: string;
+}
+
+export interface CustomerCreditTransaction {
+  id: number;
+  credit_id: number;
+  direction: "credit" | "debit";
+  amount_minor: MinorAmount;
+  source_type: string;
+  source_id?: number | null;
+  notes?: string | null;
+  created_at: string;
+}
+
 export interface CustomerWallet {
   id: number;
   customer_id: number;

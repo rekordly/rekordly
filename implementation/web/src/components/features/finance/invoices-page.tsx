@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   ArrowRight,
   ArrowsClockwise,
+  ArrowUUpLeft,
   CheckCircle,
   Copy,
   Envelope,
@@ -38,9 +39,11 @@ import { financeApi } from "@/lib/money";
 import {
   estimateSchema,
   invoiceSchema,
+  salesReturnSchema,
   walletPaymentSchema,
   type EstimateValues,
   type InvoiceValues,
+  type SalesReturnValues,
   type WalletPaymentValues,
 } from "@/lib/schemas/finance.schemas";
 import type { Estimate, Invoice } from "@/types/finance";
@@ -90,6 +93,10 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
   const [shareInvoice, setShareInvoice] = useState<Invoice | null>(null);
   const [shareData, setShareData] = useState<{ share_url: string; token: string; expires_at: string } | null>(null);
   const [copiedShareLink, setCopiedShareLink] = useState(false);
+
+  // Sales Return / Credit Note state
+  const [returnInvoice, setReturnInvoice] = useState<Invoice | null>(null);
+  const [isReturnOpen, setIsReturnOpen] = useState(false);
 
   const handleOpenShare = async (inv: Invoice) => {
     try {
@@ -148,6 +155,20 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
   });
   const estimateItems = useFieldArray({ control: estimateForm.control, name: "items" });
 
+  // Sales Return Form
+  const returnForm = useForm<SalesReturnValues>({
+    resolver: zodResolver(salesReturnSchema),
+    defaultValues: {
+      return_date: today(),
+      reason: "",
+      action_taken: "customer_credit",
+      tax_amount: "",
+      items: [],
+    },
+    mode: "onChange",
+  });
+  const returnItems = useFieldArray({ control: returnForm.control, name: "items" });
+
   const walletForm = useForm<WalletPaymentValues>({ resolver: zodResolver(walletPaymentSchema), defaultValues: { amount: "" } });
 
   // Watched invoice values
@@ -198,6 +219,40 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
     setEstimateStep(1);
     resetInlineCustomer();
     estimateForm.reset();
+  };
+
+  const closeReturnDrawer = () => {
+    setIsReturnOpen(false);
+    setReturnInvoice(null);
+    returnForm.reset();
+  };
+
+  const openReturnForInvoice = async (inv: Invoice) => {
+    setReturnInvoice(inv);
+    try {
+      const full = await financeApi.getInvoice(workspaceId, inv.id);
+      returnForm.reset({
+        return_date: today(),
+        reason: "Customer return / dispute",
+        action_taken: "customer_credit",
+        tax_amount: "0",
+        items: (full.items || []).map((it: { description: string; quantity: string; unit_price_minor: number; currency_exponent: number }) => ({
+          description: it.description,
+          quantity: it.quantity || "1",
+          unit_price: (Number(it.unit_price_minor) / Math.pow(10, it.currency_exponent || 2)).toFixed(2),
+          restock_inventory: false,
+        })),
+      });
+    } catch {
+      returnForm.reset({
+        return_date: today(),
+        reason: "Customer return / dispute",
+        action_taken: "customer_credit",
+        tax_amount: "0",
+        items: [{ description: `Return on ${inv.invoice_number}`, quantity: "1", unit_price: "0", restock_inventory: false }],
+      });
+    }
+    setIsReturnOpen(true);
   };
 
   const resetInlineCustomer = () => {
@@ -350,6 +405,38 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
     { success: "Invoice voided", onDone: closePending },
   );
 
+  const createSalesReturnAction = useFinanceAction(
+    workspaceId,
+    (values: SalesReturnValues, key: string) => {
+      if (!returnInvoice) throw new Error("No invoice selected for return");
+      return financeApi.createSalesReturn(
+        workspaceId,
+        {
+          invoice_id: returnInvoice.id,
+          customer_id: returnInvoice.customer_id,
+          return_date: values.return_date,
+          reason: values.reason,
+          action_taken: values.action_taken,
+          tax_amount: values.tax_amount || "0",
+          items: values.items.map((it) => ({
+            description: it.description,
+            quantity: it.quantity,
+            unit_price: it.unit_price,
+            restock_inventory: it.restock_inventory,
+          })),
+        },
+        key,
+      );
+    },
+    {
+      success: "Credit note & sales return issued successfully",
+      onDone: () => {
+        closeReturnDrawer();
+        invoices.refetch();
+      },
+    },
+  );
+
   const payFromWallet = useFinanceAction(
     workspaceId,
     ({ invoice, amount }: { invoice: Invoice; amount: string }, key: string) =>
@@ -450,6 +537,13 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
           icon: <Wallet size={16} aria-hidden="true" />,
           disabled: row.status !== "finalized" && row.status !== "partially_paid",
           onClick: () => setPending({ kind: "wallet", invoice: row }),
+        },
+        {
+          key: "credit_note",
+          label: "Issue Credit Note / Return",
+          icon: <ArrowUUpLeft size={16} aria-hidden="true" />,
+          disabled: row.status === "draft" || row.status === "voided",
+          onClick: () => openReturnForInvoice(row),
         },
         {
           key: "void",
@@ -1170,6 +1264,113 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
                 </a>
               </div>
             </div>
+          </div>
+        )}
+      </FormDrawer>
+
+      {/* CREDIT NOTE / SALES RETURN DRAWER */}
+      <FormDrawer
+        isOpen={isReturnOpen}
+        onOpenChange={(open) => !open && closeReturnDrawer()}
+        title="Issue Credit Note / Sales Return"
+        description={returnInvoice ? `Return goods or issue credit against ${returnInvoice.invoice_number}` : undefined}
+        onSubmit={returnForm.handleSubmit((values: SalesReturnValues) => createSalesReturnAction.mutate(values))}
+        submitLabel="Issue Credit Note"
+        isSubmitting={createSalesReturnAction.isPending}
+      >
+        {returnInvoice && (
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-border/60 bg-surface-secondary/40 p-3 text-xs space-y-1">
+              <div className="flex justify-between text-muted">
+                <span>Original Invoice:</span>
+                <span className="font-semibold text-foreground">{returnInvoice.invoice_number}</span>
+              </div>
+              <div className="flex justify-between text-muted">
+                <span>Customer:</span>
+                <span className="font-semibold text-foreground">{returnInvoice.customer_name}</span>
+              </div>
+              <div className="flex justify-between text-muted">
+                <span>Invoice Total:</span>
+                <span className="font-semibold text-foreground">{money(returnInvoice.total_amount_minor, returnInvoice)}</span>
+              </div>
+            </div>
+
+            <TextInputField
+              control={returnForm.control}
+              name="reason"
+              label="Return Reason"
+              placeholder="e.g. Defective items, customer cancellation, incorrect size"
+              isRequired
+            />
+
+            <TextInputField
+              control={returnForm.control}
+              name="return_date"
+              label="Return Date"
+              type="date"
+              isRequired
+            />
+
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-foreground">Action Taken / Compensation</label>
+              <select
+                {...returnForm.register("action_taken")}
+                className="w-full h-11 px-3 rounded-2xl border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+              >
+                <option value="customer_credit">Credit to Customer Wallet / Balance</option>
+                <option value="invoice_reduction">Direct Invoice Balance Reduction</option>
+                <option value="refund">Direct Cash / Bank Refund</option>
+              </select>
+              <p className="text-[11px] text-muted">
+                Customer credit holds credit in their account for future purchases.
+              </p>
+            </div>
+
+            <div className="space-y-3 pt-2 border-t border-border/40">
+              <label className="text-xs font-semibold text-foreground block">Returned Items</label>
+              {returnItems.fields.map((field, index) => (
+                <div key={field.id} className="p-3 rounded-2xl border border-border/60 bg-surface-secondary/20 space-y-2">
+                  <TextInputField
+                    control={returnForm.control}
+                    name={`items.${index}.description`}
+                    label="Item Description"
+                    placeholder="Item name"
+                    isRequired
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <TextInputField
+                      control={returnForm.control}
+                      name={`items.${index}.quantity`}
+                      label="Qty Returned"
+                      isRequired
+                    />
+                    <MoneyField
+                      control={returnForm.control}
+                      name={`items.${index}.unit_price`}
+                      label="Unit Price"
+                      currency={returnInvoice.currency}
+                      isRequired
+                    />
+                  </div>
+                  <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer pt-1">
+                    <input
+                      type="checkbox"
+                      {...returnForm.register(`items.${index}.restock_inventory`)}
+                      className="rounded border-border text-primary focus:ring-primary/20"
+                    />
+                    <span>Restock items back into inventory</span>
+                  </label>
+                </div>
+              ))}
+            </div>
+
+            <MoneyField
+              control={returnForm.control}
+              name="tax_amount"
+              label="Tax Adjustment (Optional)"
+              currency={returnInvoice.currency}
+              placeholder="0.00"
+            />
           </div>
         )}
       </FormDrawer>

@@ -221,6 +221,24 @@ export const estimateSchema = z.object({
 });
 export type EstimateValues = z.infer<typeof estimateSchema>;
 
+export const salesReturnSchema = z.object({
+  return_date: date("Choose return date"),
+  reason: z.string().trim().min(1, "Reason for return is required").max(300),
+  action_taken: z.enum(["customer_credit", "refund", "invoice_reduction"]),
+  tax_amount: optionalAmount,
+  items: z
+    .array(
+      z.object({
+        description: z.string().trim().min(1, "Item description is required"),
+        quantity: z.string().regex(/^[0-9]+(\.[0-9]{1,4})?$/, "Enter a valid quantity"),
+        unit_price: amount("Enter unit price"),
+        restock_inventory: z.boolean(),
+      }),
+    )
+    .min(1, "Add at least one item to return"),
+});
+export type SalesReturnValues = z.infer<typeof salesReturnSchema>;
+
 export const walletDepositSchema = z.object({
   amount: amount(),
   account_id: z.string().min(1, "Choose the account that received it"),

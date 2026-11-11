@@ -22,8 +22,12 @@ import type {
   GoodsReceipt, SupplierBill, SupplierAdvance, SupplierReturn, SupplierReturnLineOption, ProcurementReport, SupplierBillMatch,
   Estimate,
   EstimateDetail,
+  Invoice,
   PublicInvoiceView,
   PublicReceiptView,
+  SalesReturn,
+  CustomerCredit,
+  CustomerCreditTransaction,
   CustomerWallet,
   FinanceSummary,
   MixedMoneyConfirmation,
@@ -430,6 +434,11 @@ export const financeApi = {
 
   createInvoice: (workspaceId: number, body: unknown, key: string) =>
     scopedPost(workspaceId, "/api/v1/invoices", body, key),
+  getInvoice: (workspaceId: number, id: number) =>
+    scopedGet<{ invoice: Invoice & { items: { description: string; quantity: string; unit_price_minor: number; currency_exponent: number }[] } }>(
+      workspaceId,
+      `/api/v1/invoices/${id}`,
+    ).then((r) => r.invoice),
   finalizeInvoice: (workspaceId: number, id: number, key: string) =>
     scopedPost(workspaceId, `/api/v1/invoices/${id}/finalize`, {}, key),
   voidInvoice: (workspaceId: number, id: number, reason: string, key: string) =>
@@ -457,6 +466,26 @@ export const financeApi = {
     scopedPatch<{ estimate: EstimateDetail }>(workspaceId, `/api/v1/estimates/${id}/status`, { status }),
   convertEstimateToInvoice: (workspaceId: number, id: number, key: string) =>
     scopedPost<{ invoice: unknown; message: string }>(workspaceId, `/api/v1/estimates/${id}/convert-to-invoice`, {}, key),
+
+  async listSalesReturns(workspaceId: number, params: QueryParams = {}) {
+    const result = await scopedGet<{ sales_returns: SalesReturn[] }>(workspaceId, "/api/v1/sales-returns", { limit: 50, ...params });
+    return result.sales_returns ?? [];
+  },
+  getSalesReturn: (workspaceId: number, id: number) =>
+    scopedGet<{ sales_return: SalesReturn }>(workspaceId, `/api/v1/sales-returns/${id}`).then((r) => r.sales_return),
+  createSalesReturn: (workspaceId: number, body: unknown, key: string) =>
+    scopedPost<{ sales_return: SalesReturn }>(workspaceId, "/api/v1/sales-returns", body, key),
+  getCustomerCredit: (workspaceId: number, customerId: number, currency = "NGN") =>
+    scopedGet<{ customer_credit: { credit: CustomerCredit | null; transactions: CustomerCreditTransaction[] } }>(
+      workspaceId,
+      `/api/v1/customers/${customerId}/credit`,
+      { currency },
+    ).then((r) => r.customer_credit),
+  applyCustomerCredit: (workspaceId: number, customerId: number, invoiceId: number, amountMinor: number) =>
+    scopedPost<{ invoice: unknown; message: string }>(workspaceId, `/api/v1/customers/${customerId}/credit/apply`, {
+      invoice_id: invoiceId,
+      amount_minor: amountMinor,
+    }),
 
   getWallet: (workspaceId: number, customerId: number, currency: string) =>
     scopedGet<CustomerWallet>(workspaceId, `/api/v1/customers/${customerId}/wallet`, { currency }),
