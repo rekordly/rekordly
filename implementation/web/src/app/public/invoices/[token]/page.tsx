@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle, Clock, Copy, Envelope, FileText, Printer, WhatsappLogo } from "@phosphor-icons/react";
+import { CheckCircle, Clock, Copy, Envelope, Printer, WhatsappLogo } from "@phosphor-icons/react";
 import { use, useEffect, useState } from "react";
 
 import { Alert } from "@/components/ui/alert";
@@ -24,7 +24,6 @@ export default function PublicInvoicePage({ params }: PageProps) {
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
     financeApi
       .getPublicInvoice(token)
       .then((res) => {

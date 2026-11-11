@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDownLeft, ArrowUpRight, ChartLineUp, Vault } from "@phosphor-icons/react";
+import { ArrowDownLeft, ArrowUpRight, ChartLineUp, CheckCircle, Circle, Vault, X } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { format, parse, startOfMonth, subMonths } from "date-fns";
 import Link from "next/link";
@@ -47,10 +47,16 @@ function WorkspaceOverview({
   showRecent: boolean;
 }) {
   const [section, setSection] = useState<"charts" | "recent">("charts");
+  const [checklistDismissed, setChecklistDismissed] = useState(false);
   const fromDate = format(startOfMonth(subMonths(new Date(), months - 1)), "yyyy-MM-dd");
   const summary = useQuery({
     queryKey: [...moneyKeys.workspace(workspace.id), "summary", fromDate],
     queryFn: () => financeApi.summary(workspace.id, { from_date: fromDate, currency: workspace.base_currency }),
+  });
+  const checklist = useQuery({
+    queryKey: [...moneyKeys.workspace(workspace.id), "onboarding-checklist"],
+    queryFn: () => financeApi.getOnboardingChecklist(workspace.id),
+    enabled: showRecent,
   });
   const recent = useQuery({
     queryKey: [...moneyKeys.workspace(workspace.id), "recent"],
@@ -68,8 +74,61 @@ function WorkspaceOverview({
   const show = (value?: string) => formatMinorAmount(value ?? "0", currency, exponent);
   const isLoading = summary.isPending;
 
+  const checklistSteps = checklist.data
+    ? [
+        { done: checklist.data.has_account, label: "Add cash or bank account", href: "/accounts" },
+        { done: checklist.data.has_income, label: "Record first income", href: "/transactions" },
+        { done: checklist.data.has_expense, label: "Record first expense", href: "/transactions" },
+        ...(workspace.kind === "business"
+          ? [
+              { done: checklist.data.has_customer, label: "Add first customer", href: "/customers" },
+              { done: checklist.data.has_invoice, label: "Create first invoice", href: "/invoices" },
+            ]
+          : []),
+      ]
+    : [];
+
   return (
     <section className="space-y-5">
+      {showRecent && checklist.data && !checklist.data.all_done && !checklistDismissed ? (
+        <DashboardCard>
+          <div className="flex items-start justify-between gap-3 mb-3">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-primary">Getting Started Checklist</p>
+              <p className="text-xs text-muted mt-0.5">Complete these quick actions to set up {workspace.name}.</p>
+            </div>
+            <button
+              type="button"
+              aria-label="Dismiss checklist"
+              onClick={() => setChecklistDismissed(true)}
+              className="text-muted hover:text-foreground p-1 rounded-lg"
+            >
+              <X size={16} />
+            </button>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+            {checklistSteps.map((step) => (
+              <Link
+                key={step.label}
+                href={step.href}
+                className={`flex items-center gap-2 rounded-2xl border px-3 py-2.5 text-xs font-medium transition-colors ${
+                  step.done
+                    ? "border-primary/30 bg-primary-soft/30 text-foreground"
+                    : "border-border bg-background text-muted hover:border-primary/50 hover:text-foreground"
+                }`}
+              >
+                {step.done ? (
+                  <CheckCircle size={16} weight="fill" className="text-primary shrink-0" />
+                ) : (
+                  <Circle size={16} className="text-muted shrink-0" />
+                )}
+                <span className="truncate">{step.label}</span>
+              </Link>
+            ))}
+          </div>
+        </DashboardCard>
+      ) : null}
+
       <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard tag="Income" tone="success" gradient compact isLoading={isLoading} title={show(data?.income_minor)} icon={<ArrowDownLeft size={22} />} />
         <StatCard tag="Expenses" tone="danger" gradient compact isLoading={isLoading} title={show(data?.expense_minor)} icon={<ArrowUpRight size={22} />} />

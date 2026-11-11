@@ -465,6 +465,20 @@ export interface Payment {
   reference?: string | null;
 }
 
+export interface PaymentLeg {
+  id: number;
+  payment_id: number;
+  workspace_id: number;
+  money_account_id: number;
+  amount_minor: MinorAmount;
+  created_at: string;
+}
+
+export interface PaymentDetail {
+  payment: Payment;
+  payment_legs: PaymentLeg[];
+}
+
 export interface Invoice extends TradeRecord {
   customer_id: number;
   customer_name: string;
@@ -472,9 +486,17 @@ export interface Invoice extends TradeRecord {
   issue_date: string;
   due_date: string;
   subtotal_minor: MinorAmount;
+  discount_minor?: MinorAmount;
+  delivery_fee_minor?: MinorAmount;
   tax_amount_minor: MinorAmount;
   terms?: string | null;
   notes?: string | null;
+}
+
+export interface InvoiceDetail {
+  invoice: Invoice;
+  items: InvoiceLineItem[];
+  payments?: PaymentDetail[];
 }
 
 export interface Estimate {
@@ -618,8 +640,11 @@ export interface BankReconciliation {
   statement_date: string;
   statement_balance_minor: MinorAmount;
   ledger_balance_minor: MinorAmount;
+  cleared_balance_minor: MinorAmount;
   difference_minor: MinorAmount;
   status: "in_progress" | "reconciled" | "discarded";
+  reconciliation_type: "bank" | "cash";
+  denominations?: Record<string, number>;
   reconciled_at?: string | null;
   notes?: string | null;
   created_at: string;
@@ -631,6 +656,120 @@ export interface BankReconciliationMatch {
   transaction_id: number;
   match_status: "cleared" | "unmatched" | "disputed";
   cleared_at: string;
+}
+
+export interface ReconTransactionItem {
+  id: number;
+  direction: "money_in" | "money_out" | "transfer";
+  signed_minor: number;
+  amount_minor: number;
+  currency: string;
+  effective_date: string;
+  party_name?: string;
+  notes?: string;
+  reference?: string;
+  matched: boolean;
+}
+
+export interface BankReconDetail {
+  reconciliation: BankReconciliation;
+  matches: BankReconciliationMatch[];
+  transactions: ReconTransactionItem[];
+}
+
+export interface BankLine {
+  id: number;
+  money_account_id: number;
+  transaction_date: string;
+  description: string;
+  reference?: string | null;
+  direction: "money_in" | "money_out";
+  amount_minor: MinorAmount;
+  matched_transaction_id?: number | null;
+  match_status: "unmatched" | "suggested" | "matched" | "ignored";
+}
+
+export interface PublicEstimateView {
+  workspace_name: string;
+  estimate: Estimate & { discount_minor?: MinorAmount; delivery_fee_minor?: MinorAmount };
+  items: EstimateItem[];
+  allow_respond: boolean;
+  response_status?: string;
+  expires_at: string;
+}
+
+export interface PublicStatementView {
+  workspace_name: string;
+  customer: Contact;
+  from_date?: string;
+  to_date?: string;
+  invoices: Invoice[];
+  wallet_txs: WalletTransaction[];
+  expires_at: string;
+}
+
+export interface WorkspaceProfileSettings {
+  id: number;
+  kind: "personal" | "business";
+  name: string;
+  slug: string;
+  base_currency: string;
+  timezone: string;
+  business_type?: string | null;
+  country?: string | null;
+  address?: string | null;
+  contact_phone?: string | null;
+  contact_email?: string | null;
+}
+
+export interface WorkspaceMemberRow {
+  id: number;
+  user_id: number;
+  role_id: number;
+  is_owner: boolean;
+  status: string;
+  joined_at: string;
+  display_name?: string | null;
+  role_code: string;
+  role_name: string;
+}
+
+export interface WorkspaceRoleRow {
+  id: number;
+  code: string;
+  name: string;
+  is_system: boolean;
+  permissions: string[];
+}
+
+export interface WorkspaceInvitationRow {
+  id: number;
+  role_code: string;
+  role_name: string;
+  destination_normalized: string;
+  status: string;
+  expires_at: string;
+  created_at: string;
+}
+
+export interface WorkspaceNotification {
+  id: number;
+  workspace_id?: number | null;
+  category: "system" | "finance" | "invoice" | "inventory" | "team" | "approval";
+  title: string;
+  body: string;
+  action_url?: string | null;
+  is_read: boolean;
+  created_at: string;
+}
+
+export interface OnboardingChecklist {
+  has_account: boolean;
+  has_income: boolean;
+  has_expense: boolean;
+  has_customer: boolean;
+  has_invoice: boolean;
+  all_done: boolean;
 }
 
 export interface Budget {

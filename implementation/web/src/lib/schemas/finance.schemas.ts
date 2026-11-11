@@ -156,15 +156,43 @@ export const tradeSchema = z.object({
 });
 export type TradeValues = z.infer<typeof tradeSchema>;
 
-export const paymentSchema = z.object({
-  direction: z.enum(["incoming", "outgoing"]),
-  date: date(),
-  amount: amount(),
-  account_id: z.string().min(1, "Choose an account"),
-  party_name: z.string().trim().min(1, "Enter who this payment is with").max(200, "Keep this under 200 characters"),
-  reference: shortText,
-  notes,
-});
+export const paymentSchema = z
+  .object({
+    direction: z.enum(["incoming", "outgoing"]),
+    date: date(),
+    amount: amount(),
+    account_id: z.string(),
+    party_name: z.string().trim().min(1, "Enter who this payment is with").max(200, "Keep this under 200 characters"),
+    reference: shortText,
+    notes,
+    split_enabled: z.boolean(),
+    legs: z.array(
+      z.object({
+        account_id: z.string(),
+        amount: optionalAmount,
+      }),
+    ),
+  })
+  .superRefine((values, ctx) => {
+    if (!values.split_enabled) {
+      if (!values.account_id) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["account_id"], message: "Choose an account" });
+      }
+    } else {
+      if (!values.legs || values.legs.length < 2) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["legs"], message: "Add at least two payment accounts to split" });
+        return;
+      }
+      values.legs.forEach((leg, i) => {
+        if (!leg.account_id) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["legs", i, "account_id"], message: "Choose an account" });
+        }
+        if (!leg.amount || !/[1-9]/.test(leg.amount)) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["legs", i, "amount"], message: "Enter amount > 0" });
+        }
+      });
+    }
+  });
 export type PaymentValues = z.infer<typeof paymentSchema>;
 
 export const invoiceAllocationSchema = z.object({
@@ -184,6 +212,8 @@ export const invoiceSchema = z
     issue_date: date("Choose the issue date"),
     due_date: date("Choose the due date"),
     tax_amount: optionalAmount,
+    discount_amount: optionalAmount.optional(),
+    delivery_fee_amount: optionalAmount.optional(),
     notes,
     terms: notes,
     items: z
@@ -207,6 +237,8 @@ export const estimateSchema = z.object({
   issue_date: date("Choose the issue date"),
   expiry_date: date("Choose the expiry date"),
   tax_amount: optionalAmount,
+  discount_amount: optionalAmount.optional(),
+  delivery_fee_amount: optionalAmount.optional(),
   notes,
   terms: notes,
   items: z

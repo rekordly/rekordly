@@ -4,6 +4,8 @@
 import { apiClient, workspaceHeaders } from "./api.ts";
 import { buildQueryString } from "./utils.ts";
 import type {
+  BankLine,
+  BankReconDetail,
   BankReconciliation,
   BankReconciliationMatch,
   Budget,
@@ -12,6 +14,7 @@ import type {
   CatalogueItem,
   InventoryBalance,
   InventoryOutlet,
+  OnboardingChecklist,
   ProductOption,
   ProductVariant,
   StockReservation,
@@ -25,8 +28,12 @@ import type {
   Estimate,
   EstimateDetail,
   Invoice,
+  InvoiceDetail,
+  PaymentDetail,
+  PublicEstimateView,
   PublicInvoiceView,
   PublicReceiptView,
+  PublicStatementView,
   SalesReturn,
   CustomerCredit,
   CustomerCreditTransaction,
@@ -44,6 +51,11 @@ import type {
   TaxReadinessReport,
   TaxSettings,
   WalletTransaction,
+  WorkspaceInvitationRow,
+  WorkspaceMemberRow,
+  WorkspaceNotification,
+  WorkspaceProfileSettings,
+  WorkspaceRoleRow,
   EvidenceAsset,
   EvidenceAccess,
   EvidenceUploadAuthorization,
@@ -280,21 +292,34 @@ export const financeApi = {
   getCustomerDetail: (workspaceId: number, id: number) =>
     scopedGet<{
       customer: Contact;
+      currency: string;
       wallet: CustomerWallet | null;
+      credit: CustomerCredit | null;
       invoices: Invoice[];
-      sales: Array<{ id: number; total_amount_minor: number; paid_amount_minor: number; status: string; sale_date: { Time: string }; reference?: { String: string } }>;
+      sales: Array<{ id: number; customer_name: string; total_amount_minor: number; paid_amount_minor: number; currency: string; currency_exponent: number; status: string; sale_date: string; reference?: string | null }>;
     }>(workspaceId, `/api/v1/customers/${id}`),
+  getSupplierDetail: (workspaceId: number, id: number) =>
+    scopedGet<{
+      supplier: Contact;
+      purchases: Array<{ id: number; supplier_name: string; total_amount_minor: number; paid_amount_minor: number; currency: string; currency_exponent: number; status: string; purchase_date: string; reference?: string | null }>;
+    }>(workspaceId, `/api/v1/suppliers/${id}`),
   getCustomerStatement: (workspaceId: number, id: number, params: QueryParams = {}) =>
     scopedGet<{
       statement: {
         customer: Contact;
         invoices: Invoice[];
+        sales: Array<{ id: number; total_amount_minor: number; paid_amount_minor: number; currency: string; currency_exponent: number; status: string; sale_date: string; reference?: string | null }>;
         wallet_txs: WalletTransaction[];
+        from_date?: string;
         as_of_date: string;
       };
     }>(workspaceId, `/api/v1/customers/${id}/statement`, params).then((r) => r.statement),
   createContact: (workspaceId: number, kind: "customers" | "suppliers", body: unknown) =>
     scopedPost(workspaceId, `/api/v1/${kind}`, body),
+  updateContact: (workspaceId: number, kind: "customers" | "suppliers", id: number, body: unknown) =>
+    scopedPatch<{ customer?: Contact; supplier?: Contact }>(workspaceId, `/api/v1/${kind}/${id}`, body),
+  mergeContacts: (workspaceId: number, sourceId: number, targetId: number) =>
+    scopedPost<{ counterparty: Contact }>(workspaceId, "/api/v1/counterparties/merge", { source_id: sourceId, target_id: targetId }),
 
   async listCatalogueItems(workspaceId: number, params: QueryParams = {}) {
     const result = await scopedGet<{ items: CatalogueItem[] }>(workspaceId, "/api/v1/catalogue/items", { limit: 50, ...params });
@@ -453,15 +478,14 @@ export const financeApi = {
   createPurchase: (workspaceId: number, body: unknown, key: string) =>
     scopedPost(workspaceId, "/api/v1/purchases", body, key),
   createPayment: (workspaceId: number, body: unknown, key: string) =>
-    scopedPost(workspaceId, "/api/v1/payments", body, key),
+    scopedPost<PaymentDetail>(workspaceId, "/api/v1/payments", body, key),
+  getPayment: (workspaceId: number, id: number) =>
+    scopedGet<PaymentDetail>(workspaceId, `/api/v1/payments/${id}`),
 
   createInvoice: (workspaceId: number, body: unknown, key: string) =>
     scopedPost(workspaceId, "/api/v1/invoices", body, key),
   getInvoice: (workspaceId: number, id: number) =>
-    scopedGet<{ invoice: Invoice & { items: { description: string; quantity: string; unit_price_minor: number; currency_exponent: number }[] } }>(
-      workspaceId,
-      `/api/v1/invoices/${id}`,
-    ).then((r) => r.invoice),
+    scopedGet<InvoiceDetail>(workspaceId, `/api/v1/invoices/${id}`),
   finalizeInvoice: (workspaceId: number, id: number, key: string) =>
     scopedPost(workspaceId, `/api/v1/invoices/${id}/finalize`, {}, key),
   voidInvoice: (workspaceId: number, id: number, reason: string, key: string) =>
@@ -472,6 +496,19 @@ export const financeApi = {
     scopedPost<{ share_url: string; token: string; expires_at: string }>(workspaceId, `/api/v1/invoices/${invoiceId}/shares`, { expiry_days: expiryDays }),
   getPublicInvoice: (token: string) =>
     apiClient.get<{ invoice_view: PublicInvoiceView }>(`/api/v1/public/invoices/${token}`).then((r) => r.invoice_view),
+  createEstimateShare: (workspaceId: number, estimateId: number, expiryDays?: number, allowRespond = true) =>
+    scopedPost<{ share_url: string; token: string; expires_at: string }>(workspaceId, `/api/v1/estimates/${estimateId}/shares`, {
+      expiry_days: expiryDays,
+      allow_respond: allowRespond,
+    }),
+  getPublicEstimate: (token: string) =>
+    apiClient.get<{ estimate_view: PublicEstimateView }>(`/api/v1/public/estimates/${token}`).then((r) => r.estimate_view),
+  respondPublicEstimate: (token: string, body: { action: "accepted" | "declined"; responder_name: string; comment?: string }) =>
+    apiClient.post<typeof body, { estimate: Estimate }>(`/api/v1/public/estimates/${token}/respond`, body),
+  createCustomerStatementShare: (workspaceId: number, customerId: number, body: { from_date?: string; to_date?: string; expiry_days?: number }) =>
+    scopedPost<{ share_url: string; token: string; expires_at: string }>(workspaceId, `/api/v1/customers/${customerId}/statement-shares`, body),
+  getPublicStatement: (token: string) =>
+    apiClient.get<{ statement_view: PublicStatementView }>(`/api/v1/public/statements/${token}`).then((r) => r.statement_view),
   createPaymentReceipt: (workspaceId: number, paymentId: number) =>
     scopedPost<{ receipt_url: string; token: string; receipt: unknown }>(workspaceId, `/api/v1/payments/${paymentId}/receipt`, {}),
   getPublicReceipt: (token: string) =>
@@ -553,23 +590,74 @@ export const financeApi = {
   },
   startReconciliation: (
     workspaceId: number,
-    body: { money_account_id: number; statement_date: string; statement_balance_minor: number; notes?: string },
+    body: {
+      money_account_id: number;
+      statement_date: string;
+      statement_balance_minor: number;
+      reconciliation_type?: "bank" | "cash";
+      denominations?: Record<string, number>;
+      notes?: string;
+    },
   ) => scopedPost<{ reconciliation: BankReconciliation }>(workspaceId, "/api/v1/reconciliations", body),
   getReconciliation: (workspaceId: number, id: number) =>
-    scopedGet<{ reconciliation: BankReconciliation; matches: BankReconciliationMatch[] }>(
-      workspaceId,
-      `/api/v1/reconciliations/${id}`,
-    ),
+    scopedGet<BankReconDetail>(workspaceId, `/api/v1/reconciliations/${id}`),
   matchReconciliationTransaction: (workspaceId: number, reconId: number, transactionId: number) =>
-    scopedPost<{ match: BankReconciliationMatch }>(workspaceId, `/api/v1/reconciliations/${reconId}/commands/match`, {
-      transaction_id: transactionId,
-    }),
+    scopedPost<{ reconciliation: BankReconciliation; match: BankReconciliationMatch }>(
+      workspaceId,
+      `/api/v1/reconciliations/${reconId}/commands/match`,
+      { transaction_id: transactionId },
+    ),
   unmatchReconciliationTransaction: (workspaceId: number, reconId: number, transactionId: number) =>
-    scopedPost<{ unmatched: boolean }>(workspaceId, `/api/v1/reconciliations/${reconId}/commands/unmatch`, {
-      transaction_id: transactionId,
-    }),
+    scopedPost<{ unmatched: boolean; reconciliation: BankReconciliation }>(
+      workspaceId,
+      `/api/v1/reconciliations/${reconId}/commands/unmatch`,
+      { transaction_id: transactionId },
+    ),
   completeReconciliation: (workspaceId: number, reconId: number) =>
     scopedPost<{ reconciliation: BankReconciliation }>(workspaceId, `/api/v1/reconciliations/${reconId}/commands/complete`, {}),
+  importBankLines: (
+    workspaceId: number,
+    body: {
+      money_account_id: number;
+      file_name: string;
+      lines: Array<{ transaction_date: string; description: string; reference?: string; direction: "money_in" | "money_out"; amount_minor: number }>;
+    },
+  ) => scopedPost<{ batch: unknown; lines: BankLine[] }>(workspaceId, "/api/v1/reconciliations/import-lines", body),
+  async listBankLines(workspaceId: number, accountId: number) {
+    const res = await scopedGet<{ lines: BankLine[] }>(workspaceId, "/api/v1/reconciliations/bank-lines", { account_id: accountId });
+    return res.lines ?? [];
+  },
+  matchBankLine: (workspaceId: number, lineId: number, body: { transaction_id?: number; status: "matched" | "ignored" | "unmatched" }) =>
+    scopedPost<{ line: BankLine }>(workspaceId, `/api/v1/reconciliations/bank-lines/${lineId}/match`, body),
+
+  getWorkspaceSettings: (workspaceId: number) =>
+    scopedGet<{ workspace: WorkspaceProfileSettings }>(workspaceId, "/api/v1/settings/workspace").then((r) => r.workspace),
+  updateWorkspaceSettings: (workspaceId: number, body: Partial<WorkspaceProfileSettings> & { name: string; timezone: string }) =>
+    scopedPatch<{ workspace: WorkspaceProfileSettings }>(workspaceId, "/api/v1/settings/workspace", body).then((r) => r.workspace),
+  getWorkspaceTeam: (workspaceId: number) =>
+    scopedGet<{ members: WorkspaceMemberRow[]; roles: WorkspaceRoleRow[]; invitations: WorkspaceInvitationRow[] }>(
+      workspaceId,
+      "/api/v1/settings/team",
+    ),
+  createWorkspaceInvitation: (workspaceId: number, body: { email: string; role_code: string; outlet_scope?: Record<string, unknown> }) =>
+    apiClient.post<typeof body, { id: number; invite_url: string; token: string; role_code: string; role_name: string; expires_at: string }>(
+      `/api/v1/workspaces/${workspaceId}/invitations`,
+      body,
+    ),
+  revokeWorkspaceInvitation: (workspaceId: number, invitationId: number) =>
+    apiClient.delete(`/api/v1/workspaces/${workspaceId}/invitations/${invitationId}`),
+  updateRolePermissions: (workspaceId: number, roleId: number, permissions: string[]) =>
+    scopedPatch<{ permissions: string[] }>(workspaceId, `/api/v1/settings/team/roles/${roleId}/permissions`, { permissions }),
+
+  listNotifications: (workspaceId: number) =>
+    scopedGet<{ notifications: WorkspaceNotification[]; unread_count: number }>(workspaceId, "/api/v1/notifications"),
+  markNotificationRead: (workspaceId: number, id: number) =>
+    scopedPost<{ notification: WorkspaceNotification }>(workspaceId, `/api/v1/notifications/${id}/read`, {}),
+  markAllNotificationsRead: (workspaceId: number) =>
+    scopedPost<{ marked_all: boolean }>(workspaceId, "/api/v1/notifications/read-all", {}),
+
+  getOnboardingChecklist: (workspaceId: number) =>
+    scopedGet<{ checklist: OnboardingChecklist }>(workspaceId, "/api/v1/onboarding/checklist").then((r) => r.checklist),
 };
 
 /** Query keys are always namespaced by workspace so one space can never render another's rows. */

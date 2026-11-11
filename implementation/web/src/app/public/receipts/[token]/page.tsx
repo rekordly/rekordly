@@ -24,7 +24,6 @@ export default function PublicReceiptPage({ params }: PageProps) {
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
     financeApi
       .getPublicReceipt(token)
       .then((res) => {

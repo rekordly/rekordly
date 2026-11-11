@@ -1,6 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
   ArrowRight,
@@ -8,6 +9,7 @@ import {
   ArrowUUpLeft,
   CheckCircle,
   Copy,
+  CreditCard,
   Envelope,
   FileText,
   HandCoins,
@@ -35,7 +37,7 @@ import { EmptyState, Page, PageHeader } from "@/components/ui/page";
 import { RecordCard } from "@/components/ui/record-card";
 import { toast } from "@heroui/react";
 import { formatDate } from "@/lib/format";
-import { financeApi } from "@/lib/money";
+import { financeApi, formatMinorAmount } from "@/lib/money";
 import {
   estimateSchema,
   invoiceSchema,
@@ -46,7 +48,7 @@ import {
   type SalesReturnValues,
   type WalletPaymentValues,
 } from "@/lib/schemas/finance.schemas";
-import type { Estimate, Invoice } from "@/types/finance";
+import type { Estimate, Invoice, InvoiceLineItem, SalesReturn } from "@/types/finance";
 
 import { MoneyField, NotesField, TextInputField } from "./fields";
 import { PaymentDrawer, type PaymentPreset } from "./payment-drawer";
@@ -56,6 +58,7 @@ type PendingAction =
   | { kind: "finalize"; invoice: Invoice }
   | { kind: "void"; invoice: Invoice }
   | { kind: "wallet"; invoice: Invoice }
+  | { kind: "apply_credit"; invoice: Invoice; availableMinor: number }
   | { kind: "convert_estimate"; estimate: Estimate };
 
 const BLANK_ITEM = { description: "", quantity: "1", unit_price: "" };
@@ -73,7 +76,7 @@ const ESTIMATE_STEPS = [
 ] as const;
 
 function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & { startOpen: boolean }) {
-  const [activeTab, setActiveTab] = useState<"invoices" | "estimates">("invoices");
+  const [activeTab, setActiveTab] = useState<"invoices" | "estimates" | "returns">("invoices");
 
   // Invoices state
   const [isInvoiceOpen, setIsInvoiceOpen] = useState(startOpen);
@@ -85,12 +88,25 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
   const [estimateStep, setEstimateStep] = useState<1 | 2 | 3>(1);
   const estimates = useRecords<Estimate>("estimates", workspaceId);
 
+  // Sales Returns / Credit Notes list
+  const salesReturns = useQuery({
+    queryKey: ["money", workspaceId, "sales-returns"],
+    queryFn: () => financeApi.listSalesReturns(workspaceId),
+  });
+
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [payment, setPayment] = useState<PaymentPreset | undefined>();
   const customers = useContacts(workspaceId, "customers");
 
-  // Invoice share state
-  const [shareInvoice, setShareInvoice] = useState<Invoice | null>(null);
+  // Share state (Invoice or Estimate)
+  const [shareTarget, setShareTarget] = useState<{
+    kind: "invoice" | "estimate";
+    number: string;
+    customerName: string;
+    totalMinor: number | string;
+    currency: string;
+    currencyExponent: number;
+  } | null>(null);
   const [shareData, setShareData] = useState<{ share_url: string; token: string; expires_at: string } | null>(null);
   const [copiedShareLink, setCopiedShareLink] = useState(false);
 
@@ -102,9 +118,34 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
     try {
       const res = await financeApi.createInvoiceShare(workspaceId, inv.id);
       setShareData(res);
-      setShareInvoice(inv);
+      setShareTarget({
+        kind: "invoice",
+        number: inv.invoice_number,
+        customerName: inv.customer_name,
+        totalMinor: inv.total_amount_minor,
+        currency: inv.currency,
+        currencyExponent: inv.currency_exponent ?? 2,
+      });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to create share link";
+      toast.danger(msg);
+    }
+  };
+
+  const handleOpenEstimateShare = async (est: Estimate) => {
+    try {
+      const res = await financeApi.createEstimateShare(workspaceId, est.id, 30, true);
+      setShareData(res);
+      setShareTarget({
+        kind: "estimate",
+        number: est.estimate_number,
+        customerName: est.customer_name,
+        totalMinor: est.total_amount_minor,
+        currency: est.currency,
+        currencyExponent: est.currency_exponent ?? 2,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to create quotation share link";
       toast.danger(msg);
     }
   };
@@ -131,6 +172,8 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
       issue_date: today(),
       due_date: today(),
       tax_amount: "",
+      discount_amount: "",
+      delivery_fee_amount: "",
       notes: "",
       terms: "Payment is due within 14 days of invoice date.",
       items: [BLANK_ITEM],
@@ -147,6 +190,8 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
       issue_date: today(),
       expiry_date: today(),
       tax_amount: "",
+      discount_amount: "",
+      delivery_fee_amount: "",
       notes: "This quotation is valid for 14 days from issue date.",
       terms: "Standard commercial delivery terms apply.",
       items: [BLANK_ITEM],
@@ -174,6 +219,8 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
   // Watched invoice values
   const watchedInvItems = invoiceForm.watch("items");
   const watchedInvTax = invoiceForm.watch("tax_amount");
+  const watchedInvDiscount = invoiceForm.watch("discount_amount");
+  const watchedInvDelivery = invoiceForm.watch("delivery_fee_amount");
   const watchedInvCustomerId = invoiceForm.watch("customer_id");
   const watchedInvIssueDate = invoiceForm.watch("issue_date");
   const watchedInvDueDate = invoiceForm.watch("due_date");
@@ -187,11 +234,15 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
     }, 0);
   }, [watchedInvItems]);
   const invTax = parseFloat(watchedInvTax || "0") || 0;
-  const invTotal = invSubtotal + invTax;
+  const invDiscount = parseFloat(watchedInvDiscount || "0") || 0;
+  const invDelivery = parseFloat(watchedInvDelivery || "0") || 0;
+  const invTotal = Math.max(0, invSubtotal - invDiscount + invTax + invDelivery);
 
   // Watched estimate values
   const watchedEstItems = estimateForm.watch("items");
   const watchedEstTax = estimateForm.watch("tax_amount");
+  const watchedEstDiscount = estimateForm.watch("discount_amount");
+  const watchedEstDelivery = estimateForm.watch("delivery_fee_amount");
   const watchedEstCustomerId = estimateForm.watch("customer_id");
   const watchedEstIssueDate = estimateForm.watch("issue_date");
   const watchedEstExpiryDate = estimateForm.watch("expiry_date");
@@ -205,7 +256,9 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
     }, 0);
   }, [watchedEstItems]);
   const estTax = parseFloat(watchedEstTax || "0") || 0;
-  const estTotal = estSubtotal + estTax;
+  const estDiscount = parseFloat(watchedEstDiscount || "0") || 0;
+  const estDelivery = parseFloat(watchedEstDelivery || "0") || 0;
+  const estTotal = Math.max(0, estSubtotal - estDiscount + estTax + estDelivery);
 
   const closeInvoiceDrawer = () => {
     setIsInvoiceOpen(false);
@@ -231,17 +284,22 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
     setReturnInvoice(inv);
     try {
       const full = await financeApi.getInvoice(workspaceId, inv.id);
+      const exponent = full.invoice?.currency_exponent ?? inv.currency_exponent ?? 2;
+      const itemsList = (full.items || []) as InvoiceLineItem[];
       returnForm.reset({
         return_date: today(),
         reason: "Customer return / dispute",
         action_taken: "customer_credit",
         tax_amount: "0",
-        items: (full.items || []).map((it: { description: string; quantity: string; unit_price_minor: number; currency_exponent: number }) => ({
-          description: it.description,
-          quantity: it.quantity || "1",
-          unit_price: (Number(it.unit_price_minor) / Math.pow(10, it.currency_exponent || 2)).toFixed(2),
-          restock_inventory: false,
-        })),
+        items:
+          itemsList.length > 0
+            ? itemsList.map((it) => ({
+                description: it.description,
+                quantity: String(it.quantity ?? "1"),
+                unit_price: (Number(it.unit_price_minor) / Math.pow(10, exponent)).toFixed(2),
+                restock_inventory: false,
+              }))
+            : [{ description: `Return on ${inv.invoice_number}`, quantity: "1", unit_price: "0", restock_inventory: false }],
       });
     } catch {
       returnForm.reset({
@@ -307,6 +365,8 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
           currency,
           status: "draft",
           tax_amount: values.tax_amount || undefined,
+          discount_amount: values.discount_amount || undefined,
+          delivery_fee_amount: values.delivery_fee_amount || undefined,
           notes: values.notes || undefined,
           terms: values.terms || undefined,
           items: values.items.map((item) => ({
@@ -358,6 +418,8 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
           currency,
           status: "draft",
           tax_amount: values.tax_amount || undefined,
+          discount_amount: values.discount_amount || undefined,
+          delivery_fee_amount: values.delivery_fee_amount || undefined,
           notes: values.notes || undefined,
           terms: values.terms || undefined,
           items: values.items.map((item) => ({
@@ -433,9 +495,39 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
       onDone: () => {
         closeReturnDrawer();
         invoices.refetch();
+        salesReturns.refetch();
       },
     },
   );
+
+  const applyCreditAction = useFinanceAction(
+    workspaceId,
+    ({ invoice, amountMinor }: { invoice: Invoice; amountMinor: number }) =>
+      financeApi.applyCustomerCredit(workspaceId, invoice.customer_id, invoice.id, amountMinor),
+    {
+      success: "Customer credit applied to invoice",
+      onDone: () => {
+        closePending();
+        invoices.refetch();
+      },
+    },
+  );
+
+  const handleCheckAndApplyCredit = async (invoice: Invoice) => {
+    try {
+      const creditData = await financeApi.getCustomerCredit(workspaceId, invoice.customer_id, invoice.currency);
+      const balanceMinor = Number(creditData?.credit?.balance_minor ?? 0);
+      const dueMinor = Math.max(0, Number(invoice.total_amount_minor) - Number(invoice.paid_amount_minor));
+      const applyMinor = Math.min(balanceMinor, dueMinor);
+      if (applyMinor <= 0) {
+        toast.info("This customer has no available store credit balance to apply.");
+        return;
+      }
+      setPending({ kind: "apply_credit", invoice, availableMinor: applyMinor });
+    } catch (err: unknown) {
+      toast.danger(err instanceof Error ? err.message : "Failed to inspect customer credit");
+    }
+  };
 
   const payFromWallet = useFinanceAction(
     workspaceId,
@@ -539,6 +631,13 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
           onClick: () => setPending({ kind: "wallet", invoice: row }),
         },
         {
+          key: "apply_credit",
+          label: "Apply store credit",
+          icon: <CreditCard size={16} aria-hidden="true" />,
+          disabled: row.status !== "finalized" && row.status !== "partially_paid",
+          onClick: () => handleCheckAndApplyCredit(row),
+        },
+        {
           key: "credit_note",
           label: "Issue Credit Note / Return",
           icon: <ArrowUUpLeft size={16} aria-hidden="true" />,
@@ -562,6 +661,12 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
     <AppRowActions
       ariaLabel="Estimate actions"
       items={[
+        {
+          key: "share",
+          label: "Share / WhatsApp",
+          icon: <ShareNetwork size={16} aria-hidden="true" />,
+          onClick: () => handleOpenEstimateShare(row),
+        },
         {
           key: "convert",
           label: "Convert to Invoice",
@@ -602,10 +707,10 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
         description="Draft and issue invoices, send commercial quotations, and collect customer payments."
         actions={
           <div className="flex items-center gap-2">
-            {activeTab === "invoices" ? (
-              <AppButton startContent={<Plus weight="bold" />} label="New invoice" onPress={() => setIsInvoiceOpen(true)} />
-            ) : (
+            {activeTab === "estimates" ? (
               <AppButton startContent={<Plus weight="bold" />} label="New quotation" onPress={() => setIsEstimateOpen(true)} />
+            ) : (
+              <AppButton startContent={<Plus weight="bold" />} label="New invoice" onPress={() => setIsInvoiceOpen(true)} />
             )}
           </div>
         }
@@ -634,6 +739,17 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
           }`}
         >
           Estimates & Quotes
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("returns")}
+          className={`px-3.5 py-1.5 text-xs font-semibold rounded-xl transition-all ${
+            activeTab === "returns"
+              ? "bg-primary text-primary-foreground shadow-sm"
+              : "text-muted hover:text-foreground hover:bg-surface-secondary"
+          }`}
+        >
+          Credit Notes & Returns
         </button>
       </div>
 
@@ -727,6 +843,58 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
                 { label: "Expires", value: formatDate(row.expiry_date) },
               ]}
               actions={estimateRowActions(row)}
+            />
+          )}
+        />
+      )}
+
+      {/* TAB 3: CREDIT NOTES & SALES RETURNS */}
+      {activeTab === "returns" && (
+        <DataView<SalesReturn>
+          title="Credit Notes & Sales Returns"
+          rows={salesReturns.data ?? []}
+          rowKey={(row) => row.id}
+          isLoading={salesReturns.isPending}
+          isError={salesReturns.isError}
+          searchPlaceholder="Search return # or reason"
+          getSearchText={(row) => `${row.return_number} ${row.reason} ${row.action_taken}`}
+          empty={
+            <EmptyState
+              icon={ArrowUUpLeft}
+              title="No credit notes yet"
+              description="Open an issued invoice's action menu and choose Issue Credit Note / Return."
+              action={<AppButton variant="secondary" label="Go to Invoices" onPress={() => setActiveTab("invoices")} />}
+            />
+          }
+          columns={[
+            { key: "number", label: "Credit Note #", render: (row) => <span className="font-medium text-foreground">{row.return_number}</span> },
+            { key: "reason", label: "Reason", render: (row) => row.reason },
+            { key: "action", label: "Resolution", render: (row) => <span className="capitalize">{row.action_taken.replace(/_/g, " ")}</span> },
+            { key: "date", label: "Return Date", render: (row) => formatDate(row.return_date) },
+            { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> },
+            {
+              key: "total",
+              label: "Amount",
+              align: "right",
+              render: (row) => (
+                <span className="tabular font-semibold">
+                  {formatMinorAmount(row.total_amount_minor, row.currency, row.currency_exponent || 2)}
+                </span>
+              ),
+            },
+          ]}
+          renderCard={(row) => (
+            <RecordCard
+              icon={<ArrowUUpLeft size={18} aria-hidden="true" />}
+              iconClassName="bg-secondary-soft text-secondary"
+              reference={row.return_number}
+              title={row.reason}
+              amount={formatMinorAmount(row.total_amount_minor, row.currency, row.currency_exponent || 2)}
+              status={<StatusBadge status={row.status} />}
+              meta={[
+                { label: "Resolution", value: row.action_taken.replace(/_/g, " ") },
+                { label: "Date", value: formatDate(row.return_date) },
+              ]}
             />
           )}
         />
@@ -859,7 +1027,11 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
                 <TextInputField control={invoiceForm.control} name="due_date" label="Due date" type="date" isRequired />
               </div>
 
-              <MoneyField control={invoiceForm.control} name="tax_amount" label="Tax / VAT" currency={currency} />
+              <div className="grid gap-4 sm:grid-cols-3">
+                <MoneyField control={invoiceForm.control} name="tax_amount" label="Tax / VAT" currency={currency} />
+                <MoneyField control={invoiceForm.control} name="discount_amount" label="Discount" currency={currency} />
+                <MoneyField control={invoiceForm.control} name="delivery_fee_amount" label="Delivery fee" currency={currency} />
+              </div>
               <NotesField control={invoiceForm.control} name="terms" label="Payment terms" />
               <NotesField control={invoiceForm.control} name="notes" label="Customer notes (optional)" />
             </div>
@@ -893,10 +1065,22 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
                     <span>Subtotal</span>
                     <span className="tabular">{currency} {invSubtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
+                  {invDiscount > 0 && (
+                    <div className="flex justify-between text-xs text-emerald-600">
+                      <span>Discount</span>
+                      <span className="tabular">-{currency} {invDiscount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                  )}
                   {invTax > 0 && (
                     <div className="flex justify-between text-xs text-muted">
                       <span>Tax</span>
                       <span className="tabular">{currency} {invTax.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                  )}
+                  {invDelivery > 0 && (
+                    <div className="flex justify-between text-xs text-muted">
+                      <span>Delivery fee</span>
+                      <span className="tabular">{currency} {invDelivery.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     </div>
                   )}
                   <div className="flex justify-between text-sm font-bold text-foreground pt-1 border-t border-border/40">
@@ -1066,7 +1250,11 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
                 <TextInputField control={estimateForm.control} name="expiry_date" label="Expiry date" type="date" isRequired />
               </div>
 
-              <MoneyField control={estimateForm.control} name="tax_amount" label="Tax / VAT estimate" currency={currency} />
+              <div className="grid gap-4 sm:grid-cols-3">
+                <MoneyField control={estimateForm.control} name="tax_amount" label="Tax / VAT estimate" currency={currency} />
+                <MoneyField control={estimateForm.control} name="discount_amount" label="Discount" currency={currency} />
+                <MoneyField control={estimateForm.control} name="delivery_fee_amount" label="Delivery fee" currency={currency} />
+              </div>
               <NotesField control={estimateForm.control} name="terms" label="Commercial terms" />
               <NotesField control={estimateForm.control} name="notes" label="Quotation notes" />
             </div>
@@ -1100,10 +1288,22 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
                     <span>Subtotal</span>
                     <span className="tabular">{currency} {estSubtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
+                  {estDiscount > 0 && (
+                    <div className="flex justify-between text-xs text-emerald-600">
+                      <span>Discount</span>
+                      <span className="tabular">-{currency} {estDiscount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                  )}
                   {estTax > 0 && (
                     <div className="flex justify-between text-xs text-muted">
                       <span>Tax</span>
                       <span className="tabular">{currency} {estTax.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                  )}
+                  {estDelivery > 0 && (
+                    <div className="flex justify-between text-xs text-muted">
+                      <span>Delivery fee</span>
+                      <span className="tabular">{currency} {estDelivery.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     </div>
                   )}
                   <div className="flex justify-between text-sm font-bold text-foreground pt-1 border-t border-border/40">
@@ -1169,6 +1369,24 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
         onConfirm={() => pending?.kind === "finalize" && finalizeInvoiceAction.mutate(pending.invoice)}
       />
       <ConfirmDialog
+        isOpen={pending?.kind === "apply_credit"}
+        onOpenChange={(open) => !open && closePending()}
+        title="Apply customer store credit?"
+        description={
+          pending?.kind === "apply_credit"
+            ? `Apply ${formatMinorAmount(pending.availableMinor, pending.invoice.currency, pending.invoice.currency_exponent || 2)} of available store credit toward ${pending.invoice.invoice_number}?`
+            : ""
+        }
+        confirmLabel="Apply credit"
+        isDanger={false}
+        isLoading={applyCreditAction.isPending}
+        onConfirm={() =>
+          pending?.kind === "apply_credit" &&
+          applyCreditAction.mutate({ invoice: pending.invoice, amountMinor: pending.availableMinor })
+        }
+      />
+
+      <ConfirmDialog
         isOpen={pending?.kind === "void"}
         onOpenChange={(open) => !open && closePending()}
         title="Void this invoice?"
@@ -1199,17 +1417,19 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
           description="Check the wallet balance on the Wallets page first."
         />
       </FormDrawer>
-      {/* SHARE INVOICE DRAWER */}
+      {/* SHARE INVOICE OR ESTIMATE DRAWER */}
       <FormDrawer
-        isOpen={shareInvoice !== null}
-        onOpenChange={(open) => !open && setShareInvoice(null)}
-        title="Share Invoice"
-        description={shareInvoice ? `Share ${shareInvoice.invoice_number} with ${shareInvoice.customer_name}` : undefined}
+        isOpen={shareTarget !== null}
+        onOpenChange={(open) => !open && setShareTarget(null)}
+        title={shareTarget?.kind === "estimate" ? "Share Quotation" : "Share Invoice"}
+        description={shareTarget ? `Share ${shareTarget.number} with ${shareTarget.customerName}` : undefined}
       >
-        {shareData && shareInvoice && (
+        {shareData && shareTarget && (
           <div className="space-y-6">
             <div className="space-y-2">
-              <label className="text-xs font-semibold text-foreground uppercase tracking-wider block">Public Invoice Link</label>
+              <label className="text-xs font-semibold text-foreground uppercase tracking-wider block">
+                Public {shareTarget.kind === "estimate" ? "Quotation" : "Invoice"} Link
+              </label>
               <div className="flex items-center gap-2">
                 <input
                   type="text"
@@ -1226,7 +1446,7 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
                 />
               </div>
               <p className="text-[11px] text-muted">
-                Anyone with this link can view and print the invoice without signing in. Valid for 30 days.
+                Anyone with this link can view{shareTarget.kind === "estimate" ? ", accept/decline," : ""} and print without signing in. Valid for 30 days.
               </p>
             </div>
 
@@ -1235,9 +1455,10 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <a
                   href={`https://wa.me/?text=${encodeURIComponent(
-                    `Hello ${shareInvoice.customer_name}, here is your invoice ${shareInvoice.invoice_number} for ${money(
-                      shareInvoice.total_amount_minor,
-                      shareInvoice,
+                    `Hello ${shareTarget.customerName}, here is your ${shareTarget.kind === "estimate" ? "quotation" : "invoice"} ${shareTarget.number} for ${formatMinorAmount(
+                      shareTarget.totalMinor,
+                      shareTarget.currency,
+                      shareTarget.currencyExponent,
                     )}: ${typeof window !== "undefined" ? window.location.origin : ""}${shareData.share_url}`,
                   )}`}
                   target="_blank"
@@ -1249,11 +1470,14 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
                 </a>
 
                 <a
-                  href={`mailto:?subject=${encodeURIComponent(`Invoice ${shareInvoice.invoice_number}`)}&body=${encodeURIComponent(
-                    `Hello ${shareInvoice.customer_name},\n\nPlease find your invoice ${shareInvoice.invoice_number} for ${money(
-                      shareInvoice.total_amount_minor,
-                      shareInvoice,
-                    )}.\n\nView and print your invoice here:\n${typeof window !== "undefined" ? window.location.origin : ""}${
+                  href={`mailto:?subject=${encodeURIComponent(
+                    `${shareTarget.kind === "estimate" ? "Quotation" : "Invoice"} ${shareTarget.number}`,
+                  )}&body=${encodeURIComponent(
+                    `Hello ${shareTarget.customerName},\n\nPlease find your ${shareTarget.kind === "estimate" ? "quotation" : "invoice"} ${shareTarget.number} for ${formatMinorAmount(
+                      shareTarget.totalMinor,
+                      shareTarget.currency,
+                      shareTarget.currencyExponent,
+                    )}.\n\nView and print here:\n${typeof window !== "undefined" ? window.location.origin : ""}${
                       shareData.share_url
                     }\n\nThank you!`,
                   )}`}
