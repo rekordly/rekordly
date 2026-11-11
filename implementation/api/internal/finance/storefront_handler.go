@@ -1,0 +1,309 @@
+package finance
+
+import (
+	"errors"
+	"net/http"
+	"strconv"
+	"strings"
+
+	"github.com/gin-gonic/gin"
+)
+
+func (h *Handler) RegisterStorefrontRoutes(g *gin.RouterGroup) {
+	g.POST("/storefront", h.createStorefront)
+	g.GET("/storefront", h.getMerchantStorefront)
+	g.PATCH("/storefront/settings", h.updateStorefrontSettings)
+	g.POST("/storefront/commands/publish", h.publishStorefront)
+	g.POST("/storefront/commands/unpublish", h.unpublishStorefront)
+	g.POST("/storefront/commands/entitlement", h.setStorefrontEntitlement)
+	g.GET("/storefront/collections", h.listStorefrontCollections)
+	g.POST("/storefront/collections", h.createStorefrontCollection)
+	g.GET("/storefront/catalogue", h.listMerchantStorefrontProducts)
+	g.PUT("/storefront/catalogue/:variantId", h.upsertStorefrontProduct)
+	g.GET("/storefront/domains", h.listStorefrontDomains)
+	g.POST("/storefront/domains", h.addCustomDomain)
+	g.POST("/storefront/domains/:domainId/commands/recheck", h.recheckCustomDomain)
+	g.POST("/storefront/domains/:domainId/commands/disconnect", h.disconnectCustomDomain)
+	g.GET("/storefront/analytics", h.getStorefrontAnalytics)
+}
+
+func (h *Handler) storefrontError(c *gin.Context, err error) {
+	status, code := http.StatusBadRequest, "STOREFRONT_REQUEST_FAILED"
+	switch {
+	case errors.Is(err, ErrNotFound):
+		status, code = http.StatusNotFound, "NOT_FOUND"
+	case errors.Is(err, ErrStorefrontNotPublished):
+		status, code = http.StatusNotFound, "STOREFRONT_NOT_PUBLISHED"
+	case errors.Is(err, ErrSlugUnavailable):
+		status, code = http.StatusConflict, "SLUG_UNAVAILABLE"
+	case errors.Is(err, ErrProductNotPublished):
+		status, code = http.StatusNotFound, "PRODUCT_NOT_PUBLISHED"
+	case errors.Is(err, ErrCartItemChanged):
+		status, code = http.StatusConflict, "CART_ITEM_CHANGED"
+	case errors.Is(err, ErrCheckoutRateLimited):
+		status, code = http.StatusTooManyRequests, "CHECKOUT_RATE_LIMITED"
+	case errors.Is(err, ErrOrderVersionConflict):
+		status, code = http.StatusConflict, "ORDER_VERSION_CONFLICT"
+	case errors.Is(err, ErrOrderAlreadyHandled):
+		status, code = http.StatusConflict, "ORDER_ALREADY_HANDLED"
+	case errors.Is(err, ErrInsufficientStock):
+		status, code = http.StatusConflict, "INSUFFICIENT_STOCK"
+	case errors.Is(err, ErrReservationNotActive):
+		status, code = http.StatusConflict, "RESERVATION_CONFLICT"
+	case errors.Is(err, ErrDomainInvalid):
+		status, code = http.StatusBadRequest, "DOMAIN_INVALID"
+	case errors.Is(err, ErrDomainAlreadyClaimed):
+		status, code = http.StatusConflict, "DOMAIN_ALREADY_CLAIMED"
+	case errors.Is(err, ErrStorefrontEntitlementLocked):
+		status, code = http.StatusPaymentRequired, "STOREFRONT_ENTITLEMENT_REQUIRED"
+	case errors.Is(err, ErrForbiddenParty):
+		status, code = http.StatusForbidden, "FORBIDDEN"
+	}
+	c.JSON(status, gin.H{"error": gin.H{"code": code, "message": err.Error()}})
+}
+
+func (h *Handler) createStorefront(c *gin.Context) {
+	ws, ok := businessPermission(c, "storefront.manage_appearance", "storefront.publish")
+	if !ok {
+		return
+	}
+	var in CreateStorefrontInput
+	if err := c.ShouldBindJSON(&in); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": err.Error()}})
+		return
+	}
+	sf, err := h.service.CreateStorefront(c.Request.Context(), ws.WorkspaceID, ws.UserID, in)
+	if err != nil {
+		h.storefrontError(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"data": gin.H{"storefront": sf}})
+}
+
+func (h *Handler) getMerchantStorefront(c *gin.Context) {
+	ws, ok := businessPermission(c, "storefront.view", "storefront.manage_appearance", "storefront.manage_catalogue", "storefront.publish")
+	if !ok {
+		return
+	}
+	sf, err := h.service.GetMerchantStorefront(c.Request.Context(), ws.WorkspaceID)
+	if err != nil {
+		h.storefrontError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"storefront": sf}})
+}
+
+func (h *Handler) updateStorefrontSettings(c *gin.Context) {
+	ws, ok := businessPermission(c, "storefront.manage_appearance", "storefront.manage_checkout")
+	if !ok {
+		return
+	}
+	var in UpdateStorefrontSettingsInput
+	if err := c.ShouldBindJSON(&in); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": err.Error()}})
+		return
+	}
+	sf, err := h.service.UpdateStorefrontSettings(c.Request.Context(), ws.WorkspaceID, in)
+	if err != nil {
+		h.storefrontError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"storefront": sf}})
+}
+
+func (h *Handler) publishStorefront(c *gin.Context) {
+	ws, ok := businessPermission(c, "storefront.publish")
+	if !ok {
+		return
+	}
+	sf, err := h.service.PublishStorefront(c.Request.Context(), ws.WorkspaceID, true)
+	if err != nil {
+		h.storefrontError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"storefront": sf}})
+}
+
+func (h *Handler) unpublishStorefront(c *gin.Context) {
+	ws, ok := businessPermission(c, "storefront.publish")
+	if !ok {
+		return
+	}
+	sf, err := h.service.PublishStorefront(c.Request.Context(), ws.WorkspaceID, false)
+	if err != nil {
+		h.storefrontError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"storefront": sf}})
+}
+
+func (h *Handler) setStorefrontEntitlement(c *gin.Context) {
+	ws, ok := businessPermission(c, "settings.manage", "storefront.publish")
+	if !ok {
+		return
+	}
+	var in struct {
+		EntitlementStatus string `json:"entitlement_status"`
+		GraceDays         int    `json:"grace_days"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": err.Error()}})
+		return
+	}
+	sf, err := h.service.SetStorefrontEntitlementState(c.Request.Context(), ws.WorkspaceID, strings.TrimSpace(in.EntitlementStatus), in.GraceDays)
+	if err != nil {
+		h.storefrontError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"storefront": sf}})
+}
+
+func (h *Handler) listStorefrontCollections(c *gin.Context) {
+	ws, ok := businessPermission(c, "storefront.view", "storefront.manage_catalogue")
+	if !ok {
+		return
+	}
+	cols, err := h.service.ListStorefrontCollections(c.Request.Context(), ws.WorkspaceID)
+	if err != nil {
+		h.storefrontError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"collections": cols}})
+}
+
+func (h *Handler) createStorefrontCollection(c *gin.Context) {
+	ws, ok := businessPermission(c, "storefront.manage_catalogue")
+	if !ok {
+		return
+	}
+	var in UpsertCollectionInput
+	if err := c.ShouldBindJSON(&in); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": err.Error()}})
+		return
+	}
+	col, err := h.service.CreateStorefrontCollection(c.Request.Context(), ws.WorkspaceID, in)
+	if err != nil {
+		h.storefrontError(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"data": gin.H{"collection": col}})
+}
+
+func (h *Handler) listMerchantStorefrontProducts(c *gin.Context) {
+	ws, ok := businessPermission(c, "storefront.view", "storefront.manage_catalogue")
+	if !ok {
+		return
+	}
+	items, err := h.service.ListMerchantStorefrontProducts(c.Request.Context(), ws.WorkspaceID)
+	if err != nil {
+		h.storefrontError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"products": items}})
+}
+
+func (h *Handler) upsertStorefrontProduct(c *gin.Context) {
+	ws, ok := businessPermission(c, "storefront.manage_catalogue")
+	if !ok {
+		return
+	}
+	variantID, err := strconv.ParseInt(c.Param("variantId"), 10, 64)
+	if err != nil || variantID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_ID", "message": "Invalid variant"}})
+		return
+	}
+	var in PublishCatalogueVariantInput
+	if err := c.ShouldBindJSON(&in); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": err.Error()}})
+		return
+	}
+	item, err := h.service.UpsertStorefrontProduct(c.Request.Context(), ws.WorkspaceID, variantID, in)
+	if err != nil {
+		h.storefrontError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"product": item}})
+}
+
+func (h *Handler) listStorefrontDomains(c *gin.Context) {
+	ws, ok := businessPermission(c, "storefront.view", "storefront.manage_domain")
+	if !ok {
+		return
+	}
+	domains, err := h.service.ListStorefrontDomains(c.Request.Context(), ws.WorkspaceID)
+	if err != nil {
+		h.storefrontError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"domains": domains}})
+}
+
+func (h *Handler) addCustomDomain(c *gin.Context) {
+	ws, ok := businessPermission(c, "storefront.manage_domain")
+	if !ok {
+		return
+	}
+	var in struct {
+		Hostname string `json:"hostname"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": err.Error()}})
+		return
+	}
+	domain, err := h.service.AddCustomDomain(c.Request.Context(), ws.WorkspaceID, in.Hostname)
+	if err != nil {
+		h.storefrontError(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"data": gin.H{"domain": domain}})
+}
+
+func (h *Handler) recheckCustomDomain(c *gin.Context) {
+	ws, ok := businessPermission(c, "storefront.manage_domain")
+	if !ok {
+		return
+	}
+	id, err := strconv.ParseInt(c.Param("domainId"), 10, 64)
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_ID", "message": "Invalid domain"}})
+		return
+	}
+	domain, err := h.service.RecheckCustomDomain(c.Request.Context(), ws.WorkspaceID, id)
+	if err != nil {
+		h.storefrontError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"domain": domain}})
+}
+
+func (h *Handler) disconnectCustomDomain(c *gin.Context) {
+	ws, ok := businessPermission(c, "storefront.manage_domain")
+	if !ok {
+		return
+	}
+	id, err := strconv.ParseInt(c.Param("domainId"), 10, 64)
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_ID", "message": "Invalid domain"}})
+		return
+	}
+	domain, err := h.service.DisconnectCustomDomain(c.Request.Context(), ws.WorkspaceID, id)
+	if err != nil {
+		h.storefrontError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"domain": domain}})
+}
+
+func (h *Handler) getStorefrontAnalytics(c *gin.Context) {
+	ws, ok := businessPermission(c, "storefront.view", "reports.view_basic")
+	if !ok {
+		return
+	}
+	days, _ := strconv.Atoi(c.Query("days"))
+	analytics, err := h.service.GetStorefrontAnalytics(c.Request.Context(), ws.WorkspaceID, days)
+	if err != nil {
+		h.storefrontError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"analytics": analytics}})
+}

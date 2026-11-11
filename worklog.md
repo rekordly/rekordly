@@ -434,3 +434,30 @@
   - `bun run lint`: 0 errors.
   - `bun test`: 52/52 tests passed across 4 files.
   - `bun run build`: Next.js production build succeeded cleanly.
+
+
+## 2026-11-11 — Blueprint 09 (Storefront, Orders, Domains & Fulfilment) Full Implementation
+- Implemented end-to-end **Blueprint 09** across `implementation/api` and `implementation/web`:
+  1. Database Schema & SQLC (`000048_blueprint_09_storefront.sql`, `finance_storefront.sql`):
+     - Added `storefronts`, `storefront_settings`, `storefront_collections`, `storefront_products`, `storefront_domains`, `storefront_carts`, `storefront_cart_lines`, `storefront_order_sequences`, `storefront_orders`, `storefront_order_lines`, `storefront_order_versions`, `storefront_order_events`, `storefront_fulfilments`, and `storefront_analytics_events`.
+     - Seeded all 12 Blueprint 09 permissions (`storefront.*`, `orders.*`) in `role_permissions` and `auth.RoleTemplateDefinitions()` (`me.go`), and extended `notifications_category_check` for `'storefront'` and `'orders'`.
+  2. Merchant Storefront Administration, Projections & Domains (`storefront_service.go`, `storefront_handler.go`):
+     - Draft storefront creation, normalized reserved-slug blocklist (`validateStorefrontSlug`), WCAG AA accessible hex contrast validation/fallback, HTML/script input sanitization, Cloudinary optimization (`f_auto,q_auto`), desktop/mobile preview data, publish/unpublish checks, and entitlement grace/expired lifecycle (`SetStorefrontEntitlementState`).
+     - Collections & allowlisted public catalogue projection (`UpsertStorefrontProduct`), never exposing supplier, cost, margin, internal notes, or batch/serial internals.
+     - Automatic `{slug}.rekordly.com` subdomain provisioning plus Custom Domain DNS TXT verification, TLS state tracking, disconnect, and anti-takeover host lookup.
+     - Privacy-minimized storefront funnel analytics (`GetStorefrontAnalytics`).
+  3. Public Storefront, Guest Cart, Checkout Request & Order Status Portal (`storefront_public_service.go`, `storefront_public_handler.go`):
+     - Host-header/slug resolution scoped to published/active storefronts with short-TTL projection cache invalidated on catalogue/settings changes.
+     - Non-reserving visitor carts with server-side price recalculation (`CART_ITEM_CHANGED` flagging), sliding-window checkout rate limiter, sanitized contact/delivery validation, policy acknowledgement, idempotency deduplication, and opaque public order-status tokens.
+     - Guest status portal endpoints (`GET /public/orders/:token`, `acknowledge`, `cancel`, `messages`) enforcing versioned customer acknowledgements and hiding internal notes/staff/costs/sequential IDs.
+  4. Merchant Order Review, Atomic Stock Reservation & Fulfilment (`storefront_order_service.go`, `storefront_order_handler.go`):
+     - Scoped order review inbox with live available-stock comparison and suggested customer matching, `request-change` creating versioned snapshots, all-or-nothing atomic confirmation reserving `stock_reservations` & `inventory_balances.reserved_quantity`, fulfilment consuming reservations & weighted-average COGS with balanced `cogs_sale` GL entries, safe pre-fulfilment cancellation releasing reservations, explicit invoice/proforma conversion, and CSV export (`orders.export`).
+  5. Frontend Storefront Admin & Public Shop (`storefront-admin-page.tsx`, `storefront-admin-drawers.tsx`, `(protected)/store/page.tsx`, `s/[slug]/page.tsx`, `orders/status/[token]/page.tsx`, `proxy.ts`, `types/finance.ts`, `lib/money.ts`):
+     - Replaced `/store` placeholder with complete merchant Storefront Console (Overview + Desktop/Mobile Preview, Appearance & Policies, Catalogue Visibility & Collections, Order Review/Confirm/Fulfilment, Custom Domains & DNS TXT setup, Analytics).
+     - Built public guest storefront (`/s/[slug]`) with search, collections, variant selection, availability indicators, non-reserving cart drawer, and guest checkout request flow; plus `noindex` order status portal (`/orders/status/[token]`).
+- Verification Suite:
+  - Live PostgreSQL migration (`000048_blueprint_09_storefront.sql`), `sqlc generate`, `go vet ./...` & `go test -count=1 ./...`: all packages passed (`internal/auth`, `internal/config`, `internal/database`, `internal/finance`, `internal/server`), including new integration tests in `internal/finance/blueprint_09_storefront_integration_test.go`.
+  - `bun run type-check`: 0 errors.
+  - `bun run lint`: 0 errors.
+  - `bun test`: 52/52 tests passed across 4 files.
+  - `bun run build`: Next.js production build compiled cleanly including `/store`, `/s/[slug]`, and `/orders/status/[token]`.

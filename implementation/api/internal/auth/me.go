@@ -149,15 +149,15 @@ func RoleTemplateDefinitions() map[string]struct {
 		},
 		"admin": {
 			Name:        "Admin",
-			Permissions: []string{"money.view", "money.create", "money.void", "sales.view", "sales.create", "purchases.view", "purchases.create", "purchases.request", "purchases.approve_request", "purchases.create_po", "purchases.approve_po", "purchases.issue_po", "purchases.receive", "purchases.receive_unplanned", "purchases.create_bill", "purchases.approve_bill", "purchases.accept_variance", "purchases.pay_supplier", "purchases.manage_advance", "purchases.return", "purchases.close_po", "invoices.view", "invoices.create", "reconcile.manage", "contacts.view", "contacts.manage", "inventory.view_quantity", "reports.view_basic", "reports.tax", "settings.manage"},
+			Permissions: []string{"money.view", "money.create", "money.void", "sales.view", "sales.create", "purchases.view", "purchases.create", "purchases.request", "purchases.approve_request", "purchases.create_po", "purchases.approve_po", "purchases.issue_po", "purchases.receive", "purchases.receive_unplanned", "purchases.create_bill", "purchases.approve_bill", "purchases.accept_variance", "purchases.pay_supplier", "purchases.manage_advance", "purchases.return", "purchases.close_po", "storefront.view", "storefront.manage_appearance", "storefront.manage_catalogue", "storefront.manage_checkout", "storefront.publish", "storefront.manage_domain", "orders.view", "orders.review", "orders.confirm", "orders.fulfil", "orders.cancel", "orders.export", "invoices.view", "invoices.create", "reconcile.manage", "contacts.view", "contacts.manage", "inventory.view_quantity", "reports.view_basic", "reports.tax", "settings.manage"},
 		},
 		"accountant": {
 			Name:        "Accountant / Bookkeeper",
-			Permissions: []string{"money.view", "money.create", "money.void", "sales.view", "purchases.view", "purchases.create_bill", "purchases.approve_bill", "purchases.accept_variance", "purchases.pay_supplier", "purchases.manage_advance", "purchases.return", "invoices.view", "invoices.create", "reconcile.manage", "contacts.view", "contacts.manage", "reports.view_basic", "reports.tax"},
+			Permissions: []string{"money.view", "money.create", "money.void", "sales.view", "purchases.view", "purchases.create_bill", "purchases.approve_bill", "purchases.accept_variance", "purchases.pay_supplier", "purchases.manage_advance", "purchases.return", "storefront.view", "orders.view", "orders.export", "invoices.view", "invoices.create", "reconcile.manage", "contacts.view", "contacts.manage", "reports.view_basic", "reports.tax"},
 		},
 		"sales": {
 			Name:        "Sales",
-			Permissions: []string{"sales.view", "sales.create", "invoices.view", "invoices.create", "contacts.view", "contacts.manage", "inventory.view_quantity"},
+			Permissions: []string{"sales.view", "sales.create", "storefront.view", "orders.view", "orders.review", "orders.confirm", "orders.fulfil", "orders.cancel", "invoices.view", "invoices.create", "contacts.view", "contacts.manage", "inventory.view_quantity"},
 		},
 		"cashier": {
 			Name:        "Cashier",
@@ -165,7 +165,7 @@ func RoleTemplateDefinitions() map[string]struct {
 		},
 		"inventory_manager": {
 			Name:        "Inventory Manager",
-			Permissions: []string{"inventory.view_quantity", "purchases.view", "purchases.request", "purchases.receive", "purchases.receive_unplanned", "purchases.return", "sales.view", "contacts.view"},
+			Permissions: []string{"inventory.view_quantity", "purchases.view", "purchases.request", "purchases.receive", "purchases.receive_unplanned", "purchases.return", "orders.view", "orders.fulfil", "orders.cancel", "sales.view", "contacts.view"},
 		},
 		"procurement": {
 			Name:        "Procurement",
@@ -173,7 +173,7 @@ func RoleTemplateDefinitions() map[string]struct {
 		},
 		"viewer": {
 			Name:        "Viewer / Auditor",
-			Permissions: []string{"money.view", "sales.view", "purchases.view", "invoices.view", "contacts.view", "inventory.view_quantity", "reports.view_basic"},
+			Permissions: []string{"money.view", "sales.view", "purchases.view", "storefront.view", "orders.view", "invoices.view", "contacts.view", "inventory.view_quantity", "reports.view_basic"},
 		},
 	}
 }

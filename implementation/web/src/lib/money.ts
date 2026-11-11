@@ -42,6 +42,17 @@ import type {
   PublicReceiptView,
   PublicStatementView,
   PurchaseOrderShareView,
+  Storefront,
+  StorefrontCollection,
+  MerchantStorefrontProduct,
+  StorefrontDomain,
+  StorefrontAnalytics,
+  PublicStorefrontProjection,
+  PublicStorefrontProduct,
+  ValidatedCart,
+  GuestCheckoutConfirmation,
+  PublicOrderStatus,
+  MerchantOrder,
   SalesReturn,
   CustomerCredit,
   CustomerCreditTransaction,
@@ -759,6 +770,79 @@ export const financeApi = {
         note,
       })
       .then((r) => r.share),
+
+  // Blueprint 09: Merchant Storefront, Orders & Domains
+  getMerchantStorefront: (workspaceId: number) =>
+    scopedGet<{ storefront: Storefront }>(workspaceId, "/api/v1/storefront").then((r) => r.storefront),
+  createStorefront: (workspaceId: number, body: { name: string; slug: string; theme_key?: string; default_outlet_id?: number; currency?: string }) =>
+    scopedPost<{ storefront: Storefront }>(workspaceId, "/api/v1/storefront", body).then((r) => r.storefront),
+  updateStorefrontSettings: (workspaceId: number, body: unknown) =>
+    scopedPatch<{ storefront: Storefront }>(workspaceId, "/api/v1/storefront/settings", body).then((r) => r.storefront),
+  publishStorefront: (workspaceId: number) =>
+    scopedPost<{ storefront: Storefront }>(workspaceId, "/api/v1/storefront/commands/publish", {}).then((r) => r.storefront),
+  unpublishStorefront: (workspaceId: number) =>
+    scopedPost<{ storefront: Storefront }>(workspaceId, "/api/v1/storefront/commands/unpublish", {}).then((r) => r.storefront),
+  setStorefrontEntitlement: (workspaceId: number, entitlement_status: "active" | "grace" | "expired", grace_days = 7) =>
+    scopedPost<{ storefront: Storefront }>(workspaceId, "/api/v1/storefront/commands/entitlement", { entitlement_status, grace_days }).then((r) => r.storefront),
+  listStorefrontCollections: (workspaceId: number) =>
+    scopedGet<{ collections: StorefrontCollection[] }>(workspaceId, "/api/v1/storefront/collections").then((r) => r.collections ?? []),
+  createStorefrontCollection: (workspaceId: number, body: { name: string; slug?: string; description?: string; image_url?: string; position?: number }) =>
+    scopedPost<{ collection: StorefrontCollection }>(workspaceId, "/api/v1/storefront/collections", body).then((r) => r.collection),
+  listMerchantStorefrontProducts: (workspaceId: number) =>
+    scopedGet<{ products: MerchantStorefrontProduct[] }>(workspaceId, "/api/v1/storefront/catalogue").then((r) => r.products ?? []),
+  upsertStorefrontProduct: (workspaceId: number, variantId: number, body: unknown) =>
+    scopedPut<{ product: MerchantStorefrontProduct }>(workspaceId, `/api/v1/storefront/catalogue/${variantId}`, body).then((r) => r.product),
+  listStorefrontDomains: (workspaceId: number) =>
+    scopedGet<{ domains: StorefrontDomain[] }>(workspaceId, "/api/v1/storefront/domains").then((r) => r.domains ?? []),
+  addCustomDomain: (workspaceId: number, hostname: string) =>
+    scopedPost<{ domain: StorefrontDomain }>(workspaceId, "/api/v1/storefront/domains", { hostname }).then((r) => r.domain),
+  recheckCustomDomain: (workspaceId: number, domainId: number) =>
+    scopedPost<{ domain: StorefrontDomain }>(workspaceId, `/api/v1/storefront/domains/${domainId}/commands/recheck`, {}).then((r) => r.domain),
+  disconnectCustomDomain: (workspaceId: number, domainId: number) =>
+    scopedPost<{ domain: StorefrontDomain }>(workspaceId, `/api/v1/storefront/domains/${domainId}/commands/disconnect`, {}).then((r) => r.domain),
+  getStorefrontAnalytics: (workspaceId: number, days = 30) =>
+    scopedGet<{ analytics: StorefrontAnalytics }>(workspaceId, "/api/v1/storefront/analytics", { days }).then((r) => r.analytics),
+
+  listMerchantOrders: (workspaceId: number, params: { status?: string; outlet_id?: number } = {}) =>
+    scopedGet<{ orders: MerchantOrder[] }>(workspaceId, "/api/v1/orders", params).then((r) => r.orders ?? []),
+  getMerchantOrder: (workspaceId: number, id: number) =>
+    scopedGet<{ order: MerchantOrder }>(workspaceId, `/api/v1/orders/${id}`).then((r) => r.order),
+  requestOrderChange: (workspaceId: number, id: number, body: unknown) =>
+    scopedPost<{ order: MerchantOrder }>(workspaceId, `/api/v1/orders/${id}/commands/request-change`, body).then((r) => r.order),
+  confirmStorefrontOrder: (workspaceId: number, id: number, body: unknown, key?: string) =>
+    scopedPost<{ order: MerchantOrder }>(workspaceId, `/api/v1/orders/${id}/commands/confirm`, body, key).then((r) => r.order),
+  fulfilStorefrontOrder: (workspaceId: number, id: number, body: unknown) =>
+    scopedPost<{ order: MerchantOrder }>(workspaceId, `/api/v1/orders/${id}/commands/fulfil`, body).then((r) => r.order),
+  cancelStorefrontOrder: (workspaceId: number, id: number, reason: string) =>
+    scopedPost<{ order: MerchantOrder }>(workspaceId, `/api/v1/orders/${id}/commands/cancel`, { reason }).then((r) => r.order),
+  declineStorefrontOrder: (workspaceId: number, id: number, reason: string) =>
+    scopedPost<{ order: MerchantOrder }>(workspaceId, `/api/v1/orders/${id}/commands/decline`, { reason }).then((r) => r.order),
+  linkOrderCustomer: (workspaceId: number, id: number, counterpartyId?: number) =>
+    scopedPost<{ order: MerchantOrder }>(workspaceId, `/api/v1/orders/${id}/commands/link-customer`, { counterparty_id: counterpartyId ?? 0 }).then((r) => r.order),
+  convertOrderToInvoice: (workspaceId: number, id: number, proforma = false) =>
+    scopedPost<{ order: MerchantOrder }>(workspaceId, `/api/v1/orders/${id}/commands/create-invoice`, { proforma }).then((r) => r.order),
+  postMerchantOrderMessage: (workspaceId: number, id: number, message: string, customerVisible = true) =>
+    scopedPost<{ order: MerchantOrder }>(workspaceId, `/api/v1/orders/${id}/commands/messages`, { message, customer_visible: customerVisible }).then((r) => r.order),
+
+  // Blueprint 09: Public Guest Storefront & Status Portal
+  getPublicStorefront: (slug: string, params: { q?: string; collection?: string } = {}) =>
+    apiClient.get<{ storefront: PublicStorefrontProjection }>(`/api/v1/public/storefronts/${encodeURIComponent(slug)}${buildQueryString(params)}`).then((r) => r.storefront),
+  getPublicStorefrontProduct: (slug: string, productId: number) =>
+    apiClient.get<{ product: PublicStorefrontProduct; variants: PublicStorefrontProduct[]; storefront: PublicStorefrontProjection }>(`/api/v1/public/storefronts/${encodeURIComponent(slug)}/products/${productId}`),
+  validatePublicCart: (slug: string, body: { lines: { storefront_product_id: number; quantity: string; expected_price_minor?: string }[]; delivery_method?: string }) =>
+    apiClient.post<typeof body, { cart: ValidatedCart }>(`/api/v1/public/storefronts/${encodeURIComponent(slug)}/carts/validate`, body).then((r) => r.cart),
+  upsertPublicCart: (slug: string, body: { cart_token?: string; lines: { storefront_product_id: number; quantity: string; expected_price_minor?: string }[]; delivery_method?: string }) =>
+    apiClient.post<typeof body, { cart: ValidatedCart }>(`/api/v1/public/storefronts/${encodeURIComponent(slug)}/carts`, body).then((r) => r.cart),
+  submitGuestCheckout: (slug: string, body: unknown, idempotencyKey: string) =>
+    apiClient.post<unknown, { order: GuestCheckoutConfirmation }>(`/api/v1/public/storefronts/${encodeURIComponent(slug)}/checkout`, body, { headers: { "Idempotency-Key": idempotencyKey } }).then((r) => r.order),
+  getPublicOrderStatus: (token: string) =>
+    apiClient.get<{ order: PublicOrderStatus }>(`/api/v1/public/orders/${encodeURIComponent(token)}`).then((r) => r.order),
+  postPublicOrderMessage: (token: string, message: string) =>
+    apiClient.post<{ message: string }, { order: PublicOrderStatus }>(`/api/v1/public/orders/${encodeURIComponent(token)}/messages`, { message }).then((r) => r.order),
+  acknowledgePublicOrderChanges: (token: string, expectedVersion: number) =>
+    apiClient.post<{ expected_version: number }, { order: PublicOrderStatus }>(`/api/v1/public/orders/${encodeURIComponent(token)}/acknowledge`, { expected_version: expectedVersion }).then((r) => r.order),
+  cancelPublicOrder: (token: string, reason?: string) =>
+    apiClient.post<{ reason?: string }, { order: PublicOrderStatus }>(`/api/v1/public/orders/${encodeURIComponent(token)}/cancel`, { reason }).then((r) => r.order),
 };
 
 /** Query keys are always namespaced by workspace so one space can never render another's rows. */

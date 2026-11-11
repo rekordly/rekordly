@@ -75,6 +75,11 @@ func (h *Handler) RegisterRoutes(group *gin.RouterGroup) {
 	h.RegisterBlueprintsCompletionRoutes(protected)
 	h.RegisterPublicBlueprintsCompletionRoutes(group)
 
+	// Storefront, Orders, Domains and Fulfilment (Blueprint 09)
+	h.RegisterStorefrontRoutes(protected)
+	h.RegisterStorefrontOrderRoutes(protected)
+	h.RegisterPublicStorefrontRoutes(group)
+
 	// Budgets and Tax-Readiness Reports
 	h.RegisterBudgetsTaxRoutes(protected)
 }

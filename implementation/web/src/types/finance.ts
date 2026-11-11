@@ -1125,3 +1125,309 @@ export interface FinanceSummary {
   monthly: { month: string; income_minor: string; expense_minor: string }[];
   spending_by_category: { category: string; total_minor: string }[];
 }
+
+
+// Blueprint 09: Storefront, Catalogue Projection, Domains, Orders & Fulfilment
+
+export interface StorefrontSettings {
+  tagline?: string | null;
+  description?: string | null;
+  logo_url?: string | null;
+  banner_url?: string | null;
+  primary_color: string;
+  accent_color: string;
+  background_color: string;
+  text_color: string;
+  font_family: string;
+  section_order: string[];
+  contact_phone?: string | null;
+  contact_email?: string | null;
+  whatsapp_number?: string | null;
+  address?: string | null;
+  business_hours: Record<string, string>;
+  social_links: Record<string, string>;
+  delivery_methods: string[];
+  delivery_guidance?: string | null;
+  default_delivery_fee_minor: string;
+  checkout_require_email: boolean;
+  checkout_require_phone: boolean;
+  return_policy?: string | null;
+  privacy_policy?: string | null;
+  terms_policy?: string | null;
+  custom_policy?: string | null;
+  seo_title?: string | null;
+  seo_description?: string | null;
+  seo_image_url?: string | null;
+  seo_indexable: boolean;
+  version: number;
+}
+
+export interface Storefront {
+  id: number;
+  workspace_id: number;
+  name: string;
+  slug: string;
+  status: "draft" | "published" | "unpublished" | "suspended" | "grace" | "disabled";
+  theme_key: "classic" | "modern" | "editorial" | "minimal";
+  version: number;
+  default_outlet_id?: number | null;
+  currency: string;
+  currency_exponent: number;
+  reservation_ttl_hours: number;
+  entitlement_status: "active" | "grace" | "expired";
+  subdomain_host: string;
+  published_product_count: number;
+  settings: StorefrontSettings;
+}
+
+export interface StorefrontCollection {
+  id: number;
+  name: string;
+  slug: string;
+  description?: string | null;
+  image_url?: string | null;
+  position: number;
+  is_visible: boolean;
+}
+
+export interface MerchantStorefrontProduct {
+  id: number;
+  product_id: number;
+  variant_id: number;
+  collection_id?: number | null;
+  is_published: boolean;
+  is_featured: boolean;
+  public_title: string;
+  public_description?: string | null;
+  public_sku?: string | null;
+  image_urls: string[];
+  public_price_minor: string;
+  currency: string;
+  availability_policy: "in_out_stock" | "exact_quantity" | "low_stock" | "hide_unavailable" | "allow_request";
+  low_stock_threshold: number;
+  max_qty_per_order: number;
+  contact_only: boolean;
+  position: number;
+  product_kind: string;
+  variant_name: string;
+}
+
+export interface StorefrontDomain {
+  id: number;
+  hostname: string;
+  domain_type: "subdomain" | "custom";
+  status: string;
+  verification_txt_host?: string | null;
+  verification_token?: string | null;
+  tls_status: string;
+  check_attempts: number;
+  last_error?: string | null;
+  is_primary: boolean;
+}
+
+export interface StorefrontAnalytics {
+  since_date: string;
+  page_views: number;
+  product_views: number;
+  collection_views: number;
+  searches: number;
+  add_to_carts: number;
+  checkouts_started: number;
+  checkouts_submitted: number;
+  orders_confirmed: number;
+  orders_declined: number;
+  orders_cancelled: number;
+  orders_fulfilled: number;
+}
+
+export interface PublicStorefrontProduct {
+  id: number;
+  product_id: number;
+  variant_id: number;
+  collection_id?: number | null;
+  is_featured: boolean;
+  title: string;
+  description?: string | null;
+  sku?: string | null;
+  image_urls: string[];
+  price_minor: string;
+  currency: string;
+  currency_exponent: number;
+  product_kind: string;
+  variant_name: string;
+  unit_name: string;
+  availability_policy: string;
+  availability_state: "in_stock" | "low_stock" | "out_of_stock" | "request_only";
+  available_quantity?: string | null;
+  max_qty_per_order: number;
+  contact_only: boolean;
+  seo_slug?: string | null;
+  seo_title?: string | null;
+  seo_description?: string | null;
+}
+
+export interface PublicStorefrontProjection {
+  name: string;
+  slug: string;
+  theme_key: string;
+  currency: string;
+  currency_exponent: number;
+  tagline?: string | null;
+  description?: string | null;
+  logo_url?: string | null;
+  banner_url?: string | null;
+  primary_color: string;
+  accent_color: string;
+  background_color: string;
+  text_color: string;
+  font_family: string;
+  section_order: string[];
+  contact_phone?: string | null;
+  contact_email?: string | null;
+  whatsapp_number?: string | null;
+  address?: string | null;
+  business_hours: Record<string, string>;
+  social_links: Record<string, string>;
+  delivery_methods: string[];
+  delivery_guidance?: string | null;
+  default_delivery_fee_minor: string;
+  checkout_require_email: boolean;
+  checkout_require_phone: boolean;
+  return_policy?: string | null;
+  privacy_policy?: string | null;
+  terms_policy?: string | null;
+  custom_policy?: string | null;
+  seo_title?: string | null;
+  seo_description?: string | null;
+  seo_image_url?: string | null;
+  seo_indexable: boolean;
+  availability_as_of: string;
+  collections: StorefrontCollection[];
+  products: PublicStorefrontProduct[];
+}
+
+export interface ValidatedCartLine {
+  storefront_product_id: number;
+  title: string;
+  variant_name: string;
+  quantity: string;
+  unit_price_minor: string;
+  line_total_minor: string;
+  availability_state: string;
+  changed: boolean;
+  change_reason?: string;
+}
+
+export interface ValidatedCart {
+  cart_token?: string;
+  currency: string;
+  currency_exponent: number;
+  subtotal_minor: string;
+  estimated_tax_minor: string;
+  delivery_fee_minor: string;
+  estimated_total_minor: string;
+  has_changes: boolean;
+  lines: ValidatedCartLine[];
+}
+
+export interface GuestCheckoutConfirmation {
+  order_reference: string;
+  status_token?: string;
+  commercial_status: string;
+  fulfilment_status: string;
+  payment_status: string;
+  currency: string;
+  total_minor: string;
+  message: string;
+}
+
+export interface PublicOrderEvent {
+  event_type: string;
+  actor_type: string;
+  message?: string | null;
+  created_at: string;
+}
+
+export interface PublicOrderStatus {
+  order_reference: string;
+  storefront_name: string;
+  storefront_slug: string;
+  merchant_phone?: string | null;
+  merchant_email?: string | null;
+  merchant_whatsapp?: string | null;
+  commercial_status: string;
+  fulfilment_status: string;
+  payment_status: string;
+  version: number;
+  currency: string;
+  currency_exponent: number;
+  subtotal_minor: string;
+  delivery_fee_minor: string;
+  total_minor: string;
+  delivery_method: string;
+  delivery_address?: string | null;
+  payment_arrangement?: string | null;
+  requires_customer_ack: boolean;
+  latest_change_summary?: string | null;
+  linked_invoice_share_token?: string | null;
+  decline_or_cancel_reason?: string | null;
+  lines: {
+    title: string;
+    variant_name?: string | null;
+    unit_name: string;
+    requested_quantity: string;
+    confirmed_quantity: string;
+    fulfilled_quantity: string;
+    unit_price_minor: string;
+    line_total_minor: string;
+  }[];
+  events: PublicOrderEvent[];
+  created_at: string;
+}
+
+export interface MerchantOrderLine {
+  id: number;
+  product_id: number;
+  variant_id?: number | null;
+  product_kind: string;
+  title: string;
+  variant_name?: string | null;
+  unit_name: string;
+  requested_quantity: string;
+  confirmed_quantity: string;
+  fulfilled_quantity: string;
+  unit_price_minor: string;
+  line_total_minor: string;
+  available_quantity: string;
+  reservation_id?: number | null;
+}
+
+export interface MerchantOrder {
+  id: number;
+  order_reference: string;
+  customer_id?: number | null;
+  outlet_id?: number | null;
+  commercial_status: string;
+  fulfilment_status: string;
+  payment_status: string;
+  version: number;
+  currency: string;
+  currency_exponent: number;
+  subtotal_minor: string;
+  delivery_fee_minor: string;
+  total_minor: string;
+  delivery_method: string;
+  customer_name: string;
+  customer_phone?: string | null;
+  customer_email?: string | null;
+  organization_name?: string | null;
+  delivery_address?: string | null;
+  customer_note?: string | null;
+  payment_arrangement?: string | null;
+  linked_invoice_id?: number | null;
+  decline_or_cancel_reason?: string | null;
+  created_at: string;
+  lines?: MerchantOrderLine[];
+  events?: PublicOrderEvent[];
+  suggested_customers?: { id: number; name: string; phone?: string | null; email?: string | null }[];
+}

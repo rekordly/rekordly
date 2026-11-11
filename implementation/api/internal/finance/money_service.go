@@ -31,12 +31,17 @@ type Service struct {
 	queries          *db.Queries
 	planLimitChecker PlanLimitChecker
 	evidenceUploader EvidenceUploadAuthorizer
+	dnsLookupTXT     func(string) ([]string, error)
 }
 
 type ServiceOption func(*Service)
 
 func WithCloudinaryEvidence(config CloudinaryEvidenceConfig) ServiceOption {
 	return func(service *Service) { service.evidenceUploader = NewCloudinaryEvidenceAuthorizer(config) }
+}
+
+func WithStorefrontDNSLookup(fn func(string) ([]string, error)) ServiceOption {
+	return func(service *Service) { service.dnsLookupTXT = fn }
 }
 
 func NewService(pool *pgxpool.Pool, options ...ServiceOption) *Service {
