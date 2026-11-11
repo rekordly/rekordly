@@ -386,6 +386,7 @@ export const financeApi = {
   },
   createGoodsReceipt: (workspaceId: number, body: unknown, key: string) => scopedPost(workspaceId, "/api/v1/goods-receipts", body, key),
   async listGoodsReceipts(workspaceId:number){const r=await scopedGet<{receipts:GoodsReceipt[]}>(workspaceId,"/api/v1/goods-receipts");return r.receipts??[]},
+  getGoodsReceipt: (workspaceId: number, id: number) => scopedGet<{ receipt: GoodsReceipt }>(workspaceId, `/api/v1/goods-receipts/${id}`).then((result) => result.receipt),
   async listSupplierBills(workspaceId:number){const r=await scopedGet<{bills:SupplierBill[]}>(workspaceId,"/api/v1/supplier-bills");return r.bills??[]},
   createSupplierBill:(workspaceId:number,body:unknown,key:string)=>scopedPost<{bill:SupplierBill}>(workspaceId,"/api/v1/supplier-bills",body,key),
   approveSupplierBill:(workspaceId:number,id:number,expectedVersion:number,key:string)=>scopedPost<{bill:SupplierBill}>(workspaceId,`/api/v1/supplier-bills/${id}/commands/approve`,{expected_version:expectedVersion},key),

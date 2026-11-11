@@ -245,7 +245,8 @@ export interface ReceiptOptionLine {
   description: string;
   remaining_quantity: string;
 }
-export interface GoodsReceipt { id:number; purchase_order_id:number; received_on:string; receipt_reference?:string|null; }
+export interface GoodsReceiptLine { id:number; purchase_order_line_id:number; product_id?:number|null; description:string; accepted_quantity:string; unit_cost_minor:string; line_total_minor:string; }
+export interface GoodsReceipt { id:number; purchase_order_id:number; received_on:string; receipt_reference?:string|null; lines?:GoodsReceiptLine[]; }
 export interface SupplierBill { id:number; goods_receipt_id:number; goods_receipt_linked?:boolean; bill_type?:"receipt"|"direct_expense"|"direct_service"; due_date?:string|null; overdue?:boolean; status:"draft"|"approved"|"partially_paid"|"paid"|"voided"; version:number; total_minor:string; outstanding_minor:string; }
 export interface SupplierAdvance {
   id: number;
