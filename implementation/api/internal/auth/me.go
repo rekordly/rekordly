@@ -135,17 +135,52 @@ func (service *Service) CurrentUser(ctx context.Context, rawSession string) (Cur
 	return result, nil
 }
 
-func defaultPermissionsForRoleCode(code string) []string {
-	switch code {
-	case "admin":
-		return []string{"money.view", "money.create", "sales.view", "sales.create", "purchases.view", "inventory.view_quantity", "reports.view_basic", "settings.manage"}
-	case "accountant":
-		return []string{"money.view", "money.create", "sales.view", "purchases.view", "reports.view_basic"}
-	case "cashier":
-		return []string{"money.view", "sales.view", "sales.create"}
-	case "viewer":
-		return []string{"money.view", "sales.view", "reports.view_basic"}
-	default:
-		return []string{"money.view", "money.create", "sales.view", "purchases.view", "inventory.view_quantity", "reports.view_basic"}
+func RoleTemplateDefinitions() map[string]struct {
+	Name        string
+	Permissions []string
+} {
+	return map[string]struct {
+		Name        string
+		Permissions []string
+	}{
+		"owner": {
+			Name:        "Owner",
+			Permissions: []string{"*"},
+		},
+		"admin": {
+			Name:        "Admin",
+			Permissions: []string{"money.view", "money.create", "money.void", "sales.view", "sales.create", "purchases.view", "purchases.create", "invoices.view", "invoices.create", "reconcile.manage", "contacts.view", "contacts.manage", "inventory.view_quantity", "reports.view_basic", "reports.tax", "settings.manage"},
+		},
+		"accountant": {
+			Name:        "Accountant / Bookkeeper",
+			Permissions: []string{"money.view", "money.create", "money.void", "sales.view", "purchases.view", "invoices.view", "invoices.create", "reconcile.manage", "contacts.view", "contacts.manage", "reports.view_basic", "reports.tax"},
+		},
+		"sales": {
+			Name:        "Sales",
+			Permissions: []string{"sales.view", "sales.create", "invoices.view", "invoices.create", "contacts.view", "contacts.manage", "inventory.view_quantity"},
+		},
+		"cashier": {
+			Name:        "Cashier",
+			Permissions: []string{"money.view", "money.create", "sales.view", "sales.create", "invoices.view", "contacts.view"},
+		},
+		"inventory_manager": {
+			Name:        "Inventory Manager",
+			Permissions: []string{"inventory.view_quantity", "purchases.view", "sales.view", "contacts.view"},
+		},
+		"procurement": {
+			Name:        "Procurement",
+			Permissions: []string{"purchases.view", "purchases.create", "contacts.view", "contacts.manage", "inventory.view_quantity"},
+		},
+		"viewer": {
+			Name:        "Viewer / Auditor",
+			Permissions: []string{"money.view", "sales.view", "purchases.view", "invoices.view", "contacts.view", "inventory.view_quantity", "reports.view_basic"},
+		},
 	}
+}
+
+func defaultPermissionsForRoleCode(code string) []string {
+	if def, ok := RoleTemplateDefinitions()[code]; ok {
+		return def.Permissions
+	}
+	return []string{"money.view", "money.create", "sales.view", "sales.create", "purchases.view", "invoices.view", "invoices.create", "contacts.view", "inventory.view_quantity", "reports.view_basic"}
 }

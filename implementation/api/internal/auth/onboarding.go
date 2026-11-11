@@ -262,11 +262,29 @@ func ensureOwnedWorkspace(ctx context.Context, tx pgx.Tx, userID int64, kind str
 	if err := tx.QueryRow(ctx, `INSERT INTO workspaces (kind, name, slug, base_currency, timezone, owner_user_id, business_type, country_code) VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''), NULLIF($8, '')) RETURNING id`, kind, setup.Name, slug, setup.BaseCurrency, setup.Timezone, userID, setup.BusinessType, setup.Country).Scan(&workspaceID); err != nil {
 		return CreatedWorkspace{}, err
 	}
-	var roleID int64
-	if err := tx.QueryRow(ctx, `INSERT INTO roles (workspace_id, code, name) VALUES ($1, 'owner', 'Owner') RETURNING id`, workspaceID).Scan(&roleID); err != nil {
+	var ownerRoleID int64
+	if err := tx.QueryRow(ctx, `INSERT INTO roles (workspace_id, code, name) VALUES ($1, 'owner', 'Owner') RETURNING id`, workspaceID).Scan(&ownerRoleID); err != nil {
 		return CreatedWorkspace{}, err
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO memberships (workspace_id, user_id, role_id, is_owner) VALUES ($1, $2, $3, true)`, workspaceID, userID, roleID); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO role_permissions (role_id, permission_code) VALUES ($1, '*') ON CONFLICT DO NOTHING`, ownerRoleID); err != nil {
+		return CreatedWorkspace{}, err
+	}
+	// Seed prebuilt Blueprint 02 role templates for the workspace
+	for code, def := range RoleTemplateDefinitions() {
+		if code == "owner" {
+			continue
+		}
+		var rID int64
+		if err := tx.QueryRow(ctx, `INSERT INTO roles (workspace_id, code, name) VALUES ($1, $2, $3) ON CONFLICT (workspace_id, code) WHERE NOT is_system DO UPDATE SET name = EXCLUDED.name RETURNING id`, workspaceID, code, def.Name).Scan(&rID); err != nil {
+			return CreatedWorkspace{}, err
+		}
+		for _, pCode := range def.Permissions {
+			if _, err := tx.Exec(ctx, `INSERT INTO role_permissions (role_id, permission_code) VALUES ($1, $2) ON CONFLICT DO NOTHING`, rID, pCode); err != nil {
+				return CreatedWorkspace{}, err
+			}
+		}
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO memberships (workspace_id, user_id, role_id, is_owner) VALUES ($1, $2, $3, true)`, workspaceID, userID, ownerRoleID); err != nil {
 		return CreatedWorkspace{}, err
 	}
 	return CreatedWorkspace{ID: workspaceID, Kind: kind, Name: setup.Name}, nil

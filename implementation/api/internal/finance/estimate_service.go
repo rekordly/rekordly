@@ -25,6 +25,8 @@ type EstimateItemInput struct {
 	Quantity       string `json:"quantity"` // decimal string e.g. "2" or "1.5"
 	UnitPriceMinor int64  `json:"unit_price_minor"`
 	UnitPrice      string `json:"unit_price"` // optional major decimal string
+	DiscountMinor  int64  `json:"discount_minor"`
+	DiscountAmount string `json:"discount_amount"`
 }
 
 type CreateEstimateInput struct {
@@ -35,6 +37,7 @@ type CreateEstimateInput struct {
 	ExpiryDate        string              `json:"expiry_date" binding:"required"`
 	TaxAmountMinor    int64               `json:"tax_amount_minor"`
 	TaxAmount         string              `json:"tax_amount"` // optional major decimal string
+	TaxLines          []TaxLineInput      `json:"tax_lines"`
 	DiscountMinor     int64               `json:"discount_minor"`
 	DiscountAmount    string              `json:"discount_amount"`
 	DeliveryFeeMinor  int64               `json:"delivery_fee_minor"`
@@ -54,6 +57,7 @@ type UpdateDraftEstimateInput struct {
 	ExpiryDate     string              `json:"expiry_date"`
 	TaxAmountMinor int64               `json:"tax_amount_minor"`
 	TaxAmount      string              `json:"tax_amount"`
+	TaxLines       []TaxLineInput      `json:"tax_lines"`
 	Items          []EstimateItemInput `json:"items"`
 	Notes          string              `json:"notes"`
 	Terms          string              `json:"terms"`
@@ -62,6 +66,7 @@ type UpdateDraftEstimateInput struct {
 type EstimateDetail struct {
 	Estimate db.Estimate        `json:"estimate"`
 	Items    []db.EstimateItem  `json:"items"`
+	TaxLines []db.EstimateTaxLine `json:"tax_lines,omitempty"`
 }
 
 func (s *Service) CreateEstimate(ctx context.Context, workspaceID, userID int64, in CreateEstimateInput) (EstimateDetail, error) {
@@ -128,10 +133,11 @@ func (s *Service) CreateEstimate(ctx context.Context, workspaceID, userID int64,
 	}
 
 	type lineCalc struct {
-		description string
-		quantity    decimal.Decimal
-		unitPrice   int64
-		amount      int64
+		description   string
+		quantity      decimal.Decimal
+		unitPrice     int64
+		discountMinor int64
+		amount        int64
 	}
 
 	var lines []lineCalc
@@ -164,14 +170,27 @@ func (s *Service) CreateEstimate(ctx context.Context, workspaceID, userID int64,
 			return EstimateDetail{}, errors.New("item unit price cannot be negative")
 		}
 
-		lineAmount := qty.Mul(decimal.NewFromInt(unitPrice)).Round(0).IntPart()
+		itemDisc := it.DiscountMinor
+		if itemDisc == 0 && it.DiscountAmount != "" {
+			parsedDisc, err := ParseMajorToMinor(it.DiscountAmount, exponent)
+			if err != nil {
+				return EstimateDetail{}, fmt.Errorf("invalid item discount_amount: %w", err)
+			}
+			itemDisc = parsedDisc
+		}
+		grossAmount := qty.Mul(decimal.NewFromInt(unitPrice)).Round(0).IntPart()
+		if itemDisc < 0 || itemDisc > grossAmount {
+			return EstimateDetail{}, errors.New("line item discount must be between 0 and line gross amount")
+		}
+		lineAmount := grossAmount - itemDisc
 		subtotal += lineAmount
 
 		lines = append(lines, lineCalc{
-			description: desc,
-			quantity:    qty,
-			unitPrice:   unitPrice,
-			amount:      lineAmount,
+			description:   desc,
+			quantity:      qty,
+			unitPrice:     unitPrice,
+			discountMinor: itemDisc,
+			amount:        lineAmount,
 		})
 	}
 
@@ -205,6 +224,15 @@ func (s *Service) CreateEstimate(ctx context.Context, workspaceID, userID int64,
 	}
 	if discount < 0 || delivery < 0 {
 		return EstimateDetail{}, errors.New("discount and delivery fee cannot be negative")
+	}
+
+	var computedTaxLines []computedTaxLine
+	if len(in.TaxLines) > 0 {
+		var taxErr error
+		computedTaxLines, tax, taxErr = ComputeMultiTaxLines(in.TaxLines, subtotal-discount, exponent)
+		if taxErr != nil {
+			return EstimateDetail{}, taxErr
+		}
 	}
 
 	total := subtotal - discount + tax + delivery
@@ -267,8 +295,32 @@ func (s *Service) CreateEstimate(ctx context.Context, workspaceID, userID int64,
 		if err != nil {
 			return EstimateDetail{}, fmt.Errorf("failed to insert estimate item: %w", err)
 		}
+		if l.discountMinor > 0 {
+			if updItem, dErr := qtx.SetEstimateItemDiscount(ctx, db.SetEstimateItemDiscountParams{
+				ID: item.ID, WorkspaceID: workspaceID, DiscountMinor: l.discountMinor, AmountMinor: l.amount,
+			}); dErr == nil {
+				item = updItem
+			}
+		}
 		insertedItems = append(insertedItems, item)
 	}
+
+	var savedTaxLines []db.EstimateTaxLine
+	for _, tl := range computedTaxLines {
+		if tlRec, tErr := qtx.CreateEstimateTaxLine(ctx, db.CreateEstimateTaxLineParams{
+			WorkspaceID: workspaceID,
+			EstimateID:  est.ID,
+			Name:        tl.Name,
+			RateBps:     tl.RateBps,
+			AmountMinor: tl.AmountMinor,
+			IsCompound:  tl.IsCompound,
+			SortOrder:   tl.SortOrder,
+		}); tErr == nil {
+			savedTaxLines = append(savedTaxLines, tlRec)
+		}
+	}
+
+	_ = s.recordDocumentVersion(ctx, qtx, workspaceID, userID, "estimate", est.ID, "Created estimate ("+est.Status+")", ginMap("estimate", est, "items", insertedItems, "tax_lines", savedTaxLines))
 
 	if err := tx.Commit(ctx); err != nil {
 		return EstimateDetail{}, err
@@ -277,6 +329,7 @@ func (s *Service) CreateEstimate(ctx context.Context, workspaceID, userID int64,
 	return EstimateDetail{
 		Estimate: est,
 		Items:    insertedItems,
+		TaxLines: savedTaxLines,
 	}, nil
 }
 
@@ -297,9 +350,15 @@ func (s *Service) GetEstimate(ctx context.Context, workspaceID, estimateID int64
 		return EstimateDetail{}, err
 	}
 
+	taxLines, _ := s.queries.ListEstimateTaxLines(ctx, db.ListEstimateTaxLinesParams{
+		EstimateID:  estimateID,
+		WorkspaceID: workspaceID,
+	})
+
 	return EstimateDetail{
 		Estimate: est,
 		Items:    items,
+		TaxLines: taxLines,
 	}, nil
 }
 
@@ -335,9 +394,15 @@ func (s *Service) UpdateEstimateStatus(ctx context.Context, workspaceID, estimat
 		return EstimateDetail{}, err
 	}
 
+	taxLines, _ := s.queries.ListEstimateTaxLines(ctx, db.ListEstimateTaxLinesParams{
+		EstimateID:  estimateID,
+		WorkspaceID: workspaceID,
+	})
+
 	return EstimateDetail{
 		Estimate: est,
 		Items:    items,
+		TaxLines: taxLines,
 	}, nil
 }
 
@@ -352,7 +417,7 @@ func (s *Service) ConvertEstimateToInvoice(ctx context.Context, workspaceID, use
 		return InvoiceDetail{}, ErrEstimateAlreadyConverted
 	}
 
-	// Prepare invoice items
+	// Prepare invoice items & multi-tax lines
 	var invoiceItems []InvoiceItemInput
 	for _, it := range estDetail.Items {
 		qtyInt := int32(it.Quantity.Round(0).IntPart())
@@ -363,6 +428,16 @@ func (s *Service) ConvertEstimateToInvoice(ctx context.Context, workspaceID, use
 			Description:    it.Description,
 			Quantity:       qtyInt,
 			UnitPriceMinor: it.UnitPriceMinor,
+			DiscountMinor:  it.DiscountMinor,
+		})
+	}
+	var taxLineInputs []TaxLineInput
+	for _, tl := range estDetail.TaxLines {
+		taxLineInputs = append(taxLineInputs, TaxLineInput{
+			Name:        tl.Name,
+			RateBps:     tl.RateBps,
+			AmountMinor: tl.AmountMinor,
+			IsCompound:  tl.IsCompound,
 		})
 	}
 
@@ -392,14 +467,15 @@ func (s *Service) ConvertEstimateToInvoice(ctx context.Context, workspaceID, use
 		IssueDate:        todayStr,
 		DueDate:          dueStr,
 		TaxAmountMinor:   est.TaxAmountMinor,
+		TaxLines:         taxLineInputs,
 		DiscountMinor:    est.DiscountMinor,
 		DeliveryFeeMinor: est.DeliveryFeeMinor,
 		Currency:         est.Currency,
-		Status:         "draft",
-		Items:          invoiceItems,
-		Notes:          est.Notes.String,
-		Terms:          est.Terms.String,
-		IdempotencyKey: idempotencyKey,
+		Status:           "draft",
+		Items:            invoiceItems,
+		Notes:            est.Notes.String,
+		Terms:            est.Terms.String,
+		IdempotencyKey:   idempotencyKey,
 	}
 
 	invDetail, err := s.CreateInvoice(ctx, workspaceID, userID, invoiceIn)

@@ -450,6 +450,18 @@ func moneyCaptureWorkspace(c *gin.Context) (WorkspaceContext, bool) {
 		moneyCaptureError(c, http.StatusBadRequest, "INVALID_WORKSPACE", err)
 		return WorkspaceContext{}, false
 	}
+	required := "money.create"
+	if c.Request.Method == http.MethodGet {
+		if !wsCtx.HasPermission("money.view") && !wsCtx.HasPermission("money.create") {
+			c.JSON(http.StatusForbidden, gin.H{"error": gin.H{"code": "FORBIDDEN", "message": "Missing money.view permission"}})
+			return WorkspaceContext{}, false
+		}
+		return wsCtx, true
+	}
+	if !wsCtx.HasPermission(required) {
+		c.JSON(http.StatusForbidden, gin.H{"error": gin.H{"code": "FORBIDDEN", "message": "Missing money.create permission"}})
+		return WorkspaceContext{}, false
+	}
 	return wsCtx, true
 }
 

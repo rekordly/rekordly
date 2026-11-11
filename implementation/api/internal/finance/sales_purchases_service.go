@@ -34,6 +34,22 @@ type CreateCounterpartyInput struct {
 	Phone               string `json:"phone"`
 	Notes               string `json:"notes"`
 	OpeningBalanceMinor int64  `json:"opening_balance_minor"`
+	OpeningBalance      string `json:"opening_balance"` // optional major decimal string (positive = owes business / owed to supplier)
+}
+
+func (s *Service) resolveCounterpartyOpeningBalance(ctx context.Context, workspaceID int64, rawMinor int64, rawMajor string) (int64, error) {
+	if strings.TrimSpace(rawMajor) == "" {
+		return rawMinor, nil
+	}
+	currency := "NGN"
+	if profile, err := s.queries.GetWorkspaceProfile(ctx, workspaceID); err == nil && profile.BaseCurrency != "" {
+		currency = profile.BaseCurrency
+	}
+	parsed, err := ParseMajorToMinor(rawMajor, CurrencyExponent(currency))
+	if err != nil {
+		return 0, fmt.Errorf("invalid opening_balance: %w", err)
+	}
+	return parsed, nil
 }
 
 func (s *Service) CreateCounterparty(ctx context.Context, workspaceID int64, in CreateCounterpartyInput) (db.Counterparty, error) {
@@ -49,6 +65,11 @@ func (s *Service) CreateCounterparty(ctx context.Context, workspaceID int64, in 
 		return db.Counterparty{}, errors.New("invalid party type: must be customer, supplier, or both")
 	}
 
+	openMinor, err := s.resolveCounterpartyOpeningBalance(ctx, workspaceID, in.OpeningBalanceMinor, in.OpeningBalance)
+	if err != nil {
+		return db.Counterparty{}, err
+	}
+
 	return s.queries.CreateCounterparty(ctx, db.CreateCounterpartyParams{
 		WorkspaceID:         workspaceID,
 		Name:                name,
@@ -56,7 +77,7 @@ func (s *Service) CreateCounterparty(ctx context.Context, workspaceID int64, in 
 		Email:               optionalPgText(in.Email),
 		Phone:               optionalPgText(in.Phone),
 		Notes:               optionalPgText(in.Notes),
-		OpeningBalanceMinor: in.OpeningBalanceMinor,
+		OpeningBalanceMinor: openMinor,
 		IsActive:            true,
 	})
 }
@@ -78,6 +99,15 @@ func (s *Service) UpdateCounterparty(ctx context.Context, workspaceID, partyID i
 		return db.Counterparty{}, errors.New("invalid party type")
 	}
 
+	openMinor := existing.OpeningBalanceMinor
+	if strings.TrimSpace(in.OpeningBalance) != "" || in.OpeningBalanceMinor != 0 {
+		parsed, err := s.resolveCounterpartyOpeningBalance(ctx, workspaceID, in.OpeningBalanceMinor, in.OpeningBalance)
+		if err != nil {
+			return db.Counterparty{}, err
+		}
+		openMinor = parsed
+	}
+
 	updated, err := s.queries.UpdateCounterparty(ctx, db.UpdateCounterpartyParams{
 		ID:                  partyID,
 		WorkspaceID:         workspaceID,
@@ -86,7 +116,7 @@ func (s *Service) UpdateCounterparty(ctx context.Context, workspaceID, partyID i
 		Email:               optionalPgText(in.Email),
 		Phone:               optionalPgText(in.Phone),
 		Notes:               optionalPgText(in.Notes),
-		OpeningBalanceMinor: in.OpeningBalanceMinor,
+		OpeningBalanceMinor: openMinor,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return db.Counterparty{}, ErrNotFound

@@ -31,9 +31,8 @@ func (h *BankReconciliationHandler) RegisterReconciliationRoutes(protected *gin.
 }
 
 func (h *BankReconciliationHandler) listReconciliations(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "reconcile.manage", "money.view")
+	if !ok {
 		return
 	}
 
@@ -54,9 +53,8 @@ func (h *BankReconciliationHandler) listReconciliations(c *gin.Context) {
 }
 
 func (h *BankReconciliationHandler) startReconciliation(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "reconcile.manage")
+	if !ok {
 		return
 	}
 
@@ -76,9 +74,8 @@ func (h *BankReconciliationHandler) startReconciliation(c *gin.Context) {
 }
 
 func (h *BankReconciliationHandler) getReconciliation(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "reconcile.manage", "money.view")
+	if !ok {
 		return
 	}
 
@@ -102,9 +99,8 @@ func (h *BankReconciliationHandler) getReconciliation(c *gin.Context) {
 }
 
 func (h *BankReconciliationHandler) matchTransaction(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "reconcile.manage")
+	if !ok {
 		return
 	}
 
@@ -132,9 +128,8 @@ func (h *BankReconciliationHandler) matchTransaction(c *gin.Context) {
 }
 
 func (h *BankReconciliationHandler) unmatchTransaction(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "reconcile.manage")
+	if !ok {
 		return
 	}
 
@@ -162,9 +157,8 @@ func (h *BankReconciliationHandler) unmatchTransaction(c *gin.Context) {
 }
 
 func (h *BankReconciliationHandler) completeReconciliation(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "reconcile.manage")
+	if !ok {
 		return
 	}
 
@@ -184,9 +178,8 @@ func (h *BankReconciliationHandler) completeReconciliation(c *gin.Context) {
 }
 
 func (h *BankReconciliationHandler) importBankLines(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "reconcile.manage")
+	if !ok {
 		return
 	}
 
@@ -206,9 +199,8 @@ func (h *BankReconciliationHandler) importBankLines(c *gin.Context) {
 }
 
 func (h *BankReconciliationHandler) listBankLines(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "reconcile.manage", "money.view")
+	if !ok {
 		return
 	}
 
@@ -232,9 +224,8 @@ func (h *BankReconciliationHandler) listBankLines(c *gin.Context) {
 }
 
 func (h *BankReconciliationHandler) matchBankLine(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "reconcile.manage")
+	if !ok {
 		return
 	}
 

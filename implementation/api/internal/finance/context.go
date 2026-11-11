@@ -44,24 +44,89 @@ func (w WorkspaceContext) HasPermission(code string) bool {
 	return false
 }
 
-func (w WorkspaceContext) ScopedOutletID() *int64 {
+func parseScopeInt64(raw any) (int64, bool) {
+	switch v := raw.(type) {
+	case float64:
+		if int64(v) > 0 {
+			return int64(v), true
+		}
+	case int64:
+		if v > 0 {
+			return v, true
+		}
+	case int:
+		if v > 0 {
+			return int64(v), true
+		}
+	case string:
+		if id, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64); err == nil && id > 0 {
+			return id, true
+		}
+	}
+	return 0, false
+}
+
+func (w WorkspaceContext) ScopedOutletIDs() []int64 {
 	if w.IsOwner || len(w.OutletScope) == 0 {
 		return nil
 	}
+	var ids []int64
+	seen := map[int64]bool{}
 	if raw, ok := w.OutletScope["outlet_id"]; ok {
-		switch v := raw.(type) {
-		case float64:
-			id := int64(v)
-			if id > 0 {
-				return &id
-			}
-		case int64:
-			if v > 0 {
-				return &v
+		if id, ok2 := parseScopeInt64(raw); ok2 && !seen[id] {
+			ids = append(ids, id)
+			seen[id] = true
+		}
+	}
+	if rawList, ok := w.OutletScope["outlet_ids"].([]any); ok {
+		for _, item := range rawList {
+			if id, ok2 := parseScopeInt64(item); ok2 && !seen[id] {
+				ids = append(ids, id)
+				seen[id] = true
 			}
 		}
 	}
+	return ids
+}
+
+func (w WorkspaceContext) ScopedOutletID() *int64 {
+	ids := w.ScopedOutletIDs()
+	if len(ids) > 0 {
+		id := ids[0]
+		return &id
+	}
 	return nil
+}
+
+func (w WorkspaceContext) IsOutletAllowed(outletID int64) bool {
+	if outletID <= 0 {
+		return true
+	}
+	scoped := w.ScopedOutletIDs()
+	if len(scoped) == 0 {
+		return true
+	}
+	for _, id := range scoped {
+		if id == outletID {
+			return true
+		}
+	}
+	return false
+}
+
+func requirePermission(c *gin.Context, codes ...string) (WorkspaceContext, bool) {
+	wsCtx, err := GetWorkspaceContext(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+		return WorkspaceContext{}, false
+	}
+	for _, code := range codes {
+		if wsCtx.HasPermission(code) {
+			return wsCtx, true
+		}
+	}
+	c.JSON(http.StatusForbidden, gin.H{"error": gin.H{"code": "FORBIDDEN", "message": "You do not have permission to perform this action"}})
+	return WorkspaceContext{}, false
 }
 
 func AuthAndWorkspaceMiddleware(pool *pgxpool.Pool, authValidator AuthSessionValidator) gin.HandlerFunc {

@@ -26,9 +26,8 @@ func (h *Handler) RegisterSalesReturnRoutes(protected *gin.RouterGroup) {
 // @Success 201 {object} map[string]any
 // @Router /api/v1/sales-returns [post]
 func (h *Handler) createSalesReturn(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "invoices.create", "sales.create")
+	if !ok {
 		return
 	}
 
@@ -36,6 +35,12 @@ func (h *Handler) createSalesReturn(c *gin.Context) {
 	if err := c.ShouldBindJSON(&in); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": err.Error()}})
 		return
+	}
+	for _, it := range in.Items {
+		if it.OutletID > 0 && !wsCtx.IsOutletAllowed(it.OutletID) {
+			c.JSON(http.StatusForbidden, gin.H{"error": gin.H{"code": "FORBIDDEN_OUTLET", "message": "You do not have access to the specified outlet"}})
+			return
+		}
 	}
 
 	if in.IdempotencyKey == "" {
@@ -64,9 +69,8 @@ func (h *Handler) createSalesReturn(c *gin.Context) {
 // @Success 200 {object} map[string]any
 // @Router /api/v1/sales-returns/{id} [get]
 func (h *Handler) getSalesReturn(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "invoices.view", "sales.view")
+	if !ok {
 		return
 	}
 
@@ -95,9 +99,8 @@ func (h *Handler) getSalesReturn(c *gin.Context) {
 // @Success 200 {object} map[string]any
 // @Router /api/v1/sales-returns [get]
 func (h *Handler) listSalesReturns(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "invoices.view", "sales.view")
+	if !ok {
 		return
 	}
 
@@ -127,9 +130,8 @@ func (h *Handler) listSalesReturns(c *gin.Context) {
 // @Success 200 {object} map[string]any
 // @Router /api/v1/customers/{id}/credit [get]
 func (h *Handler) getCustomerCredit(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "invoices.view", "sales.view")
+	if !ok {
 		return
 	}
 
@@ -164,9 +166,8 @@ type ApplyCreditInput struct {
 // @Success 200 {object} map[string]any
 // @Router /api/v1/customers/{id}/credit/apply [post]
 func (h *Handler) applyCustomerCredit(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "invoices.create", "sales.create")
+	if !ok {
 		return
 	}
 

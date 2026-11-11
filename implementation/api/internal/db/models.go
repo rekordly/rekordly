@@ -209,6 +209,54 @@ type CustomerWallet struct {
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 }
 
+type DebitNote struct {
+	ID               int64              `json:"id"`
+	WorkspaceID      int64              `json:"workspace_id"`
+	DebitNoteNumber  string             `json:"debit_note_number"`
+	InvoiceID        pgtype.Int8        `json:"invoice_id"`
+	CustomerID       int64              `json:"customer_id"`
+	CustomerName     string             `json:"customer_name"`
+	IssueDate        pgtype.Date        `json:"issue_date"`
+	Currency         string             `json:"currency"`
+	CurrencyExponent int16              `json:"currency_exponent"`
+	SubtotalMinor    int64              `json:"subtotal_minor"`
+	TaxAmountMinor   int64              `json:"tax_amount_minor"`
+	TotalAmountMinor int64              `json:"total_amount_minor"`
+	PaidAmountMinor  int64              `json:"paid_amount_minor"`
+	Status           string             `json:"status"`
+	Reason           pgtype.Text        `json:"reason"`
+	Notes            pgtype.Text        `json:"notes"`
+	CreatedByUserID  int64              `json:"created_by_user_id"`
+	VoidReason       pgtype.Text        `json:"void_reason"`
+	VoidedAt         pgtype.Timestamptz `json:"voided_at"`
+	IdempotencyKey   pgtype.Text        `json:"idempotency_key"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+type DebitNoteItem struct {
+	ID             int64              `json:"id"`
+	DebitNoteID    int64              `json:"debit_note_id"`
+	WorkspaceID    int64              `json:"workspace_id"`
+	Description    string             `json:"description"`
+	Quantity       int32              `json:"quantity"`
+	UnitPriceMinor int64              `json:"unit_price_minor"`
+	AmountMinor    int64              `json:"amount_minor"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type DocumentVersion struct {
+	ID              int64              `json:"id"`
+	WorkspaceID     int64              `json:"workspace_id"`
+	DocumentType    string             `json:"document_type"`
+	DocumentID      int64              `json:"document_id"`
+	VersionNumber   int32              `json:"version_number"`
+	ChangeSummary   string             `json:"change_summary"`
+	Snapshot        []byte             `json:"snapshot"`
+	CreatedByUserID pgtype.Int8        `json:"created_by_user_id"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
 type Estimate struct {
 	ID                 int64              `json:"id"`
 	WorkspaceID        int64              `json:"workspace_id"`
@@ -264,6 +312,18 @@ type EstimateShare struct {
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 }
 
+type EstimateTaxLine struct {
+	ID          int64              `json:"id"`
+	WorkspaceID int64              `json:"workspace_id"`
+	EstimateID  int64              `json:"estimate_id"`
+	Name        string             `json:"name"`
+	RateBps     int32              `json:"rate_bps"`
+	AmountMinor int64              `json:"amount_minor"`
+	IsCompound  bool               `json:"is_compound"`
+	SortOrder   int32              `json:"sort_order"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
 type EvidenceAsset struct {
 	ID               int64              `json:"id"`
 	WorkspaceID      int64              `json:"workspace_id"`
@@ -281,6 +341,50 @@ type EvidenceAsset struct {
 	RetentionUntil   pgtype.Timestamptz `json:"retention_until"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ExternalMessage struct {
+	ID           int64              `json:"id"`
+	WorkspaceID  int64              `json:"workspace_id"`
+	DocumentType string             `json:"document_type"`
+	DocumentID   int64              `json:"document_id"`
+	ShareID      pgtype.Int8        `json:"share_id"`
+	SenderType   string             `json:"sender_type"`
+	SenderName   string             `json:"sender_name"`
+	SenderEmail  pgtype.Text        `json:"sender_email"`
+	Message      string             `json:"message"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+type ExternalPartyLink struct {
+	ID                 int64              `json:"id"`
+	WorkspaceID        int64              `json:"workspace_id"`
+	CounterpartyID     int64              `json:"counterparty_id"`
+	UserID             int64              `json:"user_id"`
+	SourceDocumentType string             `json:"source_document_type"`
+	SourceDocumentID   int64              `json:"source_document_id"`
+	Status             string             `json:"status"`
+	ClaimedAt          pgtype.Timestamptz `json:"claimed_at"`
+}
+
+type ExternalPaymentEvidence struct {
+	ID               int64              `json:"id"`
+	WorkspaceID      int64              `json:"workspace_id"`
+	DocumentType     string             `json:"document_type"`
+	DocumentID       int64              `json:"document_id"`
+	ShareID          pgtype.Int8        `json:"share_id"`
+	PayerName        string             `json:"payer_name"`
+	PayerEmail       pgtype.Text        `json:"payer_email"`
+	AmountMinor      int64              `json:"amount_minor"`
+	PaymentDate      pgtype.Date        `json:"payment_date"`
+	PaymentMethod    string             `json:"payment_method"`
+	Reference        pgtype.Text        `json:"reference"`
+	Notes            pgtype.Text        `json:"notes"`
+	Status           string             `json:"status"`
+	ReviewedByUserID pgtype.Int8        `json:"reviewed_by_user_id"`
+	ReviewedAt       pgtype.Timestamptz `json:"reviewed_at"`
+	ReviewNote       pgtype.Text        `json:"review_note"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 }
 
 type GoodsReceipt struct {
@@ -457,31 +561,34 @@ type Invitation struct {
 }
 
 type Invoice struct {
-	ID               int64              `json:"id"`
-	WorkspaceID      int64              `json:"workspace_id"`
-	CustomerID       int64              `json:"customer_id"`
-	CustomerName     string             `json:"customer_name"`
-	InvoiceNumber    string             `json:"invoice_number"`
-	IssueDate        pgtype.Date        `json:"issue_date"`
-	DueDate          pgtype.Date        `json:"due_date"`
-	SubtotalMinor    int64              `json:"subtotal_minor"`
-	TaxAmountMinor   int64              `json:"tax_amount_minor"`
-	TotalAmountMinor int64              `json:"total_amount_minor"`
-	PaidAmountMinor  int64              `json:"paid_amount_minor"`
-	Currency         string             `json:"currency"`
-	CurrencyExponent int32              `json:"currency_exponent"`
-	Status           string             `json:"status"`
-	Notes            pgtype.Text        `json:"notes"`
-	Terms            pgtype.Text        `json:"terms"`
-	IdempotencyKey   pgtype.Text        `json:"idempotency_key"`
-	CreatedByUserID  pgtype.Int8        `json:"created_by_user_id"`
-	FinalizedAt      pgtype.Timestamptz `json:"finalized_at"`
-	VoidedAt         pgtype.Timestamptz `json:"voided_at"`
-	VoidReason       pgtype.Text        `json:"void_reason"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
-	DiscountMinor    int64              `json:"discount_minor"`
-	DeliveryFeeMinor int64              `json:"delivery_fee_minor"`
+	ID                      int64              `json:"id"`
+	WorkspaceID             int64              `json:"workspace_id"`
+	CustomerID              int64              `json:"customer_id"`
+	CustomerName            string             `json:"customer_name"`
+	InvoiceNumber           string             `json:"invoice_number"`
+	IssueDate               pgtype.Date        `json:"issue_date"`
+	DueDate                 pgtype.Date        `json:"due_date"`
+	SubtotalMinor           int64              `json:"subtotal_minor"`
+	TaxAmountMinor          int64              `json:"tax_amount_minor"`
+	TotalAmountMinor        int64              `json:"total_amount_minor"`
+	PaidAmountMinor         int64              `json:"paid_amount_minor"`
+	Currency                string             `json:"currency"`
+	CurrencyExponent        int32              `json:"currency_exponent"`
+	Status                  string             `json:"status"`
+	Notes                   pgtype.Text        `json:"notes"`
+	Terms                   pgtype.Text        `json:"terms"`
+	IdempotencyKey          pgtype.Text        `json:"idempotency_key"`
+	CreatedByUserID         pgtype.Int8        `json:"created_by_user_id"`
+	FinalizedAt             pgtype.Timestamptz `json:"finalized_at"`
+	VoidedAt                pgtype.Timestamptz `json:"voided_at"`
+	VoidReason              pgtype.Text        `json:"void_reason"`
+	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
+	DiscountMinor           int64              `json:"discount_minor"`
+	DeliveryFeeMinor        int64              `json:"delivery_fee_minor"`
+	OutletID                pgtype.Int8        `json:"outlet_id"`
+	DocumentKind            string             `json:"document_kind"`
+	ConvertedFromProformaID pgtype.Int8        `json:"converted_from_proforma_id"`
 }
 
 type InvoiceItem struct {
@@ -506,6 +613,18 @@ type InvoiceShare struct {
 	AccessCount    int32              `json:"access_count"`
 	LastAccessedAt pgtype.Timestamptz `json:"last_accessed_at"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type InvoiceTaxLine struct {
+	ID          int64              `json:"id"`
+	WorkspaceID int64              `json:"workspace_id"`
+	InvoiceID   int64              `json:"invoice_id"`
+	Name        string             `json:"name"`
+	RateBps     int32              `json:"rate_bps"`
+	AmountMinor int64              `json:"amount_minor"`
+	IsCompound  bool               `json:"is_compound"`
+	SortOrder   int32              `json:"sort_order"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
 type LedgerEntry struct {
@@ -736,6 +855,7 @@ type MoneyTransaction struct {
 	PostedAt             pgtype.Timestamptz `json:"posted_at"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	OutletID             pgtype.Int8        `json:"outlet_id"`
 }
 
 type Notification struct {
@@ -968,6 +1088,7 @@ type Purchase struct {
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 	SubtotalMinor    pgtype.Int8        `json:"subtotal_minor"`
 	TaxAmountMinor   int64              `json:"tax_amount_minor"`
+	OutletID         pgtype.Int8        `json:"outlet_id"`
 }
 
 type PurchaseOrder struct {
@@ -1143,6 +1264,7 @@ type Sale struct {
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 	SubtotalMinor    pgtype.Int8        `json:"subtotal_minor"`
 	TaxAmountMinor   int64              `json:"tax_amount_minor"`
+	OutletID         pgtype.Int8        `json:"outlet_id"`
 }
 
 type SalesReturn struct {

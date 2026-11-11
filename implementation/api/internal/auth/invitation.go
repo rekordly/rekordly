@@ -225,16 +225,11 @@ func (service *Service) CreateWorkspaceInvitation(
 		return CreatedInvitationResult{}, errors.New("cannot invite directly as owner")
 	}
 
-	roleNames := map[string]string{
-		"admin":      "Admin",
-		"accountant": "Accountant",
-		"cashier":    "Cashier",
-		"staff":      "Staff",
-		"viewer":     "Viewer",
-	}
-	rName, ok := roleNames[rCode]
-	if !ok {
-		rName = strings.ToUpper(rCode[:1]) + rCode[1:]
+	rName := strings.ToUpper(rCode[:1]) + rCode[1:]
+	if def, ok := RoleTemplateDefinitions()[rCode]; ok {
+		rName = def.Name
+	} else if rCode == "staff" {
+		rName = "Staff"
 	}
 
 	var roleID int64

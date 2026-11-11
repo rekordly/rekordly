@@ -49,9 +49,8 @@ func (h *Handler) RegisterSalesPurchasesRoutes(protected *gin.RouterGroup) {
 // @Success 201 {object} map[string]any
 // @Router /api/v1/customers [post]
 func (h *Handler) createCustomer(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "contacts.manage", "sales.create", "invoices.create")
+	if !ok {
 		return
 	}
 
@@ -78,9 +77,8 @@ func (h *Handler) createCustomer(c *gin.Context) {
 // @Success 200 {object} map[string]any
 // @Router /api/v1/customers [get]
 func (h *Handler) listCustomers(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "contacts.view", "sales.view", "invoices.view")
+	if !ok {
 		return
 	}
 
@@ -101,9 +99,8 @@ func (h *Handler) listCustomers(c *gin.Context) {
 // @Success 200 {object} map[string]any
 // @Router /api/v1/customers/{id} [get]
 func (h *Handler) getCustomer(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "contacts.view", "sales.view", "invoices.view")
+	if !ok {
 		return
 	}
 
@@ -170,9 +167,8 @@ func (h *Handler) getCustomer(c *gin.Context) {
 }
 
 func (h *Handler) updateCustomer(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "contacts.manage")
+	if !ok {
 		return
 	}
 	custID, err := strconv.ParseInt(c.Param("id"), 10, 64)
@@ -194,9 +190,8 @@ func (h *Handler) updateCustomer(c *gin.Context) {
 }
 
 func (h *Handler) updateSupplier(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "contacts.manage")
+	if !ok {
 		return
 	}
 	suppID, err := strconv.ParseInt(c.Param("id"), 10, 64)
@@ -218,9 +213,8 @@ func (h *Handler) updateSupplier(c *gin.Context) {
 }
 
 func (h *Handler) mergeCounterparties(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "contacts.manage")
+	if !ok {
 		return
 	}
 	var in struct {
@@ -249,9 +243,8 @@ func (h *Handler) mergeCounterparties(c *gin.Context) {
 // @Success 200 {object} map[string]any
 // @Router /api/v1/customers/{id}/statement [get]
 func (h *Handler) getCustomerStatement(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "contacts.view", "sales.view", "invoices.view")
+	if !ok {
 		return
 	}
 
@@ -305,15 +298,26 @@ func (h *Handler) getCustomerStatement(c *gin.Context) {
 		Limit:       200,
 	})
 
+	var openingEntry gin.H
+	if customer.OpeningBalanceMinor != 0 {
+		openingEntry = gin.H{
+			"description":  "Brought Forward / Opening Balance",
+			"amount_minor": customer.OpeningBalanceMinor,
+			"date":         customer.CreatedAt.Time.Format("2006-01-02"),
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"data": gin.H{
 			"statement": gin.H{
-				"customer":   customer,
-				"invoices":   invoices,
-				"sales":      sales,
-				"wallet_txs": walletTxs,
-				"from_date":  c.DefaultQuery("from_date", ""),
-				"as_of_date": c.DefaultQuery("to_date", ""),
+				"customer":              customer,
+				"opening_balance_minor": customer.OpeningBalanceMinor,
+				"opening_balance_entry": openingEntry,
+				"invoices":              invoices,
+				"sales":                 sales,
+				"wallet_txs":            walletTxs,
+				"from_date":             c.DefaultQuery("from_date", ""),
+				"as_of_date":            c.DefaultQuery("to_date", ""),
 			},
 		},
 	})
@@ -328,9 +332,8 @@ func (h *Handler) getCustomerStatement(c *gin.Context) {
 // @Success 201 {object} map[string]any
 // @Router /api/v1/suppliers [post]
 func (h *Handler) createSupplier(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "contacts.manage", "purchases.create")
+	if !ok {
 		return
 	}
 
@@ -357,9 +360,8 @@ func (h *Handler) createSupplier(c *gin.Context) {
 // @Success 200 {object} map[string]any
 // @Router /api/v1/suppliers [get]
 func (h *Handler) listSuppliers(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "contacts.view", "purchases.view")
+	if !ok {
 		return
 	}
 
@@ -380,9 +382,8 @@ func (h *Handler) listSuppliers(c *gin.Context) {
 // @Success 200 {object} map[string]any
 // @Router /api/v1/suppliers/{id} [get]
 func (h *Handler) getSupplier(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "contacts.view", "purchases.view")
+	if !ok {
 		return
 	}
 
@@ -425,9 +426,8 @@ func (h *Handler) getSupplier(c *gin.Context) {
 // @Success 201 {object} map[string]any
 // @Router /api/v1/sales [post]
 func (h *Handler) createSale(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "sales.create")
+	if !ok {
 		return
 	}
 
@@ -469,9 +469,8 @@ func (h *Handler) createSale(c *gin.Context) {
 // @Success 200 {object} map[string]any
 // @Router /api/v1/sales [get]
 func (h *Handler) listSales(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "sales.view")
+	if !ok {
 		return
 	}
 
@@ -498,9 +497,8 @@ func (h *Handler) listSales(c *gin.Context) {
 // @Success 200 {object} map[string]any
 // @Router /api/v1/sales/{id} [get]
 func (h *Handler) getSale(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "sales.view")
+	if !ok {
 		return
 	}
 
@@ -532,9 +530,8 @@ func (h *Handler) getSale(c *gin.Context) {
 // @Success 201 {object} map[string]any
 // @Router /api/v1/purchases [post]
 func (h *Handler) createPurchase(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "purchases.create")
+	if !ok {
 		return
 	}
 
@@ -576,9 +573,8 @@ func (h *Handler) createPurchase(c *gin.Context) {
 // @Success 200 {object} map[string]any
 // @Router /api/v1/purchases [get]
 func (h *Handler) listPurchases(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "purchases.view")
+	if !ok {
 		return
 	}
 
@@ -605,9 +601,8 @@ func (h *Handler) listPurchases(c *gin.Context) {
 // @Success 200 {object} map[string]any
 // @Router /api/v1/purchases/{id} [get]
 func (h *Handler) getPurchase(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "purchases.view")
+	if !ok {
 		return
 	}
 
@@ -641,9 +636,8 @@ func (h *Handler) getPurchase(c *gin.Context) {
 // @Failure 400 {object} map[string]any
 // @Router /api/v1/payments [post]
 func (h *Handler) createPayment(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "sales.create", "invoices.create", "purchases.create", "money.create")
+	if !ok {
 		return
 	}
 
@@ -691,9 +685,8 @@ func (h *Handler) createPayment(c *gin.Context) {
 // @Success 200 {object} map[string]any
 // @Router /api/v1/payments [get]
 func (h *Handler) listPayments(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "sales.view", "invoices.view", "money.view")
+	if !ok {
 		return
 	}
 
@@ -720,9 +713,8 @@ func (h *Handler) listPayments(c *gin.Context) {
 // @Success 200 {object} map[string]any
 // @Router /api/v1/payments/{id} [get]
 func (h *Handler) getPayment(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "sales.view", "invoices.view", "money.view")
+	if !ok {
 		return
 	}
 

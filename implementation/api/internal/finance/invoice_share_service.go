@@ -20,10 +20,11 @@ var (
 )
 
 type PublicInvoiceView struct {
-	WorkspaceName string           `json:"workspace_name"`
-	Invoice       db.Invoice       `json:"invoice"`
-	Items         []db.InvoiceItem `json:"items"`
-	ExpiresAt     time.Time        `json:"expires_at"`
+	WorkspaceName string               `json:"workspace_name"`
+	Invoice       db.Invoice           `json:"invoice"`
+	Items         []db.InvoiceItem     `json:"items"`
+	TaxLines      []db.InvoiceTaxLine  `json:"tax_lines,omitempty"`
+	ExpiresAt     time.Time            `json:"expires_at"`
 }
 
 type PublicReceiptView struct {
@@ -108,10 +109,16 @@ func (s *Service) GetPublicInvoice(ctx context.Context, rawToken string) (Public
 		wsName = name
 	}
 
+	taxLines, _ := s.queries.ListInvoiceTaxLines(ctx, db.ListInvoiceTaxLinesParams{
+		InvoiceID:   inv.ID,
+		WorkspaceID: share.WorkspaceID,
+	})
+
 	return PublicInvoiceView{
 		WorkspaceName: wsName,
 		Invoice:       inv,
 		Items:         items,
+		TaxLines:      taxLines,
 		ExpiresAt:     share.ExpiresAt.Time,
 	}, nil
 }
@@ -377,13 +384,14 @@ func (s *Service) RespondPublicEstimate(ctx context.Context, rawToken, action, r
 }
 
 type PublicStatementView struct {
-	WorkspaceName string       `json:"workspace_name"`
-	Customer      db.Counterparty `json:"customer"`
-	FromDate      string       `json:"from_date,omitempty"`
-	ToDate        string       `json:"to_date,omitempty"`
-	Invoices      []db.Invoice `json:"invoices"`
-	WalletTxs     []db.WalletTransaction `json:"wallet_txs"`
-	ExpiresAt     time.Time    `json:"expires_at"`
+	WorkspaceName       string                 `json:"workspace_name"`
+	Customer            db.Counterparty        `json:"customer"`
+	OpeningBalanceMinor int64                  `json:"opening_balance_minor"`
+	FromDate            string                 `json:"from_date,omitempty"`
+	ToDate              string                 `json:"to_date,omitempty"`
+	Invoices            []db.Invoice           `json:"invoices"`
+	WalletTxs           []db.WalletTransaction `json:"wallet_txs"`
+	ExpiresAt           time.Time              `json:"expires_at"`
 }
 
 func (s *Service) CreateCustomerStatementShare(ctx context.Context, workspaceID, customerID, userID int64, fromDate, toDate string, expiryDays int) (string, db.CustomerStatementShare, error) {
@@ -480,12 +488,13 @@ func (s *Service) GetPublicCustomerStatement(ctx context.Context, rawToken strin
 	}
 
 	return PublicStatementView{
-		WorkspaceName: wsName,
-		Customer:      cust,
-		FromDate:      fromStr,
-		ToDate:        toStr,
-		Invoices:      invoices,
-		WalletTxs:     walletTxs,
-		ExpiresAt:     share.ExpiresAt.Time,
+		WorkspaceName:       wsName,
+		Customer:            cust,
+		OpeningBalanceMinor: cust.OpeningBalanceMinor,
+		FromDate:            fromStr,
+		ToDate:              toStr,
+		Invoices:            invoices,
+		WalletTxs:           walletTxs,
+		ExpiresAt:           share.ExpiresAt.Time,
 	}, nil
 }

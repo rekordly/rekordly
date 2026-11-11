@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/rekordly/rekordly-api/internal/db"
 )
 
 func (h *Handler) RegisterInvoicesWalletsRoutes(protected *gin.RouterGroup) {
@@ -33,9 +34,8 @@ func (h *Handler) RegisterInvoicesWalletsRoutes(protected *gin.RouterGroup) {
 // @Success 201 {object} map[string]any
 // @Router /api/v1/invoices [post]
 func (h *Handler) createInvoice(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "invoices.create", "sales.create")
+	if !ok {
 		return
 	}
 
@@ -43,6 +43,15 @@ func (h *Handler) createInvoice(c *gin.Context) {
 	if err := c.ShouldBindJSON(&in); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": err.Error()}})
 		return
+	}
+	if in.OutletID > 0 && !wsCtx.IsOutletAllowed(in.OutletID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": gin.H{"code": "FORBIDDEN_OUTLET", "message": "You do not have access to this outlet"}})
+		return
+	}
+	if in.OutletID == 0 {
+		if oid := wsCtx.ScopedOutletID(); oid != nil {
+			in.OutletID = *oid
+		}
 	}
 
 	if in.IdempotencyKey == "" {
@@ -77,9 +86,8 @@ func (h *Handler) createInvoice(c *gin.Context) {
 // @Success 200 {object} map[string]any
 // @Router /api/v1/invoices [get]
 func (h *Handler) listInvoices(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "invoices.view", "sales.view")
+	if !ok {
 		return
 	}
 
@@ -95,6 +103,22 @@ func (h *Handler) listInvoices(c *gin.Context) {
 		return
 	}
 
+	docKindFilter := c.Query("document_kind")
+	scopedOutlets := wsCtx.ScopedOutletIDs()
+	if docKindFilter != "" || len(scopedOutlets) > 0 {
+		filtered := make([]db.Invoice, 0, len(invoices))
+		for _, inv := range invoices {
+			if docKindFilter != "" && inv.DocumentKind != docKindFilter {
+				continue
+			}
+			if inv.OutletID.Valid && !wsCtx.IsOutletAllowed(inv.OutletID.Int64) {
+				continue
+			}
+			filtered = append(filtered, inv)
+		}
+		invoices = filtered
+	}
+
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"invoices": invoices}})
 }
 
@@ -106,9 +130,8 @@ func (h *Handler) listInvoices(c *gin.Context) {
 // @Success 200 {object} map[string]any
 // @Router /api/v1/invoices/{id} [get]
 func (h *Handler) getInvoice(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "invoices.view", "sales.view")
+	if !ok {
 		return
 	}
 
@@ -142,9 +165,8 @@ func (h *Handler) getInvoice(c *gin.Context) {
 // @Failure 400 {object} map[string]any
 // @Router /api/v1/invoices/{id} [patch]
 func (h *Handler) updateDraftInvoice(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "invoices.create", "sales.create")
+	if !ok {
 		return
 	}
 
@@ -185,9 +207,8 @@ func (h *Handler) updateDraftInvoice(c *gin.Context) {
 // @Success 200 {object} map[string]any
 // @Router /api/v1/invoices/{id}/finalize [post]
 func (h *Handler) finalizeInvoice(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "invoices.create", "sales.create")
+	if !ok {
 		return
 	}
 
@@ -228,9 +249,8 @@ type voidInvoiceRequest struct {
 // @Success 200 {object} map[string]any
 // @Router /api/v1/invoices/{id}/void [post]
 func (h *Handler) voidInvoice(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "invoices.create", "money.void")
+	if !ok {
 		return
 	}
 
@@ -272,9 +292,8 @@ func (h *Handler) voidInvoice(c *gin.Context) {
 // @Success 200 {object} map[string]any
 // @Router /api/v1/customers/{id}/wallet [get]
 func (h *Handler) getCustomerWallet(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "sales.view", "invoices.view", "contacts.view")
+	if !ok {
 		return
 	}
 
@@ -304,9 +323,8 @@ func (h *Handler) getCustomerWallet(c *gin.Context) {
 // @Success 201 {object} map[string]any
 // @Router /api/v1/customers/{id}/wallet/deposits [post]
 func (h *Handler) depositToCustomerWallet(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "sales.create", "invoices.create", "money.create")
+	if !ok {
 		return
 	}
 
@@ -351,9 +369,8 @@ func (h *Handler) depositToCustomerWallet(c *gin.Context) {
 // @Success 200 {object} map[string]any
 // @Router /api/v1/customers/{id}/wallet/ledger [get]
 func (h *Handler) listWalletLedger(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "sales.view", "invoices.view", "contacts.view")
+	if !ok {
 		return
 	}
 
@@ -391,9 +408,8 @@ type walletPaymentRequest struct {
 // @Success 200 {object} map[string]any
 // @Router /api/v1/invoices/{id}/wallet-payment [post]
 func (h *Handler) payInvoiceWithWallet(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "sales.create", "invoices.create")
+	if !ok {
 		return
 	}
 

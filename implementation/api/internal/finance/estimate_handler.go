@@ -27,9 +27,8 @@ func (h *Handler) RegisterEstimateRoutes(protected *gin.RouterGroup) {
 // @Success 201 {object} map[string]any
 // @Router /api/v1/estimates [post]
 func (h *Handler) createEstimate(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "invoices.create", "sales.create")
+	if !ok {
 		return
 	}
 
@@ -65,9 +64,8 @@ func (h *Handler) createEstimate(c *gin.Context) {
 // @Success 200 {object} map[string]any
 // @Router /api/v1/estimates/{id} [get]
 func (h *Handler) getEstimate(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "invoices.view", "sales.view")
+	if !ok {
 		return
 	}
 
@@ -96,9 +94,8 @@ func (h *Handler) getEstimate(c *gin.Context) {
 // @Success 200 {object} map[string]any
 // @Router /api/v1/estimates [get]
 func (h *Handler) listEstimates(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "invoices.view", "sales.view")
+	if !ok {
 		return
 	}
 
@@ -141,9 +138,8 @@ type UpdateEstimateStatusInput struct {
 // @Success 200 {object} map[string]any
 // @Router /api/v1/estimates/{id}/status [patch]
 func (h *Handler) updateEstimateStatus(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "invoices.create", "sales.create")
+	if !ok {
 		return
 	}
 
@@ -175,9 +171,8 @@ func (h *Handler) updateEstimateStatus(c *gin.Context) {
 // @Success 200 {object} map[string]any
 // @Router /api/v1/estimates/{id}/convert-to-invoice [post]
 func (h *Handler) convertEstimateToInvoice(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "invoices.create", "sales.create")
+	if !ok {
 		return
 	}
 

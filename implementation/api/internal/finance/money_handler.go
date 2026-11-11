@@ -72,6 +72,8 @@ func (h *Handler) RegisterRoutes(group *gin.RouterGroup) {
 	h.RegisterSalesReturnRoutes(protected)
 	h.RegisterReconciliationRoutes(protected)
 	h.RegisterWorkspaceOpsRoutes(protected)
+	h.RegisterBlueprintsCompletionRoutes(protected)
+	h.RegisterPublicBlueprintsCompletionRoutes(group)
 
 	// Budgets and Tax-Readiness Reports
 	h.RegisterBudgetsTaxRoutes(protected)
@@ -90,9 +92,8 @@ func (h *Handler) RegisterRoutes(group *gin.RouterGroup) {
 // @Failure 403 {object} map[string]any
 // @Router /api/v1/accounts [post]
 func (h *Handler) createAccount(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "money.create")
+	if !ok {
 		return
 	}
 
@@ -121,9 +122,8 @@ func (h *Handler) createAccount(c *gin.Context) {
 // @Failure 403 {object} map[string]any
 // @Router /api/v1/accounts [get]
 func (h *Handler) listAccounts(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "money.view", "sales.view", "invoices.view")
+	if !ok {
 		return
 	}
 
@@ -147,9 +147,8 @@ func (h *Handler) listAccounts(c *gin.Context) {
 // @Failure 400 {object} map[string]any
 // @Router /api/v1/categories [post]
 func (h *Handler) createCategory(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "money.create")
+	if !ok {
 		return
 	}
 
@@ -177,9 +176,8 @@ func (h *Handler) createCategory(c *gin.Context) {
 // @Success 200 {object} map[string]any
 // @Router /api/v1/categories [get]
 func (h *Handler) listCategories(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "money.view", "purchases.view", "sales.view")
+	if !ok {
 		return
 	}
 
@@ -216,9 +214,8 @@ func (h *Handler) listCategories(c *gin.Context) {
 // @Failure 400 {object} map[string]any
 // @Router /api/v1/transactions [post]
 func (h *Handler) createTransaction(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "money.create")
+	if !ok {
 		return
 	}
 
@@ -264,9 +261,8 @@ func (h *Handler) createTransaction(c *gin.Context) {
 // @Success 200 {object} map[string]any
 // @Router /api/v1/transactions [get]
 func (h *Handler) listTransactions(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "money.view")
+	if !ok {
 		return
 	}
 
@@ -294,9 +290,8 @@ func (h *Handler) listTransactions(c *gin.Context) {
 // @Failure 404 {object} map[string]any
 // @Router /api/v1/transactions/{id} [get]
 func (h *Handler) getTransaction(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "money.view")
+	if !ok {
 		return
 	}
 
@@ -335,9 +330,8 @@ type voidTransactionRequest struct {
 // @Failure 404 {object} map[string]any
 // @Router /api/v1/transactions/{id}/void [post]
 func (h *Handler) voidTransaction(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "money.void")
+	if !ok {
 		return
 	}
 

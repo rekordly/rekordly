@@ -32,9 +32,8 @@ type CreateShareInput struct {
 }
 
 func (h *Handler) createInvoiceShare(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "invoices.create", "sales.create", "contacts.manage")
+	if !ok {
 		return
 	}
 
@@ -65,9 +64,8 @@ func (h *Handler) createInvoiceShare(c *gin.Context) {
 }
 
 func (h *Handler) createEstimateShare(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "invoices.create", "sales.create", "contacts.manage")
+	if !ok {
 		return
 	}
 
@@ -100,9 +98,8 @@ func (h *Handler) createEstimateShare(c *gin.Context) {
 }
 
 func (h *Handler) createCustomerStatementShare(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "invoices.create", "sales.create", "contacts.manage")
+	if !ok {
 		return
 	}
 
@@ -131,9 +128,8 @@ func (h *Handler) createCustomerStatementShare(c *gin.Context) {
 }
 
 func (h *Handler) createPaymentReceipt(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+	wsCtx, ok := requirePermission(c, "invoices.create", "sales.create", "contacts.manage")
+	if !ok {
 		return
 	}
 

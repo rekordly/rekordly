@@ -165,9 +165,8 @@ func (s *Service) GetFinanceSummary(ctx context.Context, workspaceID int64, from
 // @Failure 400 {object} map[string]any
 // @Router /api/v1/reports/summary [get]
 func (h *Handler) getFinanceSummary(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": "Workspace is required"}})
+	wsCtx, ok := requirePermission(c, "reports.view_basic", "money.view", "sales.view")
+	if !ok {
 		return
 	}
 	summary, err := h.service.GetFinanceSummary(c.Request.Context(), wsCtx.WorkspaceID, c.Query("from_date"), c.Query("to_date"), c.Query("currency"))

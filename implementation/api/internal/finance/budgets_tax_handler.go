@@ -39,9 +39,8 @@ func (h *Handler) RegisterBudgetsTaxRoutes(group *gin.RouterGroup) {
 // @Failure 403 {object} map[string]any
 // @Router /api/v1/budgets [post]
 func (h *Handler) createBudget(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+	wsCtx, ok := requirePermission(c, "reports.view_basic", "money.view", "money.create")
+	if !ok {
 		return
 	}
 
@@ -81,9 +80,8 @@ func (h *Handler) createBudget(c *gin.Context) {
 // @Success 200 {object} map[string]any
 // @Router /api/v1/budgets [get]
 func (h *Handler) listBudgets(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+	wsCtx, ok := requirePermission(c, "reports.view_basic", "money.view", "money.create")
+	if !ok {
 		return
 	}
 
@@ -123,9 +121,8 @@ func (h *Handler) listBudgets(c *gin.Context) {
 // @Failure 404 {object} map[string]any
 // @Router /api/v1/budgets/{id} [get]
 func (h *Handler) getBudget(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+	wsCtx, ok := requirePermission(c, "reports.view_basic", "money.view", "money.create")
+	if !ok {
 		return
 	}
 
@@ -161,9 +158,8 @@ func (h *Handler) getBudget(c *gin.Context) {
 // @Failure 404 {object} map[string]any
 // @Router /api/v1/budgets/{id} [patch]
 func (h *Handler) updateBudget(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+	wsCtx, ok := requirePermission(c, "reports.view_basic", "money.view", "money.create")
+	if !ok {
 		return
 	}
 
@@ -205,9 +201,8 @@ func (h *Handler) updateBudget(c *gin.Context) {
 // @Failure 404 {object} map[string]any
 // @Router /api/v1/budgets/{id} [delete]
 func (h *Handler) deleteBudget(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+	wsCtx, ok := requirePermission(c, "reports.view_basic", "money.view", "money.create")
+	if !ok {
 		return
 	}
 
@@ -239,9 +234,8 @@ func (h *Handler) deleteBudget(c *gin.Context) {
 // @Failure 404 {object} map[string]any
 // @Router /api/v1/budgets/{id}/status [get]
 func (h *Handler) getBudgetStatus(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+	wsCtx, ok := requirePermission(c, "reports.view_basic", "money.view", "money.create")
+	if !ok {
 		return
 	}
 
@@ -276,9 +270,8 @@ func (h *Handler) getBudgetStatus(c *gin.Context) {
 // @Failure 400 {object} map[string]any
 // @Router /api/v1/reports/tax-readiness [get]
 func (h *Handler) getTaxReadinessReport(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+	wsCtx, ok := requirePermission(c, "reports.tax", "reports.view_basic")
+	if !ok {
 		return
 	}
 
@@ -308,9 +301,8 @@ func (h *Handler) getTaxReadinessReport(c *gin.Context) {
 // @Success 200 {object} map[string]any
 // @Router /api/v1/tax-settings [get]
 func (h *Handler) getTaxSettings(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+	wsCtx, ok := requirePermission(c, "reports.view_basic", "money.view", "money.create")
+	if !ok {
 		return
 	}
 
@@ -334,9 +326,8 @@ func (h *Handler) getTaxSettings(c *gin.Context) {
 // @Failure 400 {object} map[string]any
 // @Router /api/v1/tax-settings [put]
 func (h *Handler) updateTaxSettings(c *gin.Context) {
-	wsCtx, err := GetWorkspaceContext(c)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+	wsCtx, ok := requirePermission(c, "reports.tax", "settings.manage")
+	if !ok {
 		return
 	}
 

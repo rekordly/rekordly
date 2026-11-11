@@ -240,7 +240,7 @@ INSERT INTO money_transactions (
     created_by_user_id, posted_at
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
-) RETURNING id, workspace_id, direction, status, amount_minor, currency, currency_exponent, effective_date, money_account_id, destination_account_id, category_id, counterparty_name, purpose, notes, reference, idempotency_key, is_void, voided_at, void_reason, reversal_of_id, created_by_user_id, posted_at, created_at, updated_at
+) RETURNING id, workspace_id, direction, status, amount_minor, currency, currency_exponent, effective_date, money_account_id, destination_account_id, category_id, counterparty_name, purpose, notes, reference, idempotency_key, is_void, voided_at, void_reason, reversal_of_id, created_by_user_id, posted_at, created_at, updated_at, outlet_id
 `
 
 type CreateMoneyTransactionParams struct {
@@ -309,6 +309,7 @@ func (q *Queries) CreateMoneyTransaction(ctx context.Context, arg CreateMoneyTra
 		&i.PostedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OutletID,
 	)
 	return i, err
 }
@@ -321,7 +322,7 @@ INSERT INTO money_transactions (
     created_by_user_id, posted_at
 ) VALUES (
     $1, $2, 'reversed', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, now()
-) RETURNING id, workspace_id, direction, status, amount_minor, currency, currency_exponent, effective_date, money_account_id, destination_account_id, category_id, counterparty_name, purpose, notes, reference, idempotency_key, is_void, voided_at, void_reason, reversal_of_id, created_by_user_id, posted_at, created_at, updated_at
+) RETURNING id, workspace_id, direction, status, amount_minor, currency, currency_exponent, effective_date, money_account_id, destination_account_id, category_id, counterparty_name, purpose, notes, reference, idempotency_key, is_void, voided_at, void_reason, reversal_of_id, created_by_user_id, posted_at, created_at, updated_at, outlet_id
 `
 
 type CreateReversalTransactionParams struct {
@@ -386,6 +387,7 @@ func (q *Queries) CreateReversalTransaction(ctx context.Context, arg CreateRever
 		&i.PostedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OutletID,
 	)
 	return i, err
 }
@@ -575,7 +577,7 @@ func (q *Queries) GetMoneyAccountByName(ctx context.Context, arg GetMoneyAccount
 }
 
 const getMoneyTransactionByID = `-- name: GetMoneyTransactionByID :one
-SELECT id, workspace_id, direction, status, amount_minor, currency, currency_exponent, effective_date, money_account_id, destination_account_id, category_id, counterparty_name, purpose, notes, reference, idempotency_key, is_void, voided_at, void_reason, reversal_of_id, created_by_user_id, posted_at, created_at, updated_at FROM money_transactions
+SELECT id, workspace_id, direction, status, amount_minor, currency, currency_exponent, effective_date, money_account_id, destination_account_id, category_id, counterparty_name, purpose, notes, reference, idempotency_key, is_void, voided_at, void_reason, reversal_of_id, created_by_user_id, posted_at, created_at, updated_at, outlet_id FROM money_transactions
 WHERE id = $1 AND workspace_id = $2
 `
 
@@ -612,12 +614,13 @@ func (q *Queries) GetMoneyTransactionByID(ctx context.Context, arg GetMoneyTrans
 		&i.PostedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OutletID,
 	)
 	return i, err
 }
 
 const getMoneyTransactionByIdempotency = `-- name: GetMoneyTransactionByIdempotency :one
-SELECT id, workspace_id, direction, status, amount_minor, currency, currency_exponent, effective_date, money_account_id, destination_account_id, category_id, counterparty_name, purpose, notes, reference, idempotency_key, is_void, voided_at, void_reason, reversal_of_id, created_by_user_id, posted_at, created_at, updated_at FROM money_transactions
+SELECT id, workspace_id, direction, status, amount_minor, currency, currency_exponent, effective_date, money_account_id, destination_account_id, category_id, counterparty_name, purpose, notes, reference, idempotency_key, is_void, voided_at, void_reason, reversal_of_id, created_by_user_id, posted_at, created_at, updated_at, outlet_id FROM money_transactions
 WHERE workspace_id = $1 AND idempotency_key = $2 AND status <> 'voided'
 `
 
@@ -654,6 +657,7 @@ func (q *Queries) GetMoneyTransactionByIdempotency(ctx context.Context, arg GetM
 		&i.PostedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OutletID,
 	)
 	return i, err
 }
@@ -795,7 +799,7 @@ func (q *Queries) ListMoneyAccounts(ctx context.Context, arg ListMoneyAccountsPa
 }
 
 const listMoneyTransactions = `-- name: ListMoneyTransactions :many
-SELECT id, workspace_id, direction, status, amount_minor, currency, currency_exponent, effective_date, money_account_id, destination_account_id, category_id, counterparty_name, purpose, notes, reference, idempotency_key, is_void, voided_at, void_reason, reversal_of_id, created_by_user_id, posted_at, created_at, updated_at FROM money_transactions
+SELECT id, workspace_id, direction, status, amount_minor, currency, currency_exponent, effective_date, money_account_id, destination_account_id, category_id, counterparty_name, purpose, notes, reference, idempotency_key, is_void, voided_at, void_reason, reversal_of_id, created_by_user_id, posted_at, created_at, updated_at, outlet_id FROM money_transactions
 WHERE workspace_id = $1
   AND ($3::date IS NULL OR effective_date >= $3)
   AND ($4::date IS NULL OR effective_date <= $4)
@@ -861,6 +865,7 @@ func (q *Queries) ListMoneyTransactions(ctx context.Context, arg ListMoneyTransa
 			&i.PostedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.OutletID,
 		); err != nil {
 			return nil, err
 		}
@@ -911,7 +916,7 @@ SET status = 'posted',
     posted_at = now(),
     updated_at = now()
 WHERE id = $1 AND workspace_id = $2 AND status = 'draft'
-RETURNING id, workspace_id, direction, status, amount_minor, currency, currency_exponent, effective_date, money_account_id, destination_account_id, category_id, counterparty_name, purpose, notes, reference, idempotency_key, is_void, voided_at, void_reason, reversal_of_id, created_by_user_id, posted_at, created_at, updated_at
+RETURNING id, workspace_id, direction, status, amount_minor, currency, currency_exponent, effective_date, money_account_id, destination_account_id, category_id, counterparty_name, purpose, notes, reference, idempotency_key, is_void, voided_at, void_reason, reversal_of_id, created_by_user_id, posted_at, created_at, updated_at, outlet_id
 `
 
 type PostMoneyTransactionParams struct {
@@ -947,6 +952,7 @@ func (q *Queries) PostMoneyTransaction(ctx context.Context, arg PostMoneyTransac
 		&i.PostedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OutletID,
 	)
 	return i, err
 }
@@ -992,7 +998,7 @@ SET status = 'voided',
     void_reason = $3,
     updated_at = now()
 WHERE id = $1 AND workspace_id = $2 AND status = 'posted'
-RETURNING id, workspace_id, direction, status, amount_minor, currency, currency_exponent, effective_date, money_account_id, destination_account_id, category_id, counterparty_name, purpose, notes, reference, idempotency_key, is_void, voided_at, void_reason, reversal_of_id, created_by_user_id, posted_at, created_at, updated_at
+RETURNING id, workspace_id, direction, status, amount_minor, currency, currency_exponent, effective_date, money_account_id, destination_account_id, category_id, counterparty_name, purpose, notes, reference, idempotency_key, is_void, voided_at, void_reason, reversal_of_id, created_by_user_id, posted_at, created_at, updated_at, outlet_id
 `
 
 type VoidMoneyTransactionParams struct {
@@ -1029,6 +1035,7 @@ func (q *Queries) VoidMoneyTransaction(ctx context.Context, arg VoidMoneyTransac
 		&i.PostedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OutletID,
 	)
 	return i, err
 }
