@@ -611,6 +611,28 @@ export interface WalletTransaction {
   created_at: string;
 }
 
+export interface BankReconciliation {
+  id: number;
+  workspace_id: number;
+  money_account_id: number;
+  statement_date: string;
+  statement_balance_minor: MinorAmount;
+  ledger_balance_minor: MinorAmount;
+  difference_minor: MinorAmount;
+  status: "in_progress" | "reconciled" | "discarded";
+  reconciled_at?: string | null;
+  notes?: string | null;
+  created_at: string;
+}
+
+export interface BankReconciliationMatch {
+  id: number;
+  reconciliation_id: number;
+  transaction_id: number;
+  match_status: "cleared" | "unmatched" | "disputed";
+  cleared_at: string;
+}
+
 export interface Budget {
   id: number;
   name: string;

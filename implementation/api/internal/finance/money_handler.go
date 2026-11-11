@@ -70,6 +70,7 @@ func (h *Handler) RegisterRoutes(group *gin.RouterGroup) {
 	h.RegisterEstimateRoutes(protected)
 	h.RegisterInvoiceShareRoutes(protected)
 	h.RegisterSalesReturnRoutes(protected)
+	h.RegisterReconciliationRoutes(protected)
 
 	// Budgets and Tax-Readiness Reports
 	h.RegisterBudgetsTaxRoutes(protected)
@@ -368,4 +369,9 @@ func (h *Handler) voidTransaction(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": detail})
+}
+
+func (h *Handler) RegisterReconciliationRoutes(protected *gin.RouterGroup) {
+	reconHandler := NewBankReconciliationHandler(NewBankReconciliationService(h.service.pool, h.service.queries))
+	reconHandler.RegisterReconciliationRoutes(protected)
 }

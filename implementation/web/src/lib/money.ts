@@ -4,6 +4,8 @@
 import { apiClient, workspaceHeaders } from "./api.ts";
 import { buildQueryString } from "./utils.ts";
 import type {
+  BankReconciliation,
+  BankReconciliationMatch,
   Budget,
   BudgetStatus,
   Contact,
@@ -540,6 +542,34 @@ export const financeApi = {
     body: { default_account_id?: number; rows: Array<{ date: string; description: string; amount: string; direction: string; reference?: string; account_id?: number; category_id?: number }> },
   ) =>
     scopedPost<{ imported_count: number; drafts: unknown[] }>(workspaceId, "/api/v1/transactions/import-csv", body),
+
+  async listReconciliations(workspaceId: number, accountId?: number) {
+    const result = await scopedGet<{ reconciliations: BankReconciliation[] }>(
+      workspaceId,
+      "/api/v1/reconciliations",
+      accountId ? { account_id: accountId } : {},
+    );
+    return result.reconciliations ?? [];
+  },
+  startReconciliation: (
+    workspaceId: number,
+    body: { money_account_id: number; statement_date: string; statement_balance_minor: number; notes?: string },
+  ) => scopedPost<{ reconciliation: BankReconciliation }>(workspaceId, "/api/v1/reconciliations", body),
+  getReconciliation: (workspaceId: number, id: number) =>
+    scopedGet<{ reconciliation: BankReconciliation; matches: BankReconciliationMatch[] }>(
+      workspaceId,
+      `/api/v1/reconciliations/${id}`,
+    ),
+  matchReconciliationTransaction: (workspaceId: number, reconId: number, transactionId: number) =>
+    scopedPost<{ match: BankReconciliationMatch }>(workspaceId, `/api/v1/reconciliations/${reconId}/commands/match`, {
+      transaction_id: transactionId,
+    }),
+  unmatchReconciliationTransaction: (workspaceId: number, reconId: number, transactionId: number) =>
+    scopedPost<{ unmatched: boolean }>(workspaceId, `/api/v1/reconciliations/${reconId}/commands/unmatch`, {
+      transaction_id: transactionId,
+    }),
+  completeReconciliation: (workspaceId: number, reconId: number) =>
+    scopedPost<{ reconciliation: BankReconciliation }>(workspaceId, `/api/v1/reconciliations/${reconId}/commands/complete`, {}),
 };
 
 /** Query keys are always namespaced by workspace so one space can never render another's rows. */

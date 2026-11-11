@@ -59,6 +59,32 @@ type AuthRateLimit struct {
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
+type BankReconciliation struct {
+	ID                    int64              `json:"id"`
+	WorkspaceID           int64              `json:"workspace_id"`
+	MoneyAccountID        int64              `json:"money_account_id"`
+	StatementDate         pgtype.Date        `json:"statement_date"`
+	StatementBalanceMinor int64              `json:"statement_balance_minor"`
+	LedgerBalanceMinor    int64              `json:"ledger_balance_minor"`
+	DifferenceMinor       int64              `json:"difference_minor"`
+	Status                string             `json:"status"`
+	ReconciledAt          pgtype.Timestamptz `json:"reconciled_at"`
+	ReconciledByUserID    pgtype.Int8        `json:"reconciled_by_user_id"`
+	Notes                 pgtype.Text        `json:"notes"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+}
+
+type BankReconciliationMatch struct {
+	ID               int64              `json:"id"`
+	WorkspaceID      int64              `json:"workspace_id"`
+	ReconciliationID int64              `json:"reconciliation_id"`
+	TransactionID    int64              `json:"transaction_id"`
+	MatchStatus      string             `json:"match_status"`
+	ClearedAt        pgtype.Timestamptz `json:"cleared_at"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
 type Budget struct {
 	ID               int64              `json:"id"`
 	WorkspaceID      int64              `json:"workspace_id"`
