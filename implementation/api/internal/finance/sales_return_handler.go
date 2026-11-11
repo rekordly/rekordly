@@ -54,7 +54,7 @@ func (h *Handler) createSalesReturn(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"sales_return": detail})
+	c.JSON(http.StatusCreated, gin.H{"data": gin.H{"sales_return": detail}})
 }
 
 // @Summary Get sales return by ID
@@ -86,7 +86,7 @@ func (h *Handler) getSalesReturn(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"sales_return": detail})
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"sales_return": detail}})
 }
 
 // @Summary List sales returns
@@ -117,7 +117,7 @@ func (h *Handler) listSalesReturns(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"sales_returns": returns})
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"sales_returns": returns}})
 }
 
 // @Summary Get customer credit balance
@@ -147,7 +147,7 @@ func (h *Handler) getCustomerCredit(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"customer_credit": detail})
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"customer_credit": detail}})
 }
 
 type ApplyCreditInput struct {
@@ -189,7 +189,9 @@ func (h *Handler) applyCustomerCredit(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"invoice": invDetail,
-		"message": "Customer credit applied to invoice successfully",
+		"data": gin.H{
+			"invoice": invDetail,
+			"message": "Customer credit applied to invoice successfully",
+		},
 	})
 }

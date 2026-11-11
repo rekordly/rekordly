@@ -55,7 +55,7 @@ func (h *Handler) createEstimate(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"estimate": detail})
+	c.JSON(http.StatusCreated, gin.H{"data": gin.H{"estimate": detail}})
 }
 
 // @Summary Get estimate by ID
@@ -87,7 +87,7 @@ func (h *Handler) getEstimate(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"estimate": detail})
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"estimate": detail}})
 }
 
 // @Summary List estimates
@@ -125,7 +125,7 @@ func (h *Handler) listEstimates(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"estimates": estimates})
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"estimates": estimates}})
 }
 
 type UpdateEstimateStatusInput struct {
@@ -165,7 +165,7 @@ func (h *Handler) updateEstimateStatus(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"estimate": detail})
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"estimate": detail}})
 }
 
 // @Summary Convert estimate to invoice
@@ -196,7 +196,9 @@ func (h *Handler) convertEstimateToInvoice(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"invoice": invoiceDetail,
-		"message": "Estimate successfully converted to invoice draft",
+		"data": gin.H{
+			"invoice": invoiceDetail,
+			"message": "Estimate successfully converted to invoice draft",
+		},
 	})
 }

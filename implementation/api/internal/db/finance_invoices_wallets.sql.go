@@ -19,7 +19,7 @@ INSERT INTO invoices (
     status, notes, terms, idempotency_key, created_by_user_id
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
-) RETURNING id, workspace_id, customer_id, customer_name, invoice_number, issue_date, due_date, subtotal_minor, tax_amount_minor, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, terms, idempotency_key, created_by_user_id, finalized_at, voided_at, void_reason, created_at, updated_at
+) RETURNING id, workspace_id, customer_id, customer_name, invoice_number, issue_date, due_date, subtotal_minor, tax_amount_minor, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, terms, idempotency_key, created_by_user_id, finalized_at, voided_at, void_reason, created_at, updated_at, discount_minor, delivery_fee_minor
 `
 
 type CreateInvoiceParams struct {
@@ -87,6 +87,8 @@ func (q *Queries) CreateInvoice(ctx context.Context, arg CreateInvoiceParams) (I
 		&i.VoidReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DiscountMinor,
+		&i.DeliveryFeeMinor,
 	)
 	return i, err
 }
@@ -96,7 +98,7 @@ INSERT INTO invoice_items (
     invoice_id, workspace_id, description, quantity, unit_price_minor, amount_minor
 ) VALUES (
     $1, $2, $3, $4, $5, $6
-) RETURNING id, invoice_id, workspace_id, description, quantity, unit_price_minor, amount_minor, created_at
+) RETURNING id, invoice_id, workspace_id, description, quantity, unit_price_minor, amount_minor, created_at, discount_minor
 `
 
 type CreateInvoiceItemParams struct {
@@ -127,6 +129,7 @@ func (q *Queries) CreateInvoiceItem(ctx context.Context, arg CreateInvoiceItemPa
 		&i.UnitPriceMinor,
 		&i.AmountMinor,
 		&i.CreatedAt,
+		&i.DiscountMinor,
 	)
 	return i, err
 }
@@ -212,7 +215,7 @@ SET status = 'finalized',
     finalized_at = now(),
     updated_at = now()
 WHERE id = $1 AND workspace_id = $2 AND status = 'draft'
-RETURNING id, workspace_id, customer_id, customer_name, invoice_number, issue_date, due_date, subtotal_minor, tax_amount_minor, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, terms, idempotency_key, created_by_user_id, finalized_at, voided_at, void_reason, created_at, updated_at
+RETURNING id, workspace_id, customer_id, customer_name, invoice_number, issue_date, due_date, subtotal_minor, tax_amount_minor, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, terms, idempotency_key, created_by_user_id, finalized_at, voided_at, void_reason, created_at, updated_at, discount_minor, delivery_fee_minor
 `
 
 type FinalizeInvoiceParams struct {
@@ -247,6 +250,8 @@ func (q *Queries) FinalizeInvoice(ctx context.Context, arg FinalizeInvoiceParams
 		&i.VoidReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DiscountMinor,
+		&i.DeliveryFeeMinor,
 	)
 	return i, err
 }
@@ -279,7 +284,7 @@ func (q *Queries) GetCustomerWallet(ctx context.Context, arg GetCustomerWalletPa
 }
 
 const getInvoiceByID = `-- name: GetInvoiceByID :one
-SELECT id, workspace_id, customer_id, customer_name, invoice_number, issue_date, due_date, subtotal_minor, tax_amount_minor, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, terms, idempotency_key, created_by_user_id, finalized_at, voided_at, void_reason, created_at, updated_at FROM invoices
+SELECT id, workspace_id, customer_id, customer_name, invoice_number, issue_date, due_date, subtotal_minor, tax_amount_minor, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, terms, idempotency_key, created_by_user_id, finalized_at, voided_at, void_reason, created_at, updated_at, discount_minor, delivery_fee_minor FROM invoices
 WHERE id = $1 AND workspace_id = $2
 `
 
@@ -315,12 +320,14 @@ func (q *Queries) GetInvoiceByID(ctx context.Context, arg GetInvoiceByIDParams) 
 		&i.VoidReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DiscountMinor,
+		&i.DeliveryFeeMinor,
 	)
 	return i, err
 }
 
 const getInvoiceByIDForUpdate = `-- name: GetInvoiceByIDForUpdate :one
-SELECT id, workspace_id, customer_id, customer_name, invoice_number, issue_date, due_date, subtotal_minor, tax_amount_minor, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, terms, idempotency_key, created_by_user_id, finalized_at, voided_at, void_reason, created_at, updated_at FROM invoices
+SELECT id, workspace_id, customer_id, customer_name, invoice_number, issue_date, due_date, subtotal_minor, tax_amount_minor, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, terms, idempotency_key, created_by_user_id, finalized_at, voided_at, void_reason, created_at, updated_at, discount_minor, delivery_fee_minor FROM invoices
 WHERE id = $1 AND workspace_id = $2
 FOR UPDATE
 `
@@ -357,12 +364,14 @@ func (q *Queries) GetInvoiceByIDForUpdate(ctx context.Context, arg GetInvoiceByI
 		&i.VoidReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DiscountMinor,
+		&i.DeliveryFeeMinor,
 	)
 	return i, err
 }
 
 const getInvoiceByIdempotency = `-- name: GetInvoiceByIdempotency :one
-SELECT id, workspace_id, customer_id, customer_name, invoice_number, issue_date, due_date, subtotal_minor, tax_amount_minor, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, terms, idempotency_key, created_by_user_id, finalized_at, voided_at, void_reason, created_at, updated_at FROM invoices
+SELECT id, workspace_id, customer_id, customer_name, invoice_number, issue_date, due_date, subtotal_minor, tax_amount_minor, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, terms, idempotency_key, created_by_user_id, finalized_at, voided_at, void_reason, created_at, updated_at, discount_minor, delivery_fee_minor FROM invoices
 WHERE workspace_id = $1 AND idempotency_key = $2 AND status <> 'voided'
 `
 
@@ -398,12 +407,14 @@ func (q *Queries) GetInvoiceByIdempotency(ctx context.Context, arg GetInvoiceByI
 		&i.VoidReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DiscountMinor,
+		&i.DeliveryFeeMinor,
 	)
 	return i, err
 }
 
 const getInvoiceByNumber = `-- name: GetInvoiceByNumber :one
-SELECT id, workspace_id, customer_id, customer_name, invoice_number, issue_date, due_date, subtotal_minor, tax_amount_minor, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, terms, idempotency_key, created_by_user_id, finalized_at, voided_at, void_reason, created_at, updated_at FROM invoices
+SELECT id, workspace_id, customer_id, customer_name, invoice_number, issue_date, due_date, subtotal_minor, tax_amount_minor, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, terms, idempotency_key, created_by_user_id, finalized_at, voided_at, void_reason, created_at, updated_at, discount_minor, delivery_fee_minor FROM invoices
 WHERE workspace_id = $1 AND lower(invoice_number) = lower($2)
 `
 
@@ -439,6 +450,8 @@ func (q *Queries) GetInvoiceByNumber(ctx context.Context, arg GetInvoiceByNumber
 		&i.VoidReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DiscountMinor,
+		&i.DeliveryFeeMinor,
 	)
 	return i, err
 }
@@ -482,7 +495,7 @@ func (q *Queries) GetOrCreateCustomerWallet(ctx context.Context, arg GetOrCreate
 }
 
 const listInvoiceItemsByInvoiceID = `-- name: ListInvoiceItemsByInvoiceID :many
-SELECT id, invoice_id, workspace_id, description, quantity, unit_price_minor, amount_minor, created_at FROM invoice_items
+SELECT id, invoice_id, workspace_id, description, quantity, unit_price_minor, amount_minor, created_at, discount_minor FROM invoice_items
 WHERE invoice_id = $1 AND workspace_id = $2
 ORDER BY id ASC
 `
@@ -510,6 +523,7 @@ func (q *Queries) ListInvoiceItemsByInvoiceID(ctx context.Context, arg ListInvoi
 			&i.UnitPriceMinor,
 			&i.AmountMinor,
 			&i.CreatedAt,
+			&i.DiscountMinor,
 		); err != nil {
 			return nil, err
 		}
@@ -522,7 +536,7 @@ func (q *Queries) ListInvoiceItemsByInvoiceID(ctx context.Context, arg ListInvoi
 }
 
 const listInvoices = `-- name: ListInvoices :many
-SELECT id, workspace_id, customer_id, customer_name, invoice_number, issue_date, due_date, subtotal_minor, tax_amount_minor, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, terms, idempotency_key, created_by_user_id, finalized_at, voided_at, void_reason, created_at, updated_at FROM invoices
+SELECT id, workspace_id, customer_id, customer_name, invoice_number, issue_date, due_date, subtotal_minor, tax_amount_minor, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, terms, idempotency_key, created_by_user_id, finalized_at, voided_at, void_reason, created_at, updated_at, discount_minor, delivery_fee_minor FROM invoices
 WHERE workspace_id = $1
   AND ($3::date IS NULL OR issue_date >= $3)
   AND ($4::date IS NULL OR issue_date <= $4)
@@ -587,6 +601,8 @@ func (q *Queries) ListInvoices(ctx context.Context, arg ListInvoicesParams) ([]I
 			&i.VoidReason,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DiscountMinor,
+			&i.DeliveryFeeMinor,
 		); err != nil {
 			return nil, err
 		}
@@ -652,6 +668,100 @@ func (q *Queries) ListWalletTransactions(ctx context.Context, arg ListWalletTran
 	return items, nil
 }
 
+const setInvoiceCharges = `-- name: SetInvoiceCharges :one
+UPDATE invoices
+SET discount_minor = $3,
+    delivery_fee_minor = $4,
+    total_amount_minor = $5,
+    updated_at = now()
+WHERE id = $1 AND workspace_id = $2
+RETURNING id, workspace_id, customer_id, customer_name, invoice_number, issue_date, due_date, subtotal_minor, tax_amount_minor, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, terms, idempotency_key, created_by_user_id, finalized_at, voided_at, void_reason, created_at, updated_at, discount_minor, delivery_fee_minor
+`
+
+type SetInvoiceChargesParams struct {
+	ID               int64 `json:"id"`
+	WorkspaceID      int64 `json:"workspace_id"`
+	DiscountMinor    int64 `json:"discount_minor"`
+	DeliveryFeeMinor int64 `json:"delivery_fee_minor"`
+	TotalAmountMinor int64 `json:"total_amount_minor"`
+}
+
+func (q *Queries) SetInvoiceCharges(ctx context.Context, arg SetInvoiceChargesParams) (Invoice, error) {
+	row := q.db.QueryRow(ctx, setInvoiceCharges,
+		arg.ID,
+		arg.WorkspaceID,
+		arg.DiscountMinor,
+		arg.DeliveryFeeMinor,
+		arg.TotalAmountMinor,
+	)
+	var i Invoice
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.CustomerID,
+		&i.CustomerName,
+		&i.InvoiceNumber,
+		&i.IssueDate,
+		&i.DueDate,
+		&i.SubtotalMinor,
+		&i.TaxAmountMinor,
+		&i.TotalAmountMinor,
+		&i.PaidAmountMinor,
+		&i.Currency,
+		&i.CurrencyExponent,
+		&i.Status,
+		&i.Notes,
+		&i.Terms,
+		&i.IdempotencyKey,
+		&i.CreatedByUserID,
+		&i.FinalizedAt,
+		&i.VoidedAt,
+		&i.VoidReason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DiscountMinor,
+		&i.DeliveryFeeMinor,
+	)
+	return i, err
+}
+
+const setInvoiceItemDiscount = `-- name: SetInvoiceItemDiscount :one
+UPDATE invoice_items
+SET discount_minor = $3,
+    amount_minor = $4
+WHERE id = $1 AND workspace_id = $2
+RETURNING id, invoice_id, workspace_id, description, quantity, unit_price_minor, amount_minor, created_at, discount_minor
+`
+
+type SetInvoiceItemDiscountParams struct {
+	ID            int64 `json:"id"`
+	WorkspaceID   int64 `json:"workspace_id"`
+	DiscountMinor int64 `json:"discount_minor"`
+	AmountMinor   int64 `json:"amount_minor"`
+}
+
+func (q *Queries) SetInvoiceItemDiscount(ctx context.Context, arg SetInvoiceItemDiscountParams) (InvoiceItem, error) {
+	row := q.db.QueryRow(ctx, setInvoiceItemDiscount,
+		arg.ID,
+		arg.WorkspaceID,
+		arg.DiscountMinor,
+		arg.AmountMinor,
+	)
+	var i InvoiceItem
+	err := row.Scan(
+		&i.ID,
+		&i.InvoiceID,
+		&i.WorkspaceID,
+		&i.Description,
+		&i.Quantity,
+		&i.UnitPriceMinor,
+		&i.AmountMinor,
+		&i.CreatedAt,
+		&i.DiscountMinor,
+	)
+	return i, err
+}
+
 const updateCustomerWalletBalance = `-- name: UpdateCustomerWalletBalance :one
 UPDATE customer_wallets
 SET balance_minor = balance_minor + $4,
@@ -701,7 +811,7 @@ SET customer_id = $3,
     terms = $11,
     updated_at = now()
 WHERE id = $1 AND workspace_id = $2 AND status = 'draft'
-RETURNING id, workspace_id, customer_id, customer_name, invoice_number, issue_date, due_date, subtotal_minor, tax_amount_minor, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, terms, idempotency_key, created_by_user_id, finalized_at, voided_at, void_reason, created_at, updated_at
+RETURNING id, workspace_id, customer_id, customer_name, invoice_number, issue_date, due_date, subtotal_minor, tax_amount_minor, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, terms, idempotency_key, created_by_user_id, finalized_at, voided_at, void_reason, created_at, updated_at, discount_minor, delivery_fee_minor
 `
 
 type UpdateDraftInvoiceParams struct {
@@ -757,6 +867,8 @@ func (q *Queries) UpdateDraftInvoice(ctx context.Context, arg UpdateDraftInvoice
 		&i.VoidReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DiscountMinor,
+		&i.DeliveryFeeMinor,
 	)
 	return i, err
 }
@@ -771,7 +883,7 @@ SET paid_amount_minor = paid_amount_minor + $3,
     END,
     updated_at = now()
 WHERE id = $1 AND workspace_id = $2
-RETURNING id, workspace_id, customer_id, customer_name, invoice_number, issue_date, due_date, subtotal_minor, tax_amount_minor, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, terms, idempotency_key, created_by_user_id, finalized_at, voided_at, void_reason, created_at, updated_at
+RETURNING id, workspace_id, customer_id, customer_name, invoice_number, issue_date, due_date, subtotal_minor, tax_amount_minor, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, terms, idempotency_key, created_by_user_id, finalized_at, voided_at, void_reason, created_at, updated_at, discount_minor, delivery_fee_minor
 `
 
 type UpdateInvoicePaidAmountParams struct {
@@ -807,6 +919,8 @@ func (q *Queries) UpdateInvoicePaidAmount(ctx context.Context, arg UpdateInvoice
 		&i.VoidReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DiscountMinor,
+		&i.DeliveryFeeMinor,
 	)
 	return i, err
 }
@@ -818,7 +932,7 @@ SET status = 'voided',
     void_reason = $3,
     updated_at = now()
 WHERE id = $1 AND workspace_id = $2 AND status <> 'voided'
-RETURNING id, workspace_id, customer_id, customer_name, invoice_number, issue_date, due_date, subtotal_minor, tax_amount_minor, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, terms, idempotency_key, created_by_user_id, finalized_at, voided_at, void_reason, created_at, updated_at
+RETURNING id, workspace_id, customer_id, customer_name, invoice_number, issue_date, due_date, subtotal_minor, tax_amount_minor, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, terms, idempotency_key, created_by_user_id, finalized_at, voided_at, void_reason, created_at, updated_at, discount_minor, delivery_fee_minor
 `
 
 type VoidInvoiceParams struct {
@@ -854,6 +968,8 @@ func (q *Queries) VoidInvoice(ctx context.Context, arg VoidInvoiceParams) (Invoi
 		&i.VoidReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DiscountMinor,
+		&i.DeliveryFeeMinor,
 	)
 	return i, err
 }

@@ -751,7 +751,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 const createWorkspace = `-- name: CreateWorkspace :one
 INSERT INTO workspaces (kind, name, slug, base_currency, timezone, owner_user_id)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, kind, name, slug, base_currency, timezone, status, owner_user_id, created_at, updated_at, staff_seat_limit, accountant_seat_limit, business_type, country_code
+RETURNING id, kind, name, slug, base_currency, timezone, status, owner_user_id, created_at, updated_at, staff_seat_limit, accountant_seat_limit, business_type, country_code, country, address, contact_phone, contact_email
 `
 
 type CreateWorkspaceParams struct {
@@ -788,6 +788,10 @@ func (q *Queries) CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams
 		&i.AccountantSeatLimit,
 		&i.BusinessType,
 		&i.CountryCode,
+		&i.Country,
+		&i.Address,
+		&i.ContactPhone,
+		&i.ContactEmail,
 	)
 	return i, err
 }

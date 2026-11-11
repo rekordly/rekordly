@@ -51,6 +51,7 @@ type AuthorizedWorkspace struct {
 	RoleCode     string         `json:"role_code"`
 	RoleName     string         `json:"role_name"`
 	OutletScope  map[string]any `json:"outlet_scope"`
+	Permissions  []string       `json:"permissions"`
 }
 
 func (service *Service) CurrentUser(ctx context.Context, rawSession string) (CurrentUser, error) {
@@ -86,7 +87,7 @@ func (service *Service) CurrentUser(ctx context.Context, rawSession string) (Cur
 		return CurrentUser{}, err
 	}
 	rows, err := service.pool.Query(ctx, `
-		SELECT w.id, w.kind, w.name, w.slug, w.base_currency, w.timezone, m.is_owner, r.code, r.name, m.outlet_scope
+		SELECT w.id, w.kind, w.name, w.slug, w.base_currency, w.timezone, m.is_owner, m.role_id, r.code, r.name, m.outlet_scope
 		FROM memberships m
 		JOIN workspaces w ON w.id = m.workspace_id AND w.status = 'active'
 		JOIN roles r ON r.id = m.role_id
@@ -95,16 +96,56 @@ func (service *Service) CurrentUser(ctx context.Context, rawSession string) (Cur
 	if err != nil {
 		return CurrentUser{}, err
 	}
-	defer rows.Close()
+	type wsWithRole struct {
+		ws     AuthorizedWorkspace
+		roleID int64
+	}
+	var loaded []wsWithRole
 	for rows.Next() {
-		var workspace AuthorizedWorkspace
+		var item wsWithRole
 		var outlet []byte
-		if err := rows.Scan(&workspace.ID, &workspace.Kind, &workspace.Name, &workspace.Slug, &workspace.BaseCurrency, &workspace.Timezone, &workspace.IsOwner, &workspace.RoleCode, &workspace.RoleName, &outlet); err != nil {
+		if err := rows.Scan(&item.ws.ID, &item.ws.Kind, &item.ws.Name, &item.ws.Slug, &item.ws.BaseCurrency, &item.ws.Timezone, &item.ws.IsOwner, &item.roleID, &item.ws.RoleCode, &item.ws.RoleName, &outlet); err != nil {
+			rows.Close()
 			return CurrentUser{}, err
 		}
-		workspace.OutletScope = map[string]any{}
-		_ = json.Unmarshal(outlet, &workspace.OutletScope)
-		result.Workspaces = append(result.Workspaces, workspace)
+		item.ws.OutletScope = map[string]any{}
+		_ = json.Unmarshal(outlet, &item.ws.OutletScope)
+		loaded = append(loaded, item)
 	}
-	return result, rows.Err()
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return CurrentUser{}, err
+	}
+	rows.Close()
+
+	for _, item := range loaded {
+		ws := item.ws
+		if ws.IsOwner || ws.RoleCode == "owner" {
+			ws.Permissions = []string{"*"}
+		} else {
+			perms, pErr := queries.ListRolePermissions(ctx, item.roleID)
+			if pErr == nil && len(perms) > 0 {
+				ws.Permissions = perms
+			} else {
+				ws.Permissions = defaultPermissionsForRoleCode(ws.RoleCode)
+			}
+		}
+		result.Workspaces = append(result.Workspaces, ws)
+	}
+	return result, nil
+}
+
+func defaultPermissionsForRoleCode(code string) []string {
+	switch code {
+	case "admin":
+		return []string{"money.view", "money.create", "sales.view", "sales.create", "purchases.view", "inventory.view_quantity", "reports.view_basic", "settings.manage"}
+	case "accountant":
+		return []string{"money.view", "money.create", "sales.view", "purchases.view", "reports.view_basic"}
+	case "cashier":
+		return []string{"money.view", "sales.view", "sales.create"}
+	case "viewer":
+		return []string{"money.view", "sales.view", "reports.view_basic"}
+	default:
+		return []string{"money.view", "money.create", "sales.view", "purchases.view", "inventory.view_quantity", "reports.view_basic"}
+	}
 }

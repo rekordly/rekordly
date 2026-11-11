@@ -51,6 +51,8 @@ func (handler *Handler) RegisterRoutes(group *gin.RouterGroup) {
 	group.POST("/invitations/:token/otp/request", handler.requestInvitationOTP)
 	group.POST("/invitations/:token/otp/verify", handler.verifyInvitationOTP)
 	group.POST("/invitations/:token/accept", handler.acceptInvitation)
+	group.POST("/workspaces/:id/invitations", handler.createWorkspaceInvitation)
+	group.DELETE("/workspaces/:id/invitations/:invId", handler.revokeWorkspaceInvitation)
 }
 
 type emailRequest struct {
@@ -504,6 +506,62 @@ func (handler *Handler) acceptInvitation(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"accepted": true}})
+}
+
+func (handler *Handler) createWorkspaceInvitation(c *gin.Context) {
+	sessionToken, err := c.Cookie("rekordly_session")
+	if err != nil {
+		handler.writeError(c, ErrInvalidProof)
+		return
+	}
+	csrfCookie, err := c.Cookie("rekordly_csrf")
+	if err != nil || !subtleCompare(csrfCookie, c.GetHeader("X-CSRF-Token")) {
+		handler.writeError(c, ErrInvalidProof)
+		return
+	}
+	wsID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || wsID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": "Invalid workspace ID"}})
+		return
+	}
+	var req struct {
+		Email       string         `json:"email" binding:"required"`
+		RoleCode    string         `json:"role_code"`
+		OutletScope map[string]any `json:"outlet_scope"`
+	}
+	if !bindJSON(c, &req) {
+		return
+	}
+	res, err := handler.service.CreateWorkspaceInvitation(c.Request.Context(), sessionToken, csrfCookie, wsID, req.Email, req.RoleCode, req.OutletScope)
+	if err != nil {
+		handler.writeError(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"data": res})
+}
+
+func (handler *Handler) revokeWorkspaceInvitation(c *gin.Context) {
+	sessionToken, err := c.Cookie("rekordly_session")
+	if err != nil {
+		handler.writeError(c, ErrInvalidProof)
+		return
+	}
+	csrfCookie, err := c.Cookie("rekordly_csrf")
+	if err != nil || !subtleCompare(csrfCookie, c.GetHeader("X-CSRF-Token")) {
+		handler.writeError(c, ErrInvalidProof)
+		return
+	}
+	wsID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	invID, err2 := strconv.ParseInt(c.Param("invId"), 10, 64)
+	if err != nil || err2 != nil || wsID <= 0 || invID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": "Invalid workspace or invitation ID"}})
+		return
+	}
+	if err := handler.service.RevokeWorkspaceInvitation(c.Request.Context(), sessionToken, csrfCookie, wsID, invID); err != nil {
+		handler.writeError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"revoked": true}})
 }
 
 func (handler *Handler) writeSession(c *gin.Context, proof SessionProof) {

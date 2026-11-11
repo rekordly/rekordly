@@ -14,22 +14,31 @@ import (
 const completeBankReconciliation = `-- name: CompleteBankReconciliation :one
 UPDATE bank_reconciliations
 SET status = 'reconciled',
-    difference_minor = 0,
+    cleared_balance_minor = $3,
+    difference_minor = $4,
     reconciled_at = NOW(),
-    reconciled_by_user_id = $3,
+    reconciled_by_user_id = $5,
     updated_at = NOW()
 WHERE id = $1 AND workspace_id = $2
-RETURNING id, workspace_id, money_account_id, statement_date, statement_balance_minor, ledger_balance_minor, difference_minor, status, reconciled_at, reconciled_by_user_id, notes, created_at, updated_at
+RETURNING id, workspace_id, money_account_id, statement_date, statement_balance_minor, ledger_balance_minor, difference_minor, status, reconciled_at, reconciled_by_user_id, notes, created_at, updated_at, reconciliation_type, cleared_balance_minor, denominations
 `
 
 type CompleteBankReconciliationParams struct {
-	ID                 int64       `json:"id"`
-	WorkspaceID        int64       `json:"workspace_id"`
-	ReconciledByUserID pgtype.Int8 `json:"reconciled_by_user_id"`
+	ID                  int64       `json:"id"`
+	WorkspaceID         int64       `json:"workspace_id"`
+	ClearedBalanceMinor int64       `json:"cleared_balance_minor"`
+	DifferenceMinor     int64       `json:"difference_minor"`
+	ReconciledByUserID  pgtype.Int8 `json:"reconciled_by_user_id"`
 }
 
 func (q *Queries) CompleteBankReconciliation(ctx context.Context, arg CompleteBankReconciliationParams) (BankReconciliation, error) {
-	row := q.db.QueryRow(ctx, completeBankReconciliation, arg.ID, arg.WorkspaceID, arg.ReconciledByUserID)
+	row := q.db.QueryRow(ctx, completeBankReconciliation,
+		arg.ID,
+		arg.WorkspaceID,
+		arg.ClearedBalanceMinor,
+		arg.DifferenceMinor,
+		arg.ReconciledByUserID,
+	)
 	var i BankReconciliation
 	err := row.Scan(
 		&i.ID,
@@ -45,6 +54,104 @@ func (q *Queries) CompleteBankReconciliation(ctx context.Context, arg CompleteBa
 		&i.Notes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReconciliationType,
+		&i.ClearedBalanceMinor,
+		&i.Denominations,
+	)
+	return i, err
+}
+
+const createBankImportBatch = `-- name: CreateBankImportBatch :one
+INSERT INTO bank_import_batches (
+    workspace_id, money_account_id, file_name, row_count, imported_by_user_id
+) VALUES (
+    $1, $2, $3, $4, $5
+) RETURNING id, workspace_id, money_account_id, file_name, row_count, imported_by_user_id, created_at
+`
+
+type CreateBankImportBatchParams struct {
+	WorkspaceID      int64       `json:"workspace_id"`
+	MoneyAccountID   int64       `json:"money_account_id"`
+	FileName         string      `json:"file_name"`
+	RowCount         int32       `json:"row_count"`
+	ImportedByUserID pgtype.Int8 `json:"imported_by_user_id"`
+}
+
+func (q *Queries) CreateBankImportBatch(ctx context.Context, arg CreateBankImportBatchParams) (BankImportBatch, error) {
+	row := q.db.QueryRow(ctx, createBankImportBatch,
+		arg.WorkspaceID,
+		arg.MoneyAccountID,
+		arg.FileName,
+		arg.RowCount,
+		arg.ImportedByUserID,
+	)
+	var i BankImportBatch
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.MoneyAccountID,
+		&i.FileName,
+		&i.RowCount,
+		&i.ImportedByUserID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createBankLine = `-- name: CreateBankLine :one
+INSERT INTO bank_lines (
+    workspace_id, batch_id, money_account_id, transaction_date,
+    description, reference, direction, amount_minor, matched_transaction_id,
+    match_status, fingerprint
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+) ON CONFLICT (workspace_id, money_account_id, fingerprint) DO NOTHING
+RETURNING id, workspace_id, batch_id, money_account_id, transaction_date, description, reference, direction, amount_minor, matched_transaction_id, match_status, fingerprint, created_at
+`
+
+type CreateBankLineParams struct {
+	WorkspaceID          int64       `json:"workspace_id"`
+	BatchID              int64       `json:"batch_id"`
+	MoneyAccountID       int64       `json:"money_account_id"`
+	TransactionDate      pgtype.Date `json:"transaction_date"`
+	Description          string      `json:"description"`
+	Reference            pgtype.Text `json:"reference"`
+	Direction            string      `json:"direction"`
+	AmountMinor          int64       `json:"amount_minor"`
+	MatchedTransactionID pgtype.Int8 `json:"matched_transaction_id"`
+	MatchStatus          string      `json:"match_status"`
+	Fingerprint          string      `json:"fingerprint"`
+}
+
+func (q *Queries) CreateBankLine(ctx context.Context, arg CreateBankLineParams) (BankLine, error) {
+	row := q.db.QueryRow(ctx, createBankLine,
+		arg.WorkspaceID,
+		arg.BatchID,
+		arg.MoneyAccountID,
+		arg.TransactionDate,
+		arg.Description,
+		arg.Reference,
+		arg.Direction,
+		arg.AmountMinor,
+		arg.MatchedTransactionID,
+		arg.MatchStatus,
+		arg.Fingerprint,
+	)
+	var i BankLine
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.BatchID,
+		&i.MoneyAccountID,
+		&i.TransactionDate,
+		&i.Description,
+		&i.Reference,
+		&i.Direction,
+		&i.AmountMinor,
+		&i.MatchedTransactionID,
+		&i.MatchStatus,
+		&i.Fingerprint,
+		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -52,11 +159,11 @@ func (q *Queries) CompleteBankReconciliation(ctx context.Context, arg CompleteBa
 const createBankReconciliation = `-- name: CreateBankReconciliation :one
 INSERT INTO bank_reconciliations (
     workspace_id, money_account_id, statement_date,
-    statement_balance_minor, ledger_balance_minor, difference_minor,
-    status, notes
+    statement_balance_minor, ledger_balance_minor, cleared_balance_minor,
+    difference_minor, status, reconciliation_type, denominations, notes
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8
-) RETURNING id, workspace_id, money_account_id, statement_date, statement_balance_minor, ledger_balance_minor, difference_minor, status, reconciled_at, reconciled_by_user_id, notes, created_at, updated_at
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+) RETURNING id, workspace_id, money_account_id, statement_date, statement_balance_minor, ledger_balance_minor, difference_minor, status, reconciled_at, reconciled_by_user_id, notes, created_at, updated_at, reconciliation_type, cleared_balance_minor, denominations
 `
 
 type CreateBankReconciliationParams struct {
@@ -65,8 +172,11 @@ type CreateBankReconciliationParams struct {
 	StatementDate         pgtype.Date `json:"statement_date"`
 	StatementBalanceMinor int64       `json:"statement_balance_minor"`
 	LedgerBalanceMinor    int64       `json:"ledger_balance_minor"`
+	ClearedBalanceMinor   int64       `json:"cleared_balance_minor"`
 	DifferenceMinor       int64       `json:"difference_minor"`
 	Status                string      `json:"status"`
+	ReconciliationType    string      `json:"reconciliation_type"`
+	Denominations         []byte      `json:"denominations"`
 	Notes                 pgtype.Text `json:"notes"`
 }
 
@@ -77,8 +187,11 @@ func (q *Queries) CreateBankReconciliation(ctx context.Context, arg CreateBankRe
 		arg.StatementDate,
 		arg.StatementBalanceMinor,
 		arg.LedgerBalanceMinor,
+		arg.ClearedBalanceMinor,
 		arg.DifferenceMinor,
 		arg.Status,
+		arg.ReconciliationType,
+		arg.Denominations,
 		arg.Notes,
 	)
 	var i BankReconciliation
@@ -96,6 +209,9 @@ func (q *Queries) CreateBankReconciliation(ctx context.Context, arg CreateBankRe
 		&i.Notes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReconciliationType,
+		&i.ClearedBalanceMinor,
+		&i.Denominations,
 	)
 	return i, err
 }
@@ -152,7 +268,7 @@ func (q *Queries) DeleteReconciliationMatch(ctx context.Context, arg DeleteRecon
 }
 
 const getBankReconciliationByID = `-- name: GetBankReconciliationByID :one
-SELECT id, workspace_id, money_account_id, statement_date, statement_balance_minor, ledger_balance_minor, difference_minor, status, reconciled_at, reconciled_by_user_id, notes, created_at, updated_at FROM bank_reconciliations
+SELECT id, workspace_id, money_account_id, statement_date, statement_balance_minor, ledger_balance_minor, difference_minor, status, reconciled_at, reconciled_by_user_id, notes, created_at, updated_at, reconciliation_type, cleared_balance_minor, denominations FROM bank_reconciliations
 WHERE id = $1 AND workspace_id = $2
 `
 
@@ -178,12 +294,133 @@ func (q *Queries) GetBankReconciliationByID(ctx context.Context, arg GetBankReco
 		&i.Notes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReconciliationType,
+		&i.ClearedBalanceMinor,
+		&i.Denominations,
 	)
 	return i, err
 }
 
+const listAccountTransactionsForRecon = `-- name: ListAccountTransactionsForRecon :many
+SELECT id, direction, amount_minor, currency, currency_exponent, effective_date, money_account_id, destination_account_id, counterparty_name, notes, reference, status
+FROM money_transactions
+WHERE workspace_id = $1
+  AND (money_account_id = $2 OR destination_account_id = $2)
+  AND status = 'posted'
+  AND effective_date <= $3
+ORDER BY effective_date DESC, id DESC
+LIMIT $4
+`
+
+type ListAccountTransactionsForReconParams struct {
+	WorkspaceID    int64       `json:"workspace_id"`
+	MoneyAccountID pgtype.Int8 `json:"money_account_id"`
+	EffectiveDate  pgtype.Date `json:"effective_date"`
+	Limit          int32       `json:"limit"`
+}
+
+type ListAccountTransactionsForReconRow struct {
+	ID                   int64       `json:"id"`
+	Direction            string      `json:"direction"`
+	AmountMinor          int64       `json:"amount_minor"`
+	Currency             string      `json:"currency"`
+	CurrencyExponent     int32       `json:"currency_exponent"`
+	EffectiveDate        pgtype.Date `json:"effective_date"`
+	MoneyAccountID       pgtype.Int8 `json:"money_account_id"`
+	DestinationAccountID pgtype.Int8 `json:"destination_account_id"`
+	CounterpartyName     pgtype.Text `json:"counterparty_name"`
+	Notes                pgtype.Text `json:"notes"`
+	Reference            pgtype.Text `json:"reference"`
+	Status               string      `json:"status"`
+}
+
+func (q *Queries) ListAccountTransactionsForRecon(ctx context.Context, arg ListAccountTransactionsForReconParams) ([]ListAccountTransactionsForReconRow, error) {
+	rows, err := q.db.Query(ctx, listAccountTransactionsForRecon,
+		arg.WorkspaceID,
+		arg.MoneyAccountID,
+		arg.EffectiveDate,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAccountTransactionsForReconRow{}
+	for rows.Next() {
+		var i ListAccountTransactionsForReconRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Direction,
+			&i.AmountMinor,
+			&i.Currency,
+			&i.CurrencyExponent,
+			&i.EffectiveDate,
+			&i.MoneyAccountID,
+			&i.DestinationAccountID,
+			&i.CounterpartyName,
+			&i.Notes,
+			&i.Reference,
+			&i.Status,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBankLines = `-- name: ListBankLines :many
+SELECT id, workspace_id, batch_id, money_account_id, transaction_date, description, reference, direction, amount_minor, matched_transaction_id, match_status, fingerprint, created_at FROM bank_lines
+WHERE workspace_id = $1 AND money_account_id = $2
+ORDER BY transaction_date DESC, id DESC
+LIMIT $3
+`
+
+type ListBankLinesParams struct {
+	WorkspaceID    int64 `json:"workspace_id"`
+	MoneyAccountID int64 `json:"money_account_id"`
+	Limit          int32 `json:"limit"`
+}
+
+func (q *Queries) ListBankLines(ctx context.Context, arg ListBankLinesParams) ([]BankLine, error) {
+	rows, err := q.db.Query(ctx, listBankLines, arg.WorkspaceID, arg.MoneyAccountID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []BankLine{}
+	for rows.Next() {
+		var i BankLine
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.BatchID,
+			&i.MoneyAccountID,
+			&i.TransactionDate,
+			&i.Description,
+			&i.Reference,
+			&i.Direction,
+			&i.AmountMinor,
+			&i.MatchedTransactionID,
+			&i.MatchStatus,
+			&i.Fingerprint,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listBankReconciliations = `-- name: ListBankReconciliations :many
-SELECT id, workspace_id, money_account_id, statement_date, statement_balance_minor, ledger_balance_minor, difference_minor, status, reconciled_at, reconciled_by_user_id, notes, created_at, updated_at FROM bank_reconciliations
+SELECT id, workspace_id, money_account_id, statement_date, statement_balance_minor, ledger_balance_minor, difference_minor, status, reconciled_at, reconciled_by_user_id, notes, created_at, updated_at, reconciliation_type, cleared_balance_minor, denominations FROM bank_reconciliations
 WHERE workspace_id = $1
   AND ($3::bigint IS NULL OR money_account_id = $3)
 ORDER BY statement_date DESC, id DESC
@@ -219,6 +456,9 @@ func (q *Queries) ListBankReconciliations(ctx context.Context, arg ListBankRecon
 			&i.Notes,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ReconciliationType,
+			&i.ClearedBalanceMinor,
+			&i.Denominations,
 		); err != nil {
 			return nil, err
 		}
@@ -267,4 +507,90 @@ func (q *Queries) ListReconciliationMatches(ctx context.Context, arg ListReconci
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateBankLineMatch = `-- name: UpdateBankLineMatch :one
+UPDATE bank_lines
+SET matched_transaction_id = $3,
+    match_status = $4
+WHERE id = $1 AND workspace_id = $2
+RETURNING id, workspace_id, batch_id, money_account_id, transaction_date, description, reference, direction, amount_minor, matched_transaction_id, match_status, fingerprint, created_at
+`
+
+type UpdateBankLineMatchParams struct {
+	ID                   int64       `json:"id"`
+	WorkspaceID          int64       `json:"workspace_id"`
+	MatchedTransactionID pgtype.Int8 `json:"matched_transaction_id"`
+	MatchStatus          string      `json:"match_status"`
+}
+
+func (q *Queries) UpdateBankLineMatch(ctx context.Context, arg UpdateBankLineMatchParams) (BankLine, error) {
+	row := q.db.QueryRow(ctx, updateBankLineMatch,
+		arg.ID,
+		arg.WorkspaceID,
+		arg.MatchedTransactionID,
+		arg.MatchStatus,
+	)
+	var i BankLine
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.BatchID,
+		&i.MoneyAccountID,
+		&i.TransactionDate,
+		&i.Description,
+		&i.Reference,
+		&i.Direction,
+		&i.AmountMinor,
+		&i.MatchedTransactionID,
+		&i.MatchStatus,
+		&i.Fingerprint,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const updateBankReconciliationBalances = `-- name: UpdateBankReconciliationBalances :one
+UPDATE bank_reconciliations
+SET cleared_balance_minor = $3,
+    difference_minor = $4,
+    updated_at = NOW()
+WHERE id = $1 AND workspace_id = $2
+RETURNING id, workspace_id, money_account_id, statement_date, statement_balance_minor, ledger_balance_minor, difference_minor, status, reconciled_at, reconciled_by_user_id, notes, created_at, updated_at, reconciliation_type, cleared_balance_minor, denominations
+`
+
+type UpdateBankReconciliationBalancesParams struct {
+	ID                  int64 `json:"id"`
+	WorkspaceID         int64 `json:"workspace_id"`
+	ClearedBalanceMinor int64 `json:"cleared_balance_minor"`
+	DifferenceMinor     int64 `json:"difference_minor"`
+}
+
+func (q *Queries) UpdateBankReconciliationBalances(ctx context.Context, arg UpdateBankReconciliationBalancesParams) (BankReconciliation, error) {
+	row := q.db.QueryRow(ctx, updateBankReconciliationBalances,
+		arg.ID,
+		arg.WorkspaceID,
+		arg.ClearedBalanceMinor,
+		arg.DifferenceMinor,
+	)
+	var i BankReconciliation
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.MoneyAccountID,
+		&i.StatementDate,
+		&i.StatementBalanceMinor,
+		&i.LedgerBalanceMinor,
+		&i.DifferenceMinor,
+		&i.Status,
+		&i.ReconciledAt,
+		&i.ReconciledByUserID,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ReconciliationType,
+		&i.ClearedBalanceMinor,
+		&i.Denominations,
+	)
+	return i, err
 }

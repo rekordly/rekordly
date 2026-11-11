@@ -13,20 +13,21 @@ import (
 
 const createCounterparty = `-- name: CreateCounterparty :one
 INSERT INTO counterparties (
-    workspace_id, name, party_type, email, phone, notes, is_active
+    workspace_id, name, party_type, email, phone, notes, opening_balance_minor, is_active
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7
-) RETURNING id, workspace_id, name, party_type, email, phone, notes, is_active, created_at, updated_at
+    $1, $2, $3, $4, $5, $6, $7, $8
+) RETURNING id, workspace_id, name, party_type, email, phone, notes, is_active, created_at, updated_at, opening_balance_minor, merged_into_id
 `
 
 type CreateCounterpartyParams struct {
-	WorkspaceID int64       `json:"workspace_id"`
-	Name        string      `json:"name"`
-	PartyType   string      `json:"party_type"`
-	Email       pgtype.Text `json:"email"`
-	Phone       pgtype.Text `json:"phone"`
-	Notes       pgtype.Text `json:"notes"`
-	IsActive    bool        `json:"is_active"`
+	WorkspaceID         int64       `json:"workspace_id"`
+	Name                string      `json:"name"`
+	PartyType           string      `json:"party_type"`
+	Email               pgtype.Text `json:"email"`
+	Phone               pgtype.Text `json:"phone"`
+	Notes               pgtype.Text `json:"notes"`
+	OpeningBalanceMinor int64       `json:"opening_balance_minor"`
+	IsActive            bool        `json:"is_active"`
 }
 
 func (q *Queries) CreateCounterparty(ctx context.Context, arg CreateCounterpartyParams) (Counterparty, error) {
@@ -37,6 +38,7 @@ func (q *Queries) CreateCounterparty(ctx context.Context, arg CreateCounterparty
 		arg.Email,
 		arg.Phone,
 		arg.Notes,
+		arg.OpeningBalanceMinor,
 		arg.IsActive,
 	)
 	var i Counterparty
@@ -51,6 +53,8 @@ func (q *Queries) CreateCounterparty(ctx context.Context, arg CreateCounterparty
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OpeningBalanceMinor,
+		&i.MergedIntoID,
 	)
 	return i, err
 }
@@ -332,7 +336,7 @@ func (q *Queries) CreateSale(ctx context.Context, arg CreateSaleParams) (Sale, e
 }
 
 const getCounterpartyByID = `-- name: GetCounterpartyByID :one
-SELECT id, workspace_id, name, party_type, email, phone, notes, is_active, created_at, updated_at FROM counterparties
+SELECT id, workspace_id, name, party_type, email, phone, notes, is_active, created_at, updated_at, opening_balance_minor, merged_into_id FROM counterparties
 WHERE id = $1 AND workspace_id = $2
 `
 
@@ -355,6 +359,8 @@ func (q *Queries) GetCounterpartyByID(ctx context.Context, arg GetCounterpartyBy
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OpeningBalanceMinor,
+		&i.MergedIntoID,
 	)
 	return i, err
 }
@@ -578,8 +584,9 @@ func (q *Queries) GetSaleByIdempotency(ctx context.Context, arg GetSaleByIdempot
 }
 
 const listCounterparties = `-- name: ListCounterparties :many
-SELECT id, workspace_id, name, party_type, email, phone, notes, is_active, created_at, updated_at FROM counterparties
+SELECT id, workspace_id, name, party_type, email, phone, notes, is_active, created_at, updated_at, opening_balance_minor, merged_into_id FROM counterparties
 WHERE workspace_id = $1
+  AND merged_into_id IS NULL
   AND ($2::text IS NULL OR party_type = $2 OR party_type = 'both')
   AND ($3::boolean IS NULL OR is_active = $3)
 ORDER BY name ASC
@@ -611,6 +618,8 @@ func (q *Queries) ListCounterparties(ctx context.Context, arg ListCounterparties
 			&i.IsActive,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.OpeningBalanceMinor,
+			&i.MergedIntoID,
 		); err != nil {
 			return nil, err
 		}
@@ -920,6 +929,94 @@ func (q *Queries) ListSales(ctx context.Context, arg ListSalesParams) ([]Sale, e
 		return nil, err
 	}
 	return items, nil
+}
+
+const markCounterpartyMerged = `-- name: MarkCounterpartyMerged :one
+UPDATE counterparties
+SET merged_into_id = $3,
+    is_active = false,
+    updated_at = NOW()
+WHERE id = $1 AND workspace_id = $2
+RETURNING id, workspace_id, name, party_type, email, phone, notes, is_active, created_at, updated_at, opening_balance_minor, merged_into_id
+`
+
+type MarkCounterpartyMergedParams struct {
+	ID           int64       `json:"id"`
+	WorkspaceID  int64       `json:"workspace_id"`
+	MergedIntoID pgtype.Int8 `json:"merged_into_id"`
+}
+
+func (q *Queries) MarkCounterpartyMerged(ctx context.Context, arg MarkCounterpartyMergedParams) (Counterparty, error) {
+	row := q.db.QueryRow(ctx, markCounterpartyMerged, arg.ID, arg.WorkspaceID, arg.MergedIntoID)
+	var i Counterparty
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Name,
+		&i.PartyType,
+		&i.Email,
+		&i.Phone,
+		&i.Notes,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.OpeningBalanceMinor,
+		&i.MergedIntoID,
+	)
+	return i, err
+}
+
+const updateCounterparty = `-- name: UpdateCounterparty :one
+UPDATE counterparties
+SET name = $3,
+    party_type = $4,
+    email = $5,
+    phone = $6,
+    notes = $7,
+    opening_balance_minor = $8,
+    updated_at = NOW()
+WHERE id = $1 AND workspace_id = $2 AND merged_into_id IS NULL
+RETURNING id, workspace_id, name, party_type, email, phone, notes, is_active, created_at, updated_at, opening_balance_minor, merged_into_id
+`
+
+type UpdateCounterpartyParams struct {
+	ID                  int64       `json:"id"`
+	WorkspaceID         int64       `json:"workspace_id"`
+	Name                string      `json:"name"`
+	PartyType           string      `json:"party_type"`
+	Email               pgtype.Text `json:"email"`
+	Phone               pgtype.Text `json:"phone"`
+	Notes               pgtype.Text `json:"notes"`
+	OpeningBalanceMinor int64       `json:"opening_balance_minor"`
+}
+
+func (q *Queries) UpdateCounterparty(ctx context.Context, arg UpdateCounterpartyParams) (Counterparty, error) {
+	row := q.db.QueryRow(ctx, updateCounterparty,
+		arg.ID,
+		arg.WorkspaceID,
+		arg.Name,
+		arg.PartyType,
+		arg.Email,
+		arg.Phone,
+		arg.Notes,
+		arg.OpeningBalanceMinor,
+	)
+	var i Counterparty
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Name,
+		&i.PartyType,
+		&i.Email,
+		&i.Phone,
+		&i.Notes,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.OpeningBalanceMinor,
+		&i.MergedIntoID,
+	)
+	return i, err
 }
 
 const updatePurchasePaidAmount = `-- name: UpdatePurchasePaidAmount :one

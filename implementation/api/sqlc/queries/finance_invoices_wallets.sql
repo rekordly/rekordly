@@ -132,3 +132,19 @@ WHERE workspace_id = $1 AND customer_id = $2
   AND (sqlc.narg('before_id')::bigint IS NULL OR id < sqlc.narg('before_id'))
 ORDER BY id DESC
 LIMIT $3;
+
+-- name: SetInvoiceCharges :one
+UPDATE invoices
+SET discount_minor = $3,
+    delivery_fee_minor = $4,
+    total_amount_minor = $5,
+    updated_at = now()
+WHERE id = $1 AND workspace_id = $2
+RETURNING *;
+
+-- name: SetInvoiceItemDiscount :one
+UPDATE invoice_items
+SET discount_minor = $3,
+    amount_minor = $4
+WHERE id = $1 AND workspace_id = $2
+RETURNING *;

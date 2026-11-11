@@ -11,6 +11,99 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createCustomerStatementShare = `-- name: CreateCustomerStatementShare :one
+INSERT INTO customer_statement_shares (
+    workspace_id, customer_id, token_hash, from_date, to_date, expires_at, created_by_user_id
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7
+) RETURNING id, workspace_id, customer_id, token_hash, from_date, to_date, status, expires_at, access_count, last_accessed_at, created_by_user_id, created_at
+`
+
+type CreateCustomerStatementShareParams struct {
+	WorkspaceID     int64              `json:"workspace_id"`
+	CustomerID      int64              `json:"customer_id"`
+	TokenHash       string             `json:"token_hash"`
+	FromDate        pgtype.Date        `json:"from_date"`
+	ToDate          pgtype.Date        `json:"to_date"`
+	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
+	CreatedByUserID pgtype.Int8        `json:"created_by_user_id"`
+}
+
+func (q *Queries) CreateCustomerStatementShare(ctx context.Context, arg CreateCustomerStatementShareParams) (CustomerStatementShare, error) {
+	row := q.db.QueryRow(ctx, createCustomerStatementShare,
+		arg.WorkspaceID,
+		arg.CustomerID,
+		arg.TokenHash,
+		arg.FromDate,
+		arg.ToDate,
+		arg.ExpiresAt,
+		arg.CreatedByUserID,
+	)
+	var i CustomerStatementShare
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.CustomerID,
+		&i.TokenHash,
+		&i.FromDate,
+		&i.ToDate,
+		&i.Status,
+		&i.ExpiresAt,
+		&i.AccessCount,
+		&i.LastAccessedAt,
+		&i.CreatedByUserID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createEstimateShare = `-- name: CreateEstimateShare :one
+INSERT INTO estimate_shares (
+    workspace_id, estimate_id, token_hash, allow_respond, expires_at, created_by_user_id
+) VALUES (
+    $1, $2, $3, $4, $5, $6
+) RETURNING id, workspace_id, estimate_id, token_hash, status, allow_respond, response_status, responded_by_name, response_comment, responded_at, expires_at, access_count, last_accessed_at, created_by_user_id, created_at
+`
+
+type CreateEstimateShareParams struct {
+	WorkspaceID     int64              `json:"workspace_id"`
+	EstimateID      int64              `json:"estimate_id"`
+	TokenHash       string             `json:"token_hash"`
+	AllowRespond    bool               `json:"allow_respond"`
+	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
+	CreatedByUserID pgtype.Int8        `json:"created_by_user_id"`
+}
+
+func (q *Queries) CreateEstimateShare(ctx context.Context, arg CreateEstimateShareParams) (EstimateShare, error) {
+	row := q.db.QueryRow(ctx, createEstimateShare,
+		arg.WorkspaceID,
+		arg.EstimateID,
+		arg.TokenHash,
+		arg.AllowRespond,
+		arg.ExpiresAt,
+		arg.CreatedByUserID,
+	)
+	var i EstimateShare
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.EstimateID,
+		&i.TokenHash,
+		&i.Status,
+		&i.AllowRespond,
+		&i.ResponseStatus,
+		&i.RespondedByName,
+		&i.ResponseComment,
+		&i.RespondedAt,
+		&i.ExpiresAt,
+		&i.AccessCount,
+		&i.LastAccessedAt,
+		&i.CreatedByUserID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const createInvoiceShare = `-- name: CreateInvoiceShare :one
 INSERT INTO invoice_shares (
     workspace_id, invoice_id, token_hash, expires_at
@@ -95,6 +188,59 @@ func (q *Queries) CreatePaymentReceipt(ctx context.Context, arg CreatePaymentRec
 	return i, err
 }
 
+const getCustomerStatementShareByHash = `-- name: GetCustomerStatementShareByHash :one
+SELECT id, workspace_id, customer_id, token_hash, from_date, to_date, status, expires_at, access_count, last_accessed_at, created_by_user_id, created_at FROM customer_statement_shares
+WHERE token_hash = $1 AND status = 'active' AND expires_at > now()
+`
+
+func (q *Queries) GetCustomerStatementShareByHash(ctx context.Context, tokenHash string) (CustomerStatementShare, error) {
+	row := q.db.QueryRow(ctx, getCustomerStatementShareByHash, tokenHash)
+	var i CustomerStatementShare
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.CustomerID,
+		&i.TokenHash,
+		&i.FromDate,
+		&i.ToDate,
+		&i.Status,
+		&i.ExpiresAt,
+		&i.AccessCount,
+		&i.LastAccessedAt,
+		&i.CreatedByUserID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getEstimateShareByHash = `-- name: GetEstimateShareByHash :one
+SELECT id, workspace_id, estimate_id, token_hash, status, allow_respond, response_status, responded_by_name, response_comment, responded_at, expires_at, access_count, last_accessed_at, created_by_user_id, created_at FROM estimate_shares
+WHERE token_hash = $1 AND status = 'active' AND expires_at > now()
+`
+
+func (q *Queries) GetEstimateShareByHash(ctx context.Context, tokenHash string) (EstimateShare, error) {
+	row := q.db.QueryRow(ctx, getEstimateShareByHash, tokenHash)
+	var i EstimateShare
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.EstimateID,
+		&i.TokenHash,
+		&i.Status,
+		&i.AllowRespond,
+		&i.ResponseStatus,
+		&i.RespondedByName,
+		&i.ResponseComment,
+		&i.RespondedAt,
+		&i.ExpiresAt,
+		&i.AccessCount,
+		&i.LastAccessedAt,
+		&i.CreatedByUserID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getInvoiceShareByHash = `-- name: GetInvoiceShareByHash :one
 SELECT id, workspace_id, invoice_id, token_hash, expires_at, status, access_count, last_accessed_at, created_at FROM invoice_shares
 WHERE token_hash = $1 AND status = 'active' AND expires_at > now()
@@ -168,6 +314,30 @@ func (q *Queries) GetPaymentReceiptByPaymentID(ctx context.Context, arg GetPayme
 	return i, err
 }
 
+const incrementCustomerStatementShareAccess = `-- name: IncrementCustomerStatementShareAccess :exec
+UPDATE customer_statement_shares
+SET access_count = access_count + 1,
+    last_accessed_at = now()
+WHERE id = $1
+`
+
+func (q *Queries) IncrementCustomerStatementShareAccess(ctx context.Context, id int64) error {
+	_, err := q.db.Exec(ctx, incrementCustomerStatementShareAccess, id)
+	return err
+}
+
+const incrementEstimateShareAccess = `-- name: IncrementEstimateShareAccess :exec
+UPDATE estimate_shares
+SET access_count = access_count + 1,
+    last_accessed_at = now()
+WHERE id = $1
+`
+
+func (q *Queries) IncrementEstimateShareAccess(ctx context.Context, id int64) error {
+	_, err := q.db.Exec(ctx, incrementEstimateShareAccess, id)
+	return err
+}
+
 const incrementInvoiceShareAccess = `-- name: IncrementInvoiceShareAccess :exec
 UPDATE invoice_shares
 SET access_count = access_count + 1,
@@ -178,6 +348,51 @@ WHERE id = $1
 func (q *Queries) IncrementInvoiceShareAccess(ctx context.Context, id int64) error {
 	_, err := q.db.Exec(ctx, incrementInvoiceShareAccess, id)
 	return err
+}
+
+const recordEstimateShareResponse = `-- name: RecordEstimateShareResponse :one
+UPDATE estimate_shares
+SET response_status = $2,
+    responded_by_name = $3,
+    response_comment = $4,
+    responded_at = now()
+WHERE id = $1
+RETURNING id, workspace_id, estimate_id, token_hash, status, allow_respond, response_status, responded_by_name, response_comment, responded_at, expires_at, access_count, last_accessed_at, created_by_user_id, created_at
+`
+
+type RecordEstimateShareResponseParams struct {
+	ID              int64       `json:"id"`
+	ResponseStatus  pgtype.Text `json:"response_status"`
+	RespondedByName pgtype.Text `json:"responded_by_name"`
+	ResponseComment pgtype.Text `json:"response_comment"`
+}
+
+func (q *Queries) RecordEstimateShareResponse(ctx context.Context, arg RecordEstimateShareResponseParams) (EstimateShare, error) {
+	row := q.db.QueryRow(ctx, recordEstimateShareResponse,
+		arg.ID,
+		arg.ResponseStatus,
+		arg.RespondedByName,
+		arg.ResponseComment,
+	)
+	var i EstimateShare
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.EstimateID,
+		&i.TokenHash,
+		&i.Status,
+		&i.AllowRespond,
+		&i.ResponseStatus,
+		&i.RespondedByName,
+		&i.ResponseComment,
+		&i.RespondedAt,
+		&i.ExpiresAt,
+		&i.AccessCount,
+		&i.LastAccessedAt,
+		&i.CreatedByUserID,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const revokeInvoiceShare = `-- name: RevokeInvoiceShare :exec

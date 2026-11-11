@@ -28,11 +28,12 @@ var (
 // ---------------- Counterparties (External Customers / Suppliers) ----------------
 
 type CreateCounterpartyInput struct {
-	Name      string `json:"name" binding:"required"`
-	PartyType string `json:"party_type" binding:"required"` // customer, supplier, both
-	Email     string `json:"email"`
-	Phone     string `json:"phone"`
-	Notes     string `json:"notes"`
+	Name                string `json:"name" binding:"required"`
+	PartyType           string `json:"party_type"` // customer, supplier, both
+	Email               string `json:"email"`
+	Phone               string `json:"phone"`
+	Notes               string `json:"notes"`
+	OpeningBalanceMinor int64  `json:"opening_balance_minor"`
 }
 
 func (s *Service) CreateCounterparty(ctx context.Context, workspaceID int64, in CreateCounterpartyInput) (db.Counterparty, error) {
@@ -49,14 +50,103 @@ func (s *Service) CreateCounterparty(ctx context.Context, workspaceID int64, in 
 	}
 
 	return s.queries.CreateCounterparty(ctx, db.CreateCounterpartyParams{
-		WorkspaceID: workspaceID,
-		Name:        name,
-		PartyType:   pType,
-		Email:       optionalPgText(in.Email),
-		Phone:       optionalPgText(in.Phone),
-		Notes:       optionalPgText(in.Notes),
-		IsActive:    true,
+		WorkspaceID:         workspaceID,
+		Name:                name,
+		PartyType:           pType,
+		Email:               optionalPgText(in.Email),
+		Phone:               optionalPgText(in.Phone),
+		Notes:               optionalPgText(in.Notes),
+		OpeningBalanceMinor: in.OpeningBalanceMinor,
+		IsActive:            true,
 	})
+}
+
+func (s *Service) UpdateCounterparty(ctx context.Context, workspaceID, partyID int64, in CreateCounterpartyInput) (db.Counterparty, error) {
+	existing, err := s.GetCounterparty(ctx, workspaceID, partyID)
+	if err != nil {
+		return db.Counterparty{}, err
+	}
+	name := strings.TrimSpace(in.Name)
+	if name == "" {
+		return db.Counterparty{}, errors.New("counterparty name is required")
+	}
+	pType := strings.ToLower(strings.TrimSpace(in.PartyType))
+	if pType == "" {
+		pType = existing.PartyType
+	}
+	if pType != "customer" && pType != "supplier" && pType != "both" {
+		return db.Counterparty{}, errors.New("invalid party type")
+	}
+
+	updated, err := s.queries.UpdateCounterparty(ctx, db.UpdateCounterpartyParams{
+		ID:                  partyID,
+		WorkspaceID:         workspaceID,
+		Name:                name,
+		PartyType:           pType,
+		Email:               optionalPgText(in.Email),
+		Phone:               optionalPgText(in.Phone),
+		Notes:               optionalPgText(in.Notes),
+		OpeningBalanceMinor: in.OpeningBalanceMinor,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return db.Counterparty{}, ErrNotFound
+	}
+	return updated, err
+}
+
+func (s *Service) MergeCounterparties(ctx context.Context, workspaceID, sourceID, targetID int64) (db.Counterparty, error) {
+	if sourceID == targetID {
+		return db.Counterparty{}, errors.New("cannot merge a counterparty into itself")
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return db.Counterparty{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	qtx := s.queries.WithTx(tx)
+
+	src, err := qtx.GetCounterpartyByID(ctx, db.GetCounterpartyByIDParams{ID: sourceID, WorkspaceID: workspaceID})
+	if err != nil {
+		return db.Counterparty{}, ErrNotFound
+	}
+	tgt, err := qtx.GetCounterpartyByID(ctx, db.GetCounterpartyByIDParams{ID: targetID, WorkspaceID: workspaceID})
+	if err != nil {
+		return db.Counterparty{}, ErrNotFound
+	}
+	if src.MergedIntoID.Valid || tgt.MergedIntoID.Valid {
+		return db.Counterparty{}, errors.New("cannot merge already merged records")
+	}
+
+	// Reassign tenant-owned references cleanly from source to target
+	updates := []string{
+		`UPDATE sales SET customer_id = $3 WHERE workspace_id = $1 AND customer_id = $2`,
+		`UPDATE purchases SET supplier_id = $3 WHERE workspace_id = $1 AND supplier_id = $2`,
+		`UPDATE invoices SET customer_id = $3 WHERE workspace_id = $1 AND customer_id = $2`,
+		`UPDATE estimates SET customer_id = $3 WHERE workspace_id = $1 AND customer_id = $2`,
+		`UPDATE sales_returns SET customer_id = $3 WHERE workspace_id = $1 AND customer_id = $2`,
+		`UPDATE payments SET counterparty_id = $3 WHERE workspace_id = $1 AND counterparty_id = $2`,
+		`UPDATE money_record_drafts SET counterparty_id = $3 WHERE workspace_id = $1 AND counterparty_id = $2`,
+		`UPDATE money_records SET counterparty_id = $3 WHERE workspace_id = $1 AND counterparty_id = $2`,
+		`UPDATE wallet_transactions SET customer_id = $3 WHERE workspace_id = $1 AND customer_id = $2`,
+	}
+	for _, stmt := range updates {
+		if _, err := tx.Exec(ctx, stmt, workspaceID, sourceID, targetID); err != nil {
+			return db.Counterparty{}, fmt.Errorf("merge references: %w", err)
+		}
+	}
+
+	if _, err := qtx.MarkCounterpartyMerged(ctx, db.MarkCounterpartyMergedParams{
+		ID:           sourceID,
+		WorkspaceID:  workspaceID,
+		MergedIntoID: pgtype.Int8{Int64: targetID, Valid: true},
+	}); err != nil {
+		return db.Counterparty{}, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return db.Counterparty{}, err
+	}
+	return tgt, nil
 }
 
 func (s *Service) ListCounterparties(ctx context.Context, workspaceID int64, partyType string) ([]db.Counterparty, error) {

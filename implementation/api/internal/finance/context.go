@@ -28,6 +28,40 @@ type WorkspaceContext struct {
 	RoleCode    string
 	IsOwner     bool
 	Kind        string
+	Permissions []string
+	OutletScope map[string]any
+}
+
+func (w WorkspaceContext) HasPermission(code string) bool {
+	if w.IsOwner || w.RoleCode == "owner" {
+		return true
+	}
+	for _, p := range w.Permissions {
+		if p == "*" || p == code {
+			return true
+		}
+	}
+	return false
+}
+
+func (w WorkspaceContext) ScopedOutletID() *int64 {
+	if w.IsOwner || len(w.OutletScope) == 0 {
+		return nil
+	}
+	if raw, ok := w.OutletScope["outlet_id"]; ok {
+		switch v := raw.(type) {
+		case float64:
+			id := int64(v)
+			if id > 0 {
+				return &id
+			}
+		case int64:
+			if v > 0 {
+				return &v
+			}
+		}
+	}
+	return nil
 }
 
 func AuthAndWorkspaceMiddleware(pool *pgxpool.Pool, authValidator AuthSessionValidator) gin.HandlerFunc {
@@ -80,6 +114,8 @@ func AuthAndWorkspaceMiddleware(pool *pgxpool.Pool, authValidator AuthSessionVal
 					RoleCode:    ws.RoleCode,
 					IsOwner:     ws.IsOwner,
 					Kind:        ws.Kind,
+					Permissions: ws.Permissions,
+					OutletScope: ws.OutletScope,
 				})
 				c.Next()
 				return
@@ -130,6 +166,8 @@ func AuthAndWorkspaceMiddleware(pool *pgxpool.Pool, authValidator AuthSessionVal
 			RoleCode:    authorizedWS.RoleCode,
 			IsOwner:     authorizedWS.IsOwner,
 			Kind:        authorizedWS.Kind,
+			Permissions: authorizedWS.Permissions,
+			OutletScope: authorizedWS.OutletScope,
 		})
 		c.Next()
 	}

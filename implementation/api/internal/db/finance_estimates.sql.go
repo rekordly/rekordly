@@ -20,7 +20,7 @@ INSERT INTO estimates (
     status, notes, terms, idempotency_key, created_by_user_id
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
-) RETURNING id, workspace_id, estimate_number, customer_id, customer_name, issue_date, expiry_date, currency, currency_exponent, subtotal_minor, tax_amount_minor, total_amount_minor, status, notes, terms, converted_invoice_id, created_by_user_id, idempotency_key, created_at, updated_at
+) RETURNING id, workspace_id, estimate_number, customer_id, customer_name, issue_date, expiry_date, currency, currency_exponent, subtotal_minor, tax_amount_minor, total_amount_minor, status, notes, terms, converted_invoice_id, created_by_user_id, idempotency_key, created_at, updated_at, discount_minor, delivery_fee_minor
 `
 
 type CreateEstimateParams struct {
@@ -83,6 +83,8 @@ func (q *Queries) CreateEstimate(ctx context.Context, arg CreateEstimateParams) 
 		&i.IdempotencyKey,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DiscountMinor,
+		&i.DeliveryFeeMinor,
 	)
 	return i, err
 }
@@ -93,7 +95,7 @@ INSERT INTO estimate_items (
     unit_price_minor, amount_minor
 ) VALUES (
     $1, $2, $3, $4, $5, $6
-) RETURNING id, estimate_id, workspace_id, description, quantity, unit_price_minor, amount_minor, created_at
+) RETURNING id, estimate_id, workspace_id, description, quantity, unit_price_minor, amount_minor, created_at, discount_minor
 `
 
 type CreateEstimateItemParams struct {
@@ -124,6 +126,7 @@ func (q *Queries) CreateEstimateItem(ctx context.Context, arg CreateEstimateItem
 		&i.UnitPriceMinor,
 		&i.AmountMinor,
 		&i.CreatedAt,
+		&i.DiscountMinor,
 	)
 	return i, err
 }
@@ -144,7 +147,7 @@ func (q *Queries) DeleteEstimateItems(ctx context.Context, arg DeleteEstimateIte
 }
 
 const getEstimateByID = `-- name: GetEstimateByID :one
-SELECT id, workspace_id, estimate_number, customer_id, customer_name, issue_date, expiry_date, currency, currency_exponent, subtotal_minor, tax_amount_minor, total_amount_minor, status, notes, terms, converted_invoice_id, created_by_user_id, idempotency_key, created_at, updated_at FROM estimates
+SELECT id, workspace_id, estimate_number, customer_id, customer_name, issue_date, expiry_date, currency, currency_exponent, subtotal_minor, tax_amount_minor, total_amount_minor, status, notes, terms, converted_invoice_id, created_by_user_id, idempotency_key, created_at, updated_at, discount_minor, delivery_fee_minor FROM estimates
 WHERE id = $1 AND workspace_id = $2
 `
 
@@ -177,12 +180,14 @@ func (q *Queries) GetEstimateByID(ctx context.Context, arg GetEstimateByIDParams
 		&i.IdempotencyKey,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DiscountMinor,
+		&i.DeliveryFeeMinor,
 	)
 	return i, err
 }
 
 const getEstimateByIDForUpdate = `-- name: GetEstimateByIDForUpdate :one
-SELECT id, workspace_id, estimate_number, customer_id, customer_name, issue_date, expiry_date, currency, currency_exponent, subtotal_minor, tax_amount_minor, total_amount_minor, status, notes, terms, converted_invoice_id, created_by_user_id, idempotency_key, created_at, updated_at FROM estimates
+SELECT id, workspace_id, estimate_number, customer_id, customer_name, issue_date, expiry_date, currency, currency_exponent, subtotal_minor, tax_amount_minor, total_amount_minor, status, notes, terms, converted_invoice_id, created_by_user_id, idempotency_key, created_at, updated_at, discount_minor, delivery_fee_minor FROM estimates
 WHERE id = $1 AND workspace_id = $2
 FOR UPDATE
 `
@@ -216,12 +221,14 @@ func (q *Queries) GetEstimateByIDForUpdate(ctx context.Context, arg GetEstimateB
 		&i.IdempotencyKey,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DiscountMinor,
+		&i.DeliveryFeeMinor,
 	)
 	return i, err
 }
 
 const getEstimateByIdempotency = `-- name: GetEstimateByIdempotency :one
-SELECT id, workspace_id, estimate_number, customer_id, customer_name, issue_date, expiry_date, currency, currency_exponent, subtotal_minor, tax_amount_minor, total_amount_minor, status, notes, terms, converted_invoice_id, created_by_user_id, idempotency_key, created_at, updated_at FROM estimates
+SELECT id, workspace_id, estimate_number, customer_id, customer_name, issue_date, expiry_date, currency, currency_exponent, subtotal_minor, tax_amount_minor, total_amount_minor, status, notes, terms, converted_invoice_id, created_by_user_id, idempotency_key, created_at, updated_at, discount_minor, delivery_fee_minor FROM estimates
 WHERE workspace_id = $1 AND idempotency_key = $2
 `
 
@@ -254,12 +261,14 @@ func (q *Queries) GetEstimateByIdempotency(ctx context.Context, arg GetEstimateB
 		&i.IdempotencyKey,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DiscountMinor,
+		&i.DeliveryFeeMinor,
 	)
 	return i, err
 }
 
 const getEstimateByNumber = `-- name: GetEstimateByNumber :one
-SELECT id, workspace_id, estimate_number, customer_id, customer_name, issue_date, expiry_date, currency, currency_exponent, subtotal_minor, tax_amount_minor, total_amount_minor, status, notes, terms, converted_invoice_id, created_by_user_id, idempotency_key, created_at, updated_at FROM estimates
+SELECT id, workspace_id, estimate_number, customer_id, customer_name, issue_date, expiry_date, currency, currency_exponent, subtotal_minor, tax_amount_minor, total_amount_minor, status, notes, terms, converted_invoice_id, created_by_user_id, idempotency_key, created_at, updated_at, discount_minor, delivery_fee_minor FROM estimates
 WHERE workspace_id = $1 AND lower(estimate_number) = lower($2)
 `
 
@@ -292,12 +301,14 @@ func (q *Queries) GetEstimateByNumber(ctx context.Context, arg GetEstimateByNumb
 		&i.IdempotencyKey,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DiscountMinor,
+		&i.DeliveryFeeMinor,
 	)
 	return i, err
 }
 
 const listEstimateItems = `-- name: ListEstimateItems :many
-SELECT id, estimate_id, workspace_id, description, quantity, unit_price_minor, amount_minor, created_at FROM estimate_items
+SELECT id, estimate_id, workspace_id, description, quantity, unit_price_minor, amount_minor, created_at, discount_minor FROM estimate_items
 WHERE estimate_id = $1 AND workspace_id = $2
 ORDER BY id ASC
 `
@@ -325,6 +336,7 @@ func (q *Queries) ListEstimateItems(ctx context.Context, arg ListEstimateItemsPa
 			&i.UnitPriceMinor,
 			&i.AmountMinor,
 			&i.CreatedAt,
+			&i.DiscountMinor,
 		); err != nil {
 			return nil, err
 		}
@@ -337,7 +349,7 @@ func (q *Queries) ListEstimateItems(ctx context.Context, arg ListEstimateItemsPa
 }
 
 const listEstimates = `-- name: ListEstimates :many
-SELECT id, workspace_id, estimate_number, customer_id, customer_name, issue_date, expiry_date, currency, currency_exponent, subtotal_minor, tax_amount_minor, total_amount_minor, status, notes, terms, converted_invoice_id, created_by_user_id, idempotency_key, created_at, updated_at FROM estimates
+SELECT id, workspace_id, estimate_number, customer_id, customer_name, issue_date, expiry_date, currency, currency_exponent, subtotal_minor, tax_amount_minor, total_amount_minor, status, notes, terms, converted_invoice_id, created_by_user_id, idempotency_key, created_at, updated_at, discount_minor, delivery_fee_minor FROM estimates
 WHERE workspace_id = $1
   AND ($3::date IS NULL OR issue_date >= $3)
   AND ($4::date IS NULL OR issue_date <= $4)
@@ -399,6 +411,8 @@ func (q *Queries) ListEstimates(ctx context.Context, arg ListEstimatesParams) ([
 			&i.IdempotencyKey,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DiscountMinor,
+			&i.DeliveryFeeMinor,
 		); err != nil {
 			return nil, err
 		}
@@ -416,7 +430,7 @@ SET status = 'converted',
     converted_invoice_id = $3,
     updated_at = now()
 WHERE id = $1 AND workspace_id = $2
-RETURNING id, workspace_id, estimate_number, customer_id, customer_name, issue_date, expiry_date, currency, currency_exponent, subtotal_minor, tax_amount_minor, total_amount_minor, status, notes, terms, converted_invoice_id, created_by_user_id, idempotency_key, created_at, updated_at
+RETURNING id, workspace_id, estimate_number, customer_id, customer_name, issue_date, expiry_date, currency, currency_exponent, subtotal_minor, tax_amount_minor, total_amount_minor, status, notes, terms, converted_invoice_id, created_by_user_id, idempotency_key, created_at, updated_at, discount_minor, delivery_fee_minor
 `
 
 type MarkEstimateConvertedParams struct {
@@ -449,6 +463,99 @@ func (q *Queries) MarkEstimateConverted(ctx context.Context, arg MarkEstimateCon
 		&i.IdempotencyKey,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DiscountMinor,
+		&i.DeliveryFeeMinor,
+	)
+	return i, err
+}
+
+const setEstimateCharges = `-- name: SetEstimateCharges :one
+UPDATE estimates
+SET discount_minor = $3,
+    delivery_fee_minor = $4,
+    total_amount_minor = $5,
+    updated_at = now()
+WHERE id = $1 AND workspace_id = $2
+RETURNING id, workspace_id, estimate_number, customer_id, customer_name, issue_date, expiry_date, currency, currency_exponent, subtotal_minor, tax_amount_minor, total_amount_minor, status, notes, terms, converted_invoice_id, created_by_user_id, idempotency_key, created_at, updated_at, discount_minor, delivery_fee_minor
+`
+
+type SetEstimateChargesParams struct {
+	ID               int64 `json:"id"`
+	WorkspaceID      int64 `json:"workspace_id"`
+	DiscountMinor    int64 `json:"discount_minor"`
+	DeliveryFeeMinor int64 `json:"delivery_fee_minor"`
+	TotalAmountMinor int64 `json:"total_amount_minor"`
+}
+
+func (q *Queries) SetEstimateCharges(ctx context.Context, arg SetEstimateChargesParams) (Estimate, error) {
+	row := q.db.QueryRow(ctx, setEstimateCharges,
+		arg.ID,
+		arg.WorkspaceID,
+		arg.DiscountMinor,
+		arg.DeliveryFeeMinor,
+		arg.TotalAmountMinor,
+	)
+	var i Estimate
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.EstimateNumber,
+		&i.CustomerID,
+		&i.CustomerName,
+		&i.IssueDate,
+		&i.ExpiryDate,
+		&i.Currency,
+		&i.CurrencyExponent,
+		&i.SubtotalMinor,
+		&i.TaxAmountMinor,
+		&i.TotalAmountMinor,
+		&i.Status,
+		&i.Notes,
+		&i.Terms,
+		&i.ConvertedInvoiceID,
+		&i.CreatedByUserID,
+		&i.IdempotencyKey,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DiscountMinor,
+		&i.DeliveryFeeMinor,
+	)
+	return i, err
+}
+
+const setEstimateItemDiscount = `-- name: SetEstimateItemDiscount :one
+UPDATE estimate_items
+SET discount_minor = $3,
+    amount_minor = $4
+WHERE id = $1 AND workspace_id = $2
+RETURNING id, estimate_id, workspace_id, description, quantity, unit_price_minor, amount_minor, created_at, discount_minor
+`
+
+type SetEstimateItemDiscountParams struct {
+	ID            int64 `json:"id"`
+	WorkspaceID   int64 `json:"workspace_id"`
+	DiscountMinor int64 `json:"discount_minor"`
+	AmountMinor   int64 `json:"amount_minor"`
+}
+
+func (q *Queries) SetEstimateItemDiscount(ctx context.Context, arg SetEstimateItemDiscountParams) (EstimateItem, error) {
+	row := q.db.QueryRow(ctx, setEstimateItemDiscount,
+		arg.ID,
+		arg.WorkspaceID,
+		arg.DiscountMinor,
+		arg.AmountMinor,
+	)
+	var i EstimateItem
+	err := row.Scan(
+		&i.ID,
+		&i.EstimateID,
+		&i.WorkspaceID,
+		&i.Description,
+		&i.Quantity,
+		&i.UnitPriceMinor,
+		&i.AmountMinor,
+		&i.CreatedAt,
+		&i.DiscountMinor,
 	)
 	return i, err
 }
@@ -466,7 +573,7 @@ SET customer_id = $3,
     terms = $11,
     updated_at = now()
 WHERE id = $1 AND workspace_id = $2 AND status = 'draft'
-RETURNING id, workspace_id, estimate_number, customer_id, customer_name, issue_date, expiry_date, currency, currency_exponent, subtotal_minor, tax_amount_minor, total_amount_minor, status, notes, terms, converted_invoice_id, created_by_user_id, idempotency_key, created_at, updated_at
+RETURNING id, workspace_id, estimate_number, customer_id, customer_name, issue_date, expiry_date, currency, currency_exponent, subtotal_minor, tax_amount_minor, total_amount_minor, status, notes, terms, converted_invoice_id, created_by_user_id, idempotency_key, created_at, updated_at, discount_minor, delivery_fee_minor
 `
 
 type UpdateDraftEstimateParams struct {
@@ -519,6 +626,8 @@ func (q *Queries) UpdateDraftEstimate(ctx context.Context, arg UpdateDraftEstima
 		&i.IdempotencyKey,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DiscountMinor,
+		&i.DeliveryFeeMinor,
 	)
 	return i, err
 }
@@ -528,7 +637,7 @@ UPDATE estimates
 SET status = $3,
     updated_at = now()
 WHERE id = $1 AND workspace_id = $2
-RETURNING id, workspace_id, estimate_number, customer_id, customer_name, issue_date, expiry_date, currency, currency_exponent, subtotal_minor, tax_amount_minor, total_amount_minor, status, notes, terms, converted_invoice_id, created_by_user_id, idempotency_key, created_at, updated_at
+RETURNING id, workspace_id, estimate_number, customer_id, customer_name, issue_date, expiry_date, currency, currency_exponent, subtotal_minor, tax_amount_minor, total_amount_minor, status, notes, terms, converted_invoice_id, created_by_user_id, idempotency_key, created_at, updated_at, discount_minor, delivery_fee_minor
 `
 
 type UpdateEstimateStatusParams struct {
@@ -561,6 +670,8 @@ func (q *Queries) UpdateEstimateStatus(ctx context.Context, arg UpdateEstimateSt
 		&i.IdempotencyKey,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DiscountMinor,
+		&i.DeliveryFeeMinor,
 	)
 	return i, err
 }

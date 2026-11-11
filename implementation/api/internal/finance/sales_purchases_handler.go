@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -15,10 +16,13 @@ func (h *Handler) RegisterSalesPurchasesRoutes(protected *gin.RouterGroup) {
 	protected.POST("/customers", h.createCustomer)
 	protected.GET("/customers", h.listCustomers)
 	protected.GET("/customers/:id", h.getCustomer)
+	protected.PATCH("/customers/:id", h.updateCustomer)
 	protected.GET("/customers/:id/statement", h.getCustomerStatement)
 	protected.POST("/suppliers", h.createSupplier)
 	protected.GET("/suppliers", h.listSuppliers)
 	protected.GET("/suppliers/:id", h.getSupplier)
+	protected.PATCH("/suppliers/:id", h.updateSupplier)
+	protected.POST("/counterparties/merge", h.mergeCounterparties)
 
 	// Sales
 	protected.POST("/sales", h.createSale)
@@ -119,35 +123,120 @@ func (h *Handler) getCustomer(c *gin.Context) {
 		return
 	}
 
-	// Fetch customer's open invoices
+	// Resolve workspace base currency
+	wsCurrency := "NGN"
+	if profile, pErr := h.service.queries.GetWorkspaceProfile(c.Request.Context(), wsCtx.WorkspaceID); pErr == nil && profile.BaseCurrency != "" {
+		wsCurrency = profile.BaseCurrency
+	}
+
+	// Fetch customer's invoices
 	invoices, _ := h.service.queries.ListInvoices(c.Request.Context(), db.ListInvoicesParams{
 		WorkspaceID: wsCtx.WorkspaceID,
 		CustomerID:  pgtype.Int8{Int64: customer.ID, Valid: true},
-		Limit:       20,
+		Limit:       50,
 	})
 
-	// Fetch customer's recent sales
+	// Fetch customer's recent direct sales
 	sales, _ := h.service.queries.ListSales(c.Request.Context(), db.ListSalesParams{
 		WorkspaceID: wsCtx.WorkspaceID,
 		CustomerID:  pgtype.Int8{Int64: customer.ID, Valid: true},
-		Limit:       20,
+		Limit:       50,
 	})
 
-	// Fetch customer's wallet balance
-	wallet, _ := h.service.queries.GetCustomerWallet(c.Request.Context(), db.GetCustomerWalletParams{
+	// Fetch customer's wallet balance (nil if not created yet)
+	var walletPtr *db.CustomerWallet
+	wallet, wErr := h.service.queries.GetCustomerWallet(c.Request.Context(), db.GetCustomerWalletParams{
 		WorkspaceID: wsCtx.WorkspaceID,
 		CustomerID:  customer.ID,
-		Currency:    "NGN",
+		Currency:    wsCurrency,
 	})
+	if wErr == nil {
+		walletPtr = &wallet
+	}
+
+	// Fetch customer credit balance
+	creditDetail, _ := h.service.GetCustomerCredit(c.Request.Context(), wsCtx.WorkspaceID, customer.ID, wsCurrency)
 
 	c.JSON(http.StatusOK, gin.H{
 		"data": gin.H{
 			"customer": customer,
-			"wallet":   wallet,
+			"currency": wsCurrency,
+			"wallet":   walletPtr,
+			"credit":   creditDetail.Credit,
 			"invoices": invoices,
 			"sales":    sales,
 		},
 	})
+}
+
+func (h *Handler) updateCustomer(c *gin.Context) {
+	wsCtx, err := GetWorkspaceContext(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+		return
+	}
+	custID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_ID", "message": "Invalid customer ID"}})
+		return
+	}
+	var in CreateCounterpartyInput
+	if err := c.ShouldBindJSON(&in); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": err.Error()}})
+		return
+	}
+	cp, err := h.service.UpdateCounterparty(c.Request.Context(), wsCtx.WorkspaceID, custID, in)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "UPDATE_CUSTOMER_FAILED", "message": err.Error()}})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"customer": cp}})
+}
+
+func (h *Handler) updateSupplier(c *gin.Context) {
+	wsCtx, err := GetWorkspaceContext(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+		return
+	}
+	suppID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_ID", "message": "Invalid supplier ID"}})
+		return
+	}
+	var in CreateCounterpartyInput
+	if err := c.ShouldBindJSON(&in); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": err.Error()}})
+		return
+	}
+	cp, err := h.service.UpdateCounterparty(c.Request.Context(), wsCtx.WorkspaceID, suppID, in)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "UPDATE_SUPPLIER_FAILED", "message": err.Error()}})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"supplier": cp}})
+}
+
+func (h *Handler) mergeCounterparties(c *gin.Context) {
+	wsCtx, err := GetWorkspaceContext(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_WORKSPACE", "message": err.Error()}})
+		return
+	}
+	var in struct {
+		SourceID int64 `json:"source_id" binding:"required"`
+		TargetID int64 `json:"target_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": err.Error()}})
+		return
+	}
+	merged, err := h.service.MergeCounterparties(c.Request.Context(), wsCtx.WorkspaceID, in.SourceID, in.TargetID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "MERGE_FAILED", "message": err.Error()}})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"counterparty": merged}})
 }
 
 // @Summary Get customer statement of account
@@ -182,25 +271,49 @@ func (h *Handler) getCustomerStatement(c *gin.Context) {
 		return
 	}
 
+	var fromDatePg, toDatePg pgtype.Date
+	if f := c.Query("from_date"); f != "" {
+		if t, parseErr := time.Parse("2006-01-02", f); parseErr == nil {
+			fromDatePg = pgtype.Date{Time: t, Valid: true}
+		}
+	}
+	if tStr := c.Query("to_date"); tStr != "" {
+		if t, parseErr := time.Parse("2006-01-02", tStr); parseErr == nil {
+			toDatePg = pgtype.Date{Time: t, Valid: true}
+		}
+	}
+
 	invoices, _ := h.service.queries.ListInvoices(c.Request.Context(), db.ListInvoicesParams{
 		WorkspaceID: wsCtx.WorkspaceID,
 		CustomerID:  pgtype.Int8{Int64: customer.ID, Valid: true},
-		Limit:       100,
+		FromDate:    fromDatePg,
+		ToDate:      toDatePg,
+		Limit:       200,
+	})
+
+	sales, _ := h.service.queries.ListSales(c.Request.Context(), db.ListSalesParams{
+		WorkspaceID: wsCtx.WorkspaceID,
+		CustomerID:  pgtype.Int8{Int64: customer.ID, Valid: true},
+		FromDate:    fromDatePg,
+		ToDate:      toDatePg,
+		Limit:       200,
 	})
 
 	walletTxs, _ := h.service.queries.ListWalletTransactions(c.Request.Context(), db.ListWalletTransactionsParams{
 		WorkspaceID: wsCtx.WorkspaceID,
 		CustomerID:  customer.ID,
-		Limit:       100,
+		Limit:       200,
 	})
 
 	c.JSON(http.StatusOK, gin.H{
 		"data": gin.H{
 			"statement": gin.H{
-				"customer":    customer,
-				"invoices":    invoices,
-				"wallet_txs":  walletTxs,
-				"as_of_date":  c.DefaultQuery("to_date", ""),
+				"customer":   customer,
+				"invoices":   invoices,
+				"sales":      sales,
+				"wallet_txs": walletTxs,
+				"from_date":  c.DefaultQuery("from_date", ""),
+				"as_of_date": c.DefaultQuery("to_date", ""),
 			},
 		},
 	})

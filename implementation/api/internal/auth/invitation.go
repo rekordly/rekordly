@@ -2,10 +2,12 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -168,4 +170,147 @@ func maskEmail(value string) string {
 		return "***"
 	}
 	return parts[0][:1] + "***@" + parts[1]
+}
+
+type CreatedInvitationResult struct {
+	ID         int64     `json:"id"`
+	InviteURL  string    `json:"invite_url"`
+	Token      string    `json:"token"`
+	RoleCode   string    `json:"role_code"`
+	RoleName   string    `json:"role_name"`
+	ExpiresAt  time.Time `json:"expires_at"`
+}
+
+func (service *Service) CreateWorkspaceInvitation(
+	ctx context.Context,
+	sessionToken, csrfToken string,
+	workspaceID int64,
+	email, roleCode string,
+	outletScope map[string]any,
+) (CreatedInvitationResult, error) {
+	session, err := db.New(service.pool).GetActiveFullSessionByDigest(ctx, digest(sessionToken))
+	if err != nil || subtle.ConstantTimeCompare(session.CsrfDigest, digest(csrfToken)) != 1 {
+		return CreatedInvitationResult{}, ErrInvalidProof
+	}
+
+	normalizedEmail := strings.ToLower(strings.TrimSpace(email))
+	if normalizedEmail == "" || !strings.Contains(normalizedEmail, "@") {
+		return CreatedInvitationResult{}, errors.New("valid email address is required")
+	}
+
+	tx, err := service.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return CreatedInvitationResult{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// Verify caller is an owner or admin in this workspace
+	var isOwner bool
+	var callerRoleCode string
+	err = tx.QueryRow(ctx, `
+		SELECT m.is_owner, r.code
+		FROM memberships m
+		JOIN roles r ON r.id = m.role_id
+		WHERE m.workspace_id = $1 AND m.user_id = $2 AND m.status = 'active'
+	`, workspaceID, session.UserID).Scan(&isOwner, &callerRoleCode)
+	if err != nil || (!isOwner && callerRoleCode != "admin") {
+		return CreatedInvitationResult{}, ErrInvalidProof
+	}
+
+	rCode := strings.ToLower(strings.TrimSpace(roleCode))
+	if rCode == "" {
+		rCode = "staff"
+	}
+	if rCode == "owner" {
+		return CreatedInvitationResult{}, errors.New("cannot invite directly as owner")
+	}
+
+	roleNames := map[string]string{
+		"admin":      "Admin",
+		"accountant": "Accountant",
+		"cashier":    "Cashier",
+		"staff":      "Staff",
+		"viewer":     "Viewer",
+	}
+	rName, ok := roleNames[rCode]
+	if !ok {
+		rName = strings.ToUpper(rCode[:1]) + rCode[1:]
+	}
+
+	var roleID int64
+	err = tx.QueryRow(ctx, `SELECT id FROM roles WHERE workspace_id = $1 AND code = $2`, workspaceID, rCode).Scan(&roleID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		if err := tx.QueryRow(ctx, `INSERT INTO roles (workspace_id, code, name) VALUES ($1, $2, $3) RETURNING id`, workspaceID, rCode, rName).Scan(&roleID); err != nil {
+			return CreatedInvitationResult{}, err
+		}
+		for _, pCode := range defaultPermissionsForRoleCode(rCode) {
+			_, _ = tx.Exec(ctx, `INSERT INTO role_permissions (role_id, permission_code) VALUES ($1, $2) ON CONFLICT DO NOTHING`, roleID, pCode)
+		}
+	} else if err != nil {
+		return CreatedInvitationResult{}, err
+	}
+
+	tokenBytes := make([]byte, 24)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		return CreatedInvitationResult{}, err
+	}
+	rawToken := base64.RawURLEncoding.EncodeToString(tokenBytes)
+	expiresAt := time.Now().Add(7 * 24 * time.Hour)
+
+	scopeBytes := []byte(`{}`)
+	if len(outletScope) > 0 {
+		if b, mErr := json.Marshal(outletScope); mErr == nil {
+			scopeBytes = b
+		}
+	}
+
+	var invID int64
+	err = tx.QueryRow(ctx, `
+		INSERT INTO invitations (
+			workspace_id, invited_by_user_id, role_id,
+			destination_normalized, destination_digest, token_digest,
+			outlet_scope, status, expires_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8)
+		RETURNING id
+	`, workspaceID, session.UserID, roleID, normalizedEmail, service.recipientDigest(normalizedEmail), digest(rawToken), scopeBytes, expiresAt).Scan(&invID)
+	if err != nil {
+		return CreatedInvitationResult{}, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return CreatedInvitationResult{}, err
+	}
+
+	return CreatedInvitationResult{
+		ID:        invID,
+		InviteURL: fmt.Sprintf("/invitations/%s", rawToken),
+		Token:     rawToken,
+		RoleCode:  rCode,
+		RoleName:  rName,
+		ExpiresAt: expiresAt,
+	}, nil
+}
+
+func (service *Service) RevokeWorkspaceInvitation(ctx context.Context, sessionToken, csrfToken string, workspaceID, invitationID int64) error {
+	session, err := db.New(service.pool).GetActiveFullSessionByDigest(ctx, digest(sessionToken))
+	if err != nil || subtle.ConstantTimeCompare(session.CsrfDigest, digest(csrfToken)) != 1 {
+		return ErrInvalidProof
+	}
+	var isOwner bool
+	var callerRole string
+	err = service.pool.QueryRow(ctx, `
+		SELECT m.is_owner, r.code
+		FROM memberships m
+		JOIN roles r ON r.id = m.role_id
+		WHERE m.workspace_id = $1 AND m.user_id = $2 AND m.status = 'active'
+	`, workspaceID, session.UserID).Scan(&isOwner, &callerRole)
+	if err != nil || (!isOwner && callerRole != "admin") {
+		return ErrInvalidProof
+	}
+	_, err = service.pool.Exec(ctx, `
+		UPDATE invitations
+		SET status = 'revoked', revoked_at = NOW(), updated_at = NOW()
+		WHERE id = $1 AND workspace_id = $2 AND status = 'pending'
+	`, invitationID, workspaceID)
+	return err
 }

@@ -83,3 +83,19 @@ ORDER BY id ASC;
 -- name: DeleteEstimateItems :exec
 DELETE FROM estimate_items
 WHERE estimate_id = $1 AND workspace_id = $2;
+
+-- name: SetEstimateCharges :one
+UPDATE estimates
+SET discount_minor = $3,
+    delivery_fee_minor = $4,
+    total_amount_minor = $5,
+    updated_at = now()
+WHERE id = $1 AND workspace_id = $2
+RETURNING *;
+
+-- name: SetEstimateItemDiscount :one
+UPDATE estimate_items
+SET discount_minor = $3,
+    amount_minor = $4
+WHERE id = $1 AND workspace_id = $2
+RETURNING *;

@@ -31,12 +31,12 @@ CREATE TABLE IF NOT EXISTS sales_return_items (
     sales_return_id BIGINT NOT NULL REFERENCES sales_returns(id) ON DELETE CASCADE,
     workspace_id BIGINT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     description TEXT NOT NULL,
-    catalogue_item_id BIGINT REFERENCES catalogue_items(id) ON DELETE SET NULL,
+    catalogue_item_id BIGINT REFERENCES products(id) ON DELETE SET NULL,
     quantity NUMERIC(14, 4) NOT NULL DEFAULT 1 CONSTRAINT sales_return_items_qty_check CHECK (quantity > 0),
     unit_price_minor BIGINT NOT NULL,
     amount_minor BIGINT NOT NULL,
     restock_inventory BOOLEAN NOT NULL DEFAULT FALSE,
-    outlet_id BIGINT REFERENCES inventory_outlets(id) ON DELETE SET NULL,
+    outlet_id BIGINT REFERENCES inventory_locations(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

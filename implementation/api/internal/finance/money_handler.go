@@ -71,6 +71,7 @@ func (h *Handler) RegisterRoutes(group *gin.RouterGroup) {
 	h.RegisterInvoiceShareRoutes(protected)
 	h.RegisterSalesReturnRoutes(protected)
 	h.RegisterReconciliationRoutes(protected)
+	h.RegisterWorkspaceOpsRoutes(protected)
 
 	// Budgets and Tax-Readiness Reports
 	h.RegisterBudgetsTaxRoutes(protected)

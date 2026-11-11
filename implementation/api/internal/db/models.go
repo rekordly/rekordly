@@ -59,6 +59,32 @@ type AuthRateLimit struct {
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
+type BankImportBatch struct {
+	ID               int64              `json:"id"`
+	WorkspaceID      int64              `json:"workspace_id"`
+	MoneyAccountID   int64              `json:"money_account_id"`
+	FileName         string             `json:"file_name"`
+	RowCount         int32              `json:"row_count"`
+	ImportedByUserID pgtype.Int8        `json:"imported_by_user_id"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
+type BankLine struct {
+	ID                   int64              `json:"id"`
+	WorkspaceID          int64              `json:"workspace_id"`
+	BatchID              int64              `json:"batch_id"`
+	MoneyAccountID       int64              `json:"money_account_id"`
+	TransactionDate      pgtype.Date        `json:"transaction_date"`
+	Description          string             `json:"description"`
+	Reference            pgtype.Text        `json:"reference"`
+	Direction            string             `json:"direction"`
+	AmountMinor          int64              `json:"amount_minor"`
+	MatchedTransactionID pgtype.Int8        `json:"matched_transaction_id"`
+	MatchStatus          string             `json:"match_status"`
+	Fingerprint          string             `json:"fingerprint"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+}
+
 type BankReconciliation struct {
 	ID                    int64              `json:"id"`
 	WorkspaceID           int64              `json:"workspace_id"`
@@ -73,6 +99,9 @@ type BankReconciliation struct {
 	Notes                 pgtype.Text        `json:"notes"`
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+	ReconciliationType    string             `json:"reconciliation_type"`
+	ClearedBalanceMinor   int64              `json:"cleared_balance_minor"`
+	Denominations         []byte             `json:"denominations"`
 }
 
 type BankReconciliationMatch struct {
@@ -119,16 +148,18 @@ type Category struct {
 }
 
 type Counterparty struct {
-	ID          int64              `json:"id"`
-	WorkspaceID int64              `json:"workspace_id"`
-	Name        string             `json:"name"`
-	PartyType   string             `json:"party_type"`
-	Email       pgtype.Text        `json:"email"`
-	Phone       pgtype.Text        `json:"phone"`
-	Notes       pgtype.Text        `json:"notes"`
-	IsActive    bool               `json:"is_active"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	ID                  int64              `json:"id"`
+	WorkspaceID         int64              `json:"workspace_id"`
+	Name                string             `json:"name"`
+	PartyType           string             `json:"party_type"`
+	Email               pgtype.Text        `json:"email"`
+	Phone               pgtype.Text        `json:"phone"`
+	Notes               pgtype.Text        `json:"notes"`
+	IsActive            bool               `json:"is_active"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	OpeningBalanceMinor int64              `json:"opening_balance_minor"`
+	MergedIntoID        pgtype.Int8        `json:"merged_into_id"`
 }
 
 type CustomerCredit struct {
@@ -150,6 +181,21 @@ type CustomerCreditTransaction struct {
 	SourceID    pgtype.Int8        `json:"source_id"`
 	Notes       pgtype.Text        `json:"notes"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type CustomerStatementShare struct {
+	ID              int64              `json:"id"`
+	WorkspaceID     int64              `json:"workspace_id"`
+	CustomerID      int64              `json:"customer_id"`
+	TokenHash       string             `json:"token_hash"`
+	FromDate        pgtype.Date        `json:"from_date"`
+	ToDate          pgtype.Date        `json:"to_date"`
+	Status          string             `json:"status"`
+	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
+	AccessCount     int32              `json:"access_count"`
+	LastAccessedAt  pgtype.Timestamptz `json:"last_accessed_at"`
+	CreatedByUserID pgtype.Int8        `json:"created_by_user_id"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 }
 
 type CustomerWallet struct {
@@ -184,6 +230,8 @@ type Estimate struct {
 	IdempotencyKey     pgtype.Text        `json:"idempotency_key"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	DiscountMinor      int64              `json:"discount_minor"`
+	DeliveryFeeMinor   int64              `json:"delivery_fee_minor"`
 }
 
 type EstimateItem struct {
@@ -195,6 +243,25 @@ type EstimateItem struct {
 	UnitPriceMinor int64              `json:"unit_price_minor"`
 	AmountMinor    int64              `json:"amount_minor"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	DiscountMinor  int64              `json:"discount_minor"`
+}
+
+type EstimateShare struct {
+	ID              int64              `json:"id"`
+	WorkspaceID     int64              `json:"workspace_id"`
+	EstimateID      int64              `json:"estimate_id"`
+	TokenHash       string             `json:"token_hash"`
+	Status          string             `json:"status"`
+	AllowRespond    bool               `json:"allow_respond"`
+	ResponseStatus  pgtype.Text        `json:"response_status"`
+	RespondedByName pgtype.Text        `json:"responded_by_name"`
+	ResponseComment pgtype.Text        `json:"response_comment"`
+	RespondedAt     pgtype.Timestamptz `json:"responded_at"`
+	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
+	AccessCount     int32              `json:"access_count"`
+	LastAccessedAt  pgtype.Timestamptz `json:"last_accessed_at"`
+	CreatedByUserID pgtype.Int8        `json:"created_by_user_id"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 }
 
 type EvidenceAsset struct {
@@ -413,6 +480,8 @@ type Invoice struct {
 	VoidReason       pgtype.Text        `json:"void_reason"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	DiscountMinor    int64              `json:"discount_minor"`
+	DeliveryFeeMinor int64              `json:"delivery_fee_minor"`
 }
 
 type InvoiceItem struct {
@@ -424,6 +493,7 @@ type InvoiceItem struct {
 	UnitPriceMinor int64              `json:"unit_price_minor"`
 	AmountMinor    int64              `json:"amount_minor"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	DiscountMinor  int64              `json:"discount_minor"`
 }
 
 type InvoiceShare struct {
@@ -666,6 +736,19 @@ type MoneyTransaction struct {
 	PostedAt             pgtype.Timestamptz `json:"posted_at"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
+type Notification struct {
+	ID          int64              `json:"id"`
+	WorkspaceID pgtype.Int8        `json:"workspace_id"`
+	UserID      int64              `json:"user_id"`
+	Category    string             `json:"category"`
+	Title       string             `json:"title"`
+	Body        string             `json:"body"`
+	ActionUrl   pgtype.Text        `json:"action_url"`
+	IsRead      bool               `json:"is_read"`
+	ReadAt      pgtype.Timestamptz `json:"read_at"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
 type OauthLoginAttempt struct {
@@ -1034,6 +1117,13 @@ type Role struct {
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
+type RolePermission struct {
+	ID             int64              `json:"id"`
+	RoleID         int64              `json:"role_id"`
+	PermissionCode string             `json:"permission_code"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
 type Sale struct {
 	ID               int64              `json:"id"`
 	WorkspaceID      int64              `json:"workspace_id"`
@@ -1395,6 +1485,10 @@ type Workspace struct {
 	AccountantSeatLimit int32              `json:"accountant_seat_limit"`
 	BusinessType        pgtype.Text        `json:"business_type"`
 	CountryCode         pgtype.Text        `json:"country_code"`
+	Country             pgtype.Text        `json:"country"`
+	Address             pgtype.Text        `json:"address"`
+	ContactPhone        pgtype.Text        `json:"contact_phone"`
+	ContactEmail        pgtype.Text        `json:"contact_email"`
 }
 
 type WorkspaceTaxSetting struct {

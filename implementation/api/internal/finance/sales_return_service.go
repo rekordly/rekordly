@@ -231,13 +231,18 @@ func (s *Service) CreateSalesReturn(ctx context.Context, workspaceID, userID int
 
 		// Restock inventory if requested
 		if l.restockInventory && l.catalogueItemID > 0 && l.outletID > 0 {
-			qtyInt := l.quantity.Round(0).IntPart()
-			_, _ = tx.Exec(ctx, `
-				INSERT INTO inventory_balances (workspace_id, outlet_id, item_id, quantity_on_hand, quantity_reserved)
-				VALUES ($1, $2, $3, $4, 0)
-				ON CONFLICT (workspace_id, outlet_id, item_id)
-				DO UPDATE SET quantity_on_hand = inventory_balances.quantity_on_hand + $4, updated_at = now()
-			`, workspaceID, l.outletID, l.catalogueItemID, qtyInt)
+			qtyVal := l.quantity.StringFixed(4)
+			valMinor := l.amount
+			if _, err := tx.Exec(ctx, `
+				INSERT INTO inventory_balances (workspace_id, location_id, product_id, quantity_on_hand, value_on_hand_minor)
+				VALUES ($1, $2, $3, $4::numeric, $5)
+				ON CONFLICT (workspace_id, location_id, product_id)
+				DO UPDATE SET quantity_on_hand = inventory_balances.quantity_on_hand + $4::numeric,
+				              value_on_hand_minor = inventory_balances.value_on_hand_minor + $5,
+				              updated_at = now()
+			`, workspaceID, l.outletID, l.catalogueItemID, qtyVal, valMinor); err != nil {
+				return SalesReturnDetail{}, fmt.Errorf("failed to restock inventory: %w", err)
+			}
 		}
 	}
 
@@ -336,20 +341,29 @@ func (s *Service) ApplyCustomerCreditToInvoice(ctx context.Context, workspaceID,
 		return InvoiceDetail{}, errors.New("amount to apply must be greater than zero")
 	}
 
-	inv, err := s.queries.GetInvoiceByID(ctx, db.GetInvoiceByIDParams{
-		ID:          invoiceID,
-		WorkspaceID: workspaceID,
-	})
-	if err != nil {
-		return InvoiceDetail{}, err
-	}
-
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return InvoiceDetail{}, err
 	}
 	defer tx.Rollback(ctx)
 	qtx := s.queries.WithTx(tx)
+
+	inv, err := qtx.GetInvoiceByIDForUpdate(ctx, db.GetInvoiceByIDForUpdateParams{
+		ID:          invoiceID,
+		WorkspaceID: workspaceID,
+	})
+	if err != nil {
+		return InvoiceDetail{}, err
+	}
+	if inv.CustomerID != customerID {
+		return InvoiceDetail{}, ErrForbiddenParty
+	}
+	if inv.Status != "finalized" && inv.Status != "partially_paid" {
+		return InvoiceDetail{}, errors.New("invoice must be finalized before applying customer credit")
+	}
+	if inv.PaidAmountMinor+amountMinor > inv.TotalAmountMinor {
+		return InvoiceDetail{}, ErrOverpayment
+	}
 
 	credit, err := qtx.GetCustomerCreditForUpdate(ctx, db.GetCustomerCreditForUpdateParams{
 		WorkspaceID: workspaceID,
@@ -371,7 +385,7 @@ func (s *Service) ApplyCustomerCreditToInvoice(ctx context.Context, workspaceID,
 		return InvoiceDetail{}, err
 	}
 
-	_, _ = qtx.CreateCustomerCreditTransaction(ctx, db.CreateCustomerCreditTransactionParams{
+	if _, err := qtx.CreateCustomerCreditTransaction(ctx, db.CreateCustomerCreditTransactionParams{
 		WorkspaceID: workspaceID,
 		CreditID:    credit.ID,
 		Direction:   "debit",
@@ -379,14 +393,35 @@ func (s *Service) ApplyCustomerCreditToInvoice(ctx context.Context, workspaceID,
 		SourceType:  "invoice_application",
 		SourceID:    pgtype.Int8{Int64: inv.ID, Valid: true},
 		Notes:       pgtype.Text{String: fmt.Sprintf("Applied to %s", inv.InvoiceNumber), Valid: true},
+	}); err != nil {
+		return InvoiceDetail{}, err
+	}
+
+	updatedInv, err := qtx.UpdateInvoicePaidAmount(ctx, db.UpdateInvoicePaidAmountParams{
+		ID:              inv.ID,
+		WorkspaceID:     workspaceID,
+		PaidAmountMinor: amountMinor,
 	})
+	if err != nil {
+		return InvoiceDetail{}, fmt.Errorf("update invoice paid amount: %w", err)
+	}
+
+	items, err := qtx.ListInvoiceItemsByInvoiceID(ctx, db.ListInvoiceItemsByInvoiceIDParams{
+		InvoiceID:   inv.ID,
+		WorkspaceID: workspaceID,
+	})
+	if err != nil {
+		return InvoiceDetail{}, err
+	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return InvoiceDetail{}, err
 	}
 
-	// Record payment on invoice using service
-	return s.PayInvoiceWithWallet(ctx, workspaceID, userID, inv.ID, amountMinor)
+	return InvoiceDetail{
+		Invoice: updatedInv,
+		Items:   items,
+	}, nil
 }
 
 func (s *Service) countSalesReturns(ctx context.Context, workspaceID int64) (int64, error) {

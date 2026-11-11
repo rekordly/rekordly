@@ -1,17 +1,38 @@
 -- name: CreateCounterparty :one
 INSERT INTO counterparties (
-    workspace_id, name, party_type, email, phone, notes, is_active
+    workspace_id, name, party_type, email, phone, notes, opening_balance_minor, is_active
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7
+    $1, $2, $3, $4, $5, $6, $7, $8
 ) RETURNING *;
 
 -- name: GetCounterpartyByID :one
 SELECT * FROM counterparties
 WHERE id = $1 AND workspace_id = $2;
 
+-- name: UpdateCounterparty :one
+UPDATE counterparties
+SET name = $3,
+    party_type = $4,
+    email = $5,
+    phone = $6,
+    notes = $7,
+    opening_balance_minor = $8,
+    updated_at = NOW()
+WHERE id = $1 AND workspace_id = $2 AND merged_into_id IS NULL
+RETURNING *;
+
+-- name: MarkCounterpartyMerged :one
+UPDATE counterparties
+SET merged_into_id = $3,
+    is_active = false,
+    updated_at = NOW()
+WHERE id = $1 AND workspace_id = $2
+RETURNING *;
+
 -- name: ListCounterparties :many
 SELECT * FROM counterparties
 WHERE workspace_id = $1
+  AND merged_into_id IS NULL
   AND (sqlc.narg('party_type')::text IS NULL OR party_type = sqlc.narg('party_type') OR party_type = 'both')
   AND (sqlc.narg('is_active')::boolean IS NULL OR is_active = sqlc.narg('is_active'))
 ORDER BY name ASC;
