@@ -384,5 +384,29 @@
   - `bun test`: 52/52 tests passed across 4 files.
   - `bun run build` (`next build` 16.4.5 Turbopack): 45 static pages and all dynamic routes compiled cleanly.
 
+## 11 November 2026 — Final Blueprints 01–06 Closure: Multi-Tax, Line Discounts, Proforma, Debit Notes, Portals & RBAC Enforcement
+
+- Implemented all remaining partial/missing items identified across Blueprints 01–06:
+  1. Counterparty Opening Balances & Duplicate Detection (Blueprint 05):
+     - Added major-unit `opening_balance` parsing in `sales_purchases_service.go`, exposed `Opening balance` in `contacts-page.tsx`, `customers/[id]/page.tsx`, and `suppliers/[id]/page.tsx`, and surfaced brought-forward Opening Balance rows in authenticated & public customer statements (`public/statements/[token]/page.tsx`).
+     - Added duplicate counterparty detection query (`FindPossibleDuplicateCounterparties`, `GET /counterparties/check-duplicates`) and live duplicate warning banner in `contacts-page.tsx`.
+  2. Line-Level Discounts, Compound Multi-Tax Lines, Proforma Invoices, Debit Notes & Version History (Blueprint 06):
+     - Migration `000046_blueprints_01_06_completion.sql` & sqlc (`finance_blueprints_completion.sql`): added `invoice_tax_lines`, `estimate_tax_lines`, `invoices.document_kind` (`invoice` | `proforma`), `debit_notes` / `debit_note_items`, `document_versions`, and optional `outlet_id` columns.
+     - Implemented integer half-up compound multi-tax calculation (`ComputeMultiTaxLines`), per-line discount subtraction + balanced ledger discount/delivery postings (`postInvoiceLedger`, `VoidInvoice`), non-posting proforma conversion (`POST /proformas/:id/convert`), debit notes (`POST /debit-notes`, `POST /debit-notes/:id/void`), and automatic point-in-time document revision snapshots (`GET /documents/:docType/:id/versions`).
+     - Upgraded `invoices-page.tsx` with line-level discount fields, Multi-Tax / Compound Tax Lines builder, Proforma toggle & conversion action, "Debit Notes" tab, and "History & Portal Inbox" drawer.
+  3. External Portal Completion (Blueprint 05):
+     - Added `external_payment_evidences`, `external_messages`, and `external_party_links` with public & team endpoints (`blueprints_05_06_handler.go`), guest payment evidence submission and messaging in `public/invoices/[token]/page.tsx` & `public/estimates/[token]/page.tsx`, and supplier PO portal `src/app/purchase-orders/share/[token]/page.tsx` (`src/proxy.ts` whitelisted).
+  4. Route-Wide RBAC Enforcement, Outlet Scoping & Prebuilt Role Templates (Blueprints 01 & 02):
+     - Seeded all 8 Blueprint 02 role templates (`owner`, `admin`, `accountant`, `sales`, `cashier`, `inventory_manager`, `procurement`, `viewer`) in Migration `000046` and workspace creation (`auth/onboarding.go`), updated `auth/me.go` and `auth/invitation.go`.
+     - Added `requirePermission`, `ScopedOutletIDs`, and `IsOutletAllowed` in `finance/context.go` and enforced granular permissions & outlet scopes across `money_handler.go`, `money_capture_handler.go`, `sales_purchases_handler.go`, `invoices_wallets_handler.go`, `estimate_handler.go`, `sales_return_handler.go`, `invoice_share_handler.go`, `bank_reconciliation_handler.go`, `budgets_tax_handler.go`, and `reports.go`, plus member outlet-scope assignment in `settings/page.tsx`.
+  5. Integration tests added in `internal/finance/blueprints_05_06_completion_integration_test.go`.
+- Verification Suite:
+  - Live PostgreSQL migration (`000046_blueprints_01_06_completion.sql`) & `go test -count=1 ./...`: all packages passed (`internal/auth`, `internal/config`, `internal/database`, `internal/finance`, `internal/server`).
+  - `bun run type-check`: 0 errors.
+  - `bun run lint`: 0 errors.
+  - `bun test`: 52/52 tests passed across 4 files.
+  - `bun run build` (`next build` 16.4.5 Turbopack): all 45 static pages and all dynamic routes compiled cleanly.
+
+
 
 
