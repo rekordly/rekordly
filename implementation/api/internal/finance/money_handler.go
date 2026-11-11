@@ -49,6 +49,10 @@ func (h *Handler) RegisterRoutes(group *gin.RouterGroup) {
 	h.RegisterCatalogueRoutes(protected)
 	h.RegisterInventoryRoutes(protected)
 	h.RegisterOutletRoutes(protected)
+	h.RegisterStockReservationRoutes(protected)
+	h.RegisterStockTransferRoutes(protected)
+	h.RegisterStockCountRoutes(protected)
+	h.RegisterStockAdjustmentRoutes(protected)
 
 	// Blueprint 08 begins with non-posting purchase requests and approvals.
 	h.RegisterProcurementRoutes(protected)

@@ -42,7 +42,7 @@ INSERT INTO inventory_movements (
     workspace_id, product_id, goods_receipt_line_id, location_id,
     movement_type, source_type, source_id, quantity_delta, value_delta_minor, occurred_on
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-RETURNING id, workspace_id, product_id, goods_receipt_line_id, movement_type, quantity_delta, value_delta_minor, occurred_on, created_at, location_id, source_type, source_id
+RETURNING id, workspace_id, product_id, goods_receipt_line_id, movement_type, quantity_delta, value_delta_minor, occurred_on, created_at, location_id, source_type, source_id, variant_id
 `
 
 type CreateInventoryMovementParams struct {
@@ -85,6 +85,7 @@ func (q *Queries) CreateInventoryMovement(ctx context.Context, arg CreateInvento
 		&i.LocationID,
 		&i.SourceType,
 		&i.SourceID,
+		&i.VariantID,
 	)
 	return i, err
 }
@@ -141,8 +142,25 @@ func (q *Queries) CreateInventoryOpeningEntry(ctx context.Context, arg CreateInv
 	return i, err
 }
 
+const getCostingSettings = `-- name: GetCostingSettings :one
+SELECT workspace_id, costing_method, currency, created_at, updated_at FROM inventory_costing_settings WHERE workspace_id = $1
+`
+
+func (q *Queries) GetCostingSettings(ctx context.Context, workspaceID int64) (InventoryCostingSetting, error) {
+	row := q.db.QueryRow(ctx, getCostingSettings, workspaceID)
+	var i InventoryCostingSetting
+	err := row.Scan(
+		&i.WorkspaceID,
+		&i.CostingMethod,
+		&i.Currency,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getInventoryBalance = `-- name: GetInventoryBalance :one
-SELECT id, workspace_id, location_id, product_id, quantity_on_hand, value_on_hand_minor, costing_method, version, updated_at FROM inventory_balances WHERE workspace_id = $1 AND location_id = $2 AND product_id = $3
+SELECT id, workspace_id, location_id, product_id, quantity_on_hand, value_on_hand_minor, costing_method, version, updated_at, reserved_quantity, in_transit_quantity, variant_id FROM inventory_balances WHERE workspace_id = $1 AND location_id = $2 AND product_id = $3
 `
 
 type GetInventoryBalanceParams struct {
@@ -164,6 +182,9 @@ func (q *Queries) GetInventoryBalance(ctx context.Context, arg GetInventoryBalan
 		&i.CostingMethod,
 		&i.Version,
 		&i.UpdatedAt,
+		&i.ReservedQuantity,
+		&i.InTransitQuantity,
+		&i.VariantID,
 	)
 	return i, err
 }
@@ -252,12 +273,13 @@ func (q *Queries) GetOrCreateDefaultInventoryLocation(ctx context.Context, works
 }
 
 const listInventoryBalances = `-- name: ListInventoryBalances :many
-SELECT ib.id, ib.workspace_id, ib.location_id, ib.product_id, ib.quantity_on_hand, ib.value_on_hand_minor, ib.costing_method, ib.version, ib.updated_at, il.name AS location_name, p.name AS product_name, p.kind AS product_kind
+SELECT ib.id, ib.workspace_id, ib.location_id, ib.product_id, ib.quantity_on_hand, ib.value_on_hand_minor, ib.costing_method, ib.version, ib.updated_at, ib.reserved_quantity, ib.in_transit_quantity, ib.variant_id, il.name AS location_name, p.name AS product_name, p.kind AS product_kind
 FROM inventory_balances ib
 JOIN inventory_locations il ON il.id = ib.location_id AND il.workspace_id = ib.workspace_id
 JOIN products p ON p.id = ib.product_id AND p.workspace_id = ib.workspace_id
 WHERE ib.workspace_id = $1
-  AND ($3::bigint IS NULL OR ib.id < $3)
+  AND ($3::bigint IS NULL OR ib.location_id = $3)
+  AND ($4::bigint IS NULL OR ib.id < $4)
 ORDER BY ib.id DESC
 LIMIT $2
 `
@@ -265,26 +287,35 @@ LIMIT $2
 type ListInventoryBalancesParams struct {
 	WorkspaceID int64       `json:"workspace_id"`
 	Limit       int32       `json:"limit"`
+	LocationID  pgtype.Int8 `json:"location_id"`
 	BeforeID    pgtype.Int8 `json:"before_id"`
 }
 
 type ListInventoryBalancesRow struct {
-	ID               int64              `json:"id"`
-	WorkspaceID      int64              `json:"workspace_id"`
-	LocationID       int64              `json:"location_id"`
-	ProductID        int64              `json:"product_id"`
-	QuantityOnHand   decimal.Decimal    `json:"quantity_on_hand"`
-	ValueOnHandMinor int64              `json:"value_on_hand_minor"`
-	CostingMethod    string             `json:"costing_method"`
-	Version          int32              `json:"version"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
-	LocationName     string             `json:"location_name"`
-	ProductName      string             `json:"product_name"`
-	ProductKind      string             `json:"product_kind"`
+	ID                int64              `json:"id"`
+	WorkspaceID       int64              `json:"workspace_id"`
+	LocationID        int64              `json:"location_id"`
+	ProductID         int64              `json:"product_id"`
+	QuantityOnHand    decimal.Decimal    `json:"quantity_on_hand"`
+	ValueOnHandMinor  int64              `json:"value_on_hand_minor"`
+	CostingMethod     string             `json:"costing_method"`
+	Version           int32              `json:"version"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	ReservedQuantity  decimal.Decimal    `json:"reserved_quantity"`
+	InTransitQuantity decimal.Decimal    `json:"in_transit_quantity"`
+	VariantID         pgtype.Int8        `json:"variant_id"`
+	LocationName      string             `json:"location_name"`
+	ProductName       string             `json:"product_name"`
+	ProductKind       string             `json:"product_kind"`
 }
 
 func (q *Queries) ListInventoryBalances(ctx context.Context, arg ListInventoryBalancesParams) ([]ListInventoryBalancesRow, error) {
-	rows, err := q.db.Query(ctx, listInventoryBalances, arg.WorkspaceID, arg.Limit, arg.BeforeID)
+	rows, err := q.db.Query(ctx, listInventoryBalances,
+		arg.WorkspaceID,
+		arg.Limit,
+		arg.LocationID,
+		arg.BeforeID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -302,6 +333,9 @@ func (q *Queries) ListInventoryBalances(ctx context.Context, arg ListInventoryBa
 			&i.CostingMethod,
 			&i.Version,
 			&i.UpdatedAt,
+			&i.ReservedQuantity,
+			&i.InTransitQuantity,
+			&i.VariantID,
 			&i.LocationName,
 			&i.ProductName,
 			&i.ProductKind,
@@ -316,6 +350,56 @@ func (q *Queries) ListInventoryBalances(ctx context.Context, arg ListInventoryBa
 	return items, nil
 }
 
+const updateInventoryBalanceQuantities = `-- name: UpdateInventoryBalanceQuantities :one
+UPDATE inventory_balances
+SET quantity_on_hand = $4,
+    reserved_quantity = $5,
+    in_transit_quantity = $6,
+    value_on_hand_minor = $7,
+    version = version + 1,
+    updated_at = now()
+WHERE workspace_id = $1 AND location_id = $2 AND product_id = $3
+RETURNING id, workspace_id, location_id, product_id, quantity_on_hand, value_on_hand_minor, costing_method, version, updated_at, reserved_quantity, in_transit_quantity, variant_id
+`
+
+type UpdateInventoryBalanceQuantitiesParams struct {
+	WorkspaceID       int64           `json:"workspace_id"`
+	LocationID        int64           `json:"location_id"`
+	ProductID         int64           `json:"product_id"`
+	QuantityOnHand    decimal.Decimal `json:"quantity_on_hand"`
+	ReservedQuantity  decimal.Decimal `json:"reserved_quantity"`
+	InTransitQuantity decimal.Decimal `json:"in_transit_quantity"`
+	ValueOnHandMinor  int64           `json:"value_on_hand_minor"`
+}
+
+func (q *Queries) UpdateInventoryBalanceQuantities(ctx context.Context, arg UpdateInventoryBalanceQuantitiesParams) (InventoryBalance, error) {
+	row := q.db.QueryRow(ctx, updateInventoryBalanceQuantities,
+		arg.WorkspaceID,
+		arg.LocationID,
+		arg.ProductID,
+		arg.QuantityOnHand,
+		arg.ReservedQuantity,
+		arg.InTransitQuantity,
+		arg.ValueOnHandMinor,
+	)
+	var i InventoryBalance
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.LocationID,
+		&i.ProductID,
+		&i.QuantityOnHand,
+		&i.ValueOnHandMinor,
+		&i.CostingMethod,
+		&i.Version,
+		&i.UpdatedAt,
+		&i.ReservedQuantity,
+		&i.InTransitQuantity,
+		&i.VariantID,
+	)
+	return i, err
+}
+
 const upsertInventoryBalance = `-- name: UpsertInventoryBalance :one
 INSERT INTO inventory_balances (
     workspace_id, location_id, product_id, quantity_on_hand, value_on_hand_minor
@@ -325,7 +409,7 @@ SET quantity_on_hand = inventory_balances.quantity_on_hand + EXCLUDED.quantity_o
     value_on_hand_minor = inventory_balances.value_on_hand_minor + EXCLUDED.value_on_hand_minor,
     version = inventory_balances.version + 1,
     updated_at = now()
-RETURNING id, workspace_id, location_id, product_id, quantity_on_hand, value_on_hand_minor, costing_method, version, updated_at
+RETURNING id, workspace_id, location_id, product_id, quantity_on_hand, value_on_hand_minor, costing_method, version, updated_at, reserved_quantity, in_transit_quantity, variant_id
 `
 
 type UpsertInventoryBalanceParams struct {
@@ -355,6 +439,9 @@ func (q *Queries) UpsertInventoryBalance(ctx context.Context, arg UpsertInventor
 		&i.CostingMethod,
 		&i.Version,
 		&i.UpdatedAt,
+		&i.ReservedQuantity,
+		&i.InTransitQuantity,
+		&i.VariantID,
 	)
 	return i, err
 }

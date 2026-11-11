@@ -13,7 +13,7 @@ import (
 )
 
 const applyInventoryBalanceDelta = `-- name: ApplyInventoryBalanceDelta :one
-UPDATE inventory_balances SET quantity_on_hand=quantity_on_hand+$4,value_on_hand_minor=value_on_hand_minor+$5,version=version+1,updated_at=now() WHERE workspace_id=$1 AND location_id=$2 AND product_id=$3 AND quantity_on_hand+$4 >= 0 AND value_on_hand_minor+$5 >= 0 RETURNING id, workspace_id, location_id, product_id, quantity_on_hand, value_on_hand_minor, costing_method, version, updated_at
+UPDATE inventory_balances SET quantity_on_hand=quantity_on_hand+$4,value_on_hand_minor=value_on_hand_minor+$5,version=version+1,updated_at=now() WHERE workspace_id=$1 AND location_id=$2 AND product_id=$3 AND quantity_on_hand+$4 >= 0 AND value_on_hand_minor+$5 >= 0 RETURNING id, workspace_id, location_id, product_id, quantity_on_hand, value_on_hand_minor, costing_method, version, updated_at, reserved_quantity, in_transit_quantity, variant_id
 `
 
 type ApplyInventoryBalanceDeltaParams struct {
@@ -43,6 +43,9 @@ func (q *Queries) ApplyInventoryBalanceDelta(ctx context.Context, arg ApplyInven
 		&i.CostingMethod,
 		&i.Version,
 		&i.UpdatedAt,
+		&i.ReservedQuantity,
+		&i.InTransitQuantity,
+		&i.VariantID,
 	)
 	return i, err
 }
@@ -302,7 +305,7 @@ func (q *Queries) CreateSupplierReturnLine(ctx context.Context, arg CreateSuppli
 }
 
 const getInventoryBalanceForUpdate = `-- name: GetInventoryBalanceForUpdate :one
-SELECT id, workspace_id, location_id, product_id, quantity_on_hand, value_on_hand_minor, costing_method, version, updated_at FROM inventory_balances WHERE workspace_id=$1 AND location_id=$2 AND product_id=$3 FOR UPDATE
+SELECT id, workspace_id, location_id, product_id, quantity_on_hand, value_on_hand_minor, costing_method, version, updated_at, reserved_quantity, in_transit_quantity, variant_id FROM inventory_balances WHERE workspace_id=$1 AND location_id=$2 AND product_id=$3 FOR UPDATE
 `
 
 type GetInventoryBalanceForUpdateParams struct {
@@ -324,6 +327,9 @@ func (q *Queries) GetInventoryBalanceForUpdate(ctx context.Context, arg GetInven
 		&i.CostingMethod,
 		&i.Version,
 		&i.UpdatedAt,
+		&i.ReservedQuantity,
+		&i.InTransitQuantity,
+		&i.VariantID,
 	)
 	return i, err
 }

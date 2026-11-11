@@ -25,17 +25,20 @@ type CreateOpeningStockInput struct {
 }
 
 type InventoryBalanceView struct {
-	ID               int64  `json:"id"`
-	LocationID       int64  `json:"location_id"`
-	LocationName     string `json:"location_name"`
-	ProductID        int64  `json:"product_id"`
-	ProductName      string `json:"product_name"`
-	ProductKind      string `json:"product_kind"`
-	QuantityOnHand   string `json:"quantity_on_hand"`
-	ValueOnHandMinor string `json:"value_on_hand_minor"`
-	AverageCostMinor string `json:"average_cost_minor"`
-	CostingMethod    string `json:"costing_method"`
-	Version          int32  `json:"version"`
+	ID                int64  `json:"id"`
+	LocationID        int64  `json:"location_id"`
+	LocationName      string `json:"location_name"`
+	ProductID         int64  `json:"product_id"`
+	ProductName       string `json:"product_name"`
+	ProductKind       string `json:"product_kind"`
+	QuantityOnHand    string `json:"quantity_on_hand"`
+	ReservedQuantity  string `json:"reserved_quantity"`
+	AvailableQuantity string `json:"available_quantity"`
+	InTransitQuantity string `json:"in_transit_quantity"`
+	ValueOnHandMinor  string `json:"value_on_hand_minor"`
+	AverageCostMinor  string `json:"average_cost_minor"`
+	CostingMethod     string `json:"costing_method"`
+	Version           int32  `json:"version"`
 }
 
 func inventoryLocationFor(ctx context.Context, q *db.Queries, workspaceID, locationID int64) (db.InventoryLocation, error) {
@@ -54,11 +57,33 @@ func inventoryBalanceView(row db.ListInventoryBalancesRow) InventoryBalanceView 
 	if row.QuantityOnHand.GreaterThan(decimal.Zero) {
 		average = decimal.NewFromInt(row.ValueOnHandMinor).Div(row.QuantityOnHand)
 	}
-	return InventoryBalanceView{ID: row.ID, LocationID: row.LocationID, LocationName: row.LocationName, ProductID: row.ProductID, ProductName: row.ProductName, ProductKind: row.ProductKind, QuantityOnHand: row.QuantityOnHand.StringFixed(4), ValueOnHandMinor: fmt.Sprintf("%d", row.ValueOnHandMinor), AverageCostMinor: average.StringFixed(4), CostingMethod: row.CostingMethod, Version: row.Version}
+	avail := row.QuantityOnHand.Sub(row.ReservedQuantity)
+	if avail.IsNegative() {
+		avail = decimal.Zero
+	}
+	return InventoryBalanceView{
+		ID:                row.ID,
+		LocationID:        row.LocationID,
+		LocationName:      row.LocationName,
+		ProductID:         row.ProductID,
+		ProductName:       row.ProductName,
+		ProductKind:       row.ProductKind,
+		QuantityOnHand:    row.QuantityOnHand.StringFixed(4),
+		ReservedQuantity:  row.ReservedQuantity.StringFixed(4),
+		AvailableQuantity: avail.StringFixed(4),
+		InTransitQuantity: row.InTransitQuantity.StringFixed(4),
+		ValueOnHandMinor:  fmt.Sprintf("%d", row.ValueOnHandMinor),
+		AverageCostMinor:  average.StringFixed(4),
+		CostingMethod:     row.CostingMethod,
+		Version:           row.Version,
+	}
 }
 
 func (s *Service) ListInventoryBalances(ctx context.Context, workspaceID int64) ([]InventoryBalanceView, error) {
-	rows, err := s.queries.ListInventoryBalances(ctx, db.ListInventoryBalancesParams{WorkspaceID: workspaceID, Limit: 200})
+	rows, err := s.queries.ListInventoryBalances(ctx, db.ListInventoryBalancesParams{
+		WorkspaceID: workspaceID,
+		Limit:       200,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +104,22 @@ func (s *Service) CreateOpeningStock(ctx context.Context, workspaceID, userID in
 		if e != nil {
 			return InventoryBalanceView{}, e
 		}
-		return InventoryBalanceView{ID: balance.ID, LocationID: balance.LocationID, ProductID: balance.ProductID, QuantityOnHand: balance.QuantityOnHand.StringFixed(4), ValueOnHandMinor: fmt.Sprintf("%d", balance.ValueOnHandMinor), CostingMethod: balance.CostingMethod, Version: balance.Version}, nil
+		avail := balance.QuantityOnHand.Sub(balance.ReservedQuantity)
+		if avail.IsNegative() {
+			avail = decimal.Zero
+		}
+		return InventoryBalanceView{
+			ID:                balance.ID,
+			LocationID:        balance.LocationID,
+			ProductID:         balance.ProductID,
+			QuantityOnHand:    balance.QuantityOnHand.StringFixed(4),
+			ReservedQuantity:  balance.ReservedQuantity.StringFixed(4),
+			AvailableQuantity: avail.StringFixed(4),
+			InTransitQuantity: balance.InTransitQuantity.StringFixed(4),
+			ValueOnHandMinor:  fmt.Sprintf("%d", balance.ValueOnHandMinor),
+			CostingMethod:     balance.CostingMethod,
+			Version:           balance.Version,
+		}, nil
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return InventoryBalanceView{}, err
 	}
@@ -157,5 +197,271 @@ func (s *Service) CreateOpeningStock(ctx context.Context, workspaceID, userID in
 	if err = tx.Commit(ctx); err != nil {
 		return InventoryBalanceView{}, err
 	}
-	return InventoryBalanceView{ID: bal.ID, LocationID: bal.LocationID, LocationName: location.Name, ProductID: bal.ProductID, ProductName: product.Name, ProductKind: product.Kind, QuantityOnHand: bal.QuantityOnHand.StringFixed(4), ValueOnHandMinor: fmt.Sprintf("%d", bal.ValueOnHandMinor), AverageCostMinor: decimal.NewFromInt(bal.ValueOnHandMinor).Div(bal.QuantityOnHand).StringFixed(4), CostingMethod: bal.CostingMethod, Version: bal.Version}, nil
+	avail := bal.QuantityOnHand.Sub(bal.ReservedQuantity)
+	if avail.IsNegative() {
+		avail = decimal.Zero
+	}
+	return InventoryBalanceView{
+		ID:                bal.ID,
+		LocationID:        bal.LocationID,
+		LocationName:      location.Name,
+		ProductID:         bal.ProductID,
+		ProductName:       product.Name,
+		ProductKind:       product.Kind,
+		QuantityOnHand:    bal.QuantityOnHand.StringFixed(4),
+		ReservedQuantity:  bal.ReservedQuantity.StringFixed(4),
+		AvailableQuantity: avail.StringFixed(4),
+		InTransitQuantity: bal.InTransitQuantity.StringFixed(4),
+		ValueOnHandMinor:  fmt.Sprintf("%d", bal.ValueOnHandMinor),
+		AverageCostMinor:  decimal.NewFromInt(bal.ValueOnHandMinor).Div(bal.QuantityOnHand).StringFixed(4),
+		CostingMethod:     bal.CostingMethod,
+		Version:           bal.Version,
+	}, nil
+}
+
+type IssueSaleStockInput struct {
+	LocationID     int64  `json:"location_id"`
+	ProductID      int64  `json:"product_id" binding:"required"`
+	VariantID      *int64 `json:"variant_id"`
+	Quantity       string `json:"quantity" binding:"required"`
+	SaleID         *int64 `json:"sale_id"`
+	ReservationID  *int64 `json:"reservation_id"`
+	OccurredOn     string `json:"occurred_on" binding:"required"`
+	Reason         string `json:"reason"`
+	IdempotencyKey string `json:"idempotency_key"`
+}
+
+type StockIssueResultView struct {
+	Balance       InventoryBalanceView `json:"balance"`
+	COGSMinor     int64                `json:"cogs_minor"`
+	LedgerEntryID int64                `json:"ledger_entry_id"`
+}
+
+func (s *Service) IssueSaleStock(ctx context.Context, workspaceID, userID int64, in IssueSaleStockInput) (StockIssueResultView, error) {
+	if in.ProductID <= 0 {
+		return StockIssueResultView{}, errors.New("product is required")
+	}
+	qty, _, err := parseRequestQuantity(in.Quantity)
+	if err != nil {
+		return StockIssueResultView{}, err
+	}
+	if !qty.GreaterThan(decimal.Zero) {
+		return StockIssueResultView{}, errors.New("quantity must be greater than zero")
+	}
+	occurredOn, err := time.Parse("2006-01-02", strings.TrimSpace(in.OccurredOn))
+	if err != nil {
+		return StockIssueResultView{}, errors.New("occurred_on must be YYYY-MM-DD")
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return StockIssueResultView{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := s.queries.WithTx(tx)
+
+	product, err := q.GetProductByID(ctx, db.GetProductByIDParams{
+		WorkspaceID: workspaceID,
+		ID:          in.ProductID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return StockIssueResultView{}, ErrNotFound
+	}
+	if err != nil {
+		return StockIssueResultView{}, err
+	}
+	if product.Kind != "stock_tracked" {
+		return StockIssueResultView{}, errors.New("stock issue requires a stock-tracked product")
+	}
+
+	locationID := in.LocationID
+	var fromReservation bool
+
+	if in.ReservationID != nil && *in.ReservationID > 0 {
+		res, err := q.GetStockReservationForUpdate(ctx, db.GetStockReservationForUpdateParams{
+			WorkspaceID: workspaceID,
+			ID:          *in.ReservationID,
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return StockIssueResultView{}, errors.New("reservation not found")
+		}
+		if err != nil {
+			return StockIssueResultView{}, err
+		}
+		if res.Status != "active" {
+			return StockIssueResultView{}, ErrReservationNotActive
+		}
+		locationID = res.LocationID
+		fromReservation = true
+
+		if _, err := q.UpdateStockReservationStatus(ctx, db.UpdateStockReservationStatusParams{
+			WorkspaceID: workspaceID,
+			ID:          res.ID,
+			Status:      "fulfilled",
+		}); err != nil {
+			return StockIssueResultView{}, err
+		}
+	}
+
+	location, err := inventoryLocationFor(ctx, q, workspaceID, locationID)
+	if err != nil {
+		return StockIssueResultView{}, err
+	}
+
+	bal, err := q.GetInventoryBalanceForUpdate(ctx, db.GetInventoryBalanceForUpdateParams{
+		WorkspaceID: workspaceID,
+		LocationID:  location.ID,
+		ProductID:   product.ID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return StockIssueResultView{}, ErrInsufficientStock
+	}
+	if err != nil {
+		return StockIssueResultView{}, err
+	}
+
+	if !fromReservation {
+		available := bal.QuantityOnHand.Sub(bal.ReservedQuantity)
+		if available.LessThan(qty) {
+			return StockIssueResultView{}, ErrInsufficientStock
+		}
+	} else {
+		if bal.QuantityOnHand.LessThan(qty) {
+			return StockIssueResultView{}, ErrInsufficientStock
+		}
+	}
+
+	// Weighted-average COGS calculation:
+	// cogs_minor = round( (value_on_hand_minor / quantity_on_hand) * qty )
+	unitCostDec := decimal.NewFromInt(bal.ValueOnHandMinor).Div(bal.QuantityOnHand)
+	cogsDec := unitCostDec.Mul(qty).Round(0)
+	cogsMinor := cogsDec.IntPart()
+
+	newQty := bal.QuantityOnHand.Sub(qty)
+	var newValueMinor int64
+	if newQty.IsZero() {
+		newValueMinor = 0
+		cogsMinor = bal.ValueOnHandMinor
+	} else {
+		newValueMinor = bal.ValueOnHandMinor - cogsMinor
+		if newValueMinor < 0 {
+			newValueMinor = 0
+		}
+	}
+
+	newReserved := bal.ReservedQuantity
+	if fromReservation {
+		newReserved = newReserved.Sub(qty)
+		if newReserved.IsNegative() {
+			newReserved = decimal.Zero
+		}
+	}
+
+	updatedBal, err := q.UpdateInventoryBalanceQuantities(ctx, db.UpdateInventoryBalanceQuantitiesParams{
+		WorkspaceID:       workspaceID,
+		LocationID:        location.ID,
+		ProductID:         product.ID,
+		QuantityOnHand:    newQty,
+		ReservedQuantity:  newReserved,
+		InTransitQuantity: bal.InTransitQuantity,
+		ValueOnHandMinor:  newValueMinor,
+	})
+	if err != nil {
+		return StockIssueResultView{}, fmt.Errorf("update balance for sale: %w", err)
+	}
+
+	var sourceID pgtype.Int8
+	if in.SaleID != nil && *in.SaleID > 0 {
+		sourceID = pgtype.Int8{Int64: *in.SaleID, Valid: true}
+	}
+
+	// Movement: quantity_delta and value_delta_minor represent change (negative for reduction)
+	if _, err := q.CreateInventoryMovement(ctx, db.CreateInventoryMovementParams{
+		WorkspaceID:        workspaceID,
+		ProductID:          product.ID,
+		GoodsReceiptLineID: pgtype.Int8{},
+		LocationID:         pgtype.Int8{Int64: location.ID, Valid: true},
+		MovementType:       "sale",
+		SourceType:         "sale",
+		SourceID:           sourceID,
+		QuantityDelta:      qty.Neg(),
+		ValueDeltaMinor:    -cogsMinor,
+		OccurredOn:         pgtype.Date{Time: occurredOn, Valid: true},
+	}); err != nil {
+		return StockIssueResultView{}, fmt.Errorf("create sale inventory movement: %w", err)
+	}
+
+	currency := "NGN"
+	if costSettings, err := q.GetCostingSettings(ctx, workspaceID); err == nil {
+		currency = costSettings.Currency
+	}
+
+	// Double-entry GL posting: Debit COGS (expense), Credit Inventory Asset (asset)
+	ledger, err := q.CreateLedgerEntry(ctx, db.CreateLedgerEntryParams{
+		WorkspaceID:      workspaceID,
+		SourceType:       "cogs_sale",
+		SourceID:         updatedBal.ID,
+		EntryDate:        pgtype.Date{Time: occurredOn, Valid: true},
+		Currency:         currency,
+		CurrencyExponent: int32(CurrencyExponent(currency)),
+		Description:      optionalPgText(fmt.Sprintf("COGS recognition for sale of %s", product.Name)),
+	})
+	if err != nil {
+		return StockIssueResultView{}, fmt.Errorf("create COGS ledger entry: %w", err)
+	}
+
+	if _, err := q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{
+		LedgerEntryID: ledger.ID,
+		WorkspaceID:   workspaceID,
+		AccountClass:  "expense",
+		DebitMinor:    cogsMinor,
+		Description:   optionalPgText("Cost of Goods Sold"),
+	}); err != nil {
+		return StockIssueResultView{}, fmt.Errorf("create COGS debit line: %w", err)
+	}
+
+	if _, err := q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{
+		LedgerEntryID: ledger.ID,
+		WorkspaceID:   workspaceID,
+		AccountClass:  "asset",
+		CreditMinor:   cogsMinor,
+		Description:   optionalPgText("Inventory Asset reduction"),
+	}); err != nil {
+		return StockIssueResultView{}, fmt.Errorf("create Inventory credit line: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return StockIssueResultView{}, fmt.Errorf("commit stock issue: %w", err)
+	}
+
+	availFinal := updatedBal.QuantityOnHand.Sub(updatedBal.ReservedQuantity)
+	if availFinal.IsNegative() {
+		availFinal = decimal.Zero
+	}
+
+	avgCostFinal := decimal.Zero
+	if updatedBal.QuantityOnHand.GreaterThan(decimal.Zero) {
+		avgCostFinal = decimal.NewFromInt(updatedBal.ValueOnHandMinor).Div(updatedBal.QuantityOnHand)
+	}
+
+	return StockIssueResultView{
+		Balance: InventoryBalanceView{
+			ID:                updatedBal.ID,
+			LocationID:        updatedBal.LocationID,
+			LocationName:      location.Name,
+			ProductID:         updatedBal.ProductID,
+			ProductName:       product.Name,
+			ProductKind:       product.Kind,
+			QuantityOnHand:    updatedBal.QuantityOnHand.StringFixed(4),
+			ReservedQuantity:  updatedBal.ReservedQuantity.StringFixed(4),
+			AvailableQuantity: availFinal.StringFixed(4),
+			InTransitQuantity: updatedBal.InTransitQuantity.StringFixed(4),
+			ValueOnHandMinor:  fmt.Sprintf("%d", updatedBal.ValueOnHandMinor),
+			AverageCostMinor:  avgCostFinal.StringFixed(4),
+			CostingMethod:     updatedBal.CostingMethod,
+			Version:           updatedBal.Version,
+		},
+		COGSMinor:     cogsMinor,
+		LedgerEntryID: ledger.ID,
+	}, nil
 }

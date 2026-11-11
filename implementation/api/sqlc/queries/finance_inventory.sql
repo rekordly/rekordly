@@ -13,6 +13,9 @@ VALUES ($1, $2)
 ON CONFLICT (workspace_id) DO UPDATE SET updated_at = now()
 RETURNING *;
 
+-- name: GetCostingSettings :one
+SELECT * FROM inventory_costing_settings WHERE workspace_id = $1;
+
 -- name: CreateInventoryOpeningEntry :one
 INSERT INTO inventory_opening_entries (
     workspace_id, location_id, product_id, quantity, unit_cost_minor,
@@ -44,12 +47,24 @@ RETURNING *;
 -- name: GetInventoryBalance :one
 SELECT * FROM inventory_balances WHERE workspace_id = $1 AND location_id = $2 AND product_id = $3;
 
+-- name: UpdateInventoryBalanceQuantities :one
+UPDATE inventory_balances
+SET quantity_on_hand = $4,
+    reserved_quantity = $5,
+    in_transit_quantity = $6,
+    value_on_hand_minor = $7,
+    version = version + 1,
+    updated_at = now()
+WHERE workspace_id = $1 AND location_id = $2 AND product_id = $3
+RETURNING *;
+
 -- name: ListInventoryBalances :many
 SELECT ib.*, il.name AS location_name, p.name AS product_name, p.kind AS product_kind
 FROM inventory_balances ib
 JOIN inventory_locations il ON il.id = ib.location_id AND il.workspace_id = ib.workspace_id
 JOIN products p ON p.id = ib.product_id AND p.workspace_id = ib.workspace_id
 WHERE ib.workspace_id = $1
+  AND (sqlc.narg('location_id')::bigint IS NULL OR ib.location_id = sqlc.narg('location_id'))
   AND (sqlc.narg('before_id')::bigint IS NULL OR ib.id < sqlc.narg('before_id'))
 ORDER BY ib.id DESC
 LIMIT $2;

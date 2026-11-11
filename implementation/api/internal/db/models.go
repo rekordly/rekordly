@@ -175,15 +175,18 @@ type IdempotencyRecord struct {
 }
 
 type InventoryBalance struct {
-	ID               int64              `json:"id"`
-	WorkspaceID      int64              `json:"workspace_id"`
-	LocationID       int64              `json:"location_id"`
-	ProductID        int64              `json:"product_id"`
-	QuantityOnHand   decimal.Decimal    `json:"quantity_on_hand"`
-	ValueOnHandMinor int64              `json:"value_on_hand_minor"`
-	CostingMethod    string             `json:"costing_method"`
-	Version          int32              `json:"version"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	ID                int64              `json:"id"`
+	WorkspaceID       int64              `json:"workspace_id"`
+	LocationID        int64              `json:"location_id"`
+	ProductID         int64              `json:"product_id"`
+	QuantityOnHand    decimal.Decimal    `json:"quantity_on_hand"`
+	ValueOnHandMinor  int64              `json:"value_on_hand_minor"`
+	CostingMethod     string             `json:"costing_method"`
+	Version           int32              `json:"version"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	ReservedQuantity  decimal.Decimal    `json:"reserved_quantity"`
+	InTransitQuantity decimal.Decimal    `json:"in_transit_quantity"`
+	VariantID         pgtype.Int8        `json:"variant_id"`
 }
 
 type InventoryCostingSetting struct {
@@ -221,6 +224,7 @@ type InventoryMovement struct {
 	LocationID         pgtype.Int8        `json:"location_id"`
 	SourceType         string             `json:"source_type"`
 	SourceID           pgtype.Int8        `json:"source_id"`
+	VariantID          pgtype.Int8        `json:"variant_id"`
 }
 
 type InventoryOpeningEntry struct {
@@ -893,6 +897,104 @@ type SocialLinkAttempt struct {
 	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
 	CompletedAt     pgtype.Timestamptz `json:"completed_at"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
+type StockAdjustment struct {
+	ID               int64              `json:"id"`
+	WorkspaceID      int64              `json:"workspace_id"`
+	AdjustmentNumber string             `json:"adjustment_number"`
+	LocationID       int64              `json:"location_id"`
+	ReasonCode       string             `json:"reason_code"`
+	Notes            pgtype.Text        `json:"notes"`
+	IdempotencyKey   pgtype.Text        `json:"idempotency_key"`
+	CreatedByUserID  int64              `json:"created_by_user_id"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+type StockAdjustmentLine struct {
+	ID             int64              `json:"id"`
+	WorkspaceID    int64              `json:"workspace_id"`
+	AdjustmentID   int64              `json:"adjustment_id"`
+	ProductID      int64              `json:"product_id"`
+	VariantID      pgtype.Int8        `json:"variant_id"`
+	QuantityDelta  decimal.Decimal    `json:"quantity_delta"`
+	UnitCostMinor  int64              `json:"unit_cost_minor"`
+	TotalCostMinor int64              `json:"total_cost_minor"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type StockCount struct {
+	ID              int64              `json:"id"`
+	WorkspaceID     int64              `json:"workspace_id"`
+	CountNumber     string             `json:"count_number"`
+	LocationID      int64              `json:"location_id"`
+	Scope           string             `json:"scope"`
+	Status          string             `json:"status"`
+	CountedAt       pgtype.Timestamptz `json:"counted_at"`
+	Notes           pgtype.Text        `json:"notes"`
+	IdempotencyKey  pgtype.Text        `json:"idempotency_key"`
+	CreatedByUserID int64              `json:"created_by_user_id"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+type StockCountLine struct {
+	ID               int64              `json:"id"`
+	WorkspaceID      int64              `json:"workspace_id"`
+	CountID          int64              `json:"count_id"`
+	ProductID        int64              `json:"product_id"`
+	VariantID        pgtype.Int8        `json:"variant_id"`
+	ExpectedQuantity decimal.Decimal    `json:"expected_quantity"`
+	CountedQuantity  pgtype.Numeric     `json:"counted_quantity"`
+	VarianceQuantity decimal.Decimal    `json:"variance_quantity"`
+	UnitCostMinor    int64              `json:"unit_cost_minor"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
+type StockReservation struct {
+	ID             int64              `json:"id"`
+	WorkspaceID    int64              `json:"workspace_id"`
+	LocationID     int64              `json:"location_id"`
+	ProductID      int64              `json:"product_id"`
+	VariantID      pgtype.Int8        `json:"variant_id"`
+	OrderID        pgtype.Int8        `json:"order_id"`
+	Quantity       decimal.Decimal    `json:"quantity"`
+	Status         string             `json:"status"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+	Notes          pgtype.Text        `json:"notes"`
+	IdempotencyKey pgtype.Text        `json:"idempotency_key"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+type StockTransfer struct {
+	ID                    int64              `json:"id"`
+	WorkspaceID           int64              `json:"workspace_id"`
+	TransferNumber        string             `json:"transfer_number"`
+	SourceLocationID      int64              `json:"source_location_id"`
+	DestinationLocationID int64              `json:"destination_location_id"`
+	Status                string             `json:"status"`
+	DispatchedAt          pgtype.Timestamptz `json:"dispatched_at"`
+	ReceivedAt            pgtype.Timestamptz `json:"received_at"`
+	Notes                 pgtype.Text        `json:"notes"`
+	IdempotencyKey        pgtype.Text        `json:"idempotency_key"`
+	CreatedByUserID       int64              `json:"created_by_user_id"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+}
+
+type StockTransferLine struct {
+	ID                 int64              `json:"id"`
+	WorkspaceID        int64              `json:"workspace_id"`
+	TransferID         int64              `json:"transfer_id"`
+	ProductID          int64              `json:"product_id"`
+	VariantID          pgtype.Int8        `json:"variant_id"`
+	QuantityRequested  decimal.Decimal    `json:"quantity_requested"`
+	QuantityDispatched decimal.Decimal    `json:"quantity_dispatched"`
+	QuantityReceived   decimal.Decimal    `json:"quantity_received"`
+	UnitCostMinor      int64              `json:"unit_cost_minor"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 }
 
 type SupplierAdvance struct {
