@@ -202,6 +202,10 @@ type InventoryLocation struct {
 	IsActive     bool               `json:"is_active"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	Code         pgtype.Text        `json:"code"`
+	Address      pgtype.Text        `json:"address"`
+	Phone        pgtype.Text        `json:"phone"`
+	IsDefault    bool               `json:"is_default"`
 }
 
 type InventoryMovement struct {
@@ -644,6 +648,25 @@ type Product struct {
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
+type ProductOption struct {
+	ID          int64              `json:"id"`
+	WorkspaceID int64              `json:"workspace_id"`
+	ProductID   int64              `json:"product_id"`
+	Name        string             `json:"name"`
+	Position    int32              `json:"position"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type ProductOptionValue struct {
+	ID          int64              `json:"id"`
+	WorkspaceID int64              `json:"workspace_id"`
+	OptionID    int64              `json:"option_id"`
+	ProductID   int64              `json:"product_id"`
+	Value       string             `json:"value"`
+	Position    int32              `json:"position"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
 type ProductVariant struct {
 	ID                int64              `json:"id"`
 	WorkspaceID       int64              `json:"workspace_id"`
@@ -658,6 +681,7 @@ type ProductVariant struct {
 	IsActive          bool               `json:"is_active"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	CostPriceMinor    int64              `json:"cost_price_minor"`
 }
 
 type Purchase struct {
@@ -1002,6 +1026,12 @@ type User struct {
 	OnboardingVersion int32              `json:"onboarding_version"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+type VariantOptionValue struct {
+	WorkspaceID   int64 `json:"workspace_id"`
+	VariantID     int64 `json:"variant_id"`
+	OptionValueID int64 `json:"option_value_id"`
 }
 
 type WalletTransaction struct {

@@ -48,6 +48,7 @@ func (h *Handler) RegisterRoutes(group *gin.RouterGroup) {
 	// once immutable movements and costing are implemented.
 	h.RegisterCatalogueRoutes(protected)
 	h.RegisterInventoryRoutes(protected)
+	h.RegisterOutletRoutes(protected)
 
 	// Blueprint 08 begins with non-posting purchase requests and approvals.
 	h.RegisterProcurementRoutes(protected)
