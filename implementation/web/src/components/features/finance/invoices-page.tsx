@@ -6,14 +6,18 @@ import {
   ArrowRight,
   ArrowsClockwise,
   CheckCircle,
+  Copy,
+  Envelope,
   FileText,
   HandCoins,
   PaperPlaneTilt,
   Plus,
   Prohibit,
+  ShareNetwork,
   Trash,
   UserPlus,
   Wallet,
+  WhatsappLogo,
   XCircle,
 } from "@phosphor-icons/react";
 import { useMemo, useState } from "react";
@@ -28,6 +32,7 @@ import { DataView } from "@/components/ui/data-view";
 import { FormDrawer } from "@/components/ui/form-drawer";
 import { EmptyState, Page, PageHeader } from "@/components/ui/page";
 import { RecordCard } from "@/components/ui/record-card";
+import { toast } from "@heroui/react";
 import { formatDate } from "@/lib/format";
 import { financeApi } from "@/lib/money";
 import {
@@ -80,6 +85,30 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [payment, setPayment] = useState<PaymentPreset | undefined>();
   const customers = useContacts(workspaceId, "customers");
+
+  // Invoice share state
+  const [shareInvoice, setShareInvoice] = useState<Invoice | null>(null);
+  const [shareData, setShareData] = useState<{ share_url: string; token: string; expires_at: string } | null>(null);
+  const [copiedShareLink, setCopiedShareLink] = useState(false);
+
+  const handleOpenShare = async (inv: Invoice) => {
+    try {
+      const res = await financeApi.createInvoiceShare(workspaceId, inv.id);
+      setShareData(res);
+      setShareInvoice(inv);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to create share link";
+      toast.danger(msg);
+    }
+  };
+
+  const handleCopyShareLink = () => {
+    if (!shareData) return;
+    const fullUrl = `${window.location.origin}${shareData.share_url}`;
+    navigator.clipboard.writeText(fullUrl);
+    setCopiedShareLink(true);
+    setTimeout(() => setCopiedShareLink(false), 2000);
+  };
 
   // Inline custom customer creation states
   const [newCustomerName, setNewCustomerName] = useState("");
@@ -395,6 +424,12 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
     <AppRowActions
       ariaLabel="Invoice actions"
       items={[
+        {
+          key: "share",
+          label: "Share / WhatsApp",
+          icon: <ShareNetwork size={16} aria-hidden="true" />,
+          onClick: () => handleOpenShare(row),
+        },
         {
           key: "finalize",
           label: "Finalize",
@@ -1070,6 +1105,75 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
           description="Check the wallet balance on the Wallets page first."
         />
       </FormDrawer>
+      {/* SHARE INVOICE DRAWER */}
+      <FormDrawer
+        isOpen={shareInvoice !== null}
+        onOpenChange={(open) => !open && setShareInvoice(null)}
+        title="Share Invoice"
+        description={shareInvoice ? `Share ${shareInvoice.invoice_number} with ${shareInvoice.customer_name}` : undefined}
+      >
+        {shareData && shareInvoice && (
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-foreground uppercase tracking-wider block">Public Invoice Link</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={typeof window !== "undefined" ? `${window.location.origin}${shareData.share_url}` : shareData.share_url}
+                  className="flex-1 h-10 rounded-xl bg-surface-secondary border border-border px-3 text-xs font-mono text-foreground focus:outline-none"
+                />
+                <AppButton
+                  variant="primary"
+                  size="sm"
+                  startContent={<Copy size={15} />}
+                  label={copiedShareLink ? "Copied!" : "Copy"}
+                  onPress={handleCopyShareLink}
+                />
+              </div>
+              <p className="text-[11px] text-muted">
+                Anyone with this link can view and print the invoice without signing in. Valid for 30 days.
+              </p>
+            </div>
+
+            <div className="space-y-3 pt-2 border-t border-border/40">
+              <span className="text-xs font-semibold text-foreground uppercase tracking-wider block">Direct Messaging</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <a
+                  href={`https://wa.me/?text=${encodeURIComponent(
+                    `Hello ${shareInvoice.customer_name}, here is your invoice ${shareInvoice.invoice_number} for ${money(
+                      shareInvoice.total_amount_minor,
+                      shareInvoice,
+                    )}: ${typeof window !== "undefined" ? window.location.origin : ""}${shareData.share_url}`,
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 h-11 rounded-2xl bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366]/20 font-bold text-xs transition-colors border border-[#25D366]/20"
+                >
+                  <WhatsappLogo size={18} weight="fill" />
+                  Send via WhatsApp
+                </a>
+
+                <a
+                  href={`mailto:?subject=${encodeURIComponent(`Invoice ${shareInvoice.invoice_number}`)}&body=${encodeURIComponent(
+                    `Hello ${shareInvoice.customer_name},\n\nPlease find your invoice ${shareInvoice.invoice_number} for ${money(
+                      shareInvoice.total_amount_minor,
+                      shareInvoice,
+                    )}.\n\nView and print your invoice here:\n${typeof window !== "undefined" ? window.location.origin : ""}${
+                      shareData.share_url
+                    }\n\nThank you!`,
+                  )}`}
+                  className="flex items-center justify-center gap-2 h-11 rounded-2xl bg-surface-secondary text-foreground hover:bg-surface-secondary/80 font-semibold text-xs transition-colors border border-border"
+                >
+                  <Envelope size={18} weight="bold" />
+                  Send via Email
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
+      </FormDrawer>
+
       <PaymentDrawer
         workspaceId={workspaceId}
         currency={currency}

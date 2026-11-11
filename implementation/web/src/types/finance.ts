@@ -472,6 +472,8 @@ export interface Invoice extends TradeRecord {
   due_date: string;
   subtotal_minor: MinorAmount;
   tax_amount_minor: MinorAmount;
+  terms?: string | null;
+  notes?: string | null;
 }
 
 export interface Estimate {
@@ -507,6 +509,35 @@ export interface EstimateItem {
 export interface EstimateDetail {
   estimate: Estimate;
   items: EstimateItem[];
+}
+
+export interface InvoiceLineItem {
+  id: number;
+  invoice_id: number;
+  description: string;
+  quantity: number;
+  unit_price_minor: MinorAmount;
+  amount_minor: MinorAmount;
+}
+
+export interface PublicInvoiceView {
+  workspace_name: string;
+  invoice: Invoice;
+  items: InvoiceLineItem[];
+  expires_at: string;
+}
+
+export interface PublicReceiptView {
+  workspace_name: string;
+  receipt: {
+    id: number;
+    receipt_number: string;
+    amount_minor: MinorAmount;
+    currency: string;
+    issued_at: string;
+  };
+  payment: Payment;
+  invoice?: Invoice | null;
 }
 
 export interface CustomerWallet {

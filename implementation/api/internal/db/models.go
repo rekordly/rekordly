@@ -379,6 +379,18 @@ type InvoiceItem struct {
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
+type InvoiceShare struct {
+	ID             int64              `json:"id"`
+	WorkspaceID    int64              `json:"workspace_id"`
+	InvoiceID      int64              `json:"invoice_id"`
+	TokenHash      string             `json:"token_hash"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+	Status         string             `json:"status"`
+	AccessCount    int32              `json:"access_count"`
+	LastAccessedAt pgtype.Timestamptz `json:"last_accessed_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
 type LedgerEntry struct {
 	ID                int64              `json:"id"`
 	WorkspaceID       int64              `json:"workspace_id"`
@@ -718,6 +730,19 @@ type PaymentLeg struct {
 	MoneyAccountID int64              `json:"money_account_id"`
 	AmountMinor    int64              `json:"amount_minor"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type PaymentReceipt struct {
+	ID            int64              `json:"id"`
+	WorkspaceID   int64              `json:"workspace_id"`
+	ReceiptNumber string             `json:"receipt_number"`
+	PaymentID     int64              `json:"payment_id"`
+	InvoiceID     pgtype.Int8        `json:"invoice_id"`
+	AmountMinor   int64              `json:"amount_minor"`
+	Currency      string             `json:"currency"`
+	TokenHash     string             `json:"token_hash"`
+	IssuedAt      pgtype.Timestamptz `json:"issued_at"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 }
 
 type ProcurementApprovalPolicy struct {

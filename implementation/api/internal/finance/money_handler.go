@@ -19,6 +19,7 @@ func NewHandler(service *Service, authMiddleware gin.HandlerFunc) *Handler {
 
 func (h *Handler) RegisterRoutes(group *gin.RouterGroup) {
 	h.RegisterPurchaseOrderShareRoutes(group)
+	h.RegisterPublicFinanceRoutes(group)
 	protected := group.Group("")
 	if h.authMiddleware != nil {
 		protected.Use(h.authMiddleware)
@@ -64,9 +65,10 @@ func (h *Handler) RegisterRoutes(group *gin.RouterGroup) {
 	h.RegisterSupplierReturnRoutes(protected)
 	protected.GET("/reports/procurement", h.procurementReport)
 
-	// Invoices, Estimates and Customer Wallets
+	// Invoices, Estimates, Shares and Customer Wallets
 	h.RegisterInvoicesWalletsRoutes(protected)
 	h.RegisterEstimateRoutes(protected)
+	h.RegisterInvoiceShareRoutes(protected)
 
 	// Budgets and Tax-Readiness Reports
 	h.RegisterBudgetsTaxRoutes(protected)

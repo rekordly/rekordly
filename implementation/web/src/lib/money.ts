@@ -22,6 +22,8 @@ import type {
   GoodsReceipt, SupplierBill, SupplierAdvance, SupplierReturn, SupplierReturnLineOption, ProcurementReport, SupplierBillMatch,
   Estimate,
   EstimateDetail,
+  PublicInvoiceView,
+  PublicReceiptView,
   CustomerWallet,
   FinanceSummary,
   MixedMoneyConfirmation,
@@ -434,6 +436,14 @@ export const financeApi = {
     scopedPost(workspaceId, `/api/v1/invoices/${id}/void`, { reason }, key),
   payInvoiceFromWallet: (workspaceId: number, id: number, amount: string, currency: string, key: string) =>
     scopedPost(workspaceId, `/api/v1/invoices/${id}/wallet-payment`, { amount, currency }, key),
+  createInvoiceShare: (workspaceId: number, invoiceId: number, expiryDays?: number) =>
+    scopedPost<{ share_url: string; token: string; expires_at: string }>(workspaceId, `/api/v1/invoices/${invoiceId}/shares`, { expiry_days: expiryDays }),
+  getPublicInvoice: (token: string) =>
+    apiClient.get<{ invoice_view: PublicInvoiceView }>(`/api/v1/public/invoices/${token}`).then((r) => r.invoice_view),
+  createPaymentReceipt: (workspaceId: number, paymentId: number) =>
+    scopedPost<{ receipt_url: string; token: string; receipt: unknown }>(workspaceId, `/api/v1/payments/${paymentId}/receipt`, {}),
+  getPublicReceipt: (token: string) =>
+    apiClient.get<{ receipt_view: PublicReceiptView }>(`/api/v1/public/receipts/${token}`).then((r) => r.receipt_view),
 
   async listEstimates(workspaceId: number, params: QueryParams = {}) {
     const result = await scopedGet<{ estimates: Estimate[] }>(workspaceId, "/api/v1/estimates", { limit: 50, ...params });

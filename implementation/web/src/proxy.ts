@@ -22,6 +22,8 @@ export function proxy(request: NextRequest) {
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api") ||
     pathname.startsWith("/favicon") ||
+    pathname.startsWith("/public") ||
+    pathname.startsWith("/invitations") ||
     pathname.includes(".") ||
     PUBLIC_ROUTES.has(pathname)
   ) {
