@@ -58,20 +58,6 @@ type GoodsReceiptDetailView struct {
 	ReceiptReference *string `json:"receipt_reference,omitempty"`
 	Lines []GoodsReceiptLineView `json:"lines"`
 }
-type GoodsReceiptLineView struct {
-	ID                  int64  `json:"id"`
-	PurchaseOrderLineID int64  `json:"purchase_order_line_id"`
-	ProductID           *int64 `json:"product_id,omitempty"`
-	Description         string `json:"description"`
-	AcceptedQuantity    string `json:"accepted_quantity"`
-	UnitCostMinor       string `json:"unit_cost_minor"`
-	LineTotalMinor      string `json:"line_total_minor"`
-}
-type GoodsReceiptDetailView struct {
-	GoodsReceiptView
-	ReceiptReference *string                `json:"receipt_reference,omitempty"`
-	Lines            []GoodsReceiptLineView `json:"lines"`
-}
 type ReceiptOptionLine struct {
 	PurchaseOrderLineID int64  `json:"purchase_order_line_id"`
 	Description         string `json:"description"`
@@ -238,12 +224,12 @@ func (s *Service) CreateGoodsReceipt(ctx context.Context, ws, user int64, in Cre
 			notes string
 		}{line, qty, total, unitCost, strings.TrimSpace(input.Notes)})
 	}
-	receipt, err := q.CreateGoodsReceipt(ctx, db.CreateGoodsReceiptParams{WorkspaceID: ws, PurchaseOrderID: po.ID, ReceiptReference: optionalPgText(in.ReceiptReference), DeliveryReference: optionalText(in.DeliveryReference), ServiceAccepted: in.ServiceAccepted, ReceivedOn: pgtype.Date{Time: date, Valid: true}, IdempotencyKey: key, CreatedByUserID: user, LocationID: pgtype.Int8{Int64: location.ID, Valid: true}})
+	receipt, err := q.CreateGoodsReceipt(ctx, db.CreateGoodsReceiptParams{WorkspaceID: ws, PurchaseOrderID: po.ID, ReceiptReference: optionalPgText(in.ReceiptReference), DeliveryReference: optionalPgText(in.DeliveryReference), ServiceAccepted: in.ServiceAccepted, ReceivedOn: pgtype.Date{Time: date, Valid: true}, IdempotencyKey: key, CreatedByUserID: user, LocationID: pgtype.Int8{Int64: location.ID, Valid: true}})
 	if err != nil {
 		return GoodsReceiptView{}, err
 	}
 	for _, item := range prepared {
-		rl, e := q.CreateGoodsReceiptLine(ctx, db.CreateGoodsReceiptLineParams{WorkspaceID: ws, GoodsReceiptID: receipt.ID, PurchaseOrderLineID: item.line.ID, ProductID: item.line.ProductID, AcceptedQuantity: item.qty, UnitCostMinor: item.unitCost, ActualUnitCostMinor: pgtype.Int8{Int64: item.unitCost, Valid: true}, LineTotalMinor: item.total, LineNotes: optionalText(item.notes)})
+		rl, e := q.CreateGoodsReceiptLine(ctx, db.CreateGoodsReceiptLineParams{WorkspaceID: ws, GoodsReceiptID: receipt.ID, PurchaseOrderLineID: item.line.ID, ProductID: item.line.ProductID, AcceptedQuantity: item.qty, UnitCostMinor: item.unitCost, ActualUnitCostMinor: pgtype.Int8{Int64: item.unitCost, Valid: true}, LineTotalMinor: item.total, LineNotes: optionalPgText(item.notes)})
 		if e != nil {
 			return GoodsReceiptView{}, e
 		}

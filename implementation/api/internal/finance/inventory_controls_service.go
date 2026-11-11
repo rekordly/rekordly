@@ -314,7 +314,7 @@ func (s *Service) CreateInventoryTransfer(ctx context.Context, workspaceID, user
 	return InventoryTransferView{ID: id, Number: number, SourceLocationID: in.SourceLocationID, DestinationLocationID: in.DestinationLocationID, Status: "received"}, nil
 }
 
-func (s *Service) CreateStockCount(ctx context.Context, workspaceID, userID int64, in CreateStockCountInput) (InventoryInventoryStockCountView, error) {
+func (s *Service) CreateStockCount(ctx context.Context, workspaceID, userID int64, in CreateStockCountInput) (InventoryStockCountView, error) {
 	key := strings.TrimSpace(in.IdempotencyKey)
 	if key == "" || in.LocationID <= 0 || len(in.Lines) == 0 {
 		return InventoryStockCountView{}, errors.New("location, count lines and idempotency key are required")

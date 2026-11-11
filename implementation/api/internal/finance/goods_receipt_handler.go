@@ -36,24 +36,6 @@ func (h *Handler) listGoodsReceipts(c *gin.Context) {
 	c.JSON(200, gin.H{"data": gin.H{"receipts": rows}})
 }
 
-func (h *Handler) getGoodsReceipt(c *gin.Context) {
-	ws, ok := businessWorkspace(c)
-	if !ok {
-		return
-	}
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil || id < 1 {
-		c.JSON(400, gin.H{"error": gin.H{"message": "Invalid goods receipt"}})
-		return
-	}
-	receipt, err := h.service.GetGoodsReceipt(c, ws.WorkspaceID, id)
-	if err != nil {
-		h.procurementError(c, err)
-		return
-	}
-	c.JSON(200, gin.H{"data": gin.H{"receipt": receipt}})
-}
-
 func (h *Handler) receiptOptions(c *gin.Context) {
 	ws, ok := businessWorkspace(c)
 	if !ok {
