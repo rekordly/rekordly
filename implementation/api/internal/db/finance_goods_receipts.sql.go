@@ -144,6 +144,59 @@ func (q *Queries) GetGoodsReceiptByIdempotency(ctx context.Context, arg GetGoods
 	return i, err
 }
 
+const getGoodsReceiptDetail = `-- name: GetGoodsReceiptDetail :one
+SELECT gr.id, gr.workspace_id, gr.purchase_order_id, gr.receipt_reference, gr.received_on, gr.idempotency_key, gr.created_by_user_id, gr.created_at, gr.location_id, COALESCE(jsonb_agg(jsonb_build_object(
+  'id', grl.id,
+  'purchase_order_line_id', grl.purchase_order_line_id,
+  'product_id', grl.product_id,
+  'description', pol.description,
+  'accepted_quantity', grl.accepted_quantity,
+  'unit_cost_minor', grl.unit_cost_minor,
+  'line_total_minor', grl.line_total_minor
+) ORDER BY grl.id) FILTER (WHERE grl.id IS NOT NULL), '[]'::jsonb) AS lines
+FROM goods_receipts gr
+LEFT JOIN goods_receipt_lines grl ON grl.goods_receipt_id = gr.id AND grl.workspace_id = gr.workspace_id
+LEFT JOIN purchase_order_lines pol ON pol.id = grl.purchase_order_line_id AND pol.workspace_id = gr.workspace_id
+WHERE gr.workspace_id=$1 AND gr.id=$2
+GROUP BY gr.id
+`
+
+type GetGoodsReceiptDetailParams struct {
+	WorkspaceID int64 `json:"workspace_id"`
+	ID          int64 `json:"id"`
+}
+
+type GetGoodsReceiptDetailRow struct {
+	ID               int64              `json:"id"`
+	WorkspaceID      int64              `json:"workspace_id"`
+	PurchaseOrderID  int64              `json:"purchase_order_id"`
+	ReceiptReference pgtype.Text        `json:"receipt_reference"`
+	ReceivedOn       pgtype.Date        `json:"received_on"`
+	IdempotencyKey   string             `json:"idempotency_key"`
+	CreatedByUserID  int64              `json:"created_by_user_id"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	LocationID       pgtype.Int8        `json:"location_id"`
+	Lines            interface{}        `json:"lines"`
+}
+
+func (q *Queries) GetGoodsReceiptDetail(ctx context.Context, arg GetGoodsReceiptDetailParams) (GetGoodsReceiptDetailRow, error) {
+	row := q.db.QueryRow(ctx, getGoodsReceiptDetail, arg.WorkspaceID, arg.ID)
+	var i GetGoodsReceiptDetailRow
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.PurchaseOrderID,
+		&i.ReceiptReference,
+		&i.ReceivedOn,
+		&i.IdempotencyKey,
+		&i.CreatedByUserID,
+		&i.CreatedAt,
+		&i.LocationID,
+		&i.Lines,
+	)
+	return i, err
+}
+
 const getReceiptPurchaseOrderLinesForUpdate = `-- name: GetReceiptPurchaseOrderLinesForUpdate :many
 SELECT pol.id,pol.product_id,pol.description,pol.quantity,pol.expected_unit_cost_minor,
   (SELECT p.kind FROM products p WHERE p.id=pol.product_id AND p.workspace_id=pol.workspace_id) AS product_kind

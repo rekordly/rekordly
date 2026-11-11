@@ -22,3 +22,19 @@ INSERT INTO inventory_movements(workspace_id,product_id,goods_receipt_line_id,lo
 UPDATE purchase_orders SET status=$3,version=version+1,updated_at=now() WHERE workspace_id=$1 AND id=$2 RETURNING *;
 -- name: ListGoodsReceipts :many
 SELECT * FROM goods_receipts WHERE workspace_id=$1 AND (sqlc.narg('before_id')::bigint IS NULL OR id < sqlc.narg('before_id')) ORDER BY id DESC LIMIT $2;
+
+-- name: GetGoodsReceiptDetail :one
+SELECT gr.*, COALESCE(jsonb_agg(jsonb_build_object(
+  'id', grl.id,
+  'purchase_order_line_id', grl.purchase_order_line_id,
+  'product_id', grl.product_id,
+  'description', pol.description,
+  'accepted_quantity', grl.accepted_quantity,
+  'unit_cost_minor', grl.unit_cost_minor,
+  'line_total_minor', grl.line_total_minor
+) ORDER BY grl.id) FILTER (WHERE grl.id IS NOT NULL), '[]'::jsonb) AS lines
+FROM goods_receipts gr
+LEFT JOIN goods_receipt_lines grl ON grl.goods_receipt_id = gr.id AND grl.workspace_id = gr.workspace_id
+LEFT JOIN purchase_order_lines pol ON pol.id = grl.purchase_order_line_id AND pol.workspace_id = gr.workspace_id
+WHERE gr.workspace_id=$1 AND gr.id=$2
+GROUP BY gr.id;
