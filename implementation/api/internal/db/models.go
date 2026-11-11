@@ -116,6 +116,40 @@ type CustomerWallet struct {
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 }
 
+type Estimate struct {
+	ID                 int64              `json:"id"`
+	WorkspaceID        int64              `json:"workspace_id"`
+	EstimateNumber     string             `json:"estimate_number"`
+	CustomerID         pgtype.Int8        `json:"customer_id"`
+	CustomerName       string             `json:"customer_name"`
+	IssueDate          pgtype.Date        `json:"issue_date"`
+	ExpiryDate         pgtype.Date        `json:"expiry_date"`
+	Currency           string             `json:"currency"`
+	CurrencyExponent   int32              `json:"currency_exponent"`
+	SubtotalMinor      int64              `json:"subtotal_minor"`
+	TaxAmountMinor     int64              `json:"tax_amount_minor"`
+	TotalAmountMinor   int64              `json:"total_amount_minor"`
+	Status             string             `json:"status"`
+	Notes              pgtype.Text        `json:"notes"`
+	Terms              pgtype.Text        `json:"terms"`
+	ConvertedInvoiceID pgtype.Int8        `json:"converted_invoice_id"`
+	CreatedByUserID    pgtype.Int8        `json:"created_by_user_id"`
+	IdempotencyKey     pgtype.Text        `json:"idempotency_key"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+}
+
+type EstimateItem struct {
+	ID             int64              `json:"id"`
+	EstimateID     int64              `json:"estimate_id"`
+	WorkspaceID    int64              `json:"workspace_id"`
+	Description    string             `json:"description"`
+	Quantity       decimal.Decimal    `json:"quantity"`
+	UnitPriceMinor int64              `json:"unit_price_minor"`
+	AmountMinor    int64              `json:"amount_minor"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
 type EvidenceAsset struct {
 	ID               int64              `json:"id"`
 	WorkspaceID      int64              `json:"workspace_id"`

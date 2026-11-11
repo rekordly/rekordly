@@ -164,6 +164,11 @@ const STATUS_TONES: Readonly<Record<string, StatusTone>> = {
   unpaid: "brand",
   draft: "neutral",
   voided: "danger",
+  sent: "brand",
+  accepted: "success",
+  declined: "danger",
+  converted: "accent",
+  expired: "neutral",
 };
 
 export function StatusBadge({ status }: { status: string }) {

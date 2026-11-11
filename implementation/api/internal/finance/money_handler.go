@@ -64,8 +64,9 @@ func (h *Handler) RegisterRoutes(group *gin.RouterGroup) {
 	h.RegisterSupplierReturnRoutes(protected)
 	protected.GET("/reports/procurement", h.procurementReport)
 
-	// Invoices and Customer Wallets
+	// Invoices, Estimates and Customer Wallets
 	h.RegisterInvoicesWalletsRoutes(protected)
+	h.RegisterEstimateRoutes(protected)
 
 	// Budgets and Tax-Readiness Reports
 	h.RegisterBudgetsTaxRoutes(protected)

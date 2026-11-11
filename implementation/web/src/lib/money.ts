@@ -20,6 +20,8 @@ import type {
   PurchaseOrder,
   ReceiptOptionLine,
   GoodsReceipt, SupplierBill, SupplierAdvance, SupplierReturn, SupplierReturnLineOption, ProcurementReport, SupplierBillMatch,
+  Estimate,
+  EstimateDetail,
   CustomerWallet,
   FinanceSummary,
   MixedMoneyConfirmation,
@@ -236,7 +238,7 @@ function scopedPut<T>(workspaceId: number, path: string, body: unknown): Promise
 
 export const RECORD_PAGE_SIZE = 25;
 
-export type RecordResource = "transactions" | "sales" | "purchases" | "payments" | "invoices";
+export type RecordResource = "transactions" | "sales" | "purchases" | "payments" | "invoices" | "estimates";
 
 /** One cursor page of a financial list; the server caps page size and date window. */
 export async function listRecords<T>(
@@ -432,6 +434,19 @@ export const financeApi = {
     scopedPost(workspaceId, `/api/v1/invoices/${id}/void`, { reason }, key),
   payInvoiceFromWallet: (workspaceId: number, id: number, amount: string, currency: string, key: string) =>
     scopedPost(workspaceId, `/api/v1/invoices/${id}/wallet-payment`, { amount, currency }, key),
+
+  async listEstimates(workspaceId: number, params: QueryParams = {}) {
+    const result = await scopedGet<{ estimates: Estimate[] }>(workspaceId, "/api/v1/estimates", { limit: 50, ...params });
+    return result.estimates ?? [];
+  },
+  getEstimate: (workspaceId: number, id: number) =>
+    scopedGet<{ estimate: EstimateDetail }>(workspaceId, `/api/v1/estimates/${id}`).then((r) => r.estimate),
+  createEstimate: (workspaceId: number, body: unknown, key: string) =>
+    scopedPost<{ estimate: EstimateDetail }>(workspaceId, "/api/v1/estimates", body, key),
+  updateEstimateStatus: (workspaceId: number, id: number, status: string) =>
+    scopedPatch<{ estimate: EstimateDetail }>(workspaceId, `/api/v1/estimates/${id}/status`, { status }),
+  convertEstimateToInvoice: (workspaceId: number, id: number, key: string) =>
+    scopedPost<{ invoice: unknown; message: string }>(workspaceId, `/api/v1/estimates/${id}/convert-to-invoice`, {}, key),
 
   getWallet: (workspaceId: number, customerId: number, currency: string) =>
     scopedGet<CustomerWallet>(workspaceId, `/api/v1/customers/${customerId}/wallet`, { currency }),

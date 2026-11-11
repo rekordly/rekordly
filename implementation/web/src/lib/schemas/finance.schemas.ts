@@ -202,6 +202,25 @@ export const invoiceSchema = z
   });
 export type InvoiceValues = z.infer<typeof invoiceSchema>;
 
+export const estimateSchema = z.object({
+  customer_id: z.string().min(1, "Customer name is required"),
+  issue_date: date("Choose the issue date"),
+  expiry_date: date("Choose the expiry date"),
+  tax_amount: optionalAmount,
+  notes,
+  terms: notes,
+  items: z
+    .array(
+      z.object({
+        description: z.string().trim().min(1, "Describe this item").max(200, "Keep this under 200 characters"),
+        quantity: z.string().regex(/^[0-9]+(\.[0-9]{1,4})?$/, "Enter a valid quantity"),
+        unit_price: amount("Enter a price"),
+      }),
+    )
+    .min(1, "Add at least one item"),
+});
+export type EstimateValues = z.infer<typeof estimateSchema>;
+
 export const walletDepositSchema = z.object({
   amount: amount(),
   account_id: z.string().min(1, "Choose the account that received it"),

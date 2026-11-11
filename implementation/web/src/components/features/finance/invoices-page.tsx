@@ -4,14 +4,17 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import {
   ArrowLeft,
   ArrowRight,
+  ArrowsClockwise,
   CheckCircle,
   FileText,
   HandCoins,
+  PaperPlaneTilt,
   Plus,
   Prohibit,
   Trash,
   UserPlus,
   Wallet,
+  XCircle,
 } from "@phosphor-icons/react";
 import { useMemo, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
@@ -27,38 +30,65 @@ import { EmptyState, Page, PageHeader } from "@/components/ui/page";
 import { RecordCard } from "@/components/ui/record-card";
 import { formatDate } from "@/lib/format";
 import { financeApi } from "@/lib/money";
-import { invoiceSchema, walletPaymentSchema, type InvoiceValues, type WalletPaymentValues } from "@/lib/schemas/finance.schemas";
-import type { Invoice } from "@/types/finance";
+import {
+  estimateSchema,
+  invoiceSchema,
+  walletPaymentSchema,
+  type EstimateValues,
+  type InvoiceValues,
+  type WalletPaymentValues,
+} from "@/lib/schemas/finance.schemas";
+import type { Estimate, Invoice } from "@/types/finance";
 
 import { MoneyField, NotesField, TextInputField } from "./fields";
 import { PaymentDrawer, type PaymentPreset } from "./payment-drawer";
 import { money, StatusBadge, today, useContacts, useFinanceAction, useRecords, WorkspaceGate, type WorkspaceInfo } from "./shared";
 
-type PendingAction = { kind: "finalize" | "void" | "wallet"; invoice: Invoice };
+type PendingAction =
+  | { kind: "finalize"; invoice: Invoice }
+  | { kind: "void"; invoice: Invoice }
+  | { kind: "wallet"; invoice: Invoice }
+  | { kind: "convert_estimate"; estimate: Estimate };
 
 const BLANK_ITEM = { description: "", quantity: "1", unit_price: "" };
 
-const STEPS = [
+const INVOICE_STEPS = [
   { step: 1, title: "Items & Pricing", description: "What are you billing for?" },
   { step: 2, title: "Customer & Terms", description: "Who is this invoice for?" },
   { step: 3, title: "Review & Draft", description: "Review totals and save draft" },
 ] as const;
 
+const ESTIMATE_STEPS = [
+  { step: 1, title: "Quote Items", description: "Products and services in this quotation" },
+  { step: 2, title: "Customer & Expiry", description: "Who is this quote for and when does it expire?" },
+  { step: 3, title: "Review & Save", description: "Review quotation totals and save draft" },
+] as const;
+
 function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & { startOpen: boolean }) {
-  const [isOpen, setIsOpen] = useState(startOpen);
-  const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
+  const [activeTab, setActiveTab] = useState<"invoices" | "estimates">("invoices");
+
+  // Invoices state
+  const [isInvoiceOpen, setIsInvoiceOpen] = useState(startOpen);
+  const [invoiceStep, setInvoiceStep] = useState<1 | 2 | 3>(1);
+  const invoices = useRecords<Invoice>("invoices", workspaceId);
+
+  // Estimates state
+  const [isEstimateOpen, setIsEstimateOpen] = useState(false);
+  const [estimateStep, setEstimateStep] = useState<1 | 2 | 3>(1);
+  const estimates = useRecords<Estimate>("estimates", workspaceId);
+
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [payment, setPayment] = useState<PaymentPreset | undefined>();
-  const invoices = useRecords<Invoice>("invoices", workspaceId);
   const customers = useContacts(workspaceId, "customers");
 
-  // New inline customer creation states
+  // Inline custom customer creation states
   const [newCustomerName, setNewCustomerName] = useState("");
   const [newCustomerPhone, setNewCustomerPhone] = useState("");
   const [newCustomerEmail, setNewCustomerEmail] = useState("");
   const [isCreatingCustomerInline, setIsCreatingCustomerInline] = useState(false);
 
-  const form = useForm<InvoiceValues>({
+  // Invoice Form
+  const invoiceForm = useForm<InvoiceValues>({
     resolver: zodResolver(invoiceSchema),
     defaultValues: {
       customer_id: "",
@@ -71,38 +101,81 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
     },
     mode: "onChange",
   });
+  const invoiceItems = useFieldArray({ control: invoiceForm.control, name: "items" });
 
-  const items = useFieldArray({ control: form.control, name: "items" });
+  // Estimate Form
+  const estimateForm = useForm<EstimateValues>({
+    resolver: zodResolver(estimateSchema),
+    defaultValues: {
+      customer_id: "",
+      issue_date: today(),
+      expiry_date: today(),
+      tax_amount: "",
+      notes: "This quotation is valid for 14 days from issue date.",
+      terms: "Standard commercial delivery terms apply.",
+      items: [BLANK_ITEM],
+    },
+    mode: "onChange",
+  });
+  const estimateItems = useFieldArray({ control: estimateForm.control, name: "items" });
+
   const walletForm = useForm<WalletPaymentValues>({ resolver: zodResolver(walletPaymentSchema), defaultValues: { amount: "" } });
 
-  const watchedItems = form.watch("items");
-  const watchedTax = form.watch("tax_amount");
-  const watchedCustomerId = form.watch("customer_id");
-  const watchedIssueDate = form.watch("issue_date");
-  const watchedDueDate = form.watch("due_date");
-  const watchedNotes = form.watch("notes");
-  const watchedTerms = form.watch("terms");
+  // Watched invoice values
+  const watchedInvItems = invoiceForm.watch("items");
+  const watchedInvTax = invoiceForm.watch("tax_amount");
+  const watchedInvCustomerId = invoiceForm.watch("customer_id");
+  const watchedInvIssueDate = invoiceForm.watch("issue_date");
+  const watchedInvDueDate = invoiceForm.watch("due_date");
+  const watchedInvTerms = invoiceForm.watch("terms");
 
-  // Calculate live totals
-  const subtotal = useMemo(() => {
-    return (watchedItems ?? []).reduce((acc, it) => {
+  const invSubtotal = useMemo(() => {
+    return (watchedInvItems ?? []).reduce((acc, it) => {
       const q = parseFloat(it.quantity || "0");
       const p = parseFloat(it.unit_price || "0");
       return acc + (isNaN(q) || isNaN(p) ? 0 : q * p);
     }, 0);
-  }, [watchedItems]);
+  }, [watchedInvItems]);
+  const invTax = parseFloat(watchedInvTax || "0") || 0;
+  const invTotal = invSubtotal + invTax;
 
-  const tax = parseFloat(watchedTax || "0") || 0;
-  const total = subtotal + tax;
+  // Watched estimate values
+  const watchedEstItems = estimateForm.watch("items");
+  const watchedEstTax = estimateForm.watch("tax_amount");
+  const watchedEstCustomerId = estimateForm.watch("customer_id");
+  const watchedEstIssueDate = estimateForm.watch("issue_date");
+  const watchedEstExpiryDate = estimateForm.watch("expiry_date");
+  const watchedEstTerms = estimateForm.watch("terms");
 
-  const close = () => {
-    setIsOpen(false);
-    setCurrentStep(1);
+  const estSubtotal = useMemo(() => {
+    return (watchedEstItems ?? []).reduce((acc, it) => {
+      const q = parseFloat(it.quantity || "0");
+      const p = parseFloat(it.unit_price || "0");
+      return acc + (isNaN(q) || isNaN(p) ? 0 : q * p);
+    }, 0);
+  }, [watchedEstItems]);
+  const estTax = parseFloat(watchedEstTax || "0") || 0;
+  const estTotal = estSubtotal + estTax;
+
+  const closeInvoiceDrawer = () => {
+    setIsInvoiceOpen(false);
+    setInvoiceStep(1);
+    resetInlineCustomer();
+    invoiceForm.reset();
+  };
+
+  const closeEstimateDrawer = () => {
+    setIsEstimateOpen(false);
+    setEstimateStep(1);
+    resetInlineCustomer();
+    estimateForm.reset();
+  };
+
+  const resetInlineCustomer = () => {
     setNewCustomerName("");
     setNewCustomerPhone("");
     setNewCustomerEmail("");
     setIsCreatingCustomerInline(false);
-    form.reset();
   };
 
   const closePending = () => {
@@ -110,13 +183,13 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
     walletForm.reset();
   };
 
-  const create = useFinanceAction(
+  // Actions
+  const createInvoiceAction = useFinanceAction(
     workspaceId,
     async (values: InvoiceValues, key: string) => {
       let resolvedCustomerId = values.customer_id;
       let resolvedCustomerName: string | undefined;
 
-      // Handle on-the-fly created customer
       if (isCreatingCustomerInline && newCustomerName.trim()) {
         try {
           const created = await financeApi.createContact(workspaceId, "customers", {
@@ -129,7 +202,6 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
             resolvedCustomerName = newCustomerName.trim();
           }
         } catch {
-          // If customer creation fails, still attempt invoice creation with custom name if API supports it
           resolvedCustomerName = newCustomerName.trim();
         }
       } else {
@@ -137,7 +209,6 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
         if (found) {
           resolvedCustomerName = found.name;
         } else if (values.customer_id && isNaN(Number(values.customer_id))) {
-          // It's a typed custom name
           resolvedCustomerName = values.customer_id;
         }
       }
@@ -163,15 +234,88 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
         key,
       );
     },
-    { success: "Invoice saved as draft", onDone: close },
+    { success: "Invoice saved as draft", onDone: closeInvoiceDrawer },
   );
 
-  const finalize = useFinanceAction(workspaceId, (invoice: Invoice, key: string) => financeApi.finalizeInvoice(workspaceId, invoice.id, key), {
-    success: "Invoice finalized",
-    onDone: closePending,
-  });
+  const createEstimateAction = useFinanceAction(
+    workspaceId,
+    async (values: EstimateValues, key: string) => {
+      let resolvedCustomerId = values.customer_id;
+      let resolvedCustomerName = values.customer_id;
 
-  const voidInvoice = useFinanceAction(
+      if (isCreatingCustomerInline && newCustomerName.trim()) {
+        try {
+          const created = await financeApi.createContact(workspaceId, "customers", {
+            name: newCustomerName.trim(),
+            phone: newCustomerPhone.trim() || undefined,
+            email: newCustomerEmail.trim() || undefined,
+          });
+          if (created && typeof created === "object" && "id" in created) {
+            resolvedCustomerId = String((created as { id: number }).id);
+            resolvedCustomerName = newCustomerName.trim();
+          }
+        } catch {
+          resolvedCustomerName = newCustomerName.trim();
+        }
+      } else {
+        const found = customers.data?.find((item) => String(item.id) === values.customer_id);
+        if (found) {
+          resolvedCustomerName = found.name;
+        }
+      }
+
+      return financeApi.createEstimate(
+        workspaceId,
+        {
+          customer_id: Number(resolvedCustomerId) || undefined,
+          customer_name: resolvedCustomerName || "Prospective Client",
+          issue_date: values.issue_date,
+          expiry_date: values.expiry_date,
+          currency,
+          status: "draft",
+          tax_amount: values.tax_amount || undefined,
+          notes: values.notes || undefined,
+          terms: values.terms || undefined,
+          items: values.items.map((item) => ({
+            description: item.description,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+          })),
+        },
+        key,
+      );
+    },
+    { success: "Quotation saved as draft", onDone: closeEstimateDrawer },
+  );
+
+  const convertEstimateAction = useFinanceAction(
+    workspaceId,
+    (estimate: Estimate, key: string) => financeApi.convertEstimateToInvoice(workspaceId, estimate.id, key),
+    {
+      success: "Quotation converted to draft invoice",
+      onDone: () => {
+        closePending();
+        setActiveTab("invoices");
+      },
+    },
+  );
+
+  const updateEstimateStatusAction = useFinanceAction(
+    workspaceId,
+    ({ estimate, status }: { estimate: Estimate; status: string }) =>
+      financeApi.updateEstimateStatus(workspaceId, estimate.id, status),
+    {
+      success: "Estimate status updated",
+    },
+  );
+
+  const finalizeInvoiceAction = useFinanceAction(
+    workspaceId,
+    (invoice: Invoice, key: string) => financeApi.finalizeInvoice(workspaceId, invoice.id, key),
+    { success: "Invoice finalized", onDone: closePending },
+  );
+
+  const voidInvoiceAction = useFinanceAction(
     workspaceId,
     (invoice: Invoice, key: string) => financeApi.voidInvoice(workspaceId, invoice.id, "Voided from invoice list", key),
     { success: "Invoice voided", onDone: closePending },
@@ -202,50 +346,52 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
     }));
   }, [customers.data]);
 
-  // Selected customer display
-  const selectedCustomer = useMemo(() => {
+  // Selected customer for review steps
+  const selectedInvoiceCustomer = useMemo(() => {
     if (isCreatingCustomerInline && newCustomerName) {
       return { id: 0, name: newCustomerName, email: newCustomerEmail, phone: newCustomerPhone };
     }
-    return customers.data?.find((c) => String(c.id) === watchedCustomerId);
-  }, [customers.data, watchedCustomerId, isCreatingCustomerInline, newCustomerName, newCustomerEmail, newCustomerPhone]);
+    return customers.data?.find((c) => String(c.id) === watchedInvCustomerId);
+  }, [customers.data, watchedInvCustomerId, isCreatingCustomerInline, newCustomerName, newCustomerEmail, newCustomerPhone]);
+
+  const selectedEstimateCustomer = useMemo(() => {
+    if (isCreatingCustomerInline && newCustomerName) {
+      return { id: 0, name: newCustomerName, email: newCustomerEmail, phone: newCustomerPhone };
+    }
+    return customers.data?.find((c) => String(c.id) === watchedEstCustomerId);
+  }, [customers.data, watchedEstCustomerId, isCreatingCustomerInline, newCustomerName, newCustomerEmail, newCustomerPhone]);
 
   // Step Validation
-  const validateStep1 = async () => {
-    const valid = await form.trigger(["items"]);
-    return valid;
-  };
-
-  const validateStep2 = async () => {
-    if (isCreatingCustomerInline) {
-      if (!newCustomerName.trim()) {
-        form.setError("customer_id", { message: "Customer name is required" });
-        return false;
+  const handleInvoiceNext = async () => {
+    if (invoiceStep === 1) {
+      const ok = await invoiceForm.trigger(["items"]);
+      if (ok) setInvoiceStep(2);
+    } else if (invoiceStep === 2) {
+      if (isCreatingCustomerInline && !newCustomerName.trim()) {
+        invoiceForm.setError("customer_id", { message: "Customer name is required" });
+        return;
       }
-    } else {
-      const valid = await form.trigger(["customer_id", "issue_date", "due_date"]);
-      if (!valid) return false;
-    }
-    return true;
-  };
-
-  const handleNext = async () => {
-    if (currentStep === 1) {
-      const ok = await validateStep1();
-      if (ok) setCurrentStep(2);
-    } else if (currentStep === 2) {
-      const ok = await validateStep2();
-      if (ok) setCurrentStep(3);
+      const ok = await invoiceForm.trigger(["customer_id", "issue_date", "due_date"]);
+      if (ok) setInvoiceStep(3);
     }
   };
 
-  const handleBack = () => {
-    if (currentStep > 1) {
-      setCurrentStep((prev) => (prev - 1) as 1 | 2);
+  const handleEstimateNext = async () => {
+    if (estimateStep === 1) {
+      const ok = await estimateForm.trigger(["items"]);
+      if (ok) setEstimateStep(2);
+    } else if (estimateStep === 2) {
+      if (isCreatingCustomerInline && !newCustomerName.trim()) {
+        estimateForm.setError("customer_id", { message: "Customer name is required" });
+        return;
+      }
+      const ok = await estimateForm.trigger(["customer_id", "issue_date", "expiry_date"]);
+      if (ok) setEstimateStep(3);
     }
   };
 
-  const actions = (row: Invoice) => (
+  // Row Actions for Invoices
+  const invoiceRowActions = (row: Invoice) => (
     <AppRowActions
       ariaLabel="Invoice actions"
       items={[
@@ -282,340 +428,606 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
     />
   );
 
+  // Row Actions for Estimates
+  const estimateRowActions = (row: Estimate) => (
+    <AppRowActions
+      ariaLabel="Estimate actions"
+      items={[
+        {
+          key: "convert",
+          label: "Convert to Invoice",
+          icon: <ArrowsClockwise size={16} aria-hidden="true" />,
+          disabled: row.status === "converted" || row.status === "declined" || row.status === "expired",
+          onClick: () => setPending({ kind: "convert_estimate", estimate: row }),
+        },
+        {
+          key: "send",
+          label: "Mark Sent",
+          icon: <PaperPlaneTilt size={16} aria-hidden="true" />,
+          disabled: row.status !== "draft",
+          onClick: () => updateEstimateStatusAction.mutate({ estimate: row, status: "sent" }),
+        },
+        {
+          key: "accept",
+          label: "Mark Accepted",
+          icon: <CheckCircle size={16} aria-hidden="true" />,
+          disabled: row.status === "converted" || row.status === "accepted",
+          onClick: () => updateEstimateStatusAction.mutate({ estimate: row, status: "accepted" }),
+        },
+        {
+          key: "decline",
+          label: "Mark Declined",
+          icon: <XCircle size={16} aria-hidden="true" />,
+          danger: true,
+          disabled: row.status === "converted" || row.status === "declined",
+          onClick: () => updateEstimateStatusAction.mutate({ estimate: row, status: "declined" }),
+        },
+      ]}
+    />
+  );
+
   return (
     <Page>
       <PageHeader
-        title="Invoices"
-        description="Bills you send to customers, from draft to paid."
-        actions={<AppButton startContent={<Plus weight="bold" />} label="New invoice" onPress={() => setIsOpen(true)} />}
-      />
-
-      <DataView<Invoice>
-        title="Invoices"
-        rows={invoices.rows}
-        rowKey={(row) => row.id}
-        isLoading={invoices.isPending}
-        isError={invoices.isError}
-        server={invoices.controls}
-        searchPlaceholder="Search number or customer"
-        empty={
-          <EmptyState
-            icon={FileText}
-            title="No invoices yet"
-            description="Create an invoice to bill a customer."
-            action={<AppButton startContent={<Plus weight="bold" />} label="New invoice" onPress={() => setIsOpen(true)} />}
-          />
+        title="Billing & Invoicing"
+        description="Draft and issue invoices, send commercial quotations, and collect customer payments."
+        actions={
+          <div className="flex items-center gap-2">
+            {activeTab === "invoices" ? (
+              <AppButton startContent={<Plus weight="bold" />} label="New invoice" onPress={() => setIsInvoiceOpen(true)} />
+            ) : (
+              <AppButton startContent={<Plus weight="bold" />} label="New quotation" onPress={() => setIsEstimateOpen(true)} />
+            )}
+          </div>
         }
-        columns={[
-          { key: "number", label: "Invoice", render: (row) => <span className="font-medium text-foreground">{row.invoice_number}</span> },
-          { key: "customer", label: "Customer", render: (row) => row.customer_name },
-          { key: "due", label: "Due", render: (row) => formatDate(row.due_date) },
-          { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> },
-          { key: "paid", label: "Paid", align: "right", render: (row) => <span className="tabular">{money(row.paid_amount_minor, row)}</span> },
-          { key: "total", label: "Total", align: "right", render: (row) => <span className="tabular font-semibold">{money(row.total_amount_minor, row)}</span> },
-          { key: "actions", label: "", align: "right", render: actions },
-        ]}
-        renderCard={(row) => (
-          <RecordCard
-            icon={<FileText size={18} aria-hidden="true" />}
-            iconClassName="bg-primary-soft text-primary"
-            reference={row.invoice_number}
-            title={row.customer_name}
-            amount={money(row.total_amount_minor, row)}
-            status={<StatusBadge status={row.status} />}
-            meta={[
-              { label: "Paid", value: money(row.paid_amount_minor, row) },
-              { label: "Due", value: formatDate(row.due_date) },
-            ]}
-            actions={actions(row)}
-          />
-        )}
       />
 
-      {/* Multi-Step Invoice Creation Drawer */}
+      {/* View Switcher Tabs */}
+      <div className="flex items-center gap-2 border-b border-border/40 pb-3 mb-2">
+        <button
+          type="button"
+          onClick={() => setActiveTab("invoices")}
+          className={`px-3.5 py-1.5 text-xs font-semibold rounded-xl transition-all ${
+            activeTab === "invoices"
+              ? "bg-primary text-primary-foreground shadow-sm"
+              : "text-muted hover:text-foreground hover:bg-surface-secondary"
+          }`}
+        >
+          Invoices
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("estimates")}
+          className={`px-3.5 py-1.5 text-xs font-semibold rounded-xl transition-all ${
+            activeTab === "estimates"
+              ? "bg-primary text-primary-foreground shadow-sm"
+              : "text-muted hover:text-foreground hover:bg-surface-secondary"
+          }`}
+        >
+          Estimates & Quotes
+        </button>
+      </div>
+
+      {/* TAB 1: INVOICES */}
+      {activeTab === "invoices" && (
+        <DataView<Invoice>
+          title="Invoices"
+          rows={invoices.rows}
+          rowKey={(row) => row.id}
+          isLoading={invoices.isPending}
+          isError={invoices.isError}
+          server={invoices.controls}
+          searchPlaceholder="Search number or customer"
+          empty={
+            <EmptyState
+              icon={FileText}
+              title="No invoices yet"
+              description="Create an invoice to bill a customer."
+              action={<AppButton startContent={<Plus weight="bold" />} label="New invoice" onPress={() => setIsInvoiceOpen(true)} />}
+            />
+          }
+          columns={[
+            { key: "number", label: "Invoice", render: (row) => <span className="font-medium text-foreground">{row.invoice_number}</span> },
+            { key: "customer", label: "Customer", render: (row) => row.customer_name },
+            { key: "due", label: "Due", render: (row) => formatDate(row.due_date) },
+            { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> },
+            { key: "paid", label: "Paid", align: "right", render: (row) => <span className="tabular">{money(row.paid_amount_minor, row)}</span> },
+            { key: "total", label: "Total", align: "right", render: (row) => <span className="tabular font-semibold">{money(row.total_amount_minor, row)}</span> },
+            { key: "actions", label: "", align: "right", render: invoiceRowActions },
+          ]}
+          renderCard={(row) => (
+            <RecordCard
+              icon={<FileText size={18} aria-hidden="true" />}
+              iconClassName="bg-primary-soft text-primary"
+              reference={row.invoice_number}
+              title={row.customer_name}
+              amount={money(row.total_amount_minor, row)}
+              status={<StatusBadge status={row.status} />}
+              meta={[
+                { label: "Paid", value: money(row.paid_amount_minor, row) },
+                { label: "Due", value: formatDate(row.due_date) },
+              ]}
+              actions={invoiceRowActions(row)}
+            />
+          )}
+        />
+      )}
+
+      {/* TAB 2: ESTIMATES & QUOTATIONS */}
+      {activeTab === "estimates" && (
+        <DataView<Estimate>
+          title="Estimates & Quotations"
+          rows={estimates.rows}
+          rowKey={(row) => row.id}
+          isLoading={estimates.isPending}
+          isError={estimates.isError}
+          server={estimates.controls}
+          searchPlaceholder="Search estimate # or customer"
+          empty={
+            <EmptyState
+              icon={FileText}
+              title="No quotations yet"
+              description="Send a price quote to prospective customers before issuing an invoice."
+              action={<AppButton startContent={<Plus weight="bold" />} label="New quotation" onPress={() => setIsEstimateOpen(true)} />}
+            />
+          }
+          columns={[
+            { key: "number", label: "Estimate #", render: (row) => <span className="font-medium text-foreground">{row.estimate_number}</span> },
+            { key: "customer", label: "Customer", render: (row) => row.customer_name },
+            { key: "issue", label: "Issue Date", render: (row) => formatDate(row.issue_date) },
+            { key: "expiry", label: "Expires", render: (row) => formatDate(row.expiry_date) },
+            { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> },
+            {
+              key: "total",
+              label: "Total",
+              align: "right",
+              render: (row) => <span className="tabular font-semibold">{money(row.total_amount_minor, row)}</span>,
+            },
+            { key: "actions", label: "", align: "right", render: estimateRowActions },
+          ]}
+          renderCard={(row) => (
+            <RecordCard
+              icon={<FileText size={18} aria-hidden="true" />}
+              iconClassName="bg-accent-soft text-accent"
+              reference={row.estimate_number}
+              title={row.customer_name}
+              amount={money(row.total_amount_minor, row)}
+              status={<StatusBadge status={row.status} />}
+              meta={[
+                { label: "Issued", value: formatDate(row.issue_date) },
+                { label: "Expires", value: formatDate(row.expiry_date) },
+              ]}
+              actions={estimateRowActions(row)}
+            />
+          )}
+        />
+      )}
+
+      {/* MULTI-STEP INVOICE DRAWER */}
       <FormDrawer
-        isOpen={isOpen}
-        onOpenChange={(open) => !open && close()}
-        title={`New Invoice — Step ${currentStep} of 3`}
-        description={STEPS[currentStep - 1].description}
+        isOpen={isInvoiceOpen}
+        onOpenChange={(open) => !open && closeInvoiceDrawer()}
+        title={`New Invoice — Step ${invoiceStep} of 3`}
+        description={INVOICE_STEPS[invoiceStep - 1].description}
       >
         <div className="flex flex-col gap-6">
-          {/* Step Progress Indicators */}
           <div className="flex items-center justify-between border-b border-border/40 pb-4">
-            {STEPS.map((s) => {
-              const isActive = currentStep === s.step;
-              const isPassed = currentStep > s.step;
-              return (
-                <div key={s.step} className="flex items-center gap-2">
-                  <div
-                    className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold transition-colors ${
-                      isActive
-                        ? "bg-primary text-primary-foreground shadow-sm"
-                        : isPassed
-                          ? "bg-primary/20 text-primary font-bold"
-                          : "bg-surface-secondary text-muted"
-                    }`}
-                  >
-                    {isPassed ? "✓" : s.step}
-                  </div>
-                  <span
-                    className={`text-xs font-medium hidden sm:inline ${
-                      isActive ? "text-foreground font-semibold" : "text-muted"
-                    }`}
-                  >
-                    {s.title}
-                  </span>
+            {INVOICE_STEPS.map((s) => (
+              <div key={s.step} className="flex items-center gap-2">
+                <div
+                  className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold ${
+                    invoiceStep === s.step
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : invoiceStep > s.step
+                        ? "bg-primary/20 text-primary font-bold"
+                        : "bg-surface-secondary text-muted"
+                  }`}
+                >
+                  {invoiceStep > s.step ? "✓" : s.step}
                 </div>
-              );
-            })}
+                <span className={`text-xs font-medium hidden sm:inline ${invoiceStep === s.step ? "text-foreground font-semibold" : "text-muted"}`}>
+                  {s.title}
+                </span>
+              </div>
+            ))}
           </div>
 
-          {/* STEP 1: Items & Pricing */}
-          {currentStep === 1 && (
+          {/* STEP 1: Items */}
+          {invoiceStep === 1 && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <p className="text-[14px] font-semibold text-foreground">Line Items</p>
                 <span className="text-xs text-muted">Currency: {currency}</span>
               </div>
-
-              {items.fields.map((field, index) => (
+              {invoiceItems.fields.map((field, index) => (
                 <div key={field.id} className="space-y-3 rounded-2xl bg-surface-secondary/70 p-4 border border-border/40">
-                  <TextInputField
-                    control={form.control}
-                    name={`items.${index}.description`}
-                    label={`Item ${index + 1} Description`}
-                    placeholder="e.g. Website design or Consult"
-                    isRequired
-                  />
+                  <TextInputField control={invoiceForm.control} name={`items.${index}.description`} label={`Item ${index + 1}`} isRequired />
                   <div className="grid grid-cols-[1fr_2fr_auto] items-start gap-3">
-                    <TextInputField
-                      control={form.control}
-                      name={`items.${index}.quantity`}
-                      label="Qty"
-                      isRequired
-                    />
-                    <MoneyField
-                      control={form.control}
-                      name={`items.${index}.unit_price`}
-                      label="Unit price"
-                      currency={currency}
-                      isRequired
-                    />
+                    <TextInputField control={invoiceForm.control} name={`items.${index}.quantity`} label="Qty" isRequired />
+                    <MoneyField control={invoiceForm.control} name={`items.${index}.unit_price`} label="Unit price" currency={currency} isRequired />
                     <div className="pt-6">
-                      <AppButton
-                        isIconOnly
-                        variant="ghost"
-                        aria-label="Remove item"
-                        isDisabled={items.fields.length === 1}
-                        onPress={() => items.remove(index)}
-                      >
+                      <AppButton isIconOnly variant="ghost" aria-label="Remove item" isDisabled={invoiceItems.fields.length === 1} onPress={() => invoiceItems.remove(index)}>
                         <Trash size={18} className="text-danger" />
                       </AppButton>
                     </div>
                   </div>
                 </div>
               ))}
-
-              <AppButton
-                variant="tertiary"
-                size="sm"
-                startContent={<Plus weight="bold" />}
-                label="Add another item"
-                onPress={() => items.append(BLANK_ITEM)}
-              />
-
+              <AppButton variant="tertiary" size="sm" startContent={<Plus weight="bold" />} label="Add another item" onPress={() => invoiceItems.append(BLANK_ITEM)} />
               <div className="mt-4 rounded-xl bg-surface-secondary p-3 text-right">
                 <span className="text-xs text-muted">Subtotal: </span>
                 <span className="text-sm font-semibold text-foreground tabular">
-                  {currency} {subtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {currency} {invSubtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
             </div>
           )}
 
-          {/* STEP 2: Customer & Terms */}
-          {currentStep === 2 && (
+          {/* STEP 2: Customer */}
+          {invoiceStep === 2 && (
             <div className="space-y-4">
-              <div className="space-y-2">
-                <AppComboBox
-                  label="Customer"
-                  placeholder="Search existing customer or type new..."
-                  options={customerOptions}
-                  selectedKey={isCreatingCustomerInline ? null : watchedCustomerId || null}
-                  inputValue={isCreatingCustomerInline ? newCustomerName : undefined}
-                  onSelectionChange={(key) => {
-                    if (key) {
-                      setIsCreatingCustomerInline(false);
-                      setNewCustomerName("");
-                      form.setValue("customer_id", key, { shouldValidate: true });
-                    }
-                  }}
-                  onCustomValueSubmit={(name) => {
-                    setIsCreatingCustomerInline(true);
-                    setNewCustomerName(name);
-                    form.setValue("customer_id", name, { shouldValidate: true });
-                  }}
-                  onInputChange={(val) => {
-                    if (isCreatingCustomerInline) {
-                      setNewCustomerName(val);
-                      form.setValue("customer_id", val);
-                    }
-                  }}
-                  allowsCustomValue={true}
-                  isRequired
-                />
+              <AppComboBox
+                label="Customer"
+                placeholder="Search existing customer or type new..."
+                options={customerOptions}
+                selectedKey={isCreatingCustomerInline ? null : watchedInvCustomerId || null}
+                inputValue={isCreatingCustomerInline ? newCustomerName : undefined}
+                onSelectionChange={(key) => {
+                  if (key) {
+                    setIsCreatingCustomerInline(false);
+                    setNewCustomerName("");
+                    invoiceForm.setValue("customer_id", key, { shouldValidate: true });
+                  }
+                }}
+                onCustomValueSubmit={(name) => {
+                  setIsCreatingCustomerInline(true);
+                  setNewCustomerName(name);
+                  invoiceForm.setValue("customer_id", name, { shouldValidate: true });
+                }}
+                onInputChange={(val) => {
+                  if (isCreatingCustomerInline) {
+                    setNewCustomerName(val);
+                    invoiceForm.setValue("customer_id", val);
+                  }
+                }}
+                allowsCustomValue={true}
+                isRequired
+              />
 
-                {isCreatingCustomerInline ? (
-                  <div className="mt-3 rounded-2xl bg-primary-soft/30 p-4 border border-primary/20 space-y-3">
-                    <div className="flex items-center gap-2 text-xs font-semibold text-primary">
-                      <UserPlus size={16} weight="bold" />
-                      <span>Adding &ldquo;{newCustomerName}&rdquo; as new customer</span>
+              {isCreatingCustomerInline && (
+                <div className="rounded-2xl bg-primary-soft/30 p-4 border border-primary/20 space-y-3">
+                  <div className="flex items-center gap-2 text-xs font-semibold text-primary">
+                    <UserPlus size={16} weight="bold" />
+                    <span>Adding &ldquo;{newCustomerName}&rdquo; as new customer</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-muted block mb-1">Phone</label>
+                      <input
+                        type="tel"
+                        placeholder="+234..."
+                        value={newCustomerPhone}
+                        onChange={(e) => setNewCustomerPhone(e.target.value)}
+                        className="w-full h-9 rounded-xl bg-surface-primary border border-border px-3 text-xs text-foreground focus:outline-none focus:border-primary"
+                      />
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="text-xs text-muted block mb-1">Phone (for WhatsApp/SMS)</label>
-                        <input
-                          type="tel"
-                          placeholder="+234..."
-                          value={newCustomerPhone}
-                          onChange={(e) => setNewCustomerPhone(e.target.value)}
-                          className="w-full h-9 rounded-xl bg-surface-primary border border-border px-3 text-xs text-foreground focus:outline-none focus:border-primary"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs text-muted block mb-1">Email address</label>
-                        <input
-                          type="email"
-                          placeholder="client@example.com"
-                          value={newCustomerEmail}
-                          onChange={(e) => setNewCustomerEmail(e.target.value)}
-                          className="w-full h-9 rounded-xl bg-surface-primary border border-border px-3 text-xs text-foreground focus:outline-none focus:border-primary"
-                        />
-                      </div>
+                    <div>
+                      <label className="text-xs text-muted block mb-1">Email</label>
+                      <input
+                        type="email"
+                        placeholder="client@example.com"
+                        value={newCustomerEmail}
+                        onChange={(e) => setNewCustomerEmail(e.target.value)}
+                        className="w-full h-9 rounded-xl bg-surface-primary border border-border px-3 text-xs text-foreground focus:outline-none focus:border-primary"
+                      />
                     </div>
                   </div>
-                ) : null}
-              </div>
+                </div>
+              )}
 
               <div className="grid gap-4 sm:grid-cols-2">
-                <TextInputField control={form.control} name="issue_date" label="Issue date" type="date" isRequired />
-                <TextInputField control={form.control} name="due_date" label="Due date" type="date" isRequired />
+                <TextInputField control={invoiceForm.control} name="issue_date" label="Issue date" type="date" isRequired />
+                <TextInputField control={invoiceForm.control} name="due_date" label="Due date" type="date" isRequired />
               </div>
 
-              <MoneyField control={form.control} name="tax_amount" label="Tax / VAT amount" currency={currency} />
-              <NotesField control={form.control} name="terms" label="Payment terms" />
-              <NotesField control={form.control} name="notes" label="Customer notes (optional)" />
+              <MoneyField control={invoiceForm.control} name="tax_amount" label="Tax / VAT" currency={currency} />
+              <NotesField control={invoiceForm.control} name="terms" label="Payment terms" />
+              <NotesField control={invoiceForm.control} name="notes" label="Customer notes (optional)" />
             </div>
           )}
 
-          {/* STEP 3: Review & Summary */}
-          {currentStep === 3 && (
+          {/* STEP 3: Review */}
+          {invoiceStep === 3 && (
             <div className="space-y-4">
               <div className="rounded-2xl border border-border/60 bg-surface-secondary/40 p-4 space-y-3">
                 <div className="flex items-center justify-between border-b border-border/40 pb-2">
                   <span className="text-xs font-semibold uppercase tracking-wider text-muted">Customer</span>
-                  <span className="text-xs font-medium text-foreground">
-                    {selectedCustomer?.name || watchedCustomerId || "Walk-in"}
-                  </span>
+                  <span className="text-xs font-medium text-foreground">{selectedInvoiceCustomer?.name || watchedInvCustomerId || "Walk-in"}</span>
                 </div>
                 <div className="flex items-center justify-between border-b border-border/40 pb-2">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted">Issue / Due Date</span>
-                  <span className="text-xs text-foreground">
-                    {watchedIssueDate} → {watchedDueDate}
-                  </span>
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted">Dates</span>
+                  <span className="text-xs text-foreground">{watchedInvIssueDate} → {watchedInvDueDate}</span>
                 </div>
                 <div className="space-y-1.5 pt-1">
                   <span className="text-xs font-semibold uppercase tracking-wider text-muted block">Items</span>
-                  {watchedItems.map((item, idx) => (
+                  {watchedInvItems.map((item, idx) => (
                     <div key={idx} className="flex justify-between text-xs text-foreground">
-                      <span>
-                        {item.quantity}x {item.description || "Item"}
-                      </span>
+                      <span>{item.quantity}x {item.description || "Item"}</span>
                       <span className="tabular font-medium">
-                        {currency}{" "}
-                        {(
-                          (parseFloat(item.quantity || "0") || 0) * (parseFloat(item.unit_price || "0") || 0)
-                        ).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {currency} {((parseFloat(item.quantity || "0") || 0) * (parseFloat(item.unit_price || "0") || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </div>
                   ))}
                 </div>
-
                 <div className="border-t border-border pt-2 space-y-1">
                   <div className="flex justify-between text-xs text-muted">
                     <span>Subtotal</span>
-                    <span className="tabular">
-                      {currency} {subtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
+                    <span className="tabular">{currency} {invSubtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
-                  {tax > 0 && (
+                  {invTax > 0 && (
                     <div className="flex justify-between text-xs text-muted">
-                      <span>Tax / VAT</span>
-                      <span className="tabular">
-                        {currency} {tax.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </span>
+                      <span>Tax</span>
+                      <span className="tabular">{currency} {invTax.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     </div>
                   )}
                   <div className="flex justify-between text-sm font-bold text-foreground pt-1 border-t border-border/40">
                     <span>Total Amount</span>
-                    <span className="tabular text-primary font-bold">
-                      {currency} {total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
+                    <span className="tabular text-primary font-bold">{currency} {invTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
                 </div>
               </div>
-
-              {watchedTerms ? (
+              {watchedInvTerms && (
                 <div className="rounded-xl bg-surface-secondary/70 p-3 text-xs text-muted">
                   <span className="font-semibold text-foreground block mb-0.5">Terms:</span>
-                  {watchedTerms}
+                  {watchedInvTerms}
                 </div>
-              ) : null}
-
-              <Alert
-                status="info"
-                description="This invoice will be saved as a draft. You can review and finalize it whenever you are ready to issue."
-              />
+              )}
             </div>
           )}
 
-          {/* Wizard Footer Navigation Controls */}
+          {/* Navigation */}
           <div className="flex items-center justify-between border-t border-border/40 pt-4 mt-2">
             <div>
-              {currentStep > 1 ? (
-                <AppButton
-                  variant="ghost"
-                  startContent={<ArrowLeft size={16} />}
-                  label="Back"
-                  onPress={handleBack}
-                />
+              {invoiceStep > 1 ? (
+                <AppButton variant="ghost" startContent={<ArrowLeft size={16} />} label="Back" onPress={() => setInvoiceStep((prev) => (prev - 1) as 1 | 2)} />
               ) : (
-                <AppButton variant="ghost" label="Cancel" onPress={close} />
+                <AppButton variant="ghost" label="Cancel" onPress={closeInvoiceDrawer} />
               )}
             </div>
-
-            <div className="flex items-center gap-2">
-              {currentStep < 3 ? (
-                <AppButton
-                  variant="primary"
-                  endContent={<ArrowRight size={16} />}
-                  label="Next"
-                  onPress={handleNext}
-                />
+            <div>
+              {invoiceStep < 3 ? (
+                <AppButton variant="primary" endContent={<ArrowRight size={16} />} label="Next" onPress={handleInvoiceNext} />
               ) : (
                 <AppButton
                   variant="primary"
                   label="Save draft invoice"
-                  isLoading={create.isPending}
-                  onPress={() => {
-                    form.handleSubmit((values) => create.mutate(values))();
-                  }}
+                  isLoading={createInvoiceAction.isPending}
+                  onPress={() => invoiceForm.handleSubmit((values) => createInvoiceAction.mutate(values))()}
                 />
               )}
             </div>
           </div>
         </div>
       </FormDrawer>
+
+      {/* MULTI-STEP ESTIMATE DRAWER */}
+      <FormDrawer
+        isOpen={isEstimateOpen}
+        onOpenChange={(open) => !open && closeEstimateDrawer()}
+        title={`New Quotation — Step ${estimateStep} of 3`}
+        description={ESTIMATE_STEPS[estimateStep - 1].description}
+      >
+        <div className="flex flex-col gap-6">
+          <div className="flex items-center justify-between border-b border-border/40 pb-4">
+            {ESTIMATE_STEPS.map((s) => (
+              <div key={s.step} className="flex items-center gap-2">
+                <div
+                  className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold ${
+                    estimateStep === s.step
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : estimateStep > s.step
+                        ? "bg-primary/20 text-primary font-bold"
+                        : "bg-surface-secondary text-muted"
+                  }`}
+                >
+                  {estimateStep > s.step ? "✓" : s.step}
+                </div>
+                <span className={`text-xs font-medium hidden sm:inline ${estimateStep === s.step ? "text-foreground font-semibold" : "text-muted"}`}>
+                  {s.title}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {/* ESTIMATE STEP 1: Items */}
+          {estimateStep === 1 && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-[14px] font-semibold text-foreground">Quotation Items</p>
+                <span className="text-xs text-muted">Currency: {currency}</span>
+              </div>
+              {estimateItems.fields.map((field, index) => (
+                <div key={field.id} className="space-y-3 rounded-2xl bg-surface-secondary/70 p-4 border border-border/40">
+                  <TextInputField control={estimateForm.control} name={`items.${index}.description`} label={`Line ${index + 1}`} isRequired />
+                  <div className="grid grid-cols-[1fr_2fr_auto] items-start gap-3">
+                    <TextInputField control={estimateForm.control} name={`items.${index}.quantity`} label="Qty" isRequired />
+                    <MoneyField control={estimateForm.control} name={`items.${index}.unit_price`} label="Unit price" currency={currency} isRequired />
+                    <div className="pt-6">
+                      <AppButton isIconOnly variant="ghost" aria-label="Remove item" isDisabled={estimateItems.fields.length === 1} onPress={() => estimateItems.remove(index)}>
+                        <Trash size={18} className="text-danger" />
+                      </AppButton>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <AppButton variant="tertiary" size="sm" startContent={<Plus weight="bold" />} label="Add item" onPress={() => estimateItems.append(BLANK_ITEM)} />
+              <div className="mt-4 rounded-xl bg-surface-secondary p-3 text-right">
+                <span className="text-xs text-muted">Subtotal: </span>
+                <span className="text-sm font-semibold text-foreground tabular">
+                  {currency} {estSubtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* ESTIMATE STEP 2: Customer & Expiry */}
+          {estimateStep === 2 && (
+            <div className="space-y-4">
+              <AppComboBox
+                label="Customer / Prospect"
+                placeholder="Search or type prospective client..."
+                options={customerOptions}
+                selectedKey={isCreatingCustomerInline ? null : watchedEstCustomerId || null}
+                inputValue={isCreatingCustomerInline ? newCustomerName : undefined}
+                onSelectionChange={(key) => {
+                  if (key) {
+                    setIsCreatingCustomerInline(false);
+                    setNewCustomerName("");
+                    estimateForm.setValue("customer_id", key, { shouldValidate: true });
+                  }
+                }}
+                onCustomValueSubmit={(name) => {
+                  setIsCreatingCustomerInline(true);
+                  setNewCustomerName(name);
+                  estimateForm.setValue("customer_id", name, { shouldValidate: true });
+                }}
+                onInputChange={(val) => {
+                  if (isCreatingCustomerInline) {
+                    setNewCustomerName(val);
+                    estimateForm.setValue("customer_id", val);
+                  }
+                }}
+                allowsCustomValue={true}
+                isRequired
+              />
+
+              {isCreatingCustomerInline && (
+                <div className="rounded-2xl bg-primary-soft/30 p-4 border border-primary/20 space-y-3">
+                  <div className="flex items-center gap-2 text-xs font-semibold text-primary">
+                    <UserPlus size={16} weight="bold" />
+                    <span>Adding &ldquo;{newCustomerName}&rdquo; as new contact</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-muted block mb-1">Phone</label>
+                      <input
+                        type="tel"
+                        placeholder="+234..."
+                        value={newCustomerPhone}
+                        onChange={(e) => setNewCustomerPhone(e.target.value)}
+                        className="w-full h-9 rounded-xl bg-surface-primary border border-border px-3 text-xs text-foreground focus:outline-none focus:border-primary"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted block mb-1">Email</label>
+                      <input
+                        type="email"
+                        placeholder="client@example.com"
+                        value={newCustomerEmail}
+                        onChange={(e) => setNewCustomerEmail(e.target.value)}
+                        className="w-full h-9 rounded-xl bg-surface-primary border border-border px-3 text-xs text-foreground focus:outline-none focus:border-primary"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <TextInputField control={estimateForm.control} name="issue_date" label="Issue date" type="date" isRequired />
+                <TextInputField control={estimateForm.control} name="expiry_date" label="Expiry date" type="date" isRequired />
+              </div>
+
+              <MoneyField control={estimateForm.control} name="tax_amount" label="Tax / VAT estimate" currency={currency} />
+              <NotesField control={estimateForm.control} name="terms" label="Commercial terms" />
+              <NotesField control={estimateForm.control} name="notes" label="Quotation notes" />
+            </div>
+          )}
+
+          {/* ESTIMATE STEP 3: Review */}
+          {estimateStep === 3 && (
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-border/60 bg-surface-secondary/40 p-4 space-y-3">
+                <div className="flex items-center justify-between border-b border-border/40 pb-2">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted">Customer</span>
+                  <span className="text-xs font-medium text-foreground">{selectedEstimateCustomer?.name || watchedEstCustomerId || "Prospective Client"}</span>
+                </div>
+                <div className="flex items-center justify-between border-b border-border/40 pb-2">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted">Validity</span>
+                  <span className="text-xs text-foreground">{watchedEstIssueDate} → {watchedEstExpiryDate}</span>
+                </div>
+                <div className="space-y-1.5 pt-1">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted block">Items</span>
+                  {watchedEstItems.map((item, idx) => (
+                    <div key={idx} className="flex justify-between text-xs text-foreground">
+                      <span>{item.quantity}x {item.description || "Item"}</span>
+                      <span className="tabular font-medium">
+                        {currency} {((parseFloat(item.quantity || "0") || 0) * (parseFloat(item.unit_price || "0") || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div className="border-t border-border pt-2 space-y-1">
+                  <div className="flex justify-between text-xs text-muted">
+                    <span>Subtotal</span>
+                    <span className="tabular">{currency} {estSubtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                  {estTax > 0 && (
+                    <div className="flex justify-between text-xs text-muted">
+                      <span>Tax</span>
+                      <span className="tabular">{currency} {estTax.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-sm font-bold text-foreground pt-1 border-t border-border/40">
+                    <span>Total Estimate</span>
+                    <span className="tabular text-primary font-bold">{currency} {estTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                </div>
+              </div>
+              {watchedEstTerms && (
+                <div className="rounded-xl bg-surface-secondary/70 p-3 text-xs text-muted">
+                  <span className="font-semibold text-foreground block mb-0.5">Terms:</span>
+                  {watchedEstTerms}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Navigation */}
+          <div className="flex items-center justify-between border-t border-border/40 pt-4 mt-2">
+            <div>
+              {estimateStep > 1 ? (
+                <AppButton variant="ghost" startContent={<ArrowLeft size={16} />} label="Back" onPress={() => setEstimateStep((prev) => (prev - 1) as 1 | 2)} />
+              ) : (
+                <AppButton variant="ghost" label="Cancel" onPress={closeEstimateDrawer} />
+              )}
+            </div>
+            <div>
+              {estimateStep < 3 ? (
+                <AppButton variant="primary" endContent={<ArrowRight size={16} />} label="Next" onPress={handleEstimateNext} />
+              ) : (
+                <AppButton
+                  variant="primary"
+                  label="Save quotation"
+                  isLoading={createEstimateAction.isPending}
+                  onPress={() => estimateForm.handleSubmit((values) => createEstimateAction.mutate(values))()}
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      </FormDrawer>
+
+      {/* CONFIRM DIALOGS */}
+      <ConfirmDialog
+        isOpen={pending?.kind === "convert_estimate"}
+        onOpenChange={(open) => !open && closePending()}
+        title="Convert quotation to draft invoice?"
+        description="A new draft invoice will be created with the items and pricing from this quote. You will be able to review and finalize it before issuing."
+        confirmLabel="Convert to invoice"
+        isDanger={false}
+        isLoading={convertEstimateAction.isPending}
+        onConfirm={() => pending?.kind === "convert_estimate" && convertEstimateAction.mutate(pending.estimate)}
+      />
 
       <ConfirmDialog
         isOpen={pending?.kind === "finalize"}
@@ -624,8 +1036,8 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
         description="It will post to your books and can no longer be edited. To correct it later you would void it."
         confirmLabel="Finalize"
         isDanger={false}
-        isLoading={finalize.isPending}
-        onConfirm={() => pending && finalize.mutate(pending.invoice)}
+        isLoading={finalizeInvoiceAction.isPending}
+        onConfirm={() => pending?.kind === "finalize" && finalizeInvoiceAction.mutate(pending.invoice)}
       />
       <ConfirmDialog
         isOpen={pending?.kind === "void"}
@@ -633,27 +1045,27 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
         title="Void this invoice?"
         description="It stays in your history marked as voided, and its entries are reversed. This cannot be undone."
         confirmLabel="Void invoice"
-        isLoading={voidInvoice.isPending}
-        onConfirm={() => pending && voidInvoice.mutate(pending.invoice)}
+        isLoading={voidInvoiceAction.isPending}
+        onConfirm={() => pending?.kind === "void" && voidInvoiceAction.mutate(pending.invoice)}
       />
       <FormDrawer
         isOpen={pending?.kind === "wallet"}
         onOpenChange={(open) => !open && closePending()}
         title="Pay from customer wallet"
         description={
-          pending
+          pending?.kind === "wallet"
             ? `${pending.invoice.invoice_number}: ${money(pending.invoice.paid_amount_minor, pending.invoice)} paid of ${money(pending.invoice.total_amount_minor, pending.invoice)}.`
             : undefined
         }
         submitLabel="Confirm payment"
         isSubmitting={payFromWallet.isPending}
-        onSubmit={walletForm.handleSubmit((values) => pending && payFromWallet.mutate({ invoice: pending.invoice, amount: values.amount }))}
+        onSubmit={walletForm.handleSubmit((values) => pending?.kind === "wallet" && payFromWallet.mutate({ invoice: pending.invoice, amount: values.amount }))}
       >
         <MoneyField
           control={walletForm.control}
           name="amount"
           label="Amount"
-          currency={pending?.invoice.currency ?? currency}
+          currency={pending?.kind === "wallet" ? pending.invoice.currency : currency}
           isRequired
           description="Check the wallet balance on the Wallets page first."
         />

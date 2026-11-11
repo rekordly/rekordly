@@ -474,6 +474,41 @@ export interface Invoice extends TradeRecord {
   tax_amount_minor: MinorAmount;
 }
 
+export interface Estimate {
+  id: number;
+  workspace_id: number;
+  estimate_number: string;
+  customer_id?: number | null;
+  customer_name: string;
+  issue_date: string;
+  expiry_date: string;
+  currency: string;
+  currency_exponent: number;
+  subtotal_minor: MinorAmount;
+  tax_amount_minor: MinorAmount;
+  total_amount_minor: MinorAmount;
+  status: "draft" | "sent" | "accepted" | "declined" | "converted" | "expired";
+  notes?: string | null;
+  terms?: string | null;
+  converted_invoice_id?: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EstimateItem {
+  id: number;
+  estimate_id: number;
+  description: string;
+  quantity: string;
+  unit_price_minor: MinorAmount;
+  amount_minor: MinorAmount;
+}
+
+export interface EstimateDetail {
+  estimate: Estimate;
+  items: EstimateItem[];
+}
+
 export interface CustomerWallet {
   id: number;
   customer_id: number;
