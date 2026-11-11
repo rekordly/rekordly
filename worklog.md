@@ -355,4 +355,34 @@
   - `bun run type-check` passed with 0 errors.
   - Next.js production build (`next build`) compiled 45 routes cleanly with Turbopack.
 
+## 11 November 2026 — Blueprints 01–06 Completion: Split Payments, Reconciliation Matching, Customer/Supplier Portals, RBAC & Settings
+
+- Completed all remaining UI/API features and resolved structural bugs across Blueprints 01 through 06:
+  1. Slice A — Core Response Wrapping, Split Payments & Invoice/Return/Receipt Wiring:
+     - Wrapped response payloads in `gin.H{"data": ...}` across `internal/finance/estimate_handler.go`, `sales_return_handler.go`, and `invoice_share_handler.go` to match the frontend `apiClient` envelope contract.
+     - Fixed `getInvoice` in `src/lib/money.ts` to return full `InvoiceDetail` (`{ invoice, items, payments }`) and added `getPayment`, fixing `openReturnForInvoice` itemized returns in `invoices-page.tsx`.
+     - Upgraded `payment-drawer.tsx` with multi-leg split payment support (`split_enabled`, dynamic `legs` array, "Set total from legs" helper).
+     - Replaced `split-payments-page.tsx` placeholder with a complete multi-tender settlement ledger, payment leg inspector, split payment recording, and official receipt links; wired leg inspector & WhatsApp/Email/printable receipt share drawer into `payments-page.tsx`.
+     - Added "Credit Notes & Returns" tab, customer store credit application drawer (`applyCustomerCredit`), estimate sharing drawer (`createEstimateShare`), and `discount_amount` / `delivery_fee_amount` support with live totals calculation to `invoices-page.tsx`.
+  2. Slice B — Bank & Cash Reconciliation Engine & Statement Matching:
+     - Migration `000044_reconciliation_statements_and_portals.sql` & sqlc queries (`finance_bank_reconciliation.sql`): added `reconciliation_type` (`bank` | `cash`), `cleared_balance_minor`, `denominations`, `bank_import_batches`, `bank_lines`, `estimate_shares`, `customer_statement_shares`, invoice/estimate `discount_minor` & `delivery_fee_minor`, and counterparty `opening_balance_minor` / `merged_into_id`.
+     - Rewrote `bank_reconciliation_service.go` and `bank_reconciliation_handler.go` with `recomputeClearedBalances`, strict zero-difference completion guard (`ErrReconciliationUnbalanced`), cash count denominations, and CSV statement batch import with +/-3-day exact amount/direction auto-suggest matching (`/reconciliations/import-lines`, `/reconciliations/bank-lines`, `/reconciliations/bank-lines/:lineId/match`).
+     - Upgraded `accounts-page.tsx` reconciliation tab with Bank Statement vs Physical Cash Count mode toggle and interactive "Match & Complete" drawer (CSV statement upload, suggested match confirmation, ledger transaction matching checkboxes, and completion).
+  3. Slice C — Counterparty Update/Merge, Customer Credit Fix & Public Portals:
+     - Fixed foreign key table names in `000042_sales_returns_and_credits.sql` (`products` and `inventory_locations`), updated `inventory_balances` restock columns, and fixed `ApplyCustomerCreditToInvoice` in `sales_return_service.go` to atomically debit `customer_credits` and update invoice paid amounts inside a single transaction.
+     - Added counterparty edit & duplicate merge (`UpdateCounterparty`, `MergeCounterparties`, `PATCH /customers/:id`, `PATCH /suppliers/:id`, `POST /counterparties/merge`), date-bounded customer statements including direct `sales`, workspace-currency & credit summary in `getCustomer`, discount/delivery propagation across estimates & invoices, and shareable guest portals (`public/estimates/[token]/page.tsx` and `public/statements/[token]/page.tsx`).
+     - Upgraded `customers/[id]/page.tsx` and `contacts-page.tsx`, and built `suppliers/[id]/page.tsx` with purchase history and edit drawer.
+  4. Slice D — Granular RBAC, Notifications, Workspace Settings & Onboarding Checklist:
+     - Migration `000045_rbac_notifications_and_settings.sql` & sqlc queries (`rbac_notifications.sql`): added workspace profile columns, `role_permissions` table with backfill, and `notifications` table.
+     - Extended `auth/me.go`, `auth/invitation.go`, `auth/handler.go`, and `finance/context.go` with `Permissions`, `OutletScope`, `HasPermission()`, `ScopedOutletID()`, and workspace invitation creation/revocation endpoints; added `workspace_ops_handler.go` (`/settings/workspace`, `/settings/team`, `/settings/team/roles/:roleId/permissions`, `/notifications`, `/onboarding/checklist`).
+     - Built complete `notifications/page.tsx` and `settings/page.tsx` (profile form, active members, invitations drawer, RBAC role permission toggles, and active session management) plus dismissible Onboarding First-Action Checklist banner in `overview.tsx`.
+     - Added live PostgreSQL integration tests in `internal/finance/blueprints_04_06_complete_integration_test.go`.
+- Verification Suite:
+  - Live migrations & Go test suite (`docker run ... golang:1.23-alpine sh -c "go run ./cmd/migrate && go test -count=1 ./..."` with `--network rekordly-v2_rekordly-net`): migrations applied cleanly and all packages passed (`internal/auth`, `internal/config`, `internal/database`, `internal/finance`, `internal/server`).
+  - `bun run lint` (`eslint src tests`): 0 errors, 11 warnings.
+  - `bun run type-check` (`tsc --noEmit`): 0 errors.
+  - `bun test`: 52/52 tests passed across 4 files.
+  - `bun run build` (`next build` 16.4.5 Turbopack): 45 static pages and all dynamic routes compiled cleanly.
+
+
 
