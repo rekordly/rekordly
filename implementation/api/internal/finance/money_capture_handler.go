@@ -3,6 +3,7 @@ package finance
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -28,6 +29,89 @@ func (h *Handler) RegisterMoneyCaptureRoutes(protected *gin.RouterGroup) {
 	protected.POST("/commands/confirm-money-record", h.confirmMoneyRecord)
 	protected.GET("/money-records", h.listMoneyRecords)
 	protected.GET("/money-records/:id", h.getMoneyRecord)
+	protected.POST("/transactions/import-csv", h.importCSVDrafts)
+}
+
+type importCSVRow struct {
+	Date        string  `json:"date" binding:"required"`
+	Description string  `json:"description" binding:"required"`
+	Amount      string  `json:"amount" binding:"required"`
+	Direction   string  `json:"direction" binding:"required"`
+	Reference   string  `json:"reference"`
+	AccountID   *int64  `json:"account_id"`
+	CategoryID  *int64  `json:"category_id"`
+}
+
+type importCSVRequest struct {
+	DefaultAccountID int64          `json:"default_account_id"`
+	Rows             []importCSVRow `json:"rows" binding:"required"`
+}
+
+func (h *Handler) importCSVDrafts(c *gin.Context) {
+	wsCtx, ok := moneyCaptureWorkspace(c)
+	if !ok {
+		return
+	}
+	var in importCSVRequest
+	if err := c.ShouldBindJSON(&in); err != nil {
+		moneyCaptureError(c, http.StatusBadRequest, "INVALID_REQUEST", err)
+		return
+	}
+	if len(in.Rows) == 0 {
+		moneyCaptureError(c, http.StatusBadRequest, "EMPTY_IMPORT", errors.New("no rows provided for import"))
+		return
+	}
+	if len(in.Rows) > 500 {
+		moneyCaptureError(c, http.StatusBadRequest, "IMPORT_LIMIT_EXCEEDED", errors.New("maximum 500 rows per import"))
+		return
+	}
+
+	createdDrafts := make([]gin.H, 0, len(in.Rows))
+	for idx, row := range in.Rows {
+		accountID := row.AccountID
+		if accountID == nil && in.DefaultAccountID > 0 {
+			accountID = &in.DefaultAccountID
+		}
+		direction := row.Direction
+		if direction != "money_in" && direction != "money_out" {
+			direction = "money_out"
+		}
+		scopeType := wsCtx.Kind
+		if scopeType != "personal" && scopeType != "business" {
+			scopeType = "business"
+		}
+		purpose := "expense"
+		if direction == "money_in" {
+			purpose = "income"
+		}
+
+		draftIn := MoneyRecordDraftInput{
+			EntryMethod:    "import",
+			Direction:      direction,
+			ScopeType:      scopeType,
+			Purpose:        purpose,
+			Amount:         row.Amount,
+			EffectiveDate:  row.Date,
+			MoneyAccountID: accountID,
+			CategoryID:     row.CategoryID,
+			Description:    row.Description,
+			Reference:      row.Reference,
+		}
+
+		draft, err := h.service.CreateMoneyRecordDraft(c.Request.Context(), wsCtx.WorkspaceID, wsCtx.UserID, wsCtx.Kind, draftIn)
+		if err != nil {
+			moneyCaptureError(c, http.StatusBadRequest, "ROW_IMPORT_FAILED", fmt.Errorf("row %d failed: %w", idx+1, err))
+			return
+		}
+		createdDrafts = append(createdDrafts, moneyRecordDraftView(draft))
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"data": gin.H{
+			"imported_count": len(createdDrafts),
+			"drafts":         createdDrafts,
+		},
+	})
 }
 
 func (h *Handler) createMoneyRecordDraft(c *gin.Context) {

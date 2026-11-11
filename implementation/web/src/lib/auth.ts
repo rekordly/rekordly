@@ -450,3 +450,32 @@ export const onboardingApi = {
     );
   },
 };
+
+// ─── Invitations API ──────────────────────────────────────────────────
+
+export interface InvitationSummary {
+  workspace_name: string;
+  role_name: string;
+  destination: string;
+  expires_at: string;
+}
+
+export const invitationApi = {
+  inspect(token: string) {
+    return apiClient.get<{ workspace_name: string; role_name: string; destination: string; expires_at: string }>(
+      `/api/v1/invitations/${token}`,
+    );
+  },
+  requestOTP(token: string) {
+    return apiClient.post<Record<string, never>, { message: string }>(`/api/v1/invitations/${token}/otp/request`, {});
+  },
+  verifyOTP(token: string, code: string) {
+    return apiClient.post<{ code: string }, { user_id: number; onboarding_status: string; csrf_token?: string }>(
+      `/api/v1/invitations/${token}/otp/verify`,
+      { code },
+    );
+  },
+  accept(token: string) {
+    return apiClient.post<Record<string, never>, { accepted: boolean }>(`/api/v1/invitations/${token}/accept`, {});
+  },
+};

@@ -513,6 +513,12 @@ export const financeApi = {
   taxSettings: (workspaceId: number) => scopedGet<TaxSettings>(workspaceId, "/api/v1/tax-settings"),
   updateTaxSettings: (workspaceId: number, body: unknown) =>
     apiClient.put(`/api/v1/tax-settings`, body, { headers: workspaceHeaders(workspaceId) }),
+
+  importCSVTransactions: (
+    workspaceId: number,
+    body: { default_account_id?: number; rows: Array<{ date: string; description: string; amount: string; direction: string; reference?: string; account_id?: number; category_id?: number }> },
+  ) =>
+    scopedPost<{ imported_count: number; drafts: unknown[] }>(workspaceId, "/api/v1/transactions/import-csv", body),
 };
 
 /** Query keys are always namespaced by workspace so one space can never render another's rows. */
