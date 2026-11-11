@@ -477,6 +477,24 @@ func (q *Queries) GetSupplierCreditForUpdate(ctx context.Context, arg GetSupplie
 	return i, err
 }
 
+const getSupplierCreditsForReturnTotal = `-- name: GetSupplierCreditsForReturnTotal :one
+SELECT COALESCE(sum(amount_minor), 0)::bigint AS amount_minor
+FROM supplier_credits
+WHERE workspace_id=$1 AND supplier_return_id=$2 AND status <> 'cancelled'
+`
+
+type GetSupplierCreditsForReturnTotalParams struct {
+	WorkspaceID      int64       `json:"workspace_id"`
+	SupplierReturnID pgtype.Int8 `json:"supplier_return_id"`
+}
+
+func (q *Queries) GetSupplierCreditsForReturnTotal(ctx context.Context, arg GetSupplierCreditsForReturnTotalParams) (int64, error) {
+	row := q.db.QueryRow(ctx, getSupplierCreditsForReturnTotal, arg.WorkspaceID, arg.SupplierReturnID)
+	var amount_minor int64
+	err := row.Scan(&amount_minor)
+	return amount_minor, err
+}
+
 const getSupplierRefundByIdempotency = `-- name: GetSupplierRefundByIdempotency :one
 SELECT id, workspace_id, supplier_id, supplier_credit_id, supplier_advance_id, amount_minor, currency, currency_exponent, refund_date, idempotency_key, reason, created_by_user_id, created_at FROM supplier_refunds WHERE workspace_id=$1 AND idempotency_key=$2
 `

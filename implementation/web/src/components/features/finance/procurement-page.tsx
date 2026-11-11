@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowUUpLeft, CheckCircle, ClipboardText, Package, PaperPlaneTilt, Plus, Trash } from "@phosphor-icons/react";
+import { ArrowUUpLeft, CheckCircle, ClipboardText, LinkSimple, Package, PaperPlaneTilt, Plus, Trash } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { useFieldArray, useForm } from "react-hook-form";
 import { useState } from "react";
@@ -31,6 +31,7 @@ type PurchaseOrderResolutionCommand = "cancel" | "cancel_remainder" | "close";
 type PurchaseOrderResolutionTarget = { order: PurchaseOrder; command: PurchaseOrderResolutionCommand };
 type SupplierAdvanceValues = { supplier_id: string; money_account_id: string; amount: string; payment_date: string; notes: string };
 type ApplyAdvanceValues = { supplier_bill_id: string; amount: string };
+type DirectBillValues = { supplier_id: string; amount: string; bill_date: string; due_date: string; description: string; bill_type: "direct_expense" | "direct_service" };
 
 function RequestStatus({ status }: { status: PurchaseRequest["status"] }) {
   return status === "approved" ? <StatusPill tone="success">Approved</StatusPill> : <StatusBadge status={status} />;
@@ -42,11 +43,14 @@ function ProcurementContent({ workspaceId, currency }: WorkspaceInfo) {
   const [receiptOrder, setReceiptOrder] = useState<PurchaseOrder | null>(null);
   const [receiptQuantities, setReceiptQuantities] = useState<Record<number, string>>({});
   const [billReceipt, setBillReceipt] = useState<GoodsReceipt | null>(null);
+  const [isDirectBillOpen, setIsDirectBillOpen] = useState(false);
   const [supplierInvoiceNumber, setSupplierInvoiceNumber] = useState("");
   const [paymentBill, setPaymentBill] = useState<SupplierBill | null>(null);
   const [matchBill, setMatchBill] = useState<SupplierBill | null>(null);
   const [decisionTarget, setDecisionTarget] = useState<RequestDecisionTarget | null>(null);
   const [orderResolutionTarget, setOrderResolutionTarget] = useState<PurchaseOrderResolutionTarget | null>(null);
+  const [orderDetail, setOrderDetail] = useState<PurchaseOrder | null>(null);
+  const [shareLink, setShareLink] = useState<{ order: PurchaseOrder; token: string; expiresAt: string } | null>(null);
   const [decisionReason, setDecisionReason] = useState("");
   const [isAdvanceOpen, setIsAdvanceOpen] = useState(false);
   const [applyAdvanceTarget, setApplyAdvanceTarget] = useState<SupplierAdvance | null>(null);
@@ -58,6 +62,7 @@ function ProcurementContent({ workspaceId, currency }: WorkspaceInfo) {
   });
   const suppliers = useContacts(workspaceId, "suppliers");
   const orders = useQuery({ queryKey: [...moneyKeys.workspace(workspaceId), "purchase-orders"], queryFn: () => financeApi.listPurchaseOrders(workspaceId) });
+  const orderDetailQuery = useQuery({ queryKey: [...moneyKeys.workspace(workspaceId), "purchase-order", orderDetail?.id], queryFn: () => financeApi.getPurchaseOrder(workspaceId, orderDetail!.id), enabled: Boolean(orderDetail) });
   const receipts = useQuery({queryKey:[...moneyKeys.workspace(workspaceId),"goods-receipts"],queryFn:()=>financeApi.listGoodsReceipts(workspaceId)});
   const bills = useQuery({queryKey:[...moneyKeys.workspace(workspaceId),"supplier-bills"],queryFn:()=>financeApi.listSupplierBills(workspaceId)});
   const billMatch = useQuery({ queryKey: [...moneyKeys.workspace(workspaceId), "supplier-bill-match", matchBill?.id], queryFn: () => financeApi.supplierBillMatch(workspaceId, matchBill!.id), enabled: Boolean(matchBill) });
@@ -79,6 +84,7 @@ function ProcurementContent({ workspaceId, currency }: WorkspaceInfo) {
   const advanceForm = useForm<SupplierAdvanceValues>({ defaultValues: { supplier_id: "", money_account_id: "", amount: "", payment_date: new Date().toISOString().slice(0, 10), notes: "" } });
   const applyAdvanceForm = useForm<ApplyAdvanceValues>({ defaultValues: { supplier_bill_id: "", amount: "" } });
   const returnForm = useForm<{ line_id: string; quantity: string; reason: string }>({ defaultValues: { line_id: "", quantity: "", reason: "" } });
+  const directBillForm = useForm<DirectBillValues>({ defaultValues: { supplier_id: "", amount: "", bill_date: new Date().toISOString().slice(0, 10), due_date: "", description: "", bill_type: "direct_expense" } });
   const createReturn = useFinanceAction(workspaceId, (values: { line_id: string; quantity: string; reason: string }, key: string) => financeApi.createSupplierReturn(workspaceId, { goods_receipt_id: returnReceipt?.id, effective_on: new Date().toISOString().slice(0, 10), reason: values.reason, lines: [{ goods_receipt_line_id: Number(values.line_id), quantity: values.quantity }] }, key), { success: "Supplier return posted", onDone: () => { setReturnReceipt(null); returnForm.reset(); } });
 
   const close = () => {
@@ -152,12 +158,21 @@ function ProcurementContent({ workspaceId, currency }: WorkspaceInfo) {
     ({ id, version, command, reason }: { id: number; version: number; command: PurchaseOrderResolutionCommand; reason: string }, key) => financeApi.resolvePurchaseOrder(workspaceId, id, version, command, reason, key),
     { success: "Purchase order updated" },
   );
+  const createShare = useFinanceAction(
+    workspaceId,
+    ({ id }: { id: number }, key: string) => financeApi.createPurchaseOrderShare(workspaceId, id, { expires_in_days: 7 }, key),
+    { success: "Supplier share link created", onDone: (result) => {
+      const response = result as { share: { token: string; expires_at: string }; order: PurchaseOrder };
+      setShareLink({ order: response.order, token: response.share.token, expiresAt: response.share.expires_at });
+    } },
+  );
   const receiveOrder = useFinanceAction(
     workspaceId,
     (body: { purchase_order_id: number; received_on: string; lines: { purchase_order_line_id: number; accepted_quantity: string }[] }, key) => financeApi.createGoodsReceipt(workspaceId, body, key),
     { success: "Goods receipt posted", onDone: () => { setReceiptOrder(null); setReceiptQuantities({}); } },
   );
   const createBill=useFinanceAction(workspaceId,(body:{goods_receipt_id:number;supplier_invoice_number:string;bill_date:string},key)=>financeApi.createSupplierBill(workspaceId,body,key),{success:"Supplier bill saved",onDone:()=>{setBillReceipt(null);setSupplierInvoiceNumber("");setTab("bills")}});
+  const createDirectBill = useFinanceAction(workspaceId, (values: DirectBillValues, key: string) => financeApi.createSupplierBill(workspaceId, { supplier_id: Number(values.supplier_id), amount: values.amount, currency, bill_date: values.bill_date, due_date: values.due_date || undefined, description: values.description || undefined, bill_type: values.bill_type }, key), { success: "Direct supplier bill saved", onDone: () => { setIsDirectBillOpen(false); directBillForm.reset({ supplier_id: "", amount: "", bill_date: new Date().toISOString().slice(0, 10), due_date: "", description: "", bill_type: "direct_expense" }); setTab("bills"); } });
   const approveBill=useFinanceAction(workspaceId,({id,version}:{id:number;version:number},key)=>financeApi.approveSupplierBill(workspaceId,id,version,key),{success:"Supplier bill approved"});
   const createAdvance = useFinanceAction(
     workspaceId,
@@ -288,6 +303,13 @@ function ProcurementContent({ workspaceId, currency }: WorkspaceInfo) {
           onClick: () => advanceOrder.mutate({ id: order.id, version: order.version, command: "issued" }),
         },
         {
+          key: "share",
+          label: "Share with supplier",
+          icon: <LinkSimple size={16} weight="duotone" aria-hidden="true" />,
+          disabled: !["issued", "acknowledged", "partially_received"].includes(order.status) || !active?.is_owner || createShare.isPending,
+          onClick: () => createShare.mutate({ id: order.id }),
+        },
+        {
           key: "receive",
           label: "Receive goods or service",
           icon: <Package size={16} weight="duotone" aria-hidden="true" />,
@@ -324,7 +346,7 @@ function ProcurementContent({ workspaceId, currency }: WorkspaceInfo) {
       <PageHeader
         title="Procurement"
         description={tab === "requests" ? "Ask, review and approve needs before any order or payment is made." : tab === "advances" ? "Record supplier prepayments as an asset, then apply them to approved bills without moving cash twice." : tab === "returns" ? "Return eligible stock at its original receipt cost, then resolve the supplier credit separately." : tab === "reports" ? "Open commitments, unbilled receipts, payables and unapplied advances." : "Draft supplier commitments created from approved requests."}
-        actions={tab === "requests" ? <AppButton startContent={<Plus weight="bold" />} label="New request" onPress={() => setIsOpen(true)} /> : tab === "advances" ? <AppButton startContent={<Plus weight="bold" />} label="Record advance" onPress={() => setIsAdvanceOpen(true)} /> : undefined}
+        actions={tab === "requests" ? <AppButton startContent={<Plus weight="bold" />} label="New request" onPress={() => setIsOpen(true)} /> : tab === "advances" ? <AppButton startContent={<Plus weight="bold" />} label="Record advance" onPress={() => setIsAdvanceOpen(true)} /> : tab === "bills" ? <AppButton startContent={<Plus weight="bold" />} label="Direct bill" onPress={() => setIsDirectBillOpen(true)} /> : undefined}
       />
       <Segmented aria-label="Procurement documents" options={PROCUREMENT_TABS} value={tab} onChange={setTab} />
       {tab === "requests" ? (
@@ -385,7 +407,7 @@ function ProcurementContent({ workspaceId, currency }: WorkspaceInfo) {
             { key: "source", label: "Source request", render: (order) => `#${order.source_purchase_request_id}` },
             { key: "status", label: "Status", render: (order) => <StatusBadge status={order.status} /> },
             { key: "total", label: "Total", align: "right", render: (order) => <span className="tabular font-semibold">{formatMinorAmount(order.total_minor, order.currency, order.currency_exponent)}</span> },
-            { key: "actions", label: "", align: "right", render: orderActions },
+            { key: "actions", label: "", align: "right", render: (order) => <div className="flex items-center justify-end gap-2"><AppButton size="sm" variant="ghost" label="Details" onPress={() => setOrderDetail(order)} />{orderActions(order)}</div> },
           ]}
           renderCard={(order) => <RecordCard icon={<Package size={18} weight="duotone" aria-hidden="true" />} iconClassName="bg-primary-soft text-primary" reference={`Request #${order.source_purchase_request_id}`} title={order.order_number || `Draft PO #${order.id}`} amount={formatMinorAmount(order.total_minor, order.currency, order.currency_exponent)} status={<StatusBadge status={order.status} />} actions={orderActions(order)} />}
         />
@@ -393,7 +415,7 @@ function ProcurementContent({ workspaceId, currency }: WorkspaceInfo) {
         <DataView<GoodsReceipt> title="Goods receipts" rows={receipts.data??[]} rowKey={(receipt)=>receipt.id} isLoading={receipts.isPending} isError={receipts.isError} searchPlaceholder="Search receipts" getSearchText={(receipt)=>`${receipt.id} ${receipt.purchase_order_id} ${receipt.receipt_reference??""}`} empty={<EmptyState icon={Package} title="No goods receipts yet" description="Issue a purchase order, then receive accepted quantities."/>} columns={[{key:"receipt",label:"Receipt",render:(receipt)=><span className="font-medium">Receipt #{receipt.id}</span>},{key:"po",label:"Purchase order",render:(receipt)=>`#${receipt.purchase_order_id}`},{key:"date",label:"Received",render:(receipt)=>formatDate(receipt.received_on)},{key:"actions",label:"",align:"right",render:(receipt)=><AppRowActions ariaLabel="Receipt actions" items={[{key:"bill",label:"Create supplier bill",icon:<ClipboardText size={16} weight="duotone"/>,onClick:()=>setBillReceipt(receipt)},{key:"return",label:"Return stock",icon:<ArrowUUpLeft size={16} weight="duotone"/>,onClick:()=>setReturnReceipt(receipt)}]}/>}]}
         renderCard={(receipt)=><RecordCard icon={<Package size={18} weight="duotone"/>} iconClassName="bg-primary-soft text-primary" reference={`PO #${receipt.purchase_order_id}`} title={`Receipt #${receipt.id}`} amount={formatDate(receipt.received_on)} actions={<AppRowActions ariaLabel="Receipt actions" items={[{key:"bill",label:"Create supplier bill",onClick:()=>setBillReceipt(receipt)},{key:"return",label:"Return stock",onClick:()=>setReturnReceipt(receipt)}]}/>}/>}/>
       ) : tab === "bills" ? (
-        <DataView<SupplierBill> title="Supplier bills" rows={bills.data??[]} rowKey={(bill)=>bill.id} isLoading={bills.isPending} isError={bills.isError} searchPlaceholder="Search supplier bills" getSearchText={(bill)=>`${bill.id} ${bill.goods_receipt_id} ${bill.status}`} empty={<EmptyState icon={ClipboardText} title="No supplier bills yet" description="Create a bill from a posted goods receipt."/>} columns={[{key:"bill",label:"Bill",render:(bill)=><span className="font-medium">Bill #{bill.id}</span>},{key:"receipt",label:"Receipt",render:(bill)=>bill.goods_receipt_linked ? `#${bill.goods_receipt_id}` : "Direct bill"},{key:"status",label:"Status",render:(bill)=><StatusBadge status={bill.status}/>},{key:"total",label:"Total",align:"right",render:(bill)=><span className="tabular">{formatMinorAmount(bill.total_minor,currency,2)}</span>},{key:"actions",label:"",align:"right",render:(bill)=><AppRowActions ariaLabel="Bill actions" items={[{key:"match",label:"View three-way match",icon:<ClipboardText size={16} weight="duotone"/>,disabled:!bill.goods_receipt_linked,onClick:()=>setMatchBill(bill)},{key:"approve",label:"Approve bill",icon:<CheckCircle size={16} weight="duotone"/>,disabled:bill.status!=="draft"||!active?.is_owner,onClick:()=>approveBill.mutate({id:bill.id,version:bill.version})},{key:"pay",label:"Pay supplier bill",icon:<PaperPlaneTilt size={16} weight="duotone"/>,disabled:(bill.status!=="approved"&&bill.status!=="partially_paid")||!active?.is_owner,onClick:()=>setPaymentBill(bill)}]}/>}]}
+        <DataView<SupplierBill> title="Supplier bills" rows={bills.data??[]} rowKey={(bill)=>bill.id} isLoading={bills.isPending} isError={bills.isError} searchPlaceholder="Search supplier bills" getSearchText={(bill)=>`${bill.id} ${bill.goods_receipt_id} ${bill.status}`} empty={<EmptyState icon={ClipboardText} title="No supplier bills yet" description="Create a bill from a posted goods receipt or record a direct expense/service bill."/>} columns={[{key:"bill",label:"Bill",render:(bill)=><span className="font-medium">Bill #{bill.id}</span>},{key:"receipt",label:"Source",render:(bill)=>bill.goods_receipt_linked ? `Receipt #${bill.goods_receipt_id}` : "Direct bill"},{key:"due",label:"Due",render:(bill)=>bill.overdue ? <span className="text-danger">Overdue</span> : bill.due_date ? formatDate(bill.due_date) : "—"},{key:"status",label:"Status",render:(bill)=><StatusBadge status={bill.status}/>},{key:"total",label:"Total",align:"right",render:(bill)=><span className="tabular">{formatMinorAmount(bill.total_minor,currency,2)}</span>},{key:"actions",label:"",align:"right",render:(bill)=><AppRowActions ariaLabel="Bill actions" items={[{key:"match",label:"View three-way match",icon:<ClipboardText size={16} weight="duotone"/>,disabled:!bill.goods_receipt_linked,onClick:()=>setMatchBill(bill)},{key:"approve",label:"Approve bill",icon:<CheckCircle size={16} weight="duotone"/>,disabled:bill.status!=="draft"||!active?.is_owner,onClick:()=>approveBill.mutate({id:bill.id,version:bill.version})},{key:"pay",label:"Pay supplier bill",icon:<PaperPlaneTilt size={16} weight="duotone"/>,disabled:(bill.status!=="approved"&&bill.status!=="partially_paid")||!active?.is_owner,onClick:()=>setPaymentBill(bill)}]}/>}]}
         renderCard={(bill)=><RecordCard icon={<ClipboardText size={18} weight="duotone"/>} iconClassName="bg-primary-soft text-primary" reference={`Receipt #${bill.goods_receipt_id}`} title={`Bill #${bill.id}`} amount={formatMinorAmount(bill.total_minor,currency,2)} status={<StatusBadge status={bill.status}/>}/>}/>
       ) : tab === "returns" ? (
         <DataView<SupplierReturn> title="Supplier returns" rows={returns.data ?? []} rowKey={(item) => item.id} isLoading={returns.isPending} isError={returns.isError} searchPlaceholder="Search supplier returns" getSearchText={(item) => `${item.id} ${item.goods_receipt_id} ${item.status}`} empty={<EmptyState icon={ArrowUUpLeft} title="No supplier returns yet" description="Start a return from a posted receipt when stock is physically sent back." />} columns={[{ key: "return", label: "Return", render: (item) => <span className="font-medium">Return #{item.id}</span> }, { key: "receipt", label: "Receipt", render: (item) => `#${item.goods_receipt_id}` }, { key: "status", label: "Status", render: (item) => <StatusBadge status={item.status} /> }, { key: "total", label: "Value", align: "right", render: (item) => <span className="tabular">{formatMinorAmount(item.total_minor, currency, 2)}</span> }]} renderCard={(item) => <RecordCard icon={<ArrowUUpLeft size={18} weight="duotone" />} iconClassName="bg-primary-soft text-primary" reference={`Receipt #${item.goods_receipt_id}`} title={`Return #${item.id}`} amount={formatMinorAmount(item.total_minor, currency, 2)} status={<StatusBadge status={item.status} />} />} />
@@ -401,6 +423,7 @@ function ProcurementContent({ workspaceId, currency }: WorkspaceInfo) {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {[
             ["Open purchase orders", procurementReport.data ? `${procurementReport.data.open_purchase_order_count} · ${formatMinorAmount(procurementReport.data.open_purchase_order_minor, currency, 2)}` : "Loading…"],
+            ["Ordered / received", procurementReport.data ? `${formatMinorAmount(procurementReport.data.ordered_minor, currency, 2)} · ${formatMinorAmount(procurementReport.data.received_minor, currency, 2)}` : "Loading…"],
             ["Unbilled receipts / GRNI", procurementReport.data ? `${procurementReport.data.unbilled_receipt_count} · ${formatMinorAmount(procurementReport.data.grni_minor, currency, 2)}` : "Loading…"],
             ["AP outstanding / overdue", procurementReport.data ? `${formatMinorAmount(procurementReport.data.ap_outstanding_minor, currency, 2)} · ${formatMinorAmount(procurementReport.data.ap_overdue_minor, currency, 2)}` : "Loading…"],
             ["Unapplied supplier advances", procurementReport.data ? `${procurementReport.data.unapplied_advance_count} · ${formatMinorAmount(procurementReport.data.unapplied_advance_minor, currency, 2)}` : "Loading…"],
@@ -478,6 +501,13 @@ function ProcurementContent({ workspaceId, currency }: WorkspaceInfo) {
         {(receiptOptions.data ?? []).map((line) => <AppInput key={line.purchase_order_line_id} label={`${line.description} · open ${line.remaining_quantity}`} placeholder="Accepted quantity" value={receiptQuantities[line.purchase_order_line_id] ?? ""} onChange={(event) => setReceiptQuantities((current) => ({ ...current, [line.purchase_order_line_id]: event.target.value }))} />)}
       </FormDrawer>
       <FormDrawer isOpen={Boolean(billReceipt)} onOpenChange={(open)=>!open&&setBillReceipt(null)} title="New supplier bill" description="Approval clears GRNI into Accounts Payable. It does not pay the supplier." submitLabel="Save bill" isSubmitting={createBill.isPending} onSubmit={(event)=>{event.preventDefault();if(billReceipt&&supplierInvoiceNumber.trim())createBill.mutate({goods_receipt_id:billReceipt.id,supplier_invoice_number:supplierInvoiceNumber.trim(),bill_date:new Date().toISOString().slice(0,10)})}}><AppInput label="Supplier invoice number" isRequired value={supplierInvoiceNumber} onChange={(event)=>setSupplierInvoiceNumber(event.target.value)}/></FormDrawer>
+      <FormDrawer isOpen={isDirectBillOpen} onOpenChange={(open) => !open && setIsDirectBillOpen(false)} title="Direct supplier bill" description="Use this for an expense or service invoice that has no goods receipt. Approval posts the expense or asset to Accounts Payable." submitLabel="Save bill" isSubmitting={createDirectBill.isPending} onSubmit={directBillForm.handleSubmit((values) => createDirectBill.mutate(values))}>
+        <SelectField control={directBillForm.control} name="supplier_id" label="Supplier" isRequired placeholder="Choose supplier" options={(suppliers.data ?? []).map((supplier) => ({ key: String(supplier.id), label: supplier.name }))} />
+        <SelectField control={directBillForm.control} name="bill_type" label="Bill type" options={[{ key: "direct_expense", label: "Expense" }, { key: "direct_service", label: "Service" }]} />
+        <MoneyField control={directBillForm.control} name="amount" label="Amount" currency={currency} isRequired />
+        <div className="grid grid-cols-2 gap-3"><TextInputField control={directBillForm.control} name="bill_date" label="Bill date" type="date" isRequired /><TextInputField control={directBillForm.control} name="due_date" label="Due date" type="date" /></div>
+        <NotesField control={directBillForm.control} name="description" label="Description" placeholder="Internet subscription for November" />
+      </FormDrawer>
       <FormDrawer
         isOpen={Boolean(decisionTarget)}
         onOpenChange={(open) => !open && closeDecision()}
@@ -546,6 +576,12 @@ function ProcurementContent({ workspaceId, currency }: WorkspaceInfo) {
       </FormDrawer>
       <FormDrawer isOpen={Boolean(matchBill)} onOpenChange={(open) => !open && setMatchBill(null)} title="Three-way match" description="Server-derived comparison of the purchase order, accepted receipt and supplier bill." submitLabel="Close" isSubmitting={false} onSubmit={(event) => { event.preventDefault(); setMatchBill(null); }}>
         {billMatch.isPending ? <p className="text-sm text-muted">Calculating match…</p> : billMatch.data ? <div className="space-y-3 text-sm"><p><span className="text-muted">Result:</span> <span className="font-semibold">{billMatch.data.result}</span></p><p><span className="text-muted">Ordered:</span> {formatMinorAmount(billMatch.data.ordered_minor, currency, 2)}</p><p><span className="text-muted">Received:</span> {formatMinorAmount(billMatch.data.received_minor, currency, 2)}</p><p><span className="text-muted">Billed:</span> {formatMinorAmount(billMatch.data.billed_minor, currency, 2)}</p><p><span className="text-muted">Open to bill:</span> {formatMinorAmount(billMatch.data.open_to_bill_minor, currency, 2)}</p><p><span className="text-muted">Variance:</span> {formatMinorAmount(billMatch.data.variance_minor, currency, 2)}</p></div> : <p className="text-sm text-muted">Match data is unavailable.</p>}
+      </FormDrawer>
+      <FormDrawer isOpen={Boolean(orderDetail)} onOpenChange={(open) => !open && setOrderDetail(null)} title={orderDetail ? `Purchase order ${orderDetail.order_number || `#${orderDetail.id}`}` : "Purchase order"} description="Immutable operational detail and timeline. Receipts, bills, payments and stock remain separate linked documents." submitLabel="Close" isSubmitting={false} onSubmit={(event) => { event.preventDefault(); setOrderDetail(null); }}>
+        {orderDetailQuery.isPending ? <p className="text-sm text-muted">Loading order detail…</p> : orderDetailQuery.data ? <div className="space-y-5"><div className="grid grid-cols-2 gap-3 text-sm"><div><p className="text-muted">Status</p><p className="font-semibold">{orderDetailQuery.data.status}</p></div><div><p className="text-muted">Total</p><p className="font-semibold tabular">{formatMinorAmount(orderDetailQuery.data.total_minor, orderDetailQuery.data.currency, orderDetailQuery.data.currency_exponent)}</p></div></div><div><p className="text-[12px] font-semibold uppercase tracking-wide text-muted">Lines</p><div className="mt-2 space-y-2">{(orderDetailQuery.data.lines ?? []).map((line) => <div key={line.id} className="flex justify-between gap-3 text-sm"><span>{line.description} · {line.quantity} {line.unit_name}</span><span className="tabular">{formatMinorAmount(line.line_total_minor, orderDetailQuery.data.currency, orderDetailQuery.data.currency_exponent)}</span></div>)}</div></div><div><p className="text-[12px] font-semibold uppercase tracking-wide text-muted">Timeline</p><div className="mt-2 space-y-2">{(orderDetailQuery.data.events ?? []).map((event) => <div key={event.id} className="flex justify-between gap-3 text-sm"><span className="font-medium">{event.event_type}</span><span className="text-muted">{formatDate(event.created_at)}</span></div>)}</div></div></div> : <p className="text-sm text-muted">Order detail is unavailable.</p>}
+      </FormDrawer>
+      <FormDrawer isOpen={Boolean(shareLink)} onOpenChange={(open) => !open && setShareLink(null)} title="Supplier share link" description="This link gives the supplier a limited view of the issued purchase order and lets them acknowledge, decline, or request changes. It expires automatically." submitLabel="Close" isSubmitting={false} onSubmit={(event) => { event.preventDefault(); setShareLink(null); }}>
+        {shareLink ? <div className="space-y-3 text-sm"><p className="text-muted">Order {shareLink.order.order_number || `#${shareLink.order.id}`}</p><AppInput label="Link" value={`${window.location.origin}/purchase-orders/share/${shareLink.token}`} readOnly /><p className="text-muted">Expires {formatDate(shareLink.expiresAt)}</p></div> : null}
       </FormDrawer>
       <PaymentDrawer workspaceId={workspaceId} currency={currency} isOpen={Boolean(paymentBill)} onClose={()=>setPaymentBill(null)} preset={paymentBill?{direction:"outgoing",linkedType:"supplier_bill",linkedId:paymentBill.id,partyName:"Supplier",summary:`Settle supplier bill #${paymentBill.id}. This reduces Accounts Payable and does not create another expense.`}:undefined}/>
     </Page>

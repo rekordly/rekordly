@@ -93,6 +93,7 @@ func (s *Service) ReceiptOptions(ctx context.Context, ws, purchaseOrderID int64)
 
 func (s *Service) CreateGoodsReceipt(ctx context.Context, ws, user int64, in CreateGoodsReceiptInput) (GoodsReceiptView, error) {
 	key := strings.TrimSpace(in.IdempotencyKey)
+	in.ReceiptReference = strings.TrimSpace(in.ReceiptReference)
 	if in.PurchaseOrderID <= 0 || key == "" || len(key) > 200 || len(in.Lines) == 0 || len(in.Lines) > 100 {
 		return GoodsReceiptView{}, errors.New("purchase order, receipt lines and idempotency key are required")
 	}

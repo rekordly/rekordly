@@ -12,6 +12,8 @@ type ProcurementReport struct {
 	AsOfDate               string `json:"as_of_date"`
 	OpenPurchaseOrderCount int64  `json:"open_purchase_order_count"`
 	OpenPurchaseOrderMinor string `json:"open_purchase_order_minor"`
+	OrderedMinor           string `json:"ordered_minor"`
+	ReceivedMinor          string `json:"received_minor"`
 	UnbilledReceiptCount   int64  `json:"unbilled_receipt_count"`
 	GrniMinor              string `json:"grni_minor"`
 	ApOutstandingMinor     string `json:"ap_outstanding_minor"`
@@ -45,5 +47,9 @@ func (s *Service) GetProcurementReport(ctx context.Context, workspaceID int64, a
 	if err != nil {
 		return ProcurementReport{}, err
 	}
-	return ProcurementReport{AsOfDate: date.Format("2006-01-02"), OpenPurchaseOrderCount: po.OrderCount, OpenPurchaseOrderMinor: fmt.Sprint(po.TotalMinor), UnbilledReceiptCount: grni.ReceiptCount, GrniMinor: fmt.Sprint(grni.TotalMinor), ApOutstandingMinor: fmt.Sprint(ap.OutstandingMinor), ApOverdueMinor: fmt.Sprint(ap.OverdueMinor), UnappliedAdvanceCount: advance.AdvanceCount, UnappliedAdvanceMinor: fmt.Sprint(advance.AvailableMinor)}, nil
+	ordered, err := s.queries.GetOrderedReceivedTotals(ctx, workspaceID)
+	if err != nil {
+		return ProcurementReport{}, err
+	}
+	return ProcurementReport{AsOfDate: date.Format("2006-01-02"), OpenPurchaseOrderCount: po.OrderCount, OpenPurchaseOrderMinor: fmt.Sprint(po.TotalMinor), OrderedMinor: fmt.Sprint(ordered.OrderedMinor), ReceivedMinor: fmt.Sprint(ordered.ReceivedMinor), UnbilledReceiptCount: grni.ReceiptCount, GrniMinor: fmt.Sprint(grni.TotalMinor), ApOutstandingMinor: fmt.Sprint(ap.OutstandingMinor), ApOverdueMinor: fmt.Sprint(ap.OverdueMinor), UnappliedAdvanceCount: advance.AdvanceCount, UnappliedAdvanceMinor: fmt.Sprint(advance.AvailableMinor)}, nil
 }

@@ -298,6 +298,17 @@ func (s *Service) commandPurchaseRequest(ctx context.Context, workspaceID, userI
 		if current.Status != "submitted" {
 			return PurchaseRequestView{}, ErrInvalidPurchaseRequestState
 		}
+		policy, policyErr := qtx.GetProcurementApprovalPolicy(ctx, workspaceID)
+		if policyErr != nil && !errors.Is(policyErr, pgx.ErrNoRows) {
+			return PurchaseRequestView{}, policyErr
+		}
+		needsPolicyMembership := policyErr == nil && ((!policy.AllowSelfApproval && current.CreatedByUserID == userID) || (policy.ApprovalThresholdMinor > 0 && current.EstimatedTotalMinor >= policy.ApprovalThresholdMinor))
+		if needsPolicyMembership {
+			membership, membershipErr := qtx.GetActiveMembership(ctx, db.GetActiveMembershipParams{WorkspaceID: workspaceID, UserID: userID})
+			if membershipErr != nil || !membership.IsOwner {
+				return PurchaseRequestView{}, ErrApprovalForbidden
+			}
+		}
 		updated, err = qtx.ApprovePurchaseRequest(ctx, db.ApprovePurchaseRequestParams{ID: requestID, WorkspaceID: workspaceID, Version: in.ExpectedVersion, ApprovedByUserID: pgtype.Int8{Int64: userID, Valid: true}})
 	case "reject":
 		if current.Status != "submitted" {

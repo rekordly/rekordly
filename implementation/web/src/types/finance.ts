@@ -93,6 +93,24 @@ export interface PurchaseRequest {
   }>;
 }
 
+export interface PurchaseOrderLine {
+  id: number;
+  product_id?: number | null;
+  description: string;
+  quantity: string;
+  unit_name: string;
+  expected_unit_cost_minor: string;
+  line_total_minor: string;
+}
+export interface PurchaseOrderEvent {
+  id: number;
+  event_type: string;
+  order_version: number;
+  note?: string | null;
+  actor_user_id: number;
+  created_at: string;
+}
+
 /** A non-posting supplier commitment created from an approved request. */
 export interface PurchaseOrder {
   id: number;
@@ -105,6 +123,10 @@ export interface PurchaseOrder {
   total_minor: string;
   cancellation_reason?: string | null;
   closed_reason?: string | null;
+  acknowledged_at?: string | null;
+  acknowledgement_note?: string | null;
+  lines?: PurchaseOrderLine[];
+  events?: PurchaseOrderEvent[];
 }
 
 export interface ReceiptOptionLine {
@@ -127,7 +149,7 @@ export interface SupplierAdvance {
 }
 export interface SupplierReturn { id:number; supplier_id:number; goods_receipt_id:number; status:"posted"|"cancelled"; total_minor:string; }
 export interface SupplierReturnLineOption { id:number; product_name:string; remaining_quantity:string; unit_cost_minor:string; }
-export interface ProcurementReport { as_of_date:string; open_purchase_order_count:number; open_purchase_order_minor:string; unbilled_receipt_count:number; grni_minor:string; ap_outstanding_minor:string; ap_overdue_minor:string; unapplied_advance_count:number; unapplied_advance_minor:string; }
+export interface ProcurementReport { as_of_date:string; open_purchase_order_count:number; open_purchase_order_minor:string; ordered_minor:string; received_minor:string; unbilled_receipt_count:number; grni_minor:string; ap_outstanding_minor:string; ap_overdue_minor:string; unapplied_advance_count:number; unapplied_advance_minor:string; }
 export interface SupplierBillMatch { bill_id:number; receipt_id:number; ordered_minor:string; received_minor:string; billed_minor:string; open_to_bill_minor:string; variance_minor:string; result:string; requires_review:boolean; }
 
 export interface MoneyTransaction {

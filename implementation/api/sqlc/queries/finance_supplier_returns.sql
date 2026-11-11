@@ -22,6 +22,10 @@ SELECT * FROM inventory_balances WHERE workspace_id=$1 AND location_id=$2 AND pr
 UPDATE inventory_balances SET quantity_on_hand=quantity_on_hand+$4,value_on_hand_minor=value_on_hand_minor+$5,version=version+1,updated_at=now() WHERE workspace_id=$1 AND location_id=$2 AND product_id=$3 AND quantity_on_hand+$4 >= 0 AND value_on_hand_minor+$5 >= 0 RETURNING *;
 -- name: GetSupplierCreditByIdempotency :one
 SELECT * FROM supplier_credits WHERE workspace_id=$1 AND idempotency_key=$2;
+-- name: GetSupplierCreditsForReturnTotal :one
+SELECT COALESCE(sum(amount_minor), 0)::bigint AS amount_minor
+FROM supplier_credits
+WHERE workspace_id=$1 AND supplier_return_id=$2 AND status <> 'cancelled';
 -- name: CreateSupplierCredit :one
 INSERT INTO supplier_credits(workspace_id,supplier_id,supplier_return_id,supplier_bill_id,currency,currency_exponent,amount_minor,outstanding_minor,reason,idempotency_key,created_by_user_id) VALUES($1,$2,$3,$4,$5,$6,$7,$7,$8,$9,$10) RETURNING *;
 -- name: GetSupplierCreditForUpdate :one

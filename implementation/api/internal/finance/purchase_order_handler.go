@@ -9,8 +9,58 @@ import (
 
 func (h *Handler) RegisterPurchaseOrderRoutes(g *gin.RouterGroup) {
 	g.POST("/purchase-orders", h.createPurchaseOrder)
+	g.POST("/purchase-orders/:id/share", h.createPurchaseOrderShare)
 	g.GET("/purchase-orders", h.listPurchaseOrders)
+	g.GET("/purchase-orders/:id", h.getPurchaseOrder)
 	g.POST("/purchase-orders/:id/commands/:command", h.advancePurchaseOrder)
+}
+
+func (h *Handler) RegisterPurchaseOrderShareRoutes(g *gin.RouterGroup) {
+	g.GET("/purchase-orders/share/:token", h.getPurchaseOrderShare)
+	g.POST("/purchase-orders/share/:token/respond", h.respondPurchaseOrderShare)
+}
+
+func (h *Handler) getPurchaseOrderShare(c *gin.Context) {
+	share, err := h.service.GetPurchaseOrderShare(c.Request.Context(), c.Param("token"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "SHARE_NOT_FOUND", "message": "This purchase-order link is invalid or expired"}})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"share": share}})
+}
+
+func (h *Handler) respondPurchaseOrderShare(c *gin.Context) {
+	var input struct {
+		Response string `json:"response"`
+		Note     string `json:"note"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": err.Error()}})
+		return
+	}
+	share, err := h.service.RespondPurchaseOrderShare(c.Request.Context(), c.Param("token"), input.Response, input.Note)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "SHARE_RESPONSE_FAILED", "message": err.Error()}})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"share": share}})
+}
+func (h *Handler) getPurchaseOrder(c *gin.Context) {
+	ws, ok := businessWorkspace(c)
+	if !ok {
+		return
+	}
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"message": "Invalid purchase order"}})
+		return
+	}
+	po, err := h.service.GetPurchaseOrder(c, ws.WorkspaceID, id)
+	if err != nil {
+		h.procurementError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"order": po}})
 }
 func (h *Handler) createPurchaseOrder(c *gin.Context) {
 	ws, ok := businessWorkspace(c)
@@ -34,6 +84,33 @@ func (h *Handler) createPurchaseOrder(c *gin.Context) {
 		return
 	}
 	c.JSON(201, gin.H{"data": gin.H{"order": po}})
+}
+
+func (h *Handler) createPurchaseOrderShare(c *gin.Context) {
+	ws, ok := businessWorkspace(c)
+	if !ok {
+		return
+	}
+	if !ws.IsOwner && ws.RoleCode != "admin" && ws.RoleCode != "procurement_manager" {
+		h.procurementError(c, ErrApprovalForbidden)
+		return
+	}
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"message": "Invalid purchase order"}})
+		return
+	}
+	var input CreatePurchaseOrderShareInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": err.Error()}})
+		return
+	}
+	share, err := h.service.CreatePurchaseOrderShare(c.Request.Context(), ws.WorkspaceID, ws.UserID, id, input)
+	if err != nil {
+		h.procurementError(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"data": gin.H{"share": share}})
 }
 func (h *Handler) listPurchaseOrders(c *gin.Context) {
 	ws, ok := businessWorkspace(c)

@@ -405,6 +405,46 @@ func (q *Queries) GetPurchaseOrderForUpdate(ctx context.Context, arg GetPurchase
 	return i, err
 }
 
+const getPurchaseOrderLines = `-- name: GetPurchaseOrderLines :many
+SELECT id, workspace_id, purchase_order_id, source_purchase_request_line_id, product_id, description, quantity, unit_name, expected_unit_cost_minor, line_total_minor FROM purchase_order_lines WHERE workspace_id=$1 AND purchase_order_id=$2 ORDER BY id ASC
+`
+
+type GetPurchaseOrderLinesParams struct {
+	WorkspaceID     int64 `json:"workspace_id"`
+	PurchaseOrderID int64 `json:"purchase_order_id"`
+}
+
+func (q *Queries) GetPurchaseOrderLines(ctx context.Context, arg GetPurchaseOrderLinesParams) ([]PurchaseOrderLine, error) {
+	rows, err := q.db.Query(ctx, getPurchaseOrderLines, arg.WorkspaceID, arg.PurchaseOrderID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PurchaseOrderLine{}
+	for rows.Next() {
+		var i PurchaseOrderLine
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.PurchaseOrderID,
+			&i.SourcePurchaseRequestLineID,
+			&i.ProductID,
+			&i.Description,
+			&i.Quantity,
+			&i.UnitName,
+			&i.ExpectedUnitCostMinor,
+			&i.LineTotalMinor,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPurchaseOrderEvents = `-- name: ListPurchaseOrderEvents :many
 SELECT id, workspace_id, purchase_order_id, event_type, order_version, note, actor_user_id, created_at FROM purchase_order_events
 WHERE workspace_id=$1 AND purchase_order_id=$2
