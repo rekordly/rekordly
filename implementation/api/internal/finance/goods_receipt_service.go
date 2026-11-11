@@ -128,30 +128,10 @@ func (s *Service) ReceiptOptions(ctx context.Context, ws, purchaseOrderID int64)
 	return out, nil
 }
 
-func (s *Service) GetGoodsReceipt(ctx context.Context, ws, id int64) (GoodsReceiptDetailView, error) {
-	row, err := s.queries.GetGoodsReceiptDetail(ctx, db.GetGoodsReceiptDetailParams{WorkspaceID: ws, ID: id})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return GoodsReceiptDetailView{}, ErrNotFound
-	}
-	if err != nil {
-		return GoodsReceiptDetailView{}, err
-	}
-	var lines []GoodsReceiptLineView
-	if payload, ok := row.Lines.([]byte); ok && len(payload) > 0 {
-		if err := json.Unmarshal(payload, &lines); err != nil {
-			return GoodsReceiptDetailView{}, err
-		}
-	}
-	return GoodsReceiptDetailView{GoodsReceiptView: GoodsReceiptView{ID: row.ID, PurchaseOrderID: row.PurchaseOrderID, ReceivedOn: row.ReceivedOn.Time.Format("2006-01-02")}, ReceiptReference: nullableText(row.ReceiptReference), Lines: lines}, nil
-}
-
 func (s *Service) CreateGoodsReceipt(ctx context.Context, ws, user int64, in CreateGoodsReceiptInput) (GoodsReceiptView, error) {
 	key := strings.TrimSpace(in.IdempotencyKey)
 	in.ReceiptReference = strings.TrimSpace(in.ReceiptReference)
-<<<<<<< Updated upstream
-=======
 	in.DeliveryReference = strings.TrimSpace(in.DeliveryReference)
->>>>>>> Stashed changes
 	if in.PurchaseOrderID <= 0 || key == "" || len(key) > 200 || len(in.Lines) == 0 || len(in.Lines) > 100 {
 		return GoodsReceiptView{}, errors.New("purchase order, receipt lines and idempotency key are required")
 	}
@@ -320,8 +300,8 @@ func (s *Service) GetGoodsReceipt(ctx context.Context, ws, id int64) (GoodsRecei
 		return GoodsReceiptDetailView{}, err
 	}
 	var lines []GoodsReceiptLineView
-	if len(row.Lines) > 0 {
-		if err := json.Unmarshal(row.Lines, &lines); err != nil {
+	if payload, ok := row.Lines.([]byte); ok && len(payload) > 0 {
+		if err := json.Unmarshal(payload, &lines); err != nil {
 			return GoodsReceiptDetailView{}, err
 		}
 	}
