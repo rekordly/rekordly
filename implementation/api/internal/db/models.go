@@ -9,6 +9,65 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+type Asset struct {
+	ID                     int64              `json:"id"`
+	WorkspaceID            int64              `json:"workspace_id"`
+	Name                   string             `json:"name"`
+	AssetType              string             `json:"asset_type"`
+	Currency               string             `json:"currency"`
+	CurrencyExponent       int32              `json:"currency_exponent"`
+	AcquisitionDate        pgtype.Date        `json:"acquisition_date"`
+	AcquisitionCostMinor   int64              `json:"acquisition_cost_minor"`
+	IsOpeningAsset         bool               `json:"is_opening_asset"`
+	MoneyAccountID         pgtype.Int8        `json:"money_account_id"`
+	LatestManualValueMinor pgtype.Int8        `json:"latest_manual_value_minor"`
+	LatestValuationDate    pgtype.Date        `json:"latest_valuation_date"`
+	LatestValuationSource  pgtype.Text        `json:"latest_valuation_source"`
+	DisposalDate           pgtype.Date        `json:"disposal_date"`
+	DisposalProceedsMinor  pgtype.Int8        `json:"disposal_proceeds_minor"`
+	DisposalCostsMinor     pgtype.Int8        `json:"disposal_costs_minor"`
+	RealizedGainLossMinor  pgtype.Int8        `json:"realized_gain_loss_minor"`
+	Status                 string             `json:"status"`
+	EvidenceKey            pgtype.Text        `json:"evidence_key"`
+	Notes                  pgtype.Text        `json:"notes"`
+	Version                int32              `json:"version"`
+	IdempotencyKey         pgtype.Text        `json:"idempotency_key"`
+	CreatedByUserID        pgtype.Int8        `json:"created_by_user_id"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+}
+
+type AssetEvent struct {
+	ID                 int64              `json:"id"`
+	WorkspaceID        int64              `json:"workspace_id"`
+	AssetID            int64              `json:"asset_id"`
+	EventType          string             `json:"event_type"`
+	EffectiveDate      pgtype.Date        `json:"effective_date"`
+	AmountMinor        int64              `json:"amount_minor"`
+	DisposalCostsMinor int64              `json:"disposal_costs_minor"`
+	CounterpartyName   pgtype.Text        `json:"counterparty_name"`
+	MoneyAccountID     pgtype.Int8        `json:"money_account_id"`
+	MoneyTransactionID pgtype.Int8        `json:"money_transaction_id"`
+	LedgerEntryID      pgtype.Int8        `json:"ledger_entry_id"`
+	Notes              pgtype.Text        `json:"notes"`
+	EvidenceKey        pgtype.Text        `json:"evidence_key"`
+	IdempotencyKey     pgtype.Text        `json:"idempotency_key"`
+	CreatedByUserID    pgtype.Int8        `json:"created_by_user_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+type AssetValuation struct {
+	ID              int64              `json:"id"`
+	WorkspaceID     int64              `json:"workspace_id"`
+	AssetID         int64              `json:"asset_id"`
+	ValuationDate   pgtype.Date        `json:"valuation_date"`
+	ValueMinor      int64              `json:"value_minor"`
+	Source          string             `json:"source"`
+	Notes           pgtype.Text        `json:"notes"`
+	CreatedByUserID pgtype.Int8        `json:"created_by_user_id"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
 type AttachmentsMetadatum struct {
 	ID            int64              `json:"id"`
 	WorkspaceID   int64              `json:"workspace_id"`
@@ -115,23 +174,65 @@ type BankReconciliationMatch struct {
 }
 
 type Budget struct {
+	ID                 int64              `json:"id"`
+	WorkspaceID        int64              `json:"workspace_id"`
+	Name               string             `json:"name"`
+	CategoryID         pgtype.Int8        `json:"category_id"`
+	Scope              string             `json:"scope"`
+	Period             string             `json:"period"`
+	AmountMinor        int64              `json:"amount_minor"`
+	Currency           string             `json:"currency"`
+	CurrencyExponent   int32              `json:"currency_exponent"`
+	StartDate          pgtype.Date        `json:"start_date"`
+	EndDate            pgtype.Date        `json:"end_date"`
+	IsActive           bool               `json:"is_active"`
+	Notes              pgtype.Text        `json:"notes"`
+	IdempotencyKey     pgtype.Text        `json:"idempotency_key"`
+	CreatedByUserID    pgtype.Int8        `json:"created_by_user_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	Status             string             `json:"status"`
+	IncomeGoalMinor    int64              `json:"income_goal_minor"`
+	AlertThresholds    []byte             `json:"alert_thresholds"`
+	Version            int32              `json:"version"`
+	CopiedFromBudgetID pgtype.Int8        `json:"copied_from_budget_id"`
+	Timezone           string             `json:"timezone"`
+}
+
+type BudgetAlertEvent struct {
 	ID               int64              `json:"id"`
 	WorkspaceID      int64              `json:"workspace_id"`
-	Name             string             `json:"name"`
-	CategoryID       pgtype.Int8        `json:"category_id"`
-	Scope            string             `json:"scope"`
-	Period           string             `json:"period"`
-	AmountMinor      int64              `json:"amount_minor"`
-	Currency         string             `json:"currency"`
-	CurrencyExponent int32              `json:"currency_exponent"`
-	StartDate        pgtype.Date        `json:"start_date"`
-	EndDate          pgtype.Date        `json:"end_date"`
-	IsActive         bool               `json:"is_active"`
-	Notes            pgtype.Text        `json:"notes"`
-	IdempotencyKey   pgtype.Text        `json:"idempotency_key"`
-	CreatedByUserID  pgtype.Int8        `json:"created_by_user_id"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	BudgetID         int64              `json:"budget_id"`
+	ThresholdPercent int32              `json:"threshold_percent"`
+	ActualMinor      int64              `json:"actual_minor"`
+	LimitMinor       int64              `json:"limit_minor"`
+	UsageBasisPoints int64              `json:"usage_basis_points"`
+	Message          string             `json:"message"`
+	AcknowledgedAt   pgtype.Timestamptz `json:"acknowledged_at"`
+	TriggeredAt      pgtype.Timestamptz `json:"triggered_at"`
+}
+
+type BudgetLine struct {
+	ID          int64              `json:"id"`
+	WorkspaceID int64              `json:"workspace_id"`
+	BudgetID    int64              `json:"budget_id"`
+	CategoryID  pgtype.Int8        `json:"category_id"`
+	LimitMinor  int64              `json:"limit_minor"`
+	Notes       pgtype.Text        `json:"notes"`
+	Version     int32              `json:"version"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+type BudgetVersion struct {
+	ID              int64              `json:"id"`
+	WorkspaceID     int64              `json:"workspace_id"`
+	BudgetID        int64              `json:"budget_id"`
+	VersionNumber   int32              `json:"version_number"`
+	Snapshot        []byte             `json:"snapshot"`
+	ChangedByUserID pgtype.Int8        `json:"changed_by_user_id"`
+	ChangeReason    pgtype.Text        `json:"change_reason"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 }
 
 type Category struct {
@@ -145,6 +246,12 @@ type Category struct {
 	IsActive     bool               `json:"is_active"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	ParentID     pgtype.Int8        `json:"parent_id"`
+	IsArchived   bool               `json:"is_archived"`
+	ArchivedAt   pgtype.Timestamptz `json:"archived_at"`
+	DisplayOrder int32              `json:"display_order"`
+	Icon         pgtype.Text        `json:"icon"`
+	Color        pgtype.Text        `json:"color"`
 }
 
 type Counterparty struct {
@@ -555,6 +662,61 @@ type InventoryTransferLine struct {
 	UnitCostMinor int64           `json:"unit_cost_minor"`
 }
 
+type Investment struct {
+	ID                     int64              `json:"id"`
+	WorkspaceID            int64              `json:"workspace_id"`
+	Name                   string             `json:"name"`
+	InvestmentType         string             `json:"investment_type"`
+	InstitutionName        pgtype.Text        `json:"institution_name"`
+	Currency               string             `json:"currency"`
+	CurrencyExponent       int32              `json:"currency_exponent"`
+	TotalUnits             decimal.Decimal    `json:"total_units"`
+	CostBasisMinor         int64              `json:"cost_basis_minor"`
+	TotalIncomeMinor       int64              `json:"total_income_minor"`
+	LatestManualValueMinor pgtype.Int8        `json:"latest_manual_value_minor"`
+	LatestValuationDate    pgtype.Date        `json:"latest_valuation_date"`
+	LatestValuationSource  pgtype.Text        `json:"latest_valuation_source"`
+	Status                 string             `json:"status"`
+	Notes                  pgtype.Text        `json:"notes"`
+	Version                int32              `json:"version"`
+	IdempotencyKey         pgtype.Text        `json:"idempotency_key"`
+	CreatedByUserID        pgtype.Int8        `json:"created_by_user_id"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+}
+
+type InvestmentEvent struct {
+	ID                    int64              `json:"id"`
+	WorkspaceID           int64              `json:"workspace_id"`
+	InvestmentID          int64              `json:"investment_id"`
+	EventType             string             `json:"event_type"`
+	EffectiveDate         pgtype.Date        `json:"effective_date"`
+	AmountMinor           int64              `json:"amount_minor"`
+	UnitsDelta            decimal.Decimal    `json:"units_delta"`
+	CostBasisDeltaMinor   int64              `json:"cost_basis_delta_minor"`
+	RealizedGainLossMinor pgtype.Int8        `json:"realized_gain_loss_minor"`
+	GainLossStatus        string             `json:"gain_loss_status"`
+	MoneyAccountID        pgtype.Int8        `json:"money_account_id"`
+	MoneyTransactionID    pgtype.Int8        `json:"money_transaction_id"`
+	LedgerEntryID         pgtype.Int8        `json:"ledger_entry_id"`
+	Notes                 pgtype.Text        `json:"notes"`
+	IdempotencyKey        pgtype.Text        `json:"idempotency_key"`
+	CreatedByUserID       pgtype.Int8        `json:"created_by_user_id"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+}
+
+type InvestmentValuation struct {
+	ID              int64              `json:"id"`
+	WorkspaceID     int64              `json:"workspace_id"`
+	InvestmentID    int64              `json:"investment_id"`
+	ValuationDate   pgtype.Date        `json:"valuation_date"`
+	ValueMinor      int64              `json:"value_minor"`
+	Source          string             `json:"source"`
+	Notes           pgtype.Text        `json:"notes"`
+	CreatedByUserID pgtype.Int8        `json:"created_by_user_id"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
 type Invitation struct {
 	ID                    int64              `json:"id"`
 	WorkspaceID           int64              `json:"workspace_id"`
@@ -665,6 +827,71 @@ type LedgerLine struct {
 	Description   pgtype.Text `json:"description"`
 }
 
+type Loan struct {
+	ID                        int64              `json:"id"`
+	WorkspaceID               int64              `json:"workspace_id"`
+	Direction                 string             `json:"direction"`
+	CounterpartyName          string             `json:"counterparty_name"`
+	CounterpartyID            pgtype.Int8        `json:"counterparty_id"`
+	PrincipalMinor            int64              `json:"principal_minor"`
+	OutstandingPrincipalMinor int64              `json:"outstanding_principal_minor"`
+	TotalInterestPaidMinor    int64              `json:"total_interest_paid_minor"`
+	TotalFeesPaidMinor        int64              `json:"total_fees_paid_minor"`
+	Currency                  string             `json:"currency"`
+	CurrencyExponent          int32              `json:"currency_exponent"`
+	StartDate                 pgtype.Date        `json:"start_date"`
+	DueDate                   pgtype.Date        `json:"due_date"`
+	InterestRateBps           int32              `json:"interest_rate_bps"`
+	InterestArrangement       pgtype.Text        `json:"interest_arrangement"`
+	MoneyAccountID            pgtype.Int8        `json:"money_account_id"`
+	IsOpeningBalance          bool               `json:"is_opening_balance"`
+	Status                    string             `json:"status"`
+	Notes                     pgtype.Text        `json:"notes"`
+	EvidenceKey               pgtype.Text        `json:"evidence_key"`
+	Version                   int32              `json:"version"`
+	IdempotencyKey            pgtype.Text        `json:"idempotency_key"`
+	CreatedByUserID           pgtype.Int8        `json:"created_by_user_id"`
+	CreatedAt                 pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                 pgtype.Timestamptz `json:"updated_at"`
+}
+
+type LoanEvent struct {
+	ID                 int64              `json:"id"`
+	WorkspaceID        int64              `json:"workspace_id"`
+	LoanID             int64              `json:"loan_id"`
+	EventType          string             `json:"event_type"`
+	EffectiveDate      pgtype.Date        `json:"effective_date"`
+	TotalAmountMinor   int64              `json:"total_amount_minor"`
+	PrincipalMinor     int64              `json:"principal_minor"`
+	InterestMinor      int64              `json:"interest_minor"`
+	FeeMinor           int64              `json:"fee_minor"`
+	MoneyAccountID     pgtype.Int8        `json:"money_account_id"`
+	MoneyTransactionID pgtype.Int8        `json:"money_transaction_id"`
+	LedgerEntryID      pgtype.Int8        `json:"ledger_entry_id"`
+	ReversedEventID    pgtype.Int8        `json:"reversed_event_id"`
+	IsReversed         bool               `json:"is_reversed"`
+	Notes              pgtype.Text        `json:"notes"`
+	IdempotencyKey     pgtype.Text        `json:"idempotency_key"`
+	CreatedByUserID    pgtype.Int8        `json:"created_by_user_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+type LoanScheduleItem struct {
+	ID                     int64              `json:"id"`
+	WorkspaceID            int64              `json:"workspace_id"`
+	LoanID                 int64              `json:"loan_id"`
+	InstallmentNumber      int32              `json:"installment_number"`
+	DueDate                pgtype.Date        `json:"due_date"`
+	ExpectedTotalMinor     int64              `json:"expected_total_minor"`
+	ExpectedPrincipalMinor int64              `json:"expected_principal_minor"`
+	ExpectedInterestMinor  int64              `json:"expected_interest_minor"`
+	PaidMinor              int64              `json:"paid_minor"`
+	Status                 string             `json:"status"`
+	ReminderEnabled        bool               `json:"reminder_enabled"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+}
+
 type MagicLinkChallenge struct {
 	ID                int64              `json:"id"`
 	UserID            pgtype.Int8        `json:"user_id"`
@@ -744,6 +971,13 @@ type MoneyAccount struct {
 	IsActive            bool               `json:"is_active"`
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	InstitutionName     pgtype.Text        `json:"institution_name"`
+	MaskedReference     pgtype.Text        `json:"masked_reference"`
+	DisplayOrder        int32              `json:"display_order"`
+	Icon                pgtype.Text        `json:"icon"`
+	Color               pgtype.Text        `json:"color"`
+	ArchivedAt          pgtype.Timestamptz `json:"archived_at"`
+	Version             int32              `json:"version"`
 }
 
 type MoneyRecord struct {
@@ -869,6 +1103,8 @@ type MoneyTransaction struct {
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 	OutletID             pgtype.Int8        `json:"outlet_id"`
+	Tags                 []byte             `json:"tags"`
+	Version              int32              `json:"version"`
 }
 
 type Notification struct {
@@ -942,6 +1178,29 @@ type OutboxJob struct {
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }
 
+type OwnerTransferGroup struct {
+	ID                     int64              `json:"id"`
+	OwnerUserID            int64              `json:"owner_user_id"`
+	FromWorkspaceID        int64              `json:"from_workspace_id"`
+	ToWorkspaceID          int64              `json:"to_workspace_id"`
+	FromMoneyAccountID     int64              `json:"from_money_account_id"`
+	ToMoneyAccountID       int64              `json:"to_money_account_id"`
+	Purpose                string             `json:"purpose"`
+	AmountMinor            int64              `json:"amount_minor"`
+	Currency               string             `json:"currency"`
+	CurrencyExponent       int32              `json:"currency_exponent"`
+	EffectiveDate          pgtype.Date        `json:"effective_date"`
+	FromMoneyTransactionID pgtype.Int8        `json:"from_money_transaction_id"`
+	ToMoneyTransactionID   pgtype.Int8        `json:"to_money_transaction_id"`
+	FromLedgerEntryID      pgtype.Int8        `json:"from_ledger_entry_id"`
+	ToLedgerEntryID        pgtype.Int8        `json:"to_ledger_entry_id"`
+	Notes                  pgtype.Text        `json:"notes"`
+	Reference              pgtype.Text        `json:"reference"`
+	Status                 string             `json:"status"`
+	IdempotencyKey         string             `json:"idempotency_key"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+}
+
 type PasswordCredential struct {
 	ID               int64              `json:"id"`
 	UserID           int64              `json:"user_id"`
@@ -1006,6 +1265,16 @@ type PaymentReceipt struct {
 	TokenHash     string             `json:"token_hash"`
 	IssuedAt      pgtype.Timestamptz `json:"issued_at"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type PersonalTag struct {
+	ID          int64              `json:"id"`
+	WorkspaceID int64              `json:"workspace_id"`
+	Name        string             `json:"name"`
+	Color       pgtype.Text        `json:"color"`
+	IsActive    bool               `json:"is_active"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
 type ProcurementApprovalPolicy struct {

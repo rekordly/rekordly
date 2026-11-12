@@ -44,8 +44,8 @@ type CreateSalesReturnInput struct {
 }
 
 type SalesReturnDetail struct {
-	SalesReturn db.SalesReturn        `json:"sales_return"`
-	Items       []db.SalesReturnItem  `json:"items"`
+	SalesReturn db.SalesReturn       `json:"sales_return"`
+	Items       []db.SalesReturnItem `json:"items"`
 }
 
 type CustomerCreditDetail struct {

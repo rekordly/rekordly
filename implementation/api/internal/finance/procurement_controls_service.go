@@ -11,12 +11,12 @@ import (
 )
 
 type ProcurementApprovalPolicyView struct {
-	ApprovalThresholdMinor   string `json:"approval_threshold_minor"`
-	AllowSelfApproval        bool   `json:"allow_self_approval"`
+	ApprovalThresholdMinor    string `json:"approval_threshold_minor"`
+	AllowSelfApproval         bool   `json:"allow_self_approval"`
 	PriceVarianceToleranceBps int32  `json:"price_variance_tolerance_bps"`
 	QtyVarianceToleranceBps   int32  `json:"qty_variance_tolerance_bps"`
-	AllowUnplannedReceipt    bool   `json:"allow_unplanned_receipt"`
-	AllowOverReceipt         bool   `json:"allow_over_receipt"`
+	AllowUnplannedReceipt     bool   `json:"allow_unplanned_receipt"`
+	AllowOverReceipt          bool   `json:"allow_over_receipt"`
 }
 
 type UpdateProcurementApprovalPolicyInput struct {

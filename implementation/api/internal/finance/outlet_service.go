@@ -12,9 +12,9 @@ import (
 )
 
 var (
-	ErrOutletCodeConflict               = errors.New("an outlet with this code already exists in this workspace")
-	ErrOutletNameConflict               = errors.New("an outlet with this name already exists in this workspace")
-	ErrCannotDeactivateDefaultLocation  = errors.New("cannot deactivate the default location; set another default location first")
+	ErrOutletCodeConflict                = errors.New("an outlet with this code already exists in this workspace")
+	ErrOutletNameConflict                = errors.New("an outlet with this name already exists in this workspace")
+	ErrCannotDeactivateDefaultLocation   = errors.New("cannot deactivate the default location; set another default location first")
 	ErrCannotDeactivateLocationWithStock = errors.New("cannot deactivate location with active stock on hand")
 )
 

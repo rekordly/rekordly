@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { FeatureScaffold } from "@/components/features";
+import { LoansPage } from "@/components/features/personal/loans-page";
 
 export const metadata: Metadata = {
-  title: "Loans & Debt Tracker — Rekordly",
-  description: "Track money borrowed and lent without complex amortization formulas.",
+  title: "Loans — Rekordly",
+  description: "Track money borrowed and lent with principal, interest, and fee separation.",
 };
 
-export default function LoansPage() {
-  return <FeatureScaffold featureId="loans" defaultSpace="personal" />;
+export default function Page() {
+  return <LoansPage />;
 }

@@ -33,13 +33,13 @@ func (h *Handler) RegisterMoneyCaptureRoutes(protected *gin.RouterGroup) {
 }
 
 type importCSVRow struct {
-	Date        string  `json:"date" binding:"required"`
-	Description string  `json:"description" binding:"required"`
-	Amount      string  `json:"amount" binding:"required"`
-	Direction   string  `json:"direction" binding:"required"`
-	Reference   string  `json:"reference"`
-	AccountID   *int64  `json:"account_id"`
-	CategoryID  *int64  `json:"category_id"`
+	Date        string `json:"date" binding:"required"`
+	Description string `json:"description" binding:"required"`
+	Amount      string `json:"amount" binding:"required"`
+	Direction   string `json:"direction" binding:"required"`
+	Reference   string `json:"reference"`
+	AccountID   *int64 `json:"account_id"`
+	CategoryID  *int64 `json:"category_id"`
 }
 
 type importCSVRequest struct {

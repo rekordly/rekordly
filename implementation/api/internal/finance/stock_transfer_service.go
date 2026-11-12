@@ -300,11 +300,11 @@ func (s *Service) DispatchStockTransfer(ctx context.Context, workspaceID, userID
 		if errors.Is(err, pgx.ErrNoRows) {
 			// initialize balance for destination
 			dstBal, err = q.UpsertInventoryBalance(ctx, db.UpsertInventoryBalanceParams{
-				WorkspaceID:       workspaceID,
-				LocationID:        trf.DestinationLocationID,
-				ProductID:         line.ProductID,
-				QuantityOnHand:    decimal.Zero,
-				ValueOnHandMinor:  0,
+				WorkspaceID:      workspaceID,
+				LocationID:       trf.DestinationLocationID,
+				ProductID:        line.ProductID,
+				QuantityOnHand:   decimal.Zero,
+				ValueOnHandMinor: 0,
 			})
 			if err != nil {
 				return TransferView{}, err

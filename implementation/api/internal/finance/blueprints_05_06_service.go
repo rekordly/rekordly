@@ -455,7 +455,7 @@ func (s *Service) VoidDebitNote(ctx context.Context, workspaceID, userID, dnID i
 		entry, eErr := qtx.CreateLedgerEntry(ctx, db.CreateLedgerEntryParams{
 			WorkspaceID: workspaceID, SourceType: "reversal", SourceID: orig.ID,
 			EntryDate: pgtype.Date{Time: time.Now().UTC(), Valid: true},
-			Currency: orig.Currency, CurrencyExponent: int32(orig.CurrencyExponent),
+			Currency:  orig.Currency, CurrencyExponent: int32(orig.CurrencyExponent),
 			Description: pgtype.Text{String: "Void Debit Note #" + orig.DebitNoteNumber, Valid: true},
 		})
 		if eErr != nil {
@@ -611,14 +611,14 @@ func (s *Service) PostPublicMessage(ctx context.Context, docType, token string, 
 	}
 
 	return s.queries.CreateExternalMessage(ctx, db.CreateExternalMessageParams{
-		WorkspaceID: wsID,
+		WorkspaceID:  wsID,
 		DocumentType: docType,
-		DocumentID:  docID,
-		ShareID:     shareID,
-		SenderType:  "guest",
-		SenderName:  senderName,
-		SenderEmail: optionalPgText(in.SenderEmail),
-		Message:     msgText,
+		DocumentID:   docID,
+		ShareID:      shareID,
+		SenderType:   "guest",
+		SenderName:   senderName,
+		SenderEmail:  optionalPgText(in.SenderEmail),
+		Message:      msgText,
 	})
 }
 

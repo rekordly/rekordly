@@ -289,17 +289,17 @@ func (s *Service) ListStockReservations(ctx context.Context, workspaceID int64, 
 
 func reservationToView(res db.StockReservation) StockReservationView {
 	return StockReservationView{
-		ID:        res.ID,
+		ID:         res.ID,
 		LocationID: res.LocationID,
-		ProductID: res.ProductID,
-		VariantID: nullableInt64(res.VariantID),
-		OrderID:   nullableInt64(res.OrderID),
-		Quantity:  res.Quantity.StringFixed(4),
-		Status:    res.Status,
-		ExpiresAt: nullableTimeString(res.ExpiresAt),
-		Notes:     nullableText(res.Notes),
-		CreatedAt: res.CreatedAt.Time,
-		UpdatedAt: res.UpdatedAt.Time,
+		ProductID:  res.ProductID,
+		VariantID:  nullableInt64(res.VariantID),
+		OrderID:    nullableInt64(res.OrderID),
+		Quantity:   res.Quantity.StringFixed(4),
+		Status:     res.Status,
+		ExpiresAt:  nullableTimeString(res.ExpiresAt),
+		Notes:      nullableText(res.Notes),
+		CreatedAt:  res.CreatedAt.Time,
+		UpdatedAt:  res.UpdatedAt.Time,
 	}
 }
 

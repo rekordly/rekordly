@@ -73,7 +73,7 @@ func (s *Service) CreateAccount(ctx context.Context, workspaceID int64, in Creat
 	}
 	accType := strings.ToLower(strings.TrimSpace(in.AccountType))
 	switch accType {
-	case "cash", "bank", "mobile_wallet", "clearing", "other":
+	case "cash", "bank", "mobile_wallet", "card", "credit", "clearing", "other":
 	default:
 		return db.MoneyAccount{}, errors.New("invalid account type")
 	}

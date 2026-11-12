@@ -175,7 +175,7 @@ INSERT INTO budgets (
     is_active, notes, idempotency_key, created_by_user_id
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
-) RETURNING id, workspace_id, name, category_id, scope, period, amount_minor, currency, currency_exponent, start_date, end_date, is_active, notes, idempotency_key, created_by_user_id, created_at, updated_at
+) RETURNING id, workspace_id, name, category_id, scope, period, amount_minor, currency, currency_exponent, start_date, end_date, is_active, notes, idempotency_key, created_by_user_id, created_at, updated_at, status, income_goal_minor, alert_thresholds, version, copied_from_budget_id, timezone
 `
 
 type CreateBudgetParams struct {
@@ -233,6 +233,12 @@ func (q *Queries) CreateBudget(ctx context.Context, arg CreateBudgetParams) (Bud
 		&i.CreatedByUserID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Status,
+		&i.IncomeGoalMinor,
+		&i.AlertThresholds,
+		&i.Version,
+		&i.CopiedFromBudgetID,
+		&i.Timezone,
 	)
 	return i, err
 }
@@ -253,7 +259,7 @@ func (q *Queries) DeleteBudget(ctx context.Context, arg DeleteBudgetParams) erro
 }
 
 const getBudgetByID = `-- name: GetBudgetByID :one
-SELECT id, workspace_id, name, category_id, scope, period, amount_minor, currency, currency_exponent, start_date, end_date, is_active, notes, idempotency_key, created_by_user_id, created_at, updated_at FROM budgets
+SELECT id, workspace_id, name, category_id, scope, period, amount_minor, currency, currency_exponent, start_date, end_date, is_active, notes, idempotency_key, created_by_user_id, created_at, updated_at, status, income_goal_minor, alert_thresholds, version, copied_from_budget_id, timezone FROM budgets
 WHERE id = $1 AND workspace_id = $2
 `
 
@@ -283,12 +289,18 @@ func (q *Queries) GetBudgetByID(ctx context.Context, arg GetBudgetByIDParams) (B
 		&i.CreatedByUserID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Status,
+		&i.IncomeGoalMinor,
+		&i.AlertThresholds,
+		&i.Version,
+		&i.CopiedFromBudgetID,
+		&i.Timezone,
 	)
 	return i, err
 }
 
 const getBudgetByIdempotency = `-- name: GetBudgetByIdempotency :one
-SELECT id, workspace_id, name, category_id, scope, period, amount_minor, currency, currency_exponent, start_date, end_date, is_active, notes, idempotency_key, created_by_user_id, created_at, updated_at FROM budgets
+SELECT id, workspace_id, name, category_id, scope, period, amount_minor, currency, currency_exponent, start_date, end_date, is_active, notes, idempotency_key, created_by_user_id, created_at, updated_at, status, income_goal_minor, alert_thresholds, version, copied_from_budget_id, timezone FROM budgets
 WHERE workspace_id = $1 AND idempotency_key = $2
 `
 
@@ -318,6 +330,12 @@ func (q *Queries) GetBudgetByIdempotency(ctx context.Context, arg GetBudgetByIde
 		&i.CreatedByUserID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Status,
+		&i.IncomeGoalMinor,
+		&i.AlertThresholds,
+		&i.Version,
+		&i.CopiedFromBudgetID,
+		&i.Timezone,
 	)
 	return i, err
 }
@@ -341,7 +359,7 @@ func (q *Queries) GetWorkspaceTaxSettings(ctx context.Context, workspaceID int64
 }
 
 const listBudgets = `-- name: ListBudgets :many
-SELECT id, workspace_id, name, category_id, scope, period, amount_minor, currency, currency_exponent, start_date, end_date, is_active, notes, idempotency_key, created_by_user_id, created_at, updated_at FROM budgets
+SELECT id, workspace_id, name, category_id, scope, period, amount_minor, currency, currency_exponent, start_date, end_date, is_active, notes, idempotency_key, created_by_user_id, created_at, updated_at, status, income_goal_minor, alert_thresholds, version, copied_from_budget_id, timezone FROM budgets
 WHERE workspace_id = $1
   AND ($3::text IS NULL OR scope = $3)
   AND ($4::boolean IS NULL OR is_active = $4)
@@ -394,6 +412,12 @@ func (q *Queries) ListBudgets(ctx context.Context, arg ListBudgetsParams) ([]Bud
 			&i.CreatedByUserID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Status,
+			&i.IncomeGoalMinor,
+			&i.AlertThresholds,
+			&i.Version,
+			&i.CopiedFromBudgetID,
+			&i.Timezone,
 		); err != nil {
 			return nil, err
 		}
@@ -415,7 +439,7 @@ SET name = $3,
     is_active = $8,
     updated_at = now()
 WHERE id = $1 AND workspace_id = $2
-RETURNING id, workspace_id, name, category_id, scope, period, amount_minor, currency, currency_exponent, start_date, end_date, is_active, notes, idempotency_key, created_by_user_id, created_at, updated_at
+RETURNING id, workspace_id, name, category_id, scope, period, amount_minor, currency, currency_exponent, start_date, end_date, is_active, notes, idempotency_key, created_by_user_id, created_at, updated_at, status, income_goal_minor, alert_thresholds, version, copied_from_budget_id, timezone
 `
 
 type UpdateBudgetParams struct {
@@ -459,6 +483,12 @@ func (q *Queries) UpdateBudget(ctx context.Context, arg UpdateBudgetParams) (Bud
 		&i.CreatedByUserID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Status,
+		&i.IncomeGoalMinor,
+		&i.AlertThresholds,
+		&i.Version,
+		&i.CopiedFromBudgetID,
+		&i.Timezone,
 	)
 	return i, err
 }

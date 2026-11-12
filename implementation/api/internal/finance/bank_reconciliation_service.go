@@ -55,9 +55,9 @@ type ReconTransactionView struct {
 }
 
 type BankReconDetail struct {
-	Reconciliation db.BankReconciliation    `json:"reconciliation"`
+	Reconciliation db.BankReconciliation        `json:"reconciliation"`
 	Matches        []db.BankReconciliationMatch `json:"matches"`
-	Transactions   []ReconTransactionView   `json:"transactions"`
+	Transactions   []ReconTransactionView       `json:"transactions"`
 }
 
 func (s *BankReconciliationService) StartReconciliation(
@@ -302,11 +302,11 @@ func (s *BankReconciliationService) CompleteReconciliation(
 	}
 
 	return s.queries.CompleteBankReconciliation(ctx, db.CompleteBankReconciliationParams{
-		ID:                 reconID,
-		WorkspaceID:        workspaceID,
+		ID:                  reconID,
+		WorkspaceID:         workspaceID,
 		ClearedBalanceMinor: updated.ClearedBalanceMinor,
-		DifferenceMinor:    0,
-		ReconciledByUserID: pgtype.Int8{Int64: userID, Valid: true},
+		DifferenceMinor:     0,
+		ReconciledByUserID:  pgtype.Int8{Int64: userID, Valid: true},
 	})
 }
 
@@ -390,7 +390,7 @@ func (s *BankReconciliationService) GetReconciliationDetail(
 }
 
 type ImportBankLinesInput struct {
-	MoneyAccountID int64 `json:"money_account_id" binding:"required"`
+	MoneyAccountID int64  `json:"money_account_id" binding:"required"`
 	FileName       string `json:"file_name" binding:"required"`
 	Lines          []struct {
 		TransactionDate string `json:"transaction_date" binding:"required"`

@@ -56,24 +56,24 @@ type CreateInvoiceInput struct {
 }
 
 type UpdateDraftInvoiceInput struct {
-	CustomerID        int64              `json:"customer_id"`
-	CustomerName      string             `json:"customer_name"`
-	IssueDate         string             `json:"issue_date"`
-	DueDate           string             `json:"due_date"`
-	TaxAmountMinor    int64              `json:"tax_amount_minor"`
-	TaxLines          []TaxLineInput     `json:"tax_lines"`
-	DiscountMinor     int64              `json:"discount_minor"`
-	DeliveryFeeMinor  int64              `json:"delivery_fee_minor"`
-	Items             []InvoiceItemInput `json:"items"`
-	Notes             string             `json:"notes"`
-	Terms             string             `json:"terms"`
+	CustomerID       int64              `json:"customer_id"`
+	CustomerName     string             `json:"customer_name"`
+	IssueDate        string             `json:"issue_date"`
+	DueDate          string             `json:"due_date"`
+	TaxAmountMinor   int64              `json:"tax_amount_minor"`
+	TaxLines         []TaxLineInput     `json:"tax_lines"`
+	DiscountMinor    int64              `json:"discount_minor"`
+	DeliveryFeeMinor int64              `json:"delivery_fee_minor"`
+	Items            []InvoiceItemInput `json:"items"`
+	Notes            string             `json:"notes"`
+	Terms            string             `json:"terms"`
 }
 
 type InvoiceDetail struct {
 	Invoice  db.Invoice          `json:"invoice"`
-	Items    []db.InvoiceItem      `json:"items"`
-	TaxLines []db.InvoiceTaxLine   `json:"tax_lines,omitempty"`
-	Payments []PaymentDetail       `json:"payments,omitempty"`
+	Items    []db.InvoiceItem    `json:"items"`
+	TaxLines []db.InvoiceTaxLine `json:"tax_lines,omitempty"`
+	Payments []PaymentDetail     `json:"payments,omitempty"`
 }
 
 func (s *Service) CreateInvoice(ctx context.Context, workspaceID, userID int64, in CreateInvoiceInput) (InvoiceDetail, error) {

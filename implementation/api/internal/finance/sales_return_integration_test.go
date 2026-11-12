@@ -36,12 +36,12 @@ func TestSalesReturnLifecycle_CreditAndApplication(t *testing.T) {
 
 	// 2. Issue a Sales Return / Credit Note for 1 returned keyboard (₦25,000.00)
 	retDetail, err := svc.CreateSalesReturn(ctx, wsID, userID, finance.CreateSalesReturnInput{
-		CustomerID:   cust.ID,
-		InvoiceID:    invDetail.Invoice.ID,
-		ReturnDate:   "2026-11-11",
-		Currency:     "NGN",
-		Reason:       "Wrong switch type ordered",
-		ActionTaken:  "customer_credit",
+		CustomerID:  cust.ID,
+		InvoiceID:   invDetail.Invoice.ID,
+		ReturnDate:  "2026-11-11",
+		Currency:    "NGN",
+		Reason:      "Wrong switch type ordered",
+		ActionTaken: "customer_credit",
 		Items: []finance.SalesReturnItemInput{
 			{Description: "Mechanical Keyboard (Return)", Quantity: "1", UnitPriceMinor: 2500000},
 		},

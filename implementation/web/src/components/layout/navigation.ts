@@ -52,16 +52,25 @@ const NAVIGATION: Readonly<Record<ShellMode, NavGroup[]>> = {
       title: "Overview",
       items: [
         { label: "Home", href: "/dashboard", icon: House },
-        { label: "Records", href: "/transactions", icon: Receipt },
+        { label: "Activity", href: "/transactions", icon: Receipt },
       ],
     },
     {
-      title: "Plan",
+      title: "Plan & Track",
       items: [
         { label: "Budgets", href: "/budgets", icon: Target },
         { label: "Accounts", href: "/accounts", icon: Vault },
+        { label: "Categories", href: "/categories", icon: ClipboardText },
         { label: "Reports", href: "/reports", icon: ChartLineUp },
-        { label: "Tax readiness", href: "/reports/tax", icon: Calculator },
+      ],
+    },
+    {
+      title: "Wealth & Obligations",
+      items: [
+        { label: "Loans", href: "/loans", icon: HandCoins },
+        { label: "Investments", href: "/investments", icon: ChartLineUp },
+        { label: "Assets", href: "/assets", icon: Wallet },
+        { label: "Owner transfer", href: "/owner-transfers", icon: ArrowsLeftRight },
       ],
     },
   ],
@@ -106,8 +115,9 @@ const NAVIGATION: Readonly<Record<ShellMode, NavGroup[]>> = {
     {
       title: "All spaces",
       items: [
-        { label: "Home", href: "/dashboard", icon: House },
-        { label: "Summary", href: "/reports", icon: ChartLineUp },
+        { label: "All summary", href: "/dashboard", icon: House },
+        { label: "Owner transfer", href: "/owner-transfers", icon: ArrowsLeftRight },
+        { label: "Summary reports", href: "/reports", icon: ChartLineUp },
         { label: "Records", href: "/transactions", icon: Receipt },
       ],
     },

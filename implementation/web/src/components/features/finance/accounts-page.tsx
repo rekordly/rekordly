@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowsClockwise, CheckCircle, Eye, FileCsv, Plus, Tag, Vault } from "@phosphor-icons/react";
+import { Archive, ArrowCounterClockwise, ArrowsClockwise, CheckCircle, Eye, FileCsv, Plus, Scales, Tag, Vault } from "@phosphor-icons/react";
 import { toast } from "@heroui/react";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
@@ -16,10 +16,12 @@ import { EmptyState, Page, PageHeader, Segmented, StatusPill } from "@/component
 import { RecordCard } from "@/components/ui/record-card";
 import { capitalise } from "@/lib/format";
 import { financeApi, formatMinorAmount, moneyApi, moneyKeys } from "@/lib/money";
+import { personalApi } from "@/lib/personal-finance";
 import { accountSchema, categorySchema, type AccountValues, type CategoryValues } from "@/lib/schemas/finance.schemas";
+import { openingBalanceSchema, type OpeningBalanceValues } from "@/lib/schemas/personal-finance.schemas";
 import type { BankLine, BankReconDetail, BankReconciliation, MoneyAccount, MoneyCategory } from "@/types/finance";
 
-import { MoneyField, SelectField, TextInputField } from "./fields";
+import { MoneyField, NotesField, SelectField, TextInputField } from "./fields";
 import { money, useFinanceAction, WorkspaceGate, type WorkspaceInfo } from "./shared";
 
 const TABS = [
@@ -32,6 +34,8 @@ const ACCOUNT_TYPES = [
   { key: "cash", label: "Cash" },
   { key: "bank", label: "Bank" },
   { key: "mobile_wallet", label: "Mobile wallet" },
+  { key: "card", label: "Card" },
+  { key: "credit", label: "Credit account" },
   { key: "clearing", label: "Clearing" },
   { key: "other", label: "Other" },
 ];
@@ -49,6 +53,7 @@ function typeLabel(type: string) {
 function AccountsContent({ workspaceId, currency, isBusiness }: WorkspaceInfo) {
   const [tab, setTab] = useState<"accounts" | "categories" | "reconciliation">("accounts");
   const [drawer, setDrawer] = useState<"account" | "category" | "recon" | null>(null);
+  const [openingAccount, setOpeningAccount] = useState<MoneyAccount | null>(null);
   const accounts = useQuery({ queryKey: moneyKeys.accounts(workspaceId), queryFn: () => moneyApi.listAccounts({ workspaceId }) });
   const categories = useQuery({ queryKey: moneyKeys.categories(workspaceId, "all"), queryFn: () => moneyApi.listCategories({ workspaceId }) });
   const reconciliations = useQuery({
@@ -74,18 +79,29 @@ function AccountsContent({ workspaceId, currency, isBusiness }: WorkspaceInfo) {
     resolver: zodResolver(categorySchema),
     defaultValues: { name: "", direction: "money_out" },
   });
+  const openingForm = useForm<OpeningBalanceValues>({
+    resolver: zodResolver(openingBalanceSchema),
+    defaultValues: { amount: "", as_of_date: new Date().toISOString().split("T")[0], note: "" },
+  });
 
   const closeDrawer = () => {
     setDrawer(null);
+    setOpeningAccount(null);
     accountForm.reset();
     categoryForm.reset();
+    openingForm.reset();
     setReconNotes("");
   };
 
   const createAccount = useFinanceAction(
     workspaceId,
     (values: AccountValues) =>
-      financeApi.createAccount(workspaceId, { ...values, currency, opening_balance: values.opening_balance || undefined, is_active: true }),
+      financeApi.createAccount(workspaceId, {
+        ...values,
+        currency,
+        opening_balance: isBusiness ? values.opening_balance || undefined : undefined,
+        is_active: true,
+      }),
     { success: "Account added", onDone: closeDrawer },
   );
   const createCategory = useFinanceAction(
@@ -97,6 +113,39 @@ function AccountsContent({ workspaceId, currency, isBusiness }: WorkspaceInfo) {
         account_class: values.direction === "money_in" ? "income" : "expense",
       }),
     { success: "Category added", onDone: closeDrawer },
+  );
+
+  const recordOpeningBalance = useFinanceAction(
+    workspaceId,
+    (values: OpeningBalanceValues, key: string) =>
+      personalApi.recordOpeningBalance(
+        workspaceId,
+        openingAccount!.id,
+        { amount: values.amount, as_of_date: values.as_of_date, note: values.note || undefined },
+        key,
+      ),
+    {
+      success: "Opening balance recorded",
+      onDone: () => {
+        closeDrawer();
+        accounts.refetch();
+      },
+    },
+  );
+
+  const toggleArchiveAccount = useFinanceAction(
+    workspaceId,
+    async (acc: MoneyAccount) => {
+      const res = await personalApi.archiveAccount(workspaceId, acc.id, acc.is_active);
+      if (res.warning) {
+        toast.warning(res.warning);
+      }
+      return res;
+    },
+    {
+      success: "Account status updated",
+      onDone: () => accounts.refetch(),
+    },
   );
 
   const startReconciliationAction = useFinanceAction(
@@ -310,6 +359,38 @@ function AccountsContent({ workspaceId, currency, isBusiness }: WorkspaceInfo) {
               align: "right",
               render: (row) => <span className="tabular font-semibold">{money(row.current_balance_minor, row)}</span>,
             },
+            ...(!isBusiness
+              ? [
+                  {
+                    key: "actions",
+                    label: "",
+                    align: "right" as const,
+                    render: (row: MoneyAccount) => (
+                      <AppRowActions
+                        ariaLabel={`Actions for ${row.name}`}
+                        items={[
+                          ...(row.is_active
+                            ? [
+                                {
+                                  key: "opening-balance",
+                                  label: "Opening balance",
+                                  icon: <Scales size={16} aria-hidden="true" />,
+                                  onClick: () => setOpeningAccount(row),
+                                },
+                              ]
+                            : []),
+                          {
+                            key: row.is_active ? "archive" : "reactivate",
+                            label: row.is_active ? "Archive account" : "Reactivate account",
+                            icon: row.is_active ? <Archive size={16} aria-hidden="true" /> : <ArrowCounterClockwise size={16} aria-hidden="true" />,
+                            onClick: () => toggleArchiveAccount.mutate(row),
+                          },
+                        ]}
+                      />
+                    ),
+                  },
+                ]
+              : []),
           ]}
           renderCard={(row) => (
             <RecordCard
@@ -319,6 +400,22 @@ function AccountsContent({ workspaceId, currency, isBusiness }: WorkspaceInfo) {
               title={row.name}
               amount={money(row.current_balance_minor, row)}
               status={<StatusPill tone={row.is_active ? "success" : "neutral"}>{row.is_active ? "Active" : "Inactive"}</StatusPill>}
+              actions={
+                !isBusiness ? (
+                  <div className="flex items-center gap-2">
+                    {row.is_active ? (
+                      <AppButton size="sm" variant="secondary" label="Opening balance" onPress={() => setOpeningAccount(row)} />
+                    ) : null}
+                    <AppButton
+                      size="sm"
+                      variant="ghost"
+                      label={row.is_active ? "Archive" : "Reactivate"}
+                      isLoading={toggleArchiveAccount.isPending}
+                      onPress={() => toggleArchiveAccount.mutate(row)}
+                    />
+                  </div>
+                ) : undefined
+              }
             />
           )}
         />
@@ -444,7 +541,35 @@ function AccountsContent({ workspaceId, currency, isBusiness }: WorkspaceInfo) {
       >
         <TextInputField control={accountForm.control} name="name" label="Account name" placeholder="GTBank current" isRequired />
         <SelectField control={accountForm.control} name="account_type" label="Type" options={ACCOUNT_TYPES} isRequired />
-        <MoneyField control={accountForm.control} name="opening_balance" label="Opening balance" currency={currency} description="What is in this account today. You can leave it empty." />
+        {isBusiness ? (
+          <MoneyField control={accountForm.control} name="opening_balance" label="Opening balance" currency={currency} description="What is in this account today. You can leave it empty." />
+        ) : (
+          <Alert status="info" description="Personal accounts start at zero. Use the Opening balance action after creating the account to record an auditable opening balance." />
+        )}
+      </FormDrawer>
+
+      {/* RECORD PERSONAL OPENING BALANCE DRAWER */}
+      <FormDrawer
+        isOpen={Boolean(openingAccount)}
+        onOpenChange={(open) => !open && closeDrawer()}
+        title={openingAccount ? `Opening balance — ${openingAccount.name}` : "Record opening balance"}
+        description="Auditable opening balance posted against opening equity. Never counts as current-period income or expense."
+        submitLabel="Record opening balance"
+        isSubmitting={recordOpeningBalance.isPending}
+        onSubmit={openingForm.handleSubmit((v) => recordOpeningBalance.mutate(v))}
+      >
+        {recordOpeningBalance.error ? (
+          <Alert status="error" description={recordOpeningBalance.error.message} />
+        ) : null}
+        <MoneyField
+          control={openingForm.control}
+          name="amount"
+          label="Opening balance"
+          currency={openingAccount?.currency ?? currency}
+          exponent={openingAccount?.currency_exponent ?? 2}
+        />
+        <TextInputField control={openingForm.control} name="as_of_date" label="As-of date" type="date" />
+        <NotesField control={openingForm.control} name="note" label="Note (optional)" />
       </FormDrawer>
 
       {/* ADD CATEGORY DRAWER */}

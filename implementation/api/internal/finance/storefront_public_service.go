@@ -710,30 +710,30 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 	totVal, _ := decimal.NewFromString(calc.EstimatedTotal)
 
 	order, err := q.CreateStorefrontOrder(ctx, db.CreateStorefrontOrderParams{
-		WorkspaceID:           proj.internalWS,
-		StorefrontID:          proj.internalID,
-		OrderReference:        orderRef,
-		PublicTokenHash:       hashOpaqueToken(rawStatusToken),
-		OutletID:              proj.internalOutletID,
-		Currency:              proj.Currency,
-		CurrencyExponent:      proj.CurrencyExponent,
-		SubtotalMinor:         subVal.IntPart(),
-		TaxMinor:              0,
-		DeliveryFeeMinor:      delivVal.IntPart(),
-		TotalMinor:            totVal.IntPart(),
-		DeliveryMethod:        delivMethod,
-		CustomerName:          custName,
-		CustomerPhone:         optionalPgText(custPhone),
-		CustomerEmail:         optionalPgText(custEmail),
-		OrganizationName:      optionalPgText(sanitizePublicText(in.OrganizationName, 160)),
+		WorkspaceID:            proj.internalWS,
+		StorefrontID:           proj.internalID,
+		OrderReference:         orderRef,
+		PublicTokenHash:        hashOpaqueToken(rawStatusToken),
+		OutletID:               proj.internalOutletID,
+		Currency:               proj.Currency,
+		CurrencyExponent:       proj.CurrencyExponent,
+		SubtotalMinor:          subVal.IntPart(),
+		TaxMinor:               0,
+		DeliveryFeeMinor:       delivVal.IntPart(),
+		TotalMinor:             totVal.IntPart(),
+		DeliveryMethod:         delivMethod,
+		CustomerName:           custName,
+		CustomerPhone:          optionalPgText(custPhone),
+		CustomerEmail:          optionalPgText(custEmail),
+		OrganizationName:       optionalPgText(sanitizePublicText(in.OrganizationName, 160)),
 		PreferredContactMethod: optionalPgText(sanitizePublicText(in.PreferredContact, 40)),
-		DeliveryAddress:       optionalPgText(delivAddr),
-		DeliveryLandmark:      optionalPgText(sanitizePublicText(in.DeliveryLandmark, 200)),
-		PreferredDeliveryTime: optionalPgText(sanitizePublicText(in.PreferredDeliveryTime, 100)),
-		CustomerNote:          optionalPgText(sanitizePublicText(in.CustomerNote, 1000)),
-		PolicyAcknowledged:    true,
-		PolicyVersion:         proj.internalSettingsV,
-		IdempotencyKey:        key,
+		DeliveryAddress:        optionalPgText(delivAddr),
+		DeliveryLandmark:       optionalPgText(sanitizePublicText(in.DeliveryLandmark, 200)),
+		PreferredDeliveryTime:  optionalPgText(sanitizePublicText(in.PreferredDeliveryTime, 100)),
+		CustomerNote:           optionalPgText(sanitizePublicText(in.CustomerNote, 1000)),
+		PolicyAcknowledged:     true,
+		PolicyVersion:          proj.internalSettingsV,
+		IdempotencyKey:         key,
 	})
 	if err != nil {
 		return GuestCheckoutConfirmation{}, err
@@ -853,31 +853,31 @@ type PublicOrderEventView struct {
 }
 
 type PublicOrderStatusView struct {
-	OrderReference           string                 `json:"order_reference"`
-	StorefrontName           string                 `json:"storefront_name"`
-	StorefrontSlug           string                 `json:"storefront_slug"`
-	MerchantPhone            *string                `json:"merchant_phone,omitempty"`
-	MerchantEmail            *string                `json:"merchant_email,omitempty"`
-	MerchantWhatsapp         *string                `json:"merchant_whatsapp,omitempty"`
-	CommercialStatus         string                 `json:"commercial_status"`
-	FulfilmentStatus         string                 `json:"fulfilment_status"`
-	PaymentStatus            string                 `json:"payment_status"`
-	Version                  int32                  `json:"version"`
-	Currency                 string                 `json:"currency"`
-	CurrencyExponent         int32                  `json:"currency_exponent"`
-	SubtotalMinor            string                 `json:"subtotal_minor"`
-	DeliveryFeeMinor         string                 `json:"delivery_fee_minor"`
-	TotalMinor               string                 `json:"total_minor"`
-	DeliveryMethod           string                 `json:"delivery_method"`
-	DeliveryAddress          *string                `json:"delivery_address,omitempty"`
-	PaymentArrangement       *string                `json:"payment_arrangement,omitempty"`
-	RequiresCustomerAck      bool                   `json:"requires_customer_ack"`
-	LatestChangeSummary      *string                `json:"latest_change_summary,omitempty"`
-	LinkedInvoiceShareToken  *string                `json:"linked_invoice_share_token,omitempty"`
-	DeclineOrCancelReason    *string                `json:"decline_or_cancel_reason,omitempty"`
-	Lines                    []PublicOrderLineView  `json:"lines"`
-	Events                   []PublicOrderEventView `json:"events"`
-	CreatedAt                string                 `json:"created_at"`
+	OrderReference          string                 `json:"order_reference"`
+	StorefrontName          string                 `json:"storefront_name"`
+	StorefrontSlug          string                 `json:"storefront_slug"`
+	MerchantPhone           *string                `json:"merchant_phone,omitempty"`
+	MerchantEmail           *string                `json:"merchant_email,omitempty"`
+	MerchantWhatsapp        *string                `json:"merchant_whatsapp,omitempty"`
+	CommercialStatus        string                 `json:"commercial_status"`
+	FulfilmentStatus        string                 `json:"fulfilment_status"`
+	PaymentStatus           string                 `json:"payment_status"`
+	Version                 int32                  `json:"version"`
+	Currency                string                 `json:"currency"`
+	CurrencyExponent        int32                  `json:"currency_exponent"`
+	SubtotalMinor           string                 `json:"subtotal_minor"`
+	DeliveryFeeMinor        string                 `json:"delivery_fee_minor"`
+	TotalMinor              string                 `json:"total_minor"`
+	DeliveryMethod          string                 `json:"delivery_method"`
+	DeliveryAddress         *string                `json:"delivery_address,omitempty"`
+	PaymentArrangement      *string                `json:"payment_arrangement,omitempty"`
+	RequiresCustomerAck     bool                   `json:"requires_customer_ack"`
+	LatestChangeSummary     *string                `json:"latest_change_summary,omitempty"`
+	LinkedInvoiceShareToken *string                `json:"linked_invoice_share_token,omitempty"`
+	DeclineOrCancelReason   *string                `json:"decline_or_cancel_reason,omitempty"`
+	Lines                   []PublicOrderLineView  `json:"lines"`
+	Events                  []PublicOrderEventView `json:"events"`
+	CreatedAt               string                 `json:"created_at"`
 }
 
 func (s *Service) buildPublicOrderStatusView(ctx context.Context, o db.StorefrontOrder) (PublicOrderStatusView, error) {

@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 
-import { FinanceOverview } from "@/components/features/finance/overview";
+import { ReportsRouter } from "@/components/features/personal/reports-router";
 
 export const metadata: Metadata = {
   title: "Reports — Rekordly",
-  description: "Income, expenses and spending over time.",
+  description: "Income, expenses, cash movement, budgets, loans, investments, and assets.",
 };
 
 export default function Page() {
-  return <FinanceOverview title="Reports" description="Income, expenses and spending over time." showRecent={false} />;
+  return <ReportsRouter />;
 }

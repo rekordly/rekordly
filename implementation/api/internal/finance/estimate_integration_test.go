@@ -29,7 +29,7 @@ func TestEstimateLifecycle_CreateStatusAndConvertToInvoice(t *testing.T) {
 		Status:     "draft",
 		Items: []finance.EstimateItemInput{
 			{Description: "Enterprise Cloud Setup", Quantity: "2", UnitPriceMinor: 5000000}, // 2 * ₦50,000.00 = ₦100,000.00
-			{Description: "Security Audit", Quantity: "1", UnitPriceMinor: 2500000},          // 1 * ₦25,000.00 = ₦25,000.00
+			{Description: "Security Audit", Quantity: "1", UnitPriceMinor: 2500000},         // 1 * ₦25,000.00 = ₦25,000.00
 		},
 		TaxAmountMinor: 937500, // ₦9,375.00
 		Notes:          "Valid for 14 days from date of quote.",

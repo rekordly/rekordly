@@ -20,11 +20,11 @@ var (
 )
 
 type PublicInvoiceView struct {
-	WorkspaceName string               `json:"workspace_name"`
-	Invoice       db.Invoice           `json:"invoice"`
-	Items         []db.InvoiceItem     `json:"items"`
-	TaxLines      []db.InvoiceTaxLine  `json:"tax_lines,omitempty"`
-	ExpiresAt     time.Time            `json:"expires_at"`
+	WorkspaceName string              `json:"workspace_name"`
+	Invoice       db.Invoice          `json:"invoice"`
+	Items         []db.InvoiceItem    `json:"items"`
+	TaxLines      []db.InvoiceTaxLine `json:"tax_lines,omitempty"`
+	ExpiresAt     time.Time           `json:"expires_at"`
 }
 
 type PublicReceiptView struct {

@@ -623,4 +623,3 @@ func (s *Service) UpdateProductVariant(ctx context.Context, workspaceID, product
 		IsActive:          updated.IsActive,
 	}, nil
 }
-

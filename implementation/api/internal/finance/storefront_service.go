@@ -1173,11 +1173,11 @@ func (s *Service) RecheckCustomDomain(ctx context.Context, ws, domainID int64) (
 			msg = "DNS TXT record not found yet; propagation may take a few minutes"
 		}
 		updated, err = q.UpdateStorefrontDomainState(ctx, db.UpdateStorefrontDomainStateParams{
-			ID:        dom.ID,
+			ID:          dom.ID,
 			WorkspaceID: ws,
-			Status:    "error",
-			TlsStatus: "pending",
-			LastError: pgtype.Text{String: msg, Valid: true},
+			Status:      "error",
+			TlsStatus:   "pending",
+			LastError:   pgtype.Text{String: msg, Valid: true},
 		})
 	} else {
 		updated, err = q.UpdateStorefrontDomainState(ctx, db.UpdateStorefrontDomainStateParams{

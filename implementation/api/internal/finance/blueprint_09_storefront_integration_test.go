@@ -27,11 +27,11 @@ func TestStorefrontSetupProjectionCartCheckoutConfirmFulfilAndLedger(t *testing.
 	supplier, err := svc.CreateCounterparty(ctx, ws, finance.CreateCounterpartyInput{Name: "Secret Wholesale Supplier", PartyType: "supplier"})
 	require.NoError(t, err)
 	item, err := svc.CreateCatalogueItem(ctx, ws, user, finance.CreateCatalogueItemInput{
-		Name:         "Leather Loafers",
-		Description:  "Handcrafted Italian leather loafers",
-		Kind:         "stock_tracked",
-		SellingPrice: "100",
-		Currency:     "NGN",
+		Name:           "Leather Loafers",
+		Description:    "Handcrafted Italian leather loafers",
+		Kind:           "stock_tracked",
+		SellingPrice:   "100",
+		Currency:       "NGN",
 		IdempotencyKey: "bp09-prod-1",
 	})
 	require.NoError(t, err)

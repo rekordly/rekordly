@@ -173,12 +173,12 @@ func maskEmail(value string) string {
 }
 
 type CreatedInvitationResult struct {
-	ID         int64     `json:"id"`
-	InviteURL  string    `json:"invite_url"`
-	Token      string    `json:"token"`
-	RoleCode   string    `json:"role_code"`
-	RoleName   string    `json:"role_name"`
-	ExpiresAt  time.Time `json:"expires_at"`
+	ID        int64     `json:"id"`
+	InviteURL string    `json:"invite_url"`
+	Token     string    `json:"token"`
+	RoleCode  string    `json:"role_code"`
+	RoleName  string    `json:"role_name"`
+	ExpiresAt time.Time `json:"expires_at"`
 }
 
 func (service *Service) CreateWorkspaceInvitation(

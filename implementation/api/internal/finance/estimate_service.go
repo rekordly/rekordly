@@ -64,8 +64,8 @@ type UpdateDraftEstimateInput struct {
 }
 
 type EstimateDetail struct {
-	Estimate db.Estimate        `json:"estimate"`
-	Items    []db.EstimateItem  `json:"items"`
+	Estimate db.Estimate          `json:"estimate"`
+	Items    []db.EstimateItem    `json:"items"`
 	TaxLines []db.EstimateTaxLine `json:"tax_lines,omitempty"`
 }
 

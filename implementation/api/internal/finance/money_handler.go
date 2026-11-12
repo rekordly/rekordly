@@ -82,6 +82,9 @@ func (h *Handler) RegisterRoutes(group *gin.RouterGroup) {
 
 	// Budgets and Tax-Readiness Reports
 	h.RegisterBudgetsTaxRoutes(protected)
+
+	// Blueprint 10: Personal Finance, Budgets, Loans, Assets, Investments, Owner Transfers & All Summary
+	h.RegisterPersonalFinanceRoutes(protected)
 }
 
 // @Summary Create a money account

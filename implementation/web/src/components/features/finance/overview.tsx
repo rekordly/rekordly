@@ -18,6 +18,7 @@ import type { AuthorizedWorkspace } from "@/types/auth";
 import type { MoneyTransaction } from "@/types/finance";
 
 import { money, StatusBadge } from "./shared";
+import { AllOwnerSummaryView, PersonalHome } from "../personal/personal-home";
 
 const PERIODS = [
   { key: "1", label: "This month" },
@@ -198,29 +199,43 @@ function WorkspaceOverview({
   );
 }
 
-/** Dashboard and reports. "All spaces" tabs through each owned space; it never totals money in the browser. */
+/** Dashboard and reports. "All spaces" shows the server-calculated owner projection; Personal shows Personal Home. */
 export function FinanceOverview({ title, description, showRecent }: { title: string; description: string; showRecent: boolean }) {
-  const { inScope } = useActiveWorkspace();
-  const [period, setPeriod] = useState<Period>("6");
+  const { mode, inScope } = useActiveWorkspace();
+  const [period, setPeriod] = useState<Period>("1");
   const [shownId, setShownId] = useState("");
   const shown = inScope.find((workspace) => String(workspace.id) === shownId) ?? inScope[0];
+  const fromDate = format(startOfMonth(subMonths(new Date(), Number(period) - 1)), "yyyy-MM-dd");
+  const toDate = format(new Date(), "yyyy-MM-dd");
 
   return (
     <Page>
       <PageHeader
-        title={title}
+        title={mode === "all" ? "All spaces summary" : title}
         description={description}
         actions={<Segmented size="sm" aria-label="Period" options={PERIODS} value={period} onChange={setPeriod} />}
       />
-      {inScope.length > 1 ? (
-        <Segmented
-          aria-label="Space"
-          options={inScope.map((workspace) => ({ key: String(workspace.id), label: workspace.name }))}
-          value={String(shown?.id ?? "")}
-          onChange={setShownId}
-        />
-      ) : null}
-      {shown ? <WorkspaceOverview key={shown.id} workspace={shown} months={Number(period)} showRecent={showRecent} /> : null}
+      {mode === "all" && inScope[0] ? (
+        <AllOwnerSummaryView anchorWorkspaceId={inScope[0].id} fromDate={fromDate} toDate={toDate} />
+      ) : (
+        <>
+          {inScope.length > 1 ? (
+            <Segmented
+              aria-label="Space"
+              options={inScope.map((workspace) => ({ key: String(workspace.id), label: workspace.name }))}
+              value={String(shown?.id ?? "")}
+              onChange={setShownId}
+            />
+          ) : null}
+          {shown ? (
+            shown.kind === "personal" ? (
+              <PersonalHome key={shown.id} workspace={shown} fromDate={fromDate} toDate={toDate} />
+            ) : (
+              <WorkspaceOverview key={shown.id} workspace={shown} months={Number(period)} showRecent={showRecent} />
+            )
+          ) : null}
+        </>
+      )}
     </Page>
   );
 }

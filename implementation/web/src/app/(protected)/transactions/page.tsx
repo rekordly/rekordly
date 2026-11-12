@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { TransactionList } from "@/components/features/transaction-list";
+import { ActivityRouter } from "@/components/features/personal/activity-router";
 
 export const metadata: Metadata = {
-  title: "Transactions — Rekordly",
-  description: "Track income, expenses, and transfers across Personal and Business spaces.",
+  title: "Activity — Rekordly",
+  description: "Track income, expenses, transfers, loans, investments, and assets.",
 };
 
 export default function TransactionsPage() {
-  return <TransactionList />;
+  return <ActivityRouter />;
 }
