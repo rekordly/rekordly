@@ -958,6 +958,15 @@ type EstimateTaxLine struct {
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
+type EventConsumption struct {
+	ConsumerName string             `json:"consumer_name"`
+	EventID      string             `json:"event_id"`
+	WorkspaceID  int64              `json:"workspace_id"`
+	EventType    string             `json:"event_type"`
+	EventVersion int32              `json:"event_version"`
+	ConsumedAt   pgtype.Timestamptz `json:"consumed_at"`
+}
+
 type EvidenceAsset struct {
 	ID               int64              `json:"id"`
 	WorkspaceID      int64              `json:"workspace_id"`
@@ -2675,6 +2684,22 @@ type RetentionPolicy struct {
 	PostGraceAction     string             `json:"post_grace_action"`
 	BackupWindowDays    int32              `json:"backup_window_days"`
 	EffectiveAt         pgtype.Timestamptz `json:"effective_at"`
+}
+
+type ReviewItem struct {
+	ID                  int64              `json:"id"`
+	WorkspaceID         int64              `json:"workspace_id"`
+	ReviewType          string             `json:"review_type"`
+	State               string             `json:"state"`
+	SourceAggregateType string             `json:"source_aggregate_type"`
+	SourceAggregateID   string             `json:"source_aggregate_id"`
+	SourceVersion       int64              `json:"source_version"`
+	DedupeKey           string             `json:"dedupe_key"`
+	SafeSummary         string             `json:"safe_summary"`
+	ResolvedByEventID   string             `json:"resolved_by_event_id"`
+	Version             int64              `json:"version"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Role struct {

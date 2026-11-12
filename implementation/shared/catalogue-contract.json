@@ -1,0 +1,1296 @@
+{
+  "commands": [
+    {
+      "type": "identity.account.register",
+      "version": 1,
+      "module": "identity",
+      "idempotency_required": true,
+      "expected_version_required": false,
+      "emits_event": "identity.account.registered",
+      "owns_accounting_effect": false,
+      "owns_stock_effect": false,
+      "audit_action": "account_registered"
+    },
+    {
+      "type": "identity.contact.add",
+      "version": 1,
+      "module": "identity",
+      "permission": "account.security.manage",
+      "idempotency_required": true,
+      "expected_version_required": true,
+      "emits_event": "identity.contact.added",
+      "owns_accounting_effect": false,
+      "owns_stock_effect": false,
+      "audit_action": "contact_added"
+    },
+    {
+      "type": "identity.contact.verify",
+      "version": 1,
+      "module": "identity",
+      "idempotency_required": true,
+      "expected_version_required": false,
+      "emits_event": "identity.contact.verified",
+      "owns_accounting_effect": false,
+      "owns_stock_effect": false,
+      "audit_action": "contact_verified"
+    },
+    {
+      "type": "identity.contact.make_primary",
+      "version": 1,
+      "module": "identity",
+      "permission": "account.security.manage",
+      "idempotency_required": true,
+      "expected_version_required": true,
+      "emits_event": "identity.contact.primary_changed",
+      "owns_accounting_effect": false,
+      "owns_stock_effect": false,
+      "audit_action": "contact_primary_changed"
+    },
+    {
+      "type": "identity.contact.remove",
+      "version": 1,
+      "module": "identity",
+      "permission": "account.security.manage",
+      "idempotency_required": true,
+      "expected_version_required": true,
+      "emits_event": "identity.contact.removed",
+      "owns_accounting_effect": false,
+      "owns_stock_effect": false,
+      "audit_action": "contact_removed"
+    },
+    {
+      "type": "identity.profile.update",
+      "version": 1,
+      "module": "identity",
+      "permission": "account.profile.manage",
+      "idempotency_required": true,
+      "expected_version_required": true,
+      "emits_event": "identity.profile.updated",
+      "owns_accounting_effect": false,
+      "owns_stock_effect": false,
+      "audit_action": "profile_updated"
+    },
+    {
+      "type": "auth.session.revoke",
+      "version": 1,
+      "module": "identity",
+      "permission": "sessions.manage",
+      "idempotency_required": true,
+      "expected_version_required": false,
+      "emits_event": "auth.session.revoked",
+      "owns_accounting_effect": false,
+      "owns_stock_effect": false,
+      "audit_action": "session_revoked"
+    },
+    {
+      "type": "auth.sessions.revoke_others",
+      "version": 1,
+      "module": "identity",
+      "permission": "sessions.manage",
+      "idempotency_required": true,
+      "expected_version_required": false,
+      "emits_event": "auth.sessions.others_revoked",
+      "owns_accounting_effect": false,
+      "owns_stock_effect": false,
+      "audit_action": "other_sessions_revoked"
+    },
+    {
+      "type": "members.invitation.create",
+      "version": 1,
+      "module": "workspaces",
+      "permission": "members.manage",
+      "entitlement": "business.staff.active.max",
+      "idempotency_required": true,
+      "expected_version_required": false,
+      "emits_event": "members.invitation.created",
+      "owns_accounting_effect": false,
+      "owns_stock_effect": false,
+      "audit_action": "member_invited"
+    },
+    {
+      "type": "members.invitation.accept",
+      "version": 1,
+      "module": "workspaces",
+      "idempotency_required": true,
+      "expected_version_required": false,
+      "emits_event": "members.invitation.accepted",
+      "owns_accounting_effect": false,
+      "owns_stock_effect": false,
+      "audit_action": "member_joined"
+    },
+    {
+      "type": "members.membership.change_access",
+      "version": 1,
+      "module": "workspaces",
+      "permission": "members.manage",
+      "idempotency_required": true,
+      "expected_version_required": true,
+      "emits_event": "members.membership.access_changed",
+      "owns_accounting_effect": false,
+      "owns_stock_effect": false,
+      "audit_action": "member_access_changed"
+    },
+    {
+      "type": "members.membership.suspend",
+      "version": 1,
+      "module": "workspaces",
+      "permission": "members.manage",
+      "idempotency_required": true,
+      "expected_version_required": false,
+      "emits_event": "members.membership.suspended",
+      "owns_accounting_effect": false,
+      "owns_stock_effect": false,
+      "audit_action": "member_suspended"
+    },
+    {
+      "type": "members.membership.remove",
+      "version": 1,
+      "module": "workspaces",
+      "permission": "members.manage",
+      "idempotency_required": true,
+      "expected_version_required": false,
+      "emits_event": "members.membership.removed",
+      "owns_accounting_effect": false,
+      "owns_stock_effect": false,
+      "audit_action": "member_removed"
+    },
+    {
+      "type": "members.ownership_transfer.request",
+      "version": 1,
+      "module": "workspaces",
+      "permission": "ownership.transfer",
+      "idempotency_required": true,
+      "expected_version_required": false,
+      "emits_event": "members.ownership_transfer.requested",
+      "owns_accounting_effect": false,
+      "owns_stock_effect": false,
+      "audit_action": "ownership_transfer_initiated"
+    },
+    {
+      "type": "members.ownership_transfer.accept",
+      "version": 1,
+      "module": "workspaces",
+      "idempotency_required": true,
+      "expected_version_required": false,
+      "emits_event": "members.ownership_transfer.accepted",
+      "owns_accounting_effect": false,
+      "owns_stock_effect": false,
+      "audit_action": "business_ownership_transferred"
+    },
+    {
+      "type": "money.draft.create",
+      "version": 1,
+      "module": "money",
+      "permission": "money.create",
+      "idempotency_required": true,
+      "expected_version_required": false,
+      "emits_event": "money.draft.created",
+      "owns_accounting_effect": false,
+      "owns_stock_effect": false,
+      "audit_action": "money_draft_created"
+    },
+    {
+      "type": "money.entry.confirm",
+      "version": 1,
+      "module": "money",
+      "permission": "money.create",
+      "entitlement": "records.confirmed.monthly",
+      "idempotency_required": true,
+      "expected_version_required": true,
+      "emits_event": "money.entry.confirmed",
+      "owns_accounting_effect": true,
+      "owns_stock_effect": false,
+      "audit_action": "money_entry_confirmed"
+    },
+    {
+      "type": "money.entry.reverse",
+      "version": 1,
+      "module": "money",
+      "permission": "money.void",
+      "idempotency_required": true,
+      "expected_version_required": true,
+      "emits_event": "money.entry.reversed",
+      "owns_accounting_effect": true,
+      "owns_stock_effect": false,
+      "audit_action": "money_entry_reversed"
+    },
+    {
+      "type": "payments.payment.record",
+      "version": 1,
+      "module": "payments",
+      "permission": "sales.create",
+      "idempotency_required": true,
+      "expected_version_required": false,
+      "emits_event": "payments.payment.recorded",
+      "owns_accounting_effect": true,
+      "owns_stock_effect": false,
+      "audit_action": "payment_recorded"
+    },
+    {
+      "type": "payments.payment.allocate",
+      "version": 1,
+      "module": "payments",
+      "permission": "sales.create",
+      "idempotency_required": true,
+      "expected_version_required": true,
+      "emits_event": "payments.payment.allocated",
+      "owns_accounting_effect": true,
+      "owns_stock_effect": false,
+      "audit_action": "payment_allocated"
+    },
+    {
+      "type": "sales.invoice.issue",
+      "version": 1,
+      "module": "sales",
+      "permission": "invoices.create",
+      "idempotency_required": true,
+      "expected_version_required": true,
+      "emits_event": "sales.invoice.issued",
+      "owns_accounting_effect": true,
+      "owns_stock_effect": false,
+      "audit_action": "invoice_issued"
+    },
+    {
+      "type": "sales.sale.confirm",
+      "version": 1,
+      "module": "sales",
+      "permission": "sales.create",
+      "idempotency_required": true,
+      "expected_version_required": false,
+      "emits_event": "sales.sale.confirmed",
+      "owns_accounting_effect": true,
+      "owns_stock_effect": true,
+      "audit_action": "sale_confirmed"
+    },
+    {
+      "type": "purchasing.receipt.post",
+      "version": 1,
+      "module": "purchasing",
+      "permission": "purchases.create",
+      "entitlement": "business.procurement.enabled",
+      "idempotency_required": true,
+      "expected_version_required": false,
+      "emits_event": "purchasing.receipt.posted",
+      "owns_accounting_effect": true,
+      "owns_stock_effect": true,
+      "audit_action": "goods_receipt_posted"
+    },
+    {
+      "type": "purchasing.bill.post",
+      "version": 1,
+      "module": "purchasing",
+      "permission": "purchases.create",
+      "entitlement": "business.procurement.enabled",
+      "idempotency_required": true,
+      "expected_version_required": false,
+      "emits_event": "purchasing.bill.posted",
+      "owns_accounting_effect": true,
+      "owns_stock_effect": false,
+      "audit_action": "supplier_bill_posted"
+    },
+    {
+      "type": "inventory.transfer.dispatch",
+      "version": 1,
+      "module": "inventory",
+      "permission": "inventory.view_quantity",
+      "entitlement": "business.inventory.enabled",
+      "idempotency_required": true,
+      "expected_version_required": true,
+      "emits_event": "inventory.transfer.dispatched",
+      "owns_accounting_effect": false,
+      "owns_stock_effect": true,
+      "audit_action": "inventory_transfer_dispatched"
+    },
+    {
+      "type": "inventory.transfer.receive",
+      "version": 1,
+      "module": "inventory",
+      "permission": "inventory.view_quantity",
+      "entitlement": "business.inventory.enabled",
+      "idempotency_required": true,
+      "expected_version_required": true,
+      "emits_event": "inventory.transfer.received",
+      "owns_accounting_effect": false,
+      "owns_stock_effect": true,
+      "audit_action": "inventory_transfer_received"
+    },
+    {
+      "type": "personal.account.opening_balance.record",
+      "version": 1,
+      "module": "personal",
+      "permission": "money.create",
+      "idempotency_required": true,
+      "expected_version_required": false,
+      "emits_event": "personal.account.opening_balance_recorded",
+      "owns_accounting_effect": true,
+      "owns_stock_effect": false,
+      "audit_action": "opening_balance_recorded"
+    },
+    {
+      "type": "personal.loan.repayment",
+      "version": 1,
+      "module": "personal",
+      "permission": "money.create",
+      "entitlement": "personal.loans.enabled",
+      "idempotency_required": true,
+      "expected_version_required": false,
+      "emits_event": "personal.loan.repaid",
+      "owns_accounting_effect": true,
+      "owns_stock_effect": false,
+      "audit_action": "loan_repayment_recorded"
+    },
+    {
+      "type": "ledger.period.lock",
+      "version": 1,
+      "module": "ledger",
+      "permission": "period.lock",
+      "idempotency_required": true,
+      "expected_version_required": false,
+      "emits_event": "ledger.period.locked",
+      "owns_accounting_effect": false,
+      "owns_stock_effect": false,
+      "audit_action": "period_locked"
+    },
+    {
+      "type": "ledger.manual_journal.approve",
+      "version": 1,
+      "module": "ledger",
+      "permission": "journal.approve_manual",
+      "idempotency_required": true,
+      "expected_version_required": true,
+      "emits_event": "ledger.manual_journal.approved",
+      "owns_accounting_effect": true,
+      "owns_stock_effect": false,
+      "audit_action": "manual_journal_approved"
+    },
+    {
+      "type": "ai.draft.create",
+      "version": 1,
+      "module": "aiimports",
+      "permission": "ai.use",
+      "entitlement": "ai.draft.monthly",
+      "idempotency_required": true,
+      "expected_version_required": false,
+      "emits_event": "ai.draft.created",
+      "owns_accounting_effect": false,
+      "owns_stock_effect": false,
+      "audit_action": "ai_draft_created"
+    },
+    {
+      "type": "imports.batch.create",
+      "version": 1,
+      "module": "aiimports",
+      "permission": "imports.create",
+      "entitlement": "csv.import.enabled",
+      "idempotency_required": true,
+      "expected_version_required": false,
+      "emits_event": "imports.batch.created",
+      "owns_accounting_effect": false,
+      "owns_stock_effect": false,
+      "audit_action": "import_batch_created"
+    },
+    {
+      "type": "billing.checkout.create",
+      "version": 1,
+      "module": "billing",
+      "permission": "billing.manage_plan",
+      "idempotency_required": true,
+      "expected_version_required": false,
+      "emits_event": "billing.checkout.created",
+      "owns_accounting_effect": false,
+      "owns_stock_effect": false,
+      "audit_action": "billing_checkout_created"
+    },
+    {
+      "type": "documents.render.request",
+      "version": 1,
+      "module": "documents",
+      "permission": "documents.render",
+      "idempotency_required": true,
+      "expected_version_required": true,
+      "emits_event": "documents.render.requested",
+      "owns_accounting_effect": false,
+      "owns_stock_effect": false,
+      "audit_action": "document_render_requested"
+    },
+    {
+      "type": "sharing.grant.create",
+      "version": 1,
+      "module": "documents",
+      "permission": "shares.create",
+      "idempotency_required": true,
+      "expected_version_required": false,
+      "emits_event": "sharing.grant.created",
+      "owns_accounting_effect": false,
+      "owns_stock_effect": false,
+      "audit_action": "share_grant_created"
+    },
+    {
+      "type": "sharing.grant.revoke",
+      "version": 1,
+      "module": "documents",
+      "permission": "shares.revoke",
+      "idempotency_required": true,
+      "expected_version_required": false,
+      "emits_event": "sharing.grant.revoked",
+      "owns_accounting_effect": false,
+      "owns_stock_effect": false,
+      "audit_action": "share_grant_revoked"
+    },
+    {
+      "type": "sync.session.start",
+      "version": 1,
+      "module": "sync",
+      "entitlement": "offline.mode",
+      "idempotency_required": false,
+      "expected_version_required": false,
+      "emits_event": "sync.session.started",
+      "owns_accounting_effect": false,
+      "owns_stock_effect": false,
+      "audit_action": "sync_session_started"
+    },
+    {
+      "type": "privacy.export.request",
+      "version": 1,
+      "module": "privacy",
+      "permission": "exports.complete",
+      "idempotency_required": true,
+      "expected_version_required": false,
+      "emits_event": "privacy.export.requested",
+      "owns_accounting_effect": false,
+      "owns_stock_effect": false,
+      "audit_action": "ownership_export_created"
+    },
+    {
+      "type": "privacy.deletion.request",
+      "version": 1,
+      "module": "privacy",
+      "permission": "deletion.request",
+      "idempotency_required": true,
+      "expected_version_required": false,
+      "emits_event": "privacy.deletion.requested",
+      "owns_accounting_effect": false,
+      "owns_stock_effect": false,
+      "audit_action": "deletion_requested"
+    },
+    {
+      "type": "privacy.deletion.cancel",
+      "version": 1,
+      "module": "privacy",
+      "permission": "deletion.request",
+      "idempotency_required": true,
+      "expected_version_required": false,
+      "emits_event": "privacy.deletion.cancelled",
+      "owns_accounting_effect": false,
+      "owns_stock_effect": false,
+      "audit_action": "deletion_cancelled_restored"
+    },
+    {
+      "type": "support.case.create",
+      "version": 1,
+      "module": "support",
+      "permission": "support.intake",
+      "idempotency_required": true,
+      "expected_version_required": false,
+      "emits_event": "support.case.created",
+      "owns_accounting_effect": false,
+      "owns_stock_effect": false,
+      "audit_action": "support_case_created"
+    },
+    {
+      "type": "support.access_grant.create",
+      "version": 1,
+      "module": "support",
+      "permission": "support.access.grant",
+      "idempotency_required": true,
+      "expected_version_required": false,
+      "emits_event": "support.access_grant.created",
+      "owns_accounting_effect": false,
+      "owns_stock_effect": false,
+      "audit_action": "support_access_granted"
+    },
+    {
+      "type": "support.access_grant.revoke",
+      "version": 1,
+      "module": "support",
+      "permission": "support.access.grant",
+      "idempotency_required": true,
+      "expected_version_required": false,
+      "emits_event": "support.access_grant.revoked",
+      "owns_accounting_effect": false,
+      "owns_stock_effect": false,
+      "audit_action": "support_access_revoked"
+    },
+    {
+      "type": "operations.job.retry",
+      "version": 1,
+      "module": "operations",
+      "permission": "admin.recovery",
+      "idempotency_required": true,
+      "expected_version_required": false,
+      "emits_event": "operations.job.retry_requested",
+      "owns_accounting_effect": false,
+      "owns_stock_effect": false,
+      "audit_action": "admin_job_retried"
+    },
+    {
+      "type": "operations.reconciliation.run",
+      "version": 1,
+      "module": "operations",
+      "permission": "admin.recovery",
+      "idempotency_required": true,
+      "expected_version_required": false,
+      "emits_event": "operations.reconciliation.requested",
+      "owns_accounting_effect": false,
+      "owns_stock_effect": false,
+      "audit_action": "admin_reconciliation_run"
+    }
+  ],
+  "error_codes": [
+    "UNAUTHORIZED",
+    "FORBIDDEN",
+    "NOT_FOUND",
+    "IDEMPOTENCY_CONFLICT",
+    "RECENT_AUTH_REQUIRED",
+    "CONTACT_ALREADY_IN_USE",
+    "CONTACT_VERIFICATION_REQUIRED",
+    "LAST_LOGIN_METHOD",
+    "SESSION_ALREADY_REVOKED",
+    "SETTINGS_VERSION_CONFLICT",
+    "SETTING_LOCKED_AFTER_POSTING",
+    "LAST_OWNER_REQUIRED",
+    "OWNERSHIP_TRANSFER_PENDING",
+    "INVITATION_EXPIRED",
+    "EXPORT_NOT_READY",
+    "EXPORT_RECONCILIATION_FAILED",
+    "DELETION_DEPENDENCY_UNRESOLVED",
+    "DELETION_ALREADY_REQUESTED",
+    "DELETION_GRACE_EXPIRED",
+    "DELETION_PURGE_STARTED",
+    "RETENTION_HOLD_ACTIVE",
+    "SUPPORT_VERIFICATION_REQUIRED",
+    "SUPPORT_ACCESS_EXPIRED",
+    "OFFLINE_COMMAND_NOT_ALLOWED",
+    "OFFLINE_QUEUE_LIMIT_REACHED",
+    "INVALID_STATE_TRANSITION"
+  ],
+  "events": [
+    {
+      "type": "identity.account.registered",
+      "version": 1,
+      "module": "identity",
+      "class": "domain"
+    },
+    {
+      "type": "identity.contact.added",
+      "version": 1,
+      "module": "identity",
+      "class": "security"
+    },
+    {
+      "type": "identity.contact.verified",
+      "version": 1,
+      "module": "identity",
+      "class": "security"
+    },
+    {
+      "type": "identity.contact.primary_changed",
+      "version": 1,
+      "module": "identity",
+      "class": "security"
+    },
+    {
+      "type": "identity.contact.removed",
+      "version": 1,
+      "module": "identity",
+      "class": "security"
+    },
+    {
+      "type": "identity.profile.updated",
+      "version": 1,
+      "module": "identity",
+      "class": "domain"
+    },
+    {
+      "type": "auth.session.revoked",
+      "version": 1,
+      "module": "identity",
+      "class": "security"
+    },
+    {
+      "type": "auth.sessions.others_revoked",
+      "version": 1,
+      "module": "identity",
+      "class": "security"
+    },
+    {
+      "type": "members.invitation.created",
+      "version": 1,
+      "module": "workspaces",
+      "class": "domain"
+    },
+    {
+      "type": "members.invitation.accepted",
+      "version": 1,
+      "module": "workspaces",
+      "class": "domain"
+    },
+    {
+      "type": "members.membership.access_changed",
+      "version": 1,
+      "module": "workspaces",
+      "class": "security"
+    },
+    {
+      "type": "members.membership.suspended",
+      "version": 1,
+      "module": "workspaces",
+      "class": "security"
+    },
+    {
+      "type": "members.membership.removed",
+      "version": 1,
+      "module": "workspaces",
+      "class": "security"
+    },
+    {
+      "type": "members.ownership_transfer.requested",
+      "version": 1,
+      "module": "workspaces",
+      "class": "security"
+    },
+    {
+      "type": "members.ownership_transfer.accepted",
+      "version": 1,
+      "module": "workspaces",
+      "class": "security"
+    },
+    {
+      "type": "money.draft.created",
+      "version": 1,
+      "module": "money",
+      "class": "domain"
+    },
+    {
+      "type": "money.entry.confirmed",
+      "version": 1,
+      "module": "money",
+      "class": "domain",
+      "accounting_owner": "money.entry.confirm"
+    },
+    {
+      "type": "money.entry.reversed",
+      "version": 1,
+      "module": "money",
+      "class": "domain",
+      "accounting_owner": "money.entry.reverse"
+    },
+    {
+      "type": "payments.payment.recorded",
+      "version": 1,
+      "module": "payments",
+      "class": "domain",
+      "accounting_owner": "payments.payment.record"
+    },
+    {
+      "type": "payments.payment.allocated",
+      "version": 1,
+      "module": "payments",
+      "class": "domain",
+      "accounting_owner": "payments.payment.allocate"
+    },
+    {
+      "type": "sales.invoice.issued",
+      "version": 1,
+      "module": "sales",
+      "class": "domain",
+      "accounting_owner": "sales.invoice.issue"
+    },
+    {
+      "type": "sales.sale.confirmed",
+      "version": 1,
+      "module": "sales",
+      "class": "domain",
+      "accounting_owner": "sales.sale.confirm",
+      "stock_owner": "sales.sale.confirm"
+    },
+    {
+      "type": "purchasing.receipt.posted",
+      "version": 1,
+      "module": "purchasing",
+      "class": "domain",
+      "accounting_owner": "purchasing.receipt.post",
+      "stock_owner": "purchasing.receipt.post"
+    },
+    {
+      "type": "purchasing.bill.posted",
+      "version": 1,
+      "module": "purchasing",
+      "class": "domain",
+      "accounting_owner": "purchasing.bill.post"
+    },
+    {
+      "type": "inventory.transfer.dispatched",
+      "version": 1,
+      "module": "inventory",
+      "class": "domain",
+      "stock_owner": "inventory.transfer.dispatch"
+    },
+    {
+      "type": "inventory.transfer.received",
+      "version": 1,
+      "module": "inventory",
+      "class": "domain",
+      "stock_owner": "inventory.transfer.receive"
+    },
+    {
+      "type": "personal.account.opening_balance_recorded",
+      "version": 1,
+      "module": "personal",
+      "class": "domain",
+      "accounting_owner": "personal.account.opening_balance.record"
+    },
+    {
+      "type": "personal.loan.repaid",
+      "version": 1,
+      "module": "personal",
+      "class": "domain",
+      "accounting_owner": "personal.loan.repayment"
+    },
+    {
+      "type": "ledger.period.locked",
+      "version": 1,
+      "module": "ledger",
+      "class": "domain"
+    },
+    {
+      "type": "ledger.manual_journal.approved",
+      "version": 1,
+      "module": "ledger",
+      "class": "domain",
+      "accounting_owner": "ledger.manual_journal.approve"
+    },
+    {
+      "type": "ai.draft.created",
+      "version": 1,
+      "module": "aiimports",
+      "class": "domain"
+    },
+    {
+      "type": "imports.batch.created",
+      "version": 1,
+      "module": "aiimports",
+      "class": "domain"
+    },
+    {
+      "type": "billing.checkout.created",
+      "version": 1,
+      "module": "billing",
+      "class": "domain"
+    },
+    {
+      "type": "documents.render.requested",
+      "version": 1,
+      "module": "documents",
+      "class": "integration"
+    },
+    {
+      "type": "sharing.grant.created",
+      "version": 1,
+      "module": "documents",
+      "class": "domain"
+    },
+    {
+      "type": "sharing.grant.revoked",
+      "version": 1,
+      "module": "documents",
+      "class": "domain"
+    },
+    {
+      "type": "sync.session.started",
+      "version": 1,
+      "module": "sync",
+      "class": "domain"
+    },
+    {
+      "type": "privacy.export.requested",
+      "version": 1,
+      "module": "privacy",
+      "class": "domain"
+    },
+    {
+      "type": "privacy.deletion.requested",
+      "version": 1,
+      "module": "privacy",
+      "class": "security"
+    },
+    {
+      "type": "privacy.deletion.cancelled",
+      "version": 1,
+      "module": "privacy",
+      "class": "security"
+    },
+    {
+      "type": "support.case.created",
+      "version": 1,
+      "module": "support",
+      "class": "domain"
+    },
+    {
+      "type": "support.access_grant.created",
+      "version": 1,
+      "module": "support",
+      "class": "security"
+    },
+    {
+      "type": "support.access_grant.revoked",
+      "version": 1,
+      "module": "support",
+      "class": "security"
+    },
+    {
+      "type": "operations.job.retry_requested",
+      "version": 1,
+      "module": "operations",
+      "class": "audit"
+    },
+    {
+      "type": "operations.reconciliation.requested",
+      "version": 1,
+      "module": "operations",
+      "class": "audit"
+    }
+  ],
+  "jobs": [
+    {
+      "type": "documents.pdf.render",
+      "version": 1,
+      "module": "documents",
+      "max_attempts": 5
+    },
+    {
+      "type": "notifications.email.send",
+      "version": 1,
+      "module": "documents",
+      "max_attempts": 5
+    },
+    {
+      "type": "privacy.export.generate",
+      "version": 1,
+      "module": "privacy",
+      "max_attempts": 3
+    },
+    {
+      "type": "privacy.deletion.purge_subject",
+      "version": 1,
+      "module": "privacy",
+      "max_attempts": 5
+    },
+    {
+      "type": "operations.reconciliation.run",
+      "version": 1,
+      "module": "operations",
+      "max_attempts": 3
+    }
+  ],
+  "notification_templates": [
+    {
+      "key": "security.contact_changed",
+      "version": 1,
+      "category": "security",
+      "severity": "high",
+      "source_event": "identity.contact.primary_changed",
+      "mandatory": true
+    },
+    {
+      "key": "sales.delivery_failed",
+      "version": 1,
+      "category": "sales",
+      "severity": "warning",
+      "source_event": "sales.delivery_failed",
+      "mandatory": false,
+      "review_item_type": "sales.delivery_failed"
+    },
+    {
+      "key": "billing.renewal_failed",
+      "version": 1,
+      "category": "billing",
+      "severity": "high",
+      "source_event": "billing.subscription.payment_failed",
+      "mandatory": true,
+      "review_item_type": "billing.payment_recovery"
+    },
+    {
+      "key": "privacy.deletion_requested",
+      "version": 1,
+      "category": "privacy",
+      "severity": "high",
+      "source_event": "privacy.deletion.requested",
+      "mandatory": true
+    },
+    {
+      "key": "operations.reconciliation_alert",
+      "version": 1,
+      "category": "operations",
+      "severity": "critical",
+      "source_event": "operations.reconciliation.requested",
+      "mandatory": true,
+      "review_item_type": "operations.reconciliation_finding"
+    }
+  ],
+  "review_item_types": [
+    "money.classification_required",
+    "money.suspense_resolution_required",
+    "payments.allocation_conflict",
+    "payments.reconciliation_required",
+    "parties.duplicate_or_merge_review",
+    "parties.claim_disputed",
+    "sales.document_conflict",
+    "sales.delivery_failed",
+    "inventory.low_stock",
+    "inventory.count_variance",
+    "inventory.transfer_dispute",
+    "purchasing.approval_required",
+    "purchasing.match_variance",
+    "purchasing.duplicate_bill",
+    "commerce.order_review",
+    "commerce.domain_error",
+    "ai.clarification_required",
+    "imports.row_conflict",
+    "offline.sync_conflict",
+    "billing.payment_recovery",
+    "files.quarantine_or_delete_failure",
+    "privacy.deletion_or_export_failure",
+    "operations.reconciliation_finding"
+  ],
+  "schema_version": 1,
+  "state_machines": {
+    "auth.session": {
+      "active": [
+        "rotated",
+        "expired",
+        "revoked",
+        "suspicious"
+      ],
+      "expired": [],
+      "revoked": [],
+      "rotated": [],
+      "suspicious": [
+        "active",
+        "revoked"
+      ]
+    },
+    "billing.subscription": {
+      "active": [
+        "past_due",
+        "cancelled",
+        "expired"
+      ],
+      "cancelled": [
+        "active"
+      ],
+      "expired": [
+        "active"
+      ],
+      "past_due": [
+        "active",
+        "cancelled",
+        "expired"
+      ],
+      "trialing": [
+        "active",
+        "past_due",
+        "cancelled",
+        "expired"
+      ]
+    },
+    "identity.account": {
+      "active": [
+        "security_restricted",
+        "deletion_requested",
+        "disabled"
+      ],
+      "deleted": [],
+      "deletion_requested": [
+        "active",
+        "purge_review"
+      ],
+      "disabled": [
+        "active"
+      ],
+      "pending_verification": [
+        "active",
+        "expired",
+        "blocked"
+      ],
+      "purge_failed": [
+        "purging"
+      ],
+      "purge_review": [
+        "retention_hold",
+        "purging"
+      ],
+      "purging": [
+        "deleted",
+        "purge_failed"
+      ],
+      "retention_hold": [
+        "purge_review"
+      ],
+      "security_restricted": [
+        "active",
+        "disabled",
+        "deletion_requested"
+      ]
+    },
+    "inventory.transfer": {
+      "cancelled": [],
+      "dispatched": [
+        "received",
+        "disputed"
+      ],
+      "disputed": [
+        "received"
+      ],
+      "draft": [
+        "dispatched",
+        "cancelled"
+      ],
+      "received": []
+    },
+    "membership": {
+      "active": [
+        "suspended",
+        "billing_restricted",
+        "removed"
+      ],
+      "billing_restricted": [
+        "active",
+        "removed"
+      ],
+      "expired": [],
+      "pending_invitation": [
+        "active",
+        "expired",
+        "revoked"
+      ],
+      "removed": [],
+      "revoked": [],
+      "suspended": [
+        "active",
+        "removed"
+      ]
+    },
+    "money.draft": {
+      "confirmed": [],
+      "discarded": [],
+      "draft": [
+        "confirmed",
+        "discarded",
+        "needs_review"
+      ],
+      "needs_review": [
+        "draft",
+        "confirmed",
+        "discarded"
+      ]
+    },
+    "money.entry": {
+      "posted": [
+        "reversed"
+      ],
+      "reversed": []
+    },
+    "operations.job": {
+      "cancelled": [],
+      "dead_letter": [
+        "queued",
+        "cancelled"
+      ],
+      "processing": [
+        "succeeded",
+        "retry_scheduled",
+        "dead_letter"
+      ],
+      "queued": [
+        "processing",
+        "cancelled"
+      ],
+      "retry_scheduled": [
+        "processing",
+        "cancelled",
+        "dead_letter"
+      ],
+      "succeeded": []
+    },
+    "privacy.deletion": {
+      "deleted": [],
+      "grace_restricted": [
+        "restoring",
+        "purge_review"
+      ],
+      "purge_failed": [
+        "purging"
+      ],
+      "purge_review": [
+        "retention_hold",
+        "purging"
+      ],
+      "purging": [
+        "deleted",
+        "purge_failed"
+      ],
+      "requested": [
+        "grace_restricted",
+        "restoring"
+      ],
+      "restored": [],
+      "restoring": [
+        "restored"
+      ],
+      "retention_hold": [
+        "purge_review"
+      ]
+    },
+    "purchasing.po": {
+      "cancelled": [],
+      "closed": [],
+      "draft": [
+        "pending_approval",
+        "issued",
+        "cancelled"
+      ],
+      "issued": [
+        "partially_received",
+        "received",
+        "closed",
+        "cancelled"
+      ],
+      "partially_received": [
+        "received",
+        "closed"
+      ],
+      "pending_approval": [
+        "issued",
+        "rejected",
+        "draft"
+      ],
+      "received": [
+        "closed"
+      ],
+      "rejected": [
+        "draft"
+      ]
+    },
+    "review.item": {
+      "blocked": [
+        "open",
+        "in_progress",
+        "resolved",
+        "superseded"
+      ],
+      "dismissed": [],
+      "in_progress": [
+        "blocked",
+        "resolved",
+        "dismissed",
+        "superseded"
+      ],
+      "open": [
+        "in_progress",
+        "blocked",
+        "resolved",
+        "dismissed",
+        "superseded"
+      ],
+      "resolved": [],
+      "superseded": []
+    },
+    "sales.invoice": {
+      "cancelled": [],
+      "draft": [
+        "issued",
+        "cancelled"
+      ],
+      "issued": [
+        "partially_paid",
+        "paid",
+        "voided",
+        "reversed"
+      ],
+      "paid": [
+        "reversed"
+      ],
+      "partially_paid": [
+        "paid",
+        "reversed"
+      ],
+      "reversed": [],
+      "voided": []
+    },
+    "support.case": {
+      "closed": [
+        "reopened"
+      ],
+      "new": [
+        "triaged",
+        "security_incident"
+      ],
+      "reopened": [
+        "waiting_on_support",
+        "resolved"
+      ],
+      "resolved": [
+        "closed",
+        "reopened"
+      ],
+      "security_incident": [
+        "resolved"
+      ],
+      "triaged": [
+        "waiting_on_support",
+        "waiting_on_user",
+        "security_incident",
+        "resolved"
+      ],
+      "waiting_on_support": [
+        "waiting_on_user",
+        "resolved",
+        "security_incident"
+      ],
+      "waiting_on_user": [
+        "waiting_on_support",
+        "resolved"
+      ]
+    },
+    "workspace": {
+      "active": [
+        "read_only",
+        "archived",
+        "deletion_pending"
+      ],
+      "archived": [
+        "active",
+        "deletion_pending"
+      ],
+      "deleted": [],
+      "deletion_pending": [
+        "active",
+        "purging"
+      ],
+      "purging": [
+        "deleted"
+      ],
+      "read_only": [
+        "active",
+        "archived",
+        "deletion_pending"
+      ],
+      "setup": [
+        "active",
+        "archived",
+        "deletion_pending"
+      ]
+    }
+  }
+}
