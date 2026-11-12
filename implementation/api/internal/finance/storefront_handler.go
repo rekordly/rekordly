@@ -86,6 +86,10 @@ func (h *Handler) getMerchantStorefront(c *gin.Context) {
 		return
 	}
 	sf, err := h.service.GetMerchantStorefront(c.Request.Context(), ws.WorkspaceID)
+	if errors.Is(err, ErrNotFound) {
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{"storefront": nil}})
+		return
+	}
 	if err != nil {
 		h.storefrontError(c, err)
 		return

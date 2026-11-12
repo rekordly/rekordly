@@ -11,9 +11,6 @@ func (h *Handler) RegisterInventoryRoutes(protected *gin.RouterGroup) {
 	protected.GET("/inventory/balances", h.listInventoryBalances)
 	protected.POST("/inventory/opening-stock", h.createOpeningStock)
 	protected.POST("/inventory/issue-sale", h.issueSaleStock)
-	protected.POST("/inventory/adjustments", h.createInventoryAdjustment)
-	protected.POST("/inventory/transfers", h.createInventoryTransfer)
-	protected.POST("/inventory/counts", h.createStockCount)
 }
 
 func (h *Handler) createInventoryAdjustment(c *gin.Context) {

@@ -773,7 +773,7 @@ export const financeApi = {
 
   // Blueprint 09: Merchant Storefront, Orders & Domains
   getMerchantStorefront: (workspaceId: number) =>
-    scopedGet<{ storefront: Storefront }>(workspaceId, "/api/v1/storefront").then((r) => r.storefront),
+    scopedGet<{ storefront: Storefront | null }>(workspaceId, "/api/v1/storefront").then((r) => r.storefront),
   createStorefront: (workspaceId: number, body: { name: string; slug: string; theme_key?: string; default_outlet_id?: number; currency?: string }) =>
     scopedPost<{ storefront: Storefront }>(workspaceId, "/api/v1/storefront", body).then((r) => r.storefront),
   updateStorefrontSettings: (workspaceId: number, body: unknown) =>
