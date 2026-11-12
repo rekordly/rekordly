@@ -91,6 +91,9 @@ func (h *Handler) RegisterRoutes(group *gin.RouterGroup) {
 
 	// Blueprint 12: AI Assistant, CSV Imports, Background Jobs & Deterministic Automation
 	h.RegisterBlueprint12Routes(protected)
+
+	// Blueprint 13: Plans, Billing, Entitlements & Downgrades
+	h.RegisterBlueprint13Routes(group, protected)
 }
 
 // @Summary Create a money account

@@ -136,7 +136,11 @@ const NAVIGATION: Readonly<Record<ShellMode, NavGroup[]>> = {
 
 const ACCOUNT_GROUP: NavGroup = {
   title: "Account",
-  items: [{ label: "Settings", href: "/settings", icon: GearSix }],
+  items: [
+    { label: "Plan & Billing", href: "/billing", icon: Vault, permission: PERMISSIONS.BILLING_VIEW },
+    { label: "Compare Plans", href: "/plans", icon: Target, permission: PERMISSIONS.BILLING_VIEW },
+    { label: "Settings", href: "/settings", icon: GearSix },
+  ],
 };
 
 const PERSONAL_ADD_ACTIONS: AddAction[] = [

@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rekordly/rekordly-api/internal/ai"
+	"github.com/rekordly/rekordly-api/internal/billing"
 	"github.com/rekordly/rekordly-api/internal/db"
 )
 
@@ -34,9 +35,14 @@ type Service struct {
 	evidenceUploader EvidenceUploadAuthorizer
 	dnsLookupTXT     func(string) ([]string, error)
 	aiOrchestrator   *ai.Orchestrator
+	paymentProvider  billing.PaymentProvider
 }
 
 type ServiceOption func(*Service)
+
+func WithPaymentProvider(provider billing.PaymentProvider) ServiceOption {
+	return func(service *Service) { service.paymentProvider = provider }
+}
 
 func WithAIOrchestrator(orch *ai.Orchestrator) ServiceOption {
 	return func(service *Service) { service.aiOrchestrator = orch }

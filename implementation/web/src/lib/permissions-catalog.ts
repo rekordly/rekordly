@@ -29,6 +29,15 @@ export const PERMISSIONS = {
   AUTOMATION_MANAGE: "automation.manage",
   JOBS_VIEW_FAILURES: "jobs.view_failures",
   JOBS_RETRY: "jobs.retry",
+  BILLING_VIEW: "billing.view",
+  BILLING_MANAGE_PLAN: "billing.manage_plan",
+  BILLING_CANCEL_RESUME: "billing.cancel_resume",
+  BILLING_PURCHASE_ADDON: "billing.purchase_addon",
+  BILLING_VIEW_DOCUMENTS: "billing.view_documents",
+  BILLING_REQUEST_REFUND: "billing.request_refund",
+  BILLING_MANAGE_SUBJECTS: "billing.manage_subjects",
+  BILLING_OVERRIDE: "billing.override",
+  BILLING_RECONCILE: "billing.reconcile",
 } as const;
 
 export const WILDCARD_PERMISSION = "*";

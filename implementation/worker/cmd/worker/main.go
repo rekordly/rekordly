@@ -451,6 +451,20 @@ func (w *worker) processBlueprint12Job(ctx context.Context, j bp12Job) error {
 	switch j.JobType {
 	case "automation_evaluate", "document_delivery_retry", "domain_verification_poll", "reconciliation_run", "report_export":
 		return nil
+	case "billing_release_expired_reservations":
+		_, err := w.pool.Exec(ctx, `
+			WITH exp AS (
+				UPDATE usage_reservations
+				SET status = 'expired', settled_at = now(), terminal_reason = 'expired'
+				WHERE status = 'reserved' AND expires_at < now()
+				RETURNING usage_counter_id, units
+			)
+			UPDATE usage_counters uc
+			SET reserved = GREATEST(uc.reserved - exp.units, 0), updated_at = now()
+			FROM exp WHERE uc.id = exp.usage_counter_id`)
+		return err
+	case "billing_expire_beta_grants", "billing_reconcile_subscriptions", "billing_storefront_grace_check":
+		return nil
 	default:
 		return fmt.Errorf("job_type %s requires api-context execution", j.JobType)
 	}

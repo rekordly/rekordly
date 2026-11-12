@@ -12,6 +12,7 @@ import (
 
 	"github.com/rekordly/rekordly-api/internal/ai"
 	"github.com/rekordly/rekordly-api/internal/auth"
+	"github.com/rekordly/rekordly-api/internal/billing"
 	"github.com/rekordly/rekordly-api/internal/config"
 	"github.com/rekordly/rekordly-api/internal/database"
 	"github.com/rekordly/rekordly-api/internal/finance"
@@ -61,6 +62,8 @@ func main() {
 	}
 	aiOrch := ai.NewOrchestrator(primaryAI, fallbackAI, aiTimeout, cfg.AIMaxInputChars, cfg.AIMaxOutputTokens)
 
+	paystack := billing.NewPaystackProvider(cfg.PaystackSecretKey, cfg.PaystackWebhookSecret, cfg.PaystackBaseURL, 15*time.Second)
+
 	financeService := finance.NewService(
 		pool,
 		finance.WithCloudinaryEvidence(finance.CloudinaryEvidenceConfig{
@@ -69,6 +72,7 @@ func main() {
 			APISecret: cfg.CloudinaryAPISecret,
 		}),
 		finance.WithAIOrchestrator(aiOrch),
+		finance.WithPaymentProvider(paystack),
 	)
 	financeAuthMiddleware := finance.AuthAndWorkspaceMiddleware(pool, authService)
 	financeHandler := finance.NewHandler(financeService, financeAuthMiddleware)

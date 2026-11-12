@@ -41,6 +41,10 @@ type Config struct {
 	AIMaxRetries           int
 	AIMaxInputChars        int
 	AIMaxOutputTokens      int
+	CommercialMode         string
+	PaystackSecretKey      string
+	PaystackWebhookSecret  string
+	PaystackBaseURL        string
 }
 
 func Load() (Config, error) {
@@ -65,6 +69,8 @@ func Load() (Config, error) {
 	v.SetDefault("AI_MAX_RETRIES", 2)
 	v.SetDefault("AI_MAX_INPUT_CHARS", 2000)
 	v.SetDefault("AI_MAX_OUTPUT_TOKENS", 1500)
+	v.SetDefault("COMMERCIAL_MODE", "controlled_beta")
+	v.SetDefault("PAYSTACK_BASE_URL", "https://api.paystack.co")
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 
@@ -100,6 +106,10 @@ func Load() (Config, error) {
 		AIMaxRetries:           v.GetInt("AI_MAX_RETRIES"),
 		AIMaxInputChars:        v.GetInt("AI_MAX_INPUT_CHARS"),
 		AIMaxOutputTokens:      v.GetInt("AI_MAX_OUTPUT_TOKENS"),
+		CommercialMode:         strings.ToLower(strings.TrimSpace(v.GetString("COMMERCIAL_MODE"))),
+		PaystackSecretKey:      v.GetString("PAYSTACK_SECRET_KEY"),
+		PaystackWebhookSecret:  v.GetString("PAYSTACK_WEBHOOK_SECRET"),
+		PaystackBaseURL:        strings.TrimRight(strings.TrimSpace(v.GetString("PAYSTACK_BASE_URL")), "/"),
 	}
 
 	if cfg.DatabaseURL == "" {

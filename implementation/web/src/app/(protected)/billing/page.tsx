@@ -1,11 +1,7 @@
-import type { Metadata } from "next";
-import { FeatureScaffold } from "@/components/features";
+"use client";
 
-export const metadata: Metadata = {
-  title: "Plan Limits & Billing — Rekordly",
-  description: "Track monthly quota utilization, AI credits, and plan entitlements.",
-};
+import { BillingOverviewPage } from "@/components/features/billing/billing-overview-page";
 
 export default function BillingPage() {
-  return <FeatureScaffold featureId="plan-limits" defaultSpace="business" />;
+  return <BillingOverviewPage />;
 }

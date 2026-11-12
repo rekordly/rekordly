@@ -38,6 +38,19 @@ type AccountingPeriod struct {
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 }
 
+type AddOnInstance struct {
+	ID                 int64              `json:"id"`
+	BillingSubjectID   int64              `json:"billing_subject_id"`
+	AddonPlanVersionID int64              `json:"addon_plan_version_id"`
+	Quantity           int32              `json:"quantity"`
+	IsRecurring        bool               `json:"is_recurring"`
+	State              string             `json:"state"`
+	EffectiveFrom      pgtype.Timestamptz `json:"effective_from"`
+	ExpiresAt          pgtype.Timestamptz `json:"expires_at"`
+	IdempotencyKey     string             `json:"idempotency_key"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
 type AiDraft struct {
 	ID                   int64              `json:"id"`
 	WorkspaceID          int64              `json:"workspace_id"`
@@ -309,6 +322,59 @@ type BankReconciliationMatch struct {
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 }
 
+type BillingDocument struct {
+	ID                   int64              `json:"id"`
+	BillingSubjectID     int64              `json:"billing_subject_id"`
+	BillingTransactionID pgtype.Int8        `json:"billing_transaction_id"`
+	DocumentNumber       string             `json:"document_number"`
+	DocumentType         string             `json:"document_type"`
+	Currency             string             `json:"currency"`
+	SubtotalMinor        int64              `json:"subtotal_minor"`
+	TaxMinor             int64              `json:"tax_minor"`
+	TotalMinor           int64              `json:"total_minor"`
+	ServicePeriod        string             `json:"service_period"`
+	Status               string             `json:"status"`
+	ContentText          string             `json:"content_text"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+}
+
+type BillingReconciliationRun struct {
+	ID            int64              `json:"id"`
+	Status        string             `json:"status"`
+	CheckedCount  int32              `json:"checked_count"`
+	MismatchCount int32              `json:"mismatch_count"`
+	Summary       string             `json:"summary"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type BillingSubject struct {
+	ID                  int64              `json:"id"`
+	SubjectType         string             `json:"subject_type"`
+	WorkspaceID         int64              `json:"workspace_id"`
+	OwnerUserID         int64              `json:"owner_user_id"`
+	BillingName         string             `json:"billing_name"`
+	BillingEmail        string             `json:"billing_email"`
+	ProviderCustomerRef pgtype.Text        `json:"provider_customer_ref"`
+	Status              string             `json:"status"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+}
+
+type BillingTransaction struct {
+	ID               int64              `json:"id"`
+	BillingSubjectID int64              `json:"billing_subject_id"`
+	SubscriptionID   pgtype.Int8        `json:"subscription_id"`
+	CheckoutIntentID pgtype.Int8        `json:"checkout_intent_id"`
+	TxType           string             `json:"tx_type"`
+	AmountMinor      int64              `json:"amount_minor"`
+	TaxMinor         int64              `json:"tax_minor"`
+	Currency         string             `json:"currency"`
+	Status           string             `json:"status"`
+	ProviderRef      string             `json:"provider_ref"`
+	IdempotencyKey   string             `json:"idempotency_key"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
 type Budget struct {
 	ID                 int64              `json:"id"`
 	WorkspaceID        int64              `json:"workspace_id"`
@@ -390,6 +456,21 @@ type Category struct {
 	Color        pgtype.Text        `json:"color"`
 }
 
+type ChargebackReview struct {
+	ID                   int64              `json:"id"`
+	BillingTransactionID int64              `json:"billing_transaction_id"`
+	BillingSubjectID     int64              `json:"billing_subject_id"`
+	ProviderDisputeRef   string             `json:"provider_dispute_ref"`
+	AmountMinor          int64              `json:"amount_minor"`
+	Currency             string             `json:"currency"`
+	Status               string             `json:"status"`
+	EvidenceDueAt        pgtype.Timestamptz `json:"evidence_due_at"`
+	ResolutionNotes      string             `json:"resolution_notes"`
+	ResolvedByUserID     pgtype.Int8        `json:"resolved_by_user_id"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
 type ChartAccount struct {
 	ID                  int64              `json:"id"`
 	WorkspaceID         int64              `json:"workspace_id"`
@@ -408,6 +489,33 @@ type ChartAccount struct {
 	Description         pgtype.Text        `json:"description"`
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+}
+
+type CheckoutIntent struct {
+	ID                 int64              `json:"id"`
+	BillingSubjectID   int64              `json:"billing_subject_id"`
+	PlanVersionID      int64              `json:"plan_version_id"`
+	Reference          string             `json:"reference"`
+	AmountMinor        int64              `json:"amount_minor"`
+	Currency           string             `json:"currency"`
+	Status             string             `json:"status"`
+	Provider           string             `json:"provider"`
+	ProviderAccessCode string             `json:"provider_access_code"`
+	AuthorizationUrl   string             `json:"authorization_url"`
+	IdempotencyKey     string             `json:"idempotency_key"`
+	CreatedByUserID    pgtype.Int8        `json:"created_by_user_id"`
+	VerifiedAt         pgtype.Timestamptz `json:"verified_at"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+type CommercialModeConfig struct {
+	ID              int16              `json:"id"`
+	Mode            string             `json:"mode"`
+	BetaCohort      string             `json:"beta_cohort"`
+	PastDueDays     int32              `json:"past_due_days"`
+	GraceDays       int32              `json:"grace_days"`
+	UpdatedByUserID pgtype.Int8        `json:"updated_by_user_id"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Counterparty struct {
@@ -518,6 +626,25 @@ type DocumentVersion struct {
 	Snapshot        []byte             `json:"snapshot"`
 	CreatedByUserID pgtype.Int8        `json:"created_by_user_id"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
+type EntitlementOverride struct {
+	ID               int64              `json:"id"`
+	BillingSubjectID int64              `json:"billing_subject_id"`
+	FeatureKey       string             `json:"feature_key"`
+	GrantSource      string             `json:"grant_source"`
+	GrantVersion     string             `json:"grant_version"`
+	Cohort           string             `json:"cohort"`
+	BoolValue        pgtype.Bool        `json:"bool_value"`
+	IntValue         pgtype.Int8        `json:"int_value"`
+	TextValue        pgtype.Text        `json:"text_value"`
+	Priority         int32              `json:"priority"`
+	Reason           string             `json:"reason"`
+	IssuerUserID     pgtype.Int8        `json:"issuer_user_id"`
+	AuditRef         string             `json:"audit_ref"`
+	EffectiveFrom    pgtype.Timestamptz `json:"effective_from"`
+	ExpiresAt        pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 }
 
 type Estimate struct {
@@ -1678,6 +1805,38 @@ type PersonalTag struct {
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
+type PlanEntitlementDefinition struct {
+	ID                int64       `json:"id"`
+	PlanVersionID     int64       `json:"plan_version_id"`
+	FeatureKey        string      `json:"feature_key"`
+	GrantType         string      `json:"grant_type"`
+	BoolValue         pgtype.Bool `json:"bool_value"`
+	IntValue          pgtype.Int8 `json:"int_value"`
+	TextValue         pgtype.Text `json:"text_value"`
+	PeriodModel       string      `json:"period_model"`
+	DefinitionVersion int32       `json:"definition_version"`
+}
+
+type PlanVersion struct {
+	ID                int64              `json:"id"`
+	PlanCode          string             `json:"plan_code"`
+	Version           int32              `json:"version"`
+	DisplayName       string             `json:"display_name"`
+	SubjectType       string             `json:"subject_type"`
+	BillingInterval   string             `json:"billing_interval"`
+	Currency          string             `json:"currency"`
+	PriceMinor        int64              `json:"price_minor"`
+	TaxBehavior       string             `json:"tax_behavior"`
+	IsAvailable       bool               `json:"is_available"`
+	IsAddon           bool               `json:"is_addon"`
+	AddonType         string             `json:"addon_type"`
+	FairUseMetadata   []byte             `json:"fair_use_metadata"`
+	DowngradeBehavior []byte             `json:"downgrade_behavior"`
+	EffectiveFrom     pgtype.Timestamptz `json:"effective_from"`
+	EffectiveTo       pgtype.Timestamptz `json:"effective_to"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
 type PostingTemplateVersion struct {
 	ID          int64              `json:"id"`
 	TemplateKey string             `json:"template_key"`
@@ -1778,6 +1937,21 @@ type ProjectionRebuildRun struct {
 	CreatedByUserID pgtype.Int8        `json:"created_by_user_id"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	CompletedAt     pgtype.Timestamptz `json:"completed_at"`
+}
+
+type ProviderEvent struct {
+	ID              int64              `json:"id"`
+	Provider        string             `json:"provider"`
+	EventID         string             `json:"event_id"`
+	EventType       string             `json:"event_type"`
+	ProviderRef     string             `json:"provider_ref"`
+	SignatureValid  bool               `json:"signature_valid"`
+	EventOccurredAt pgtype.Timestamptz `json:"event_occurred_at"`
+	ProcessingState string             `json:"processing_state"`
+	RedactedSummary string             `json:"redacted_summary"`
+	ErrorMessage    string             `json:"error_message"`
+	ProcessedAt     pgtype.Timestamptz `json:"processed_at"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 }
 
 type Purchase struct {
@@ -1980,6 +2154,20 @@ type ReconciliationRun struct {
 	FailedChecks int32              `json:"failed_checks"`
 	RunByUserID  pgtype.Int8        `json:"run_by_user_id"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+type Refund struct {
+	ID                   int64              `json:"id"`
+	BillingTransactionID int64              `json:"billing_transaction_id"`
+	BillingSubjectID     int64              `json:"billing_subject_id"`
+	AmountMinor          int64              `json:"amount_minor"`
+	Currency             string             `json:"currency"`
+	Reason               string             `json:"reason"`
+	Status               string             `json:"status"`
+	ProviderRefundRef    string             `json:"provider_refund_ref"`
+	IdempotencyKey       string             `json:"idempotency_key"`
+	RequestedByUserID    pgtype.Int8        `json:"requested_by_user_id"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 }
 
 type ReportExport struct {
@@ -2462,6 +2650,39 @@ type StorefrontSetting struct {
 	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
 }
 
+type Subscription struct {
+	ID                  int64              `json:"id"`
+	BillingSubjectID    int64              `json:"billing_subject_id"`
+	PlanVersionID       int64              `json:"plan_version_id"`
+	State               string             `json:"state"`
+	BillingInterval     string             `json:"billing_interval"`
+	CurrentPeriodStart  pgtype.Timestamptz `json:"current_period_start"`
+	PaidThroughAt       pgtype.Timestamptz `json:"paid_through_at"`
+	GraceEndsAt         pgtype.Timestamptz `json:"grace_ends_at"`
+	CancelAtPeriodEnd   bool               `json:"cancel_at_period_end"`
+	CancelledAt         pgtype.Timestamptz `json:"cancelled_at"`
+	ProviderSubRef      pgtype.Text        `json:"provider_sub_ref"`
+	EntitlementRevision int64              `json:"entitlement_revision"`
+	StateReason         string             `json:"state_reason"`
+	LastEventAt         pgtype.Timestamptz `json:"last_event_at"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+}
+
+type SubscriptionChange struct {
+	ID                  int64              `json:"id"`
+	BillingSubjectID    int64              `json:"billing_subject_id"`
+	SubscriptionID      int64              `json:"subscription_id"`
+	SourcePlanVersionID int64              `json:"source_plan_version_id"`
+	TargetPlanVersionID int64              `json:"target_plan_version_id"`
+	QuoteSnapshot       []byte             `json:"quote_snapshot"`
+	Status              string             `json:"status"`
+	EffectiveAt         pgtype.Timestamptz `json:"effective_at"`
+	ActorUserID         pgtype.Int8        `json:"actor_user_id"`
+	IdempotencyKey      string             `json:"idempotency_key"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+}
+
 type SupplierAdvance struct {
 	ID               int64              `json:"id"`
 	WorkspaceID      int64              `json:"workspace_id"`
@@ -2682,6 +2903,34 @@ type TaxScheduleItem struct {
 	RateBps          int32              `json:"rate_bps"`
 	EffectiveDate    pgtype.Date        `json:"effective_date"`
 	Status           string             `json:"status"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
+type UsageCounter struct {
+	ID               int64              `json:"id"`
+	BillingSubjectID int64              `json:"billing_subject_id"`
+	FeatureKey       string             `json:"feature_key"`
+	PeriodStart      pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd        pgtype.Timestamptz `json:"period_end"`
+	Consumed         int64              `json:"consumed"`
+	Reserved         int64              `json:"reserved"`
+	ManualAdjustment int64              `json:"manual_adjustment"`
+	Revision         int64              `json:"revision"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+type UsageReservation struct {
+	ID               int64              `json:"id"`
+	UsageCounterID   int64              `json:"usage_counter_id"`
+	BillingSubjectID int64              `json:"billing_subject_id"`
+	FeatureKey       string             `json:"feature_key"`
+	CommandType      string             `json:"command_type"`
+	IdempotencyKey   string             `json:"idempotency_key"`
+	Units            int64              `json:"units"`
+	Status           string             `json:"status"`
+	ExpiresAt        pgtype.Timestamptz `json:"expires_at"`
+	SettledAt        pgtype.Timestamptz `json:"settled_at"`
+	TerminalReason   string             `json:"terminal_reason"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 }
 
