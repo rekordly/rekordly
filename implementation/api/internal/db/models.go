@@ -280,6 +280,21 @@ type AutomationRule struct {
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
+type BackupRehearsalRecord struct {
+	ID                 int64              `json:"id"`
+	Environment        string             `json:"environment"`
+	BackupID           string             `json:"backup_id"`
+	BackupSource       string             `json:"backup_source"`
+	ChecksumSha256     string             `json:"checksum_sha256"`
+	RpoSeconds         int32              `json:"rpo_seconds"`
+	RtoSeconds         int32              `json:"rto_seconds"`
+	ReconciledJournals int64              `json:"reconciled_journals"`
+	TombstonesReplayed int64              `json:"tombstones_replayed"`
+	Status             string             `json:"status"`
+	VerifiedAt         pgtype.Timestamptz `json:"verified_at"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
 type BankImportBatch struct {
 	ID               int64              `json:"id"`
 	WorkspaceID      int64              `json:"workspace_id"`
@@ -333,6 +348,20 @@ type BankReconciliationMatch struct {
 	MatchStatus      string             `json:"match_status"`
 	ClearedAt        pgtype.Timestamptz `json:"cleared_at"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
+type BetaCohortRegister struct {
+	ID                 int64              `json:"id"`
+	WorkspaceID        int64              `json:"workspace_id"`
+	Segment            string             `json:"segment"`
+	UseCase            string             `json:"use_case"`
+	ConsentAccepted    bool               `json:"consent_accepted"`
+	EnabledModulesJson []byte             `json:"enabled_modules_json"`
+	OnboardingStatus   string             `json:"onboarding_status"`
+	SupportStatus      string             `json:"support_status"`
+	PlanIntent         string             `json:"plan_intent"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
 
 type BillingDocument struct {
@@ -777,6 +806,18 @@ type DeliveryAttempt struct {
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 }
 
+type DeploymentRecord struct {
+	ID                   int64              `json:"id"`
+	Environment          string             `json:"environment"`
+	CommitSha            string             `json:"commit_sha"`
+	ImageTag             string             `json:"image_tag"`
+	MigrationVersion     string             `json:"migration_version"`
+	FeatureFlagsSnapshot []byte             `json:"feature_flags_snapshot"`
+	DeployedBy           string             `json:"deployed_by"`
+	Status               string             `json:"status"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+}
+
 type DocumentArtifact struct {
 	ID                  int64              `json:"id"`
 	WorkspaceID         int64              `json:"workspace_id"`
@@ -1013,6 +1054,20 @@ type FailedJob struct {
 	Status           string             `json:"status"`
 	RetriedJobID     pgtype.Int8        `json:"retried_job_id"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+type FeatureFlag struct {
+	FlagKey          string             `json:"flag_key"`
+	Description      string             `json:"description"`
+	Owner            string             `json:"owner"`
+	DefaultEnabled   bool               `json:"default_enabled"`
+	Scope            string             `json:"scope"`
+	EnabledInEnv     bool               `json:"enabled_in_env"`
+	KillSwitchActive bool               `json:"kill_switch_active"`
+	ReviewAt         pgtype.Timestamptz `json:"review_at"`
+	DependenciesJson []byte             `json:"dependencies_json"`
+	UpdatedBy        string             `json:"updated_by"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 }
 
@@ -1632,6 +1687,16 @@ type MagicLinkChallenge struct {
 	ConsumedAt        pgtype.Timestamptz `json:"consumed_at"`
 	InvalidatedAt     pgtype.Timestamptz `json:"invalidated_at"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
+type MaintenanceMode struct {
+	ID          int32              `json:"id"`
+	Mode        string             `json:"mode"`
+	Scope       string             `json:"scope"`
+	Reason      string             `json:"reason"`
+	OwnerLabel  string             `json:"owner_label"`
+	ActivatedAt pgtype.Timestamptz `json:"activated_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
 type ManualJournalDraft struct {

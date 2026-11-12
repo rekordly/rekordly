@@ -58,10 +58,14 @@ func createBlueprint14Env(t *testing.T, prefix string) (*pgxpool.Pool, int64, in
 func TestBlueprint14_NotificationsOutboxArtifactsSharingAndEmail(t *testing.T) {
 	pool, wsID, _, ownerID := createBlueprint14Env(t, "bp14-main")
 	ctx := context.Background()
+	providerMsgID := fmt.Sprintf("re_bp14_%d", time.Now().UnixNano())
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, `DELETE FROM email_webhook_events WHERE provider_message_id = $1`, providerMsgID)
+	})
 
 	resendSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":"re_bp14_001"}`))
+		_, _ = w.Write([]byte(fmt.Sprintf(`{"id":%q}`, providerMsgID)))
 	}))
 	defer resendSrv.Close()
 
@@ -138,12 +142,18 @@ func TestBlueprint14_NotificationsOutboxArtifactsSharingAndEmail(t *testing.T) {
 	require.Equal(t, "accepted", deliv.Status)
 
 	// Simulate bounce webhook
-	bounceBody := []byte(`{"type":"email.bounced","data":{"email_id":"re_bp14_001"}}`)
+	bounceBody := []byte(fmt.Sprintf(`{"type":"email.bounced","data":{"email_id":%q}}`, providerMsgID))
 	mac := hmac.New(sha256.New, []byte(whSecret))
 	_, _ = mac.Write(bounceBody)
 	sig := base64.StdEncoding.EncodeToString(mac.Sum(nil))
-	_, err = svc.ProcessEmailWebhook(ctx, bounceBody, sig)
+	whStatus, err := svc.ProcessEmailWebhook(ctx, bounceBody, sig)
 	require.NoError(t, err)
+	require.Equal(t, "processed", whStatus)
+
+	// Duplicate bounce webhook is safely ignored without error
+	whDupStatus, err := svc.ProcessEmailWebhook(ctx, bounceBody, sig)
+	require.NoError(t, err)
+	require.Equal(t, "duplicate_ignored", whDupStatus)
 
 	// Subsequent send to suppressed recipient is blocked before provider call
 	_, err = svc.CreateEmailDelivery(ctx, wsID, ownerID, "invoice", invID, "deliv-2", finance.CreateDeliveryInput{

@@ -50,6 +50,9 @@ type Config struct {
 	EmailFrom              string
 	EmailWebhookSecret     string
 	GuestShareBaseURL      string
+	AdminOpsToken          string
+	WorkerConcurrency      int
+	WorkerLeaseSeconds     int
 }
 
 func Load() (Config, error) {
@@ -79,6 +82,8 @@ func Load() (Config, error) {
 	v.SetDefault("RESEND_BASE_URL", "https://api.resend.com")
 	v.SetDefault("EMAIL_FROM", "notifications@rekordly.com")
 	v.SetDefault("GUEST_SHARE_BASE_URL", "http://localhost:3000/share")
+	v.SetDefault("WORKER_CONCURRENCY", 4)
+	v.SetDefault("WORKER_LEASE_SECONDS", 60)
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 
@@ -123,6 +128,9 @@ func Load() (Config, error) {
 		EmailFrom:              v.GetString("EMAIL_FROM"),
 		EmailWebhookSecret:     v.GetString("EMAIL_WEBHOOK_SECRET"),
 		GuestShareBaseURL:      strings.TrimRight(strings.TrimSpace(v.GetString("GUEST_SHARE_BASE_URL")), "/"),
+		AdminOpsToken:          v.GetString("ADMIN_OPS_TOKEN"),
+		WorkerConcurrency:      v.GetInt("WORKER_CONCURRENCY"),
+		WorkerLeaseSeconds:     v.GetInt("WORKER_LEASE_SECONDS"),
 	}
 
 	if cfg.DatabaseURL == "" {
@@ -169,7 +177,36 @@ func Load() (Config, error) {
 	if err := validateDatabaseEnvironment(cfg.Environment, cfg.DatabaseURL); err != nil {
 		return Config{}, err
 	}
+	if err := validateProductionConfig(cfg); err != nil {
+		return Config{}, err
+	}
 	return cfg, nil
+}
+
+func validateProductionConfig(cfg Config) error {
+	if strings.ToLower(strings.TrimSpace(cfg.Environment)) != "production" {
+		return nil
+	}
+	if len(cfg.JWTSigningSecret) < 32 {
+		return fmt.Errorf("production requires JWT_SIGNING_SECRET >= 32 characters")
+	}
+	if !strings.HasPrefix(strings.ToLower(cfg.FrontendBaseURL), "https://") {
+		return fmt.Errorf("production requires HTTPS FRONTEND_BASE_URL")
+	}
+	for _, origin := range cfg.CORSAllowedOrigins {
+		if !strings.HasPrefix(strings.ToLower(origin), "https://") {
+			return fmt.Errorf("production CORS_ALLOWED_ORIGINS must use https:// (%q)", origin)
+		}
+	}
+	if cfg.ResendAPIKey == "" || cfg.EmailWebhookSecret == "" {
+		return fmt.Errorf("production requires RESEND_API_KEY and EMAIL_WEBHOOK_SECRET")
+	}
+	if cfg.CommercialMode != "" && cfg.CommercialMode != "controlled_beta" {
+		if cfg.PaystackSecretKey == "" || cfg.PaystackWebhookSecret == "" {
+			return fmt.Errorf("paid commercial mode requires PAYSTACK_SECRET_KEY and PAYSTACK_WEBHOOK_SECRET")
+		}
+	}
+	return nil
 }
 
 func validateDatabaseEnvironment(environment, databaseURL string) error {

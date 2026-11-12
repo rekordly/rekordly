@@ -1,0 +1,67 @@
+name: Rekordly v2 CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: rekordly
+          POSTGRES_PASSWORD: rekordly_ci_password
+          POSTGRES_DB: rekordly
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://rekordly:rekordly_ci_password@localhost:5432/rekordly?sslmode=disable
+      JWT_SIGNING_SECRET: ci-only-signing-secret-must-not-be-used-in-prod-32bytes
+      CORS_ALLOWED_ORIGINS: http://localhost:3000
+      ENVIRONMENT: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache-dependency-path: implementation/api/go.sum
+      - name: Check formatting
+        working-directory: implementation/api
+        run: test -z "$(gofmt -l ./internal ./cmd)"
+      - name: Go vet
+        working-directory: implementation/api
+        run: go vet ./...
+      - name: Run migrations
+        working-directory: implementation/api
+        run: go run ./cmd/migrate
+      - name: Run Go tests
+        working-directory: implementation/api
+        run: go test -race ./...
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: implementation/web/package-lock.json
+      - name: Install dependencies
+        working-directory: implementation/web
+        run: npm ci
+      - name: Type-check and unit tests
+        working-directory: implementation/web
+        run: npm test
+      - name: Production build
+        working-directory: implementation/web
+        run: npm run build

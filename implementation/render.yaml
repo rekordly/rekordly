@@ -1,0 +1,61 @@
+services:
+  - type: web
+    name: rekordly-api
+    runtime: docker
+    dockerfilePath: ./api/Dockerfile
+    dockerContext: ./api
+    plan: starter
+    healthCheckPath: /health/ready
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: COMMERCIAL_MODE
+        value: controlled_beta
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SIGNING_SECRET
+        sync: false
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: FRONTEND_BASE_URL
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_WEBHOOK_SECRET
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: PAYSTACK_SECRET_KEY
+        sync: false
+      - key: PAYSTACK_WEBHOOK_SECRET
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: ADMIN_OPS_TOKEN
+        sync: false
+
+  - type: worker
+    name: rekordly-worker
+    runtime: docker
+    dockerfilePath: ./api/Dockerfile.worker
+    dockerContext: ./api
+    plan: starter
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SIGNING_SECRET
+        sync: false
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: WORKER_CONCURRENCY
+        value: "4"
+      - key: WORKER_LEASE_SECONDS
+        value: "60"

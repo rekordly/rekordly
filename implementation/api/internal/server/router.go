@@ -2,8 +2,11 @@ package server
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -15,6 +18,46 @@ import (
 
 type ReadinessCheck func(context.Context) error
 
+// RedactSensitiveValue strips tokens, OTPs, and query secrets from loggable strings.
+func RedactSensitiveValue(raw string) string {
+	lower := strings.ToLower(raw)
+	for _, needle := range []string{"bearer ", "token=", "otp=", "password=", "secret=", "signature="} {
+		if strings.Contains(lower, needle) {
+			return "[REDACTED]"
+		}
+	}
+	return raw
+}
+
+func requestCorrelationMiddleware(cfg config.Config, logger *slog.Logger) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		started := time.Now()
+		reqID := strings.TrimSpace(c.GetHeader("X-Request-ID"))
+		if reqID == "" {
+			var b [8]byte
+			_, _ = rand.Read(b[:])
+			reqID = "req_" + hex.EncodeToString(b[:])
+		}
+		c.Header("X-Request-ID", reqID)
+		c.Next()
+
+		route := c.FullPath()
+		if route == "" {
+			route = c.Request.URL.Path
+		}
+		logger.Info("http_request",
+			"service", "rekordly-api",
+			"environment", cfg.Environment,
+			"request_id", reqID,
+			"method", c.Request.Method,
+			"route", RedactSensitiveValue(route),
+			"status", c.Writer.Status(),
+			"duration_ms", time.Since(started).Milliseconds(),
+			"workspace_header", c.GetHeader("X-Workspace-ID"),
+		)
+	}
+}
+
 func NewRouter(cfg config.Config, logger *slog.Logger, readiness ReadinessCheck, authHandler *auth.Handler, financeHandlers ...*finance.Handler) http.Handler {
 	if cfg.Environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -22,10 +65,11 @@ func NewRouter(cfg config.Config, logger *slog.Logger, readiness ReadinessCheck,
 
 	router := gin.New()
 	router.Use(gin.Recovery())
+	router.Use(requestCorrelationMiddleware(cfg, logger))
 	router.Use(cors.New(cors.Config{
 		AllowOrigins:     cfg.CORSAllowedOrigins,
 		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
-		AllowHeaders:     []string{"Authorization", "Content-Type", "Idempotency-Key", "X-Request-ID", "X-CSRF-Token", "X-Preauth-Token", "X-Device-Label", "X-Workspace-ID"},
+		AllowHeaders:     []string{"Authorization", "Content-Type", "Idempotency-Key", "X-Request-ID", "X-CSRF-Token", "X-Preauth-Token", "X-Device-Label", "X-Workspace-ID", "X-Admin-Ops-Token"},
 		ExposeHeaders:    []string{"X-Request-ID"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,

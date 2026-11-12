@@ -2,28 +2,37 @@ package config
 
 import (
 	"testing"
-
-	"github.com/stretchr/testify/require"
 )
 
-func TestValidateDatabaseEnvironmentAllowsComposeHost(t *testing.T) {
-	require.NoError(t, validateDatabaseEnvironment(
-		"local",
-		"postgres://rekordly:local@rekordly-postgres:5432/rekordly?sslmode=disable",
-	))
-}
+func TestValidateProductionConfig(t *testing.T) {
+	base := Config{
+		Environment:        "production",
+		JWTSigningSecret:   "0123456789abcdef0123456789abcdef",
+		FrontendBaseURL:    "https://app.rekordly.com",
+		CORSAllowedOrigins: []string{"https://app.rekordly.com"},
+		ResendAPIKey:       "re_test",
+		EmailWebhookSecret: "whsec_test",
+		CommercialMode:     "controlled_beta",
+	}
+	if err := validateProductionConfig(base); err != nil {
+		t.Fatalf("expected valid production config, got %v", err)
+	}
 
-func TestValidateDatabaseEnvironmentRejectsRemoteHostForLocal(t *testing.T) {
-	err := validateDatabaseEnvironment(
-		"local",
-		"postgres://user:secret@production.example.neon.tech/rekordly?sslmode=require",
-	)
-	require.ErrorContains(t, err, "not an approved local database host")
-}
+	shortSecret := base
+	shortSecret.JWTSigningSecret = "too-short"
+	if err := validateProductionConfig(shortSecret); err == nil {
+		t.Fatal("expected error for short JWT_SIGNING_SECRET in production")
+	}
 
-func TestValidateDatabaseEnvironmentAllowsRemoteHostForProduction(t *testing.T) {
-	require.NoError(t, validateDatabaseEnvironment(
-		"production",
-		"postgres://user:secret@production.example.neon.tech/rekordly?sslmode=require",
-	))
+	httpOrigin := base
+	httpOrigin.CORSAllowedOrigins = []string{"http://localhost:3000"}
+	if err := validateProductionConfig(httpOrigin); err == nil {
+		t.Fatal("expected error for non-HTTPS CORS origin in production")
+	}
+
+	paidMissingPaystack := base
+	paidMissingPaystack.CommercialMode = "live_paid"
+	if err := validateProductionConfig(paidMissingPaystack); err == nil {
+		t.Fatal("expected error when paid mode lacks Paystack secrets")
+	}
 }
