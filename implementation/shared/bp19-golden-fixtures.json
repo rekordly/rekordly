@@ -1,0 +1,72 @@
+{
+  "fixture_version": "2026-11-12.1",
+  "money_golden_cases": [
+    {
+      "id": "GF-M1",
+      "description": "NGN service invoice with 10% line discount then 7.5% VAT",
+      "currency": "NGN",
+      "exponent": 2,
+      "quantity": "3",
+      "unit_price": "10000.00",
+      "discount_percent": "10",
+      "vat_percent": "7.5",
+      "expected_subtotal_minor": 2700000,
+      "expected_tax_minor": 202500,
+      "expected_total_minor": 2902500,
+      "expected_journal": [
+        { "account": "accounts_receivable", "debit_minor": 2902500, "credit_minor": 0 },
+        { "account": "sales_revenue", "debit_minor": 0, "credit_minor": 2700000 },
+        { "account": "vat_payable", "debit_minor": 0, "credit_minor": 202500 }
+      ]
+    },
+    {
+      "id": "GF-M2",
+      "description": "Large NGN ledger entry below int64 overflow without float rounding",
+      "currency": "NGN",
+      "exponent": 2,
+      "input_amount": "9999999999.99",
+      "expected_minor": 999999999999
+    }
+  ],
+  "inventory_golden_cases": [
+    {
+      "id": "GF-INV-FIFO",
+      "costing_method": "fifo",
+      "receipts": [
+        { "qty": 10, "unit_cost_minor": 50000 },
+        { "qty": 10, "unit_cost_minor": 70000 }
+      ],
+      "sale_qty": 12,
+      "expected_cogs_minor": 640000,
+      "expected_remaining_qty": 8,
+      "expected_remaining_asset_minor": 560000
+    },
+    {
+      "id": "GF-INV-WA",
+      "costing_method": "weighted_average",
+      "receipts": [
+        { "qty": 10, "unit_cost_minor": 50000 },
+        { "qty": 10, "unit_cost_minor": 70000 }
+      ],
+      "sale_qty": 12,
+      "expected_cogs_minor": 720000,
+      "expected_remaining_qty": 8,
+      "expected_remaining_asset_minor": 480000
+    }
+  ],
+  "personas": [
+    "P1_personal_ngn",
+    "P2_personal_plus_power",
+    "P3_freelancer_combined",
+    "B1_service_business",
+    "B2_inventory_retailer",
+    "B3_procurement_business",
+    "B4_multi_outlet_team",
+    "C1_storefront_merchant_guest",
+    "A1_staff_accountant",
+    "R1_external_recipient",
+    "O1_billing_owner",
+    "D1_deletion_requester",
+    "S1_support_operator"
+  ]
+}

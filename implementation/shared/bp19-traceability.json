@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "release_candidate_commit": "0324830",
+  "entries": [
+    {
+      "test_id": "G0-01",
+      "blueprint": "02/10/16",
+      "gate": "G0",
+      "requirement": "Tenant isolation & Personal/Business separation",
+      "command_or_api": "GET /v1/personal-spaces/:id/settings, GET /v1/me/exports",
+      "package": "internal/finance",
+      "automated_test": "TestBP19_G0_TenantAndPersonalBusinessIsolation",
+      "status": "passed"
+    },
+    {
+      "test_id": "G0-02",
+      "blueprint": "03/11/18",
+      "gate": "G0",
+      "requirement": "Balanced double-entry accounting & golden money/inventory fixtures",
+      "command_or_api": "money.entry.confirm, sales.invoice.issue, inventory.sale.post",
+      "package": "internal/finance",
+      "automated_test": "TestBP19_G0_GoldenAccountingAndInventoryInvariants",
+      "status": "passed"
+    },
+    {
+      "test_id": "G0-03",
+      "blueprint": "12/15/18",
+      "gate": "G0",
+      "requirement": "AI, CSV import, and offline drafts never post financial truth silently",
+      "command_or_api": "ai.draft.create, imports.batch.create, POST /v1/sync/commands:batch",
+      "package": "internal/finance",
+      "automated_test": "TestBP19_G0_AIImportOfflineAndBillingSeparation",
+      "status": "passed"
+    },
+    {
+      "test_id": "G0-04",
+      "blueprint": "13/16",
+      "gate": "G0",
+      "requirement": "Subscription expiry never triggers deletion; 60-day deletion recovery & tombstone replay",
+      "command_or_api": "POST /v1/deletion-cases, POST /v1/deletion-cases/:id/commands/cancel",
+      "package": "internal/finance",
+      "automated_test": "TestBP19_G0_DeletionGraceRestoreAndBackupRehearsal",
+      "status": "passed"
+    },
+    {
+      "test_id": "G0-05",
+      "blueprint": "14/16/17",
+      "gate": "G0",
+      "requirement": "Security abuse, secret redaction, CSV formula injection, and idempotency under concurrency",
+      "command_or_api": "POST /v1/me/exports, RedactSensitiveValue",
+      "package": "internal/finance",
+      "automated_test": "TestBP19_G0_SecurityAbuseAndFormulaInjection",
+      "status": "passed"
+    },
+    {
+      "test_id": "G1-01",
+      "blueprint": "17/18/19",
+      "gate": "G1",
+      "requirement": "Module enablement, extreme NGN minor-unit precision, and concurrent idempotent retries",
+      "command_or_api": "PUT /v1/admin/ops/flags/:flagKey, POST /v1/sync/commands:batch",
+      "package": "internal/finance",
+      "automated_test": "TestBP19_G1_ModuleEnablementAndExtremeValues",
+      "status": "passed"
+    },
+    {
+      "test_id": "G1-02",
+      "blueprint": "14/15/18/19",
+      "gate": "G1",
+      "requirement": "Frontend precise labels, security headers, and route completeness",
+      "command_or_api": "next.config.ts, catalogue.ts",
+      "package": "implementation/web",
+      "automated_test": "tests/blueprint-19.test.ts",
+      "status": "passed"
+    }
+  ]
+}
