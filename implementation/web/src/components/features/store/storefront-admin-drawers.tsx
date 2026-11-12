@@ -230,6 +230,8 @@ function MerchantOrderDetailInner({
   const [reason, setReason] = useState("");
   const [msg, setMsg] = useState("");
   const [trackingNote, setTrackingNote] = useState("");
+  const [fulfilQtys, setFulfilQtys] = useState<Record<number, string>>({});
+  const [returnReason, setReturnReason] = useState("");
 
   const confirmAct = useFinanceAction(
     workspaceId,
@@ -266,6 +268,11 @@ function MerchantOrderDetailInner({
     workspaceId,
     (text: string) => financeApi.postMerchantOrderMessage(workspaceId, order!.id, text, true),
     { success: "Message sent to order portal", onDone: () => setMsg("") },
+  );
+  const returnAct = useFinanceAction(
+    workspaceId,
+    (body: { reason: string }) => financeApi.returnStorefrontOrder(workspaceId, order!.id, body),
+    { success: "Return recorded and stock restored", onDone: () => setReturnReason("") },
   );
 
   return (
@@ -374,14 +381,58 @@ function MerchantOrderDetailInner({
 
           {canFulfil && order.commercial_status === "confirmed" && ["reserved", "partially_fulfilled"].includes(order.fulfilment_status) ? (
             <div className="rounded-xl border border-default p-3 space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted">Fulfilment & COGS</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted">Fulfilment &amp; COGS</p>
+              <div className="space-y-1.5">
+                {(order.lines ?? []).map((l) => {
+                  const rem = Math.max(0, Number(l.confirmed_quantity) - Number(l.fulfilled_quantity));
+                  if (rem <= 0) return null;
+                  const val = fulfilQtys[l.id] ?? String(rem);
+                  return (
+                    <div key={l.id} className="flex items-center justify-between gap-2 text-xs">
+                      <span className="truncate text-foreground">{l.title} (rem: {rem})</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max={rem}
+                        step="any"
+                        value={val}
+                        onChange={(e) => setFulfilQtys((prev) => ({ ...prev, [l.id]: e.target.value }))}
+                        className="w-20 rounded-lg border border-default bg-surface px-2 py-1 text-right text-xs"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
               <AppInput label="Dispatch / tracking / batch note" value={trackingNote} onChange={(e) => setTrackingNote(e.target.value)} placeholder="Dispatched via rider or picked up" />
               <AppButton
                 variant="primary"
                 startContent={<Package weight="duotone" />}
-                label="Fulfil all remaining & post COGS"
+                label="Fulfil selected & post COGS"
                 isLoading={fulfilAct.isPending}
-                onPress={() => fulfilAct.mutate({ expected_version: order.version, recipient_name: order.customer_name, tracking_note: trackingNote })}
+                onPress={() => {
+                  const lines = (order.lines ?? [])
+                    .map((l) => {
+                      const rem = Math.max(0, Number(l.confirmed_quantity) - Number(l.fulfilled_quantity));
+                      const q = Number(fulfilQtys[l.id] ?? rem);
+                      return q > 0 ? { order_line_id: l.id, quantity: String(q) } : null;
+                    })
+                    .filter(Boolean);
+                  fulfilAct.mutate({ expected_version: order.version, recipient_name: order.customer_name, tracking_note: trackingNote, lines });
+                }}
+              />
+            </div>
+          ) : null}
+
+          {canFulfil && ["fulfilled", "partially_fulfilled"].includes(order.fulfilment_status) ? (
+            <div className="rounded-xl border border-default p-3 space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted">Record Return</p>
+              <AppInput label="Return reason" value={returnReason} onChange={(e) => setReturnReason(e.target.value)} placeholder="Customer returned items" />
+              <AppButton
+                size="sm"
+                variant="secondary"
+                label="Record full return & restock"
+                isLoading={returnAct.isPending}
+                onPress={() => returnAct.mutate({ reason: returnReason })}
               />
             </div>
           ) : null}

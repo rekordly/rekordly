@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -385,4 +386,100 @@ func TestStorefrontDomainsDowngradeAndRBAC(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	require.Equal(t, http.StatusForbidden, w.Code)
+}
+
+func TestStorefrontCartRestoreReturnAndReservationExpiry(t *testing.T) {
+	pool := testPool(t)
+	ws, user := createTestWorkspace(t, pool, "bp09-gaps")
+	svc := finance.NewService(pool)
+	ctx := context.Background()
+
+	var outletID int64
+	require.NoError(t, pool.QueryRow(ctx, `INSERT INTO inventory_locations(workspace_id, name, is_default, is_active) VALUES($1, 'Main', true, true) RETURNING id`, ws).Scan(&outletID))
+	item, err := svc.CreateCatalogueItem(ctx, ws, user, finance.CreateCatalogueItemInput{Name: "Bottle", Kind: "stock_tracked", SellingPrice: "100", Currency: "NGN", IdempotencyKey: "bp09-gaps-item"})
+	require.NoError(t, err)
+	_, err = svc.CreateOpeningStock(ctx, ws, user, finance.CreateOpeningStockInput{ProductID: item.ID, LocationID: outletID, EffectiveOn: "2026-11-11", Quantity: "5", UnitCost: "40", Currency: "NGN", Reason: "Initial stock", IdempotencyKey: "bp09-gaps-open"})
+	require.NoError(t, err)
+	vars, err := svc.ListProductVariants(ctx, ws, item.ID)
+	require.NoError(t, err)
+
+	slug := "gaps-shop-" + fmt.Sprint(ws)
+	_, err = svc.CreateStorefront(ctx, ws, user, finance.CreateStorefrontInput{Name: "Gaps Shop", Slug: slug, DefaultOutletID: &outletID, Currency: "NGN"})
+	require.NoError(t, err)
+	_, err = svc.UpdateStorefrontSettings(ctx, ws, finance.UpdateStorefrontSettingsInput{ContactPhone: "+2348000000000"})
+	require.NoError(t, err)
+	sfProd, err := svc.UpsertStorefrontProduct(ctx, ws, vars[0].ID, finance.PublishCatalogueVariantInput{IsPublished: true})
+	require.NoError(t, err)
+	_, err = svc.PublishStorefront(ctx, ws, true)
+	require.NoError(t, err)
+
+	// 1. Cart upsert & restore by token
+	saved, err := svc.UpsertVisitorCart(ctx, slug, "", []finance.CartLineInput{{StorefrontProductID: sfProd.ID, Quantity: "2"}}, "pickup")
+	require.NoError(t, err)
+	require.NotEmpty(t, saved.CartToken)
+
+	restored, err := svc.GetVisitorCart(ctx, slug, saved.CartToken, "pickup")
+	require.NoError(t, err)
+	require.Len(t, restored.Lines, 1)
+	require.Equal(t, "2.0000", restored.Lines[0].Quantity)
+
+	// 2. Checkout -> Confirm -> Fulfil -> Customer Return Request -> Merchant Return & Restock
+	orderConf, err := svc.SubmitGuestCheckout(ctx, slug, false, finance.GuestCheckoutInput{
+		ClientKey:          "127.0.0.1",
+		Lines:              []finance.CartLineInput{{StorefrontProductID: sfProd.ID, Quantity: "2"}},
+		CustomerName:       "Ada",
+		CustomerPhone:      "+2348011111111",
+		DeliveryMethod:     "pickup",
+		PolicyAcknowledged: true,
+		IdempotencyKey:     "bp09-gaps-co1",
+	})
+	require.NoError(t, err)
+
+	orders, err := svc.ListMerchantOrders(ctx, ws, "", 0)
+	require.NoError(t, err)
+	require.Len(t, orders, 1)
+	o1 := orders[0]
+
+	confirmed, err := svc.ConfirmStorefrontOrder(ctx, ws, user, o1.ID, finance.ConfirmOrderInput{ExpectedVersion: o1.Version, OutletID: outletID})
+	require.NoError(t, err)
+	fulfilled, err := svc.FulfilStorefrontOrder(ctx, ws, user, o1.ID, finance.FulfilStorefrontOrderInput{ExpectedVersion: confirmed.Version})
+	require.NoError(t, err)
+	require.Equal(t, "fulfilled", fulfilled.FulfilmentStatus)
+
+	_, err = svc.RequestPublicOrderReturn(ctx, orderConf.StatusToken, "Damaged seal")
+	require.NoError(t, err)
+	_, err = svc.ReturnStorefrontOrder(ctx, ws, user, o1.ID, finance.ReturnStorefrontOrderInput{Reason: "Accepted return"})
+	require.NoError(t, err)
+
+	var onHandAfterReturn string
+	require.NoError(t, pool.QueryRow(ctx, `SELECT quantity_on_hand::text FROM inventory_balances WHERE workspace_id=$1 AND product_id=$2`, ws, item.ID).Scan(&onHandAfterReturn))
+	require.Equal(t, "5.0000", onHandAfterReturn)
+
+	// 3. Stale reservation expiry sweep
+	_, err = svc.SubmitGuestCheckout(ctx, slug, false, finance.GuestCheckoutInput{
+		ClientKey:          "127.0.0.1",
+		Lines:              []finance.CartLineInput{{StorefrontProductID: sfProd.ID, Quantity: "1"}},
+		CustomerName:       "Bola",
+		CustomerPhone:      "+2348022222222",
+		DeliveryMethod:     "pickup",
+		PolicyAcknowledged: true,
+		IdempotencyKey:     "bp09-gaps-co2",
+	})
+	require.NoError(t, err)
+	orders2, err := svc.ListMerchantOrders(ctx, ws, "request_received", 0)
+	require.NoError(t, err)
+	require.Len(t, orders2, 1)
+	_, err = svc.ConfirmStorefrontOrder(ctx, ws, user, orders2[0].ID, finance.ConfirmOrderInput{ExpectedVersion: orders2[0].Version, OutletID: outletID})
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `UPDATE storefront_orders SET reservation_expires_at = now() - interval '1 hour' WHERE id=$1`, orders2[0].ID)
+	require.NoError(t, err)
+
+	expiredCount, err := svc.ExpireStaleStorefrontReservations(ctx)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, expiredCount, 1)
+
+	o2After, err := svc.GetMerchantOrder(ctx, ws, orders2[0].ID)
+	require.NoError(t, err)
+	require.Equal(t, "cancelled", o2After.CommercialStatus)
+	require.Equal(t, "unreserved", o2After.FulfilmentStatus)
 }

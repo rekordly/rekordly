@@ -823,12 +823,25 @@ export const financeApi = {
     scopedPost<{ order: MerchantOrder }>(workspaceId, `/api/v1/orders/${id}/commands/create-invoice`, { proforma }).then((r) => r.order),
   postMerchantOrderMessage: (workspaceId: number, id: number, message: string, customerVisible = true) =>
     scopedPost<{ order: MerchantOrder }>(workspaceId, `/api/v1/orders/${id}/commands/messages`, { message, customer_visible: customerVisible }).then((r) => r.order),
+  returnStorefrontOrder: (workspaceId: number, id: number, body: { reason: string; lines?: { order_line_id: number; quantity: string }[] }) =>
+    scopedPost<{ order: MerchantOrder }>(workspaceId, `/api/v1/orders/${id}/commands/return`, body).then((r) => r.order),
+  exportMerchantOrdersCsv: async (workspaceId: number) => {
+    const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+    const res = await fetch(`${base}/api/v1/orders/export`, {
+      credentials: "include",
+      headers: workspaceHeaders(workspaceId),
+    });
+    if (!res.ok) throw new Error("Failed to export orders");
+    return res.blob();
+  },
 
   // Blueprint 09: Public Guest Storefront & Status Portal
   getPublicStorefront: (slug: string, params: { q?: string; collection?: string } = {}) =>
     apiClient.get<{ storefront: PublicStorefrontProjection }>(`/api/v1/public/storefronts/${encodeURIComponent(slug)}${buildQueryString(params)}`).then((r) => r.storefront),
   getPublicStorefrontProduct: (slug: string, productId: number) =>
     apiClient.get<{ product: PublicStorefrontProduct; variants: PublicStorefrontProduct[]; storefront: PublicStorefrontProjection }>(`/api/v1/public/storefronts/${encodeURIComponent(slug)}/products/${productId}`),
+  getPublicCart: (slug: string, token: string, deliveryMethod?: string) =>
+    apiClient.get<{ cart: ValidatedCart }>(`/api/v1/public/storefronts/${encodeURIComponent(slug)}/carts/${encodeURIComponent(token)}${buildQueryString({ delivery_method: deliveryMethod })}`).then((r) => r.cart),
   validatePublicCart: (slug: string, body: { lines: { storefront_product_id: number; quantity: string; expected_price_minor?: string }[]; delivery_method?: string }) =>
     apiClient.post<typeof body, { cart: ValidatedCart }>(`/api/v1/public/storefronts/${encodeURIComponent(slug)}/carts/validate`, body).then((r) => r.cart),
   upsertPublicCart: (slug: string, body: { cart_token?: string; lines: { storefront_product_id: number; quantity: string; expected_price_minor?: string }[]; delivery_method?: string }) =>
@@ -843,6 +856,8 @@ export const financeApi = {
     apiClient.post<{ expected_version: number }, { order: PublicOrderStatus }>(`/api/v1/public/orders/${encodeURIComponent(token)}/acknowledge`, { expected_version: expectedVersion }).then((r) => r.order),
   cancelPublicOrder: (token: string, reason?: string) =>
     apiClient.post<{ reason?: string }, { order: PublicOrderStatus }>(`/api/v1/public/orders/${encodeURIComponent(token)}/cancel`, { reason }).then((r) => r.order),
+  requestPublicOrderReturn: (token: string, reason?: string) =>
+    apiClient.post<{ reason?: string }, { order: PublicOrderStatus }>(`/api/v1/public/orders/${encodeURIComponent(token)}/return-request`, { reason }).then((r) => r.order),
 };
 
 /** Query keys are always namespaced by workspace so one space can never render another's rows. */

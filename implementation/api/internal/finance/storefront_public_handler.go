@@ -13,6 +13,7 @@ func (h *Handler) RegisterPublicStorefrontRoutes(g *gin.RouterGroup) {
 	g.GET("/public/storefronts/:slug", h.getPublicStorefront)
 	g.GET("/public/storefronts/:slug/products/:productId", h.getPublicStorefrontProduct)
 	g.POST("/public/storefronts/:slug/carts/validate", h.validatePublicCart)
+	g.GET("/public/storefronts/:slug/carts/:token", h.getPublicCart)
 	g.POST("/public/storefronts/:slug/carts", h.upsertPublicCart)
 	g.POST("/public/storefronts/:slug/checkout", h.submitGuestCheckout)
 
@@ -20,6 +21,7 @@ func (h *Handler) RegisterPublicStorefrontRoutes(g *gin.RouterGroup) {
 	g.POST("/public/orders/:token/messages", h.postPublicOrderMessage)
 	g.POST("/public/orders/:token/acknowledge", h.acknowledgePublicOrderChanges)
 	g.POST("/public/orders/:token/cancel", h.cancelPublicOrderBeforeConfirm)
+	g.POST("/public/orders/:token/return-request", h.requestPublicOrderReturn)
 }
 
 func (h *Handler) getPublicStorefrontByHost(c *gin.Context) {
@@ -168,6 +170,28 @@ func (h *Handler) cancelPublicOrderBeforeConfirm(c *gin.Context) {
 	}
 	_ = c.ShouldBindJSON(&in)
 	order, err := h.service.CancelPublicOrderBeforeConfirm(c.Request.Context(), c.Param("token"), in.Reason)
+	if err != nil {
+		h.storefrontError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"order": order}})
+}
+
+func (h *Handler) getPublicCart(c *gin.Context) {
+	cart, err := h.service.GetVisitorCart(c.Request.Context(), c.Param("slug"), c.Param("token"), c.Query("delivery_method"))
+	if err != nil {
+		h.storefrontError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"cart": cart}})
+}
+
+func (h *Handler) requestPublicOrderReturn(c *gin.Context) {
+	var in struct {
+		Reason string `json:"reason"`
+	}
+	_ = c.ShouldBindJSON(&in)
+	order, err := h.service.RequestPublicOrderReturn(c.Request.Context(), c.Param("token"), in.Reason)
 	if err != nil {
 		h.storefrontError(c, err)
 		return

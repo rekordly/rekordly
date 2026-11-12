@@ -541,6 +541,47 @@ func (s *Service) UpsertVisitorCart(ctx context.Context, slug string, existingTo
 	return calc, nil
 }
 
+func (s *Service) GetVisitorCart(ctx context.Context, slug, rawToken, deliveryMethod string) (ValidatedCartView, error) {
+	token := strings.TrimSpace(rawToken)
+	if token == "" {
+		return ValidatedCartView{}, ErrNotFound
+	}
+	sf, err := s.resolveActiveStorefrontRow(ctx, slug, false)
+	if err != nil {
+		return ValidatedCartView{}, err
+	}
+	cart, err := s.queries.GetStorefrontCartByHash(ctx, db.GetStorefrontCartByHashParams{
+		CartTokenHash: hashOpaqueToken(token),
+		StorefrontID:  sf.ID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ValidatedCartView{}, ErrNotFound
+	}
+	if err != nil {
+		return ValidatedCartView{}, err
+	}
+	lines, err := s.queries.ListStorefrontCartLines(ctx, cart.ID)
+	if err != nil {
+		return ValidatedCartView{}, err
+	}
+	if len(lines) == 0 {
+		return ValidatedCartView{CartToken: token, Currency: sf.Currency, CurrencyExponent: sf.CurrencyExponent, Lines: []ValidatedCartLineView{}}, nil
+	}
+	rawLines := make([]CartLineInput, 0, len(lines))
+	for _, l := range lines {
+		rawLines = append(rawLines, CartLineInput{
+			StorefrontProductID: l.StorefrontProductID,
+			Quantity:            l.Quantity.String(),
+		})
+	}
+	calc, _, err := s.ValidateAndRecalculateCart(ctx, slug, false, rawLines, deliveryMethod)
+	if err != nil {
+		return ValidatedCartView{}, err
+	}
+	calc.CartToken = token
+	return calc, nil
+}
+
 // Guest Checkout Request (Never reserves stock or posts accounting/invoice/payment)
 
 type GuestCheckoutInput struct {
@@ -971,6 +1012,7 @@ func (s *Service) AcknowledgePublicOrderChanges(ctx context.Context, rawToken st
 	if err := tx.Commit(ctx); err != nil {
 		return PublicOrderStatusView{}, err
 	}
+	s.notifyStorefrontWorkspace(ctx, o.WorkspaceID, fmt.Sprintf("Order %s acknowledged", o.OrderReference), fmt.Sprintf("Customer acknowledged order changes for v%d", expectedVersion))
 	return s.buildPublicOrderStatusView(ctx, updated)
 }
 
@@ -1018,6 +1060,7 @@ func (s *Service) CancelPublicOrderBeforeConfirm(ctx context.Context, rawToken, 
 	if err := tx.Commit(ctx); err != nil {
 		return PublicOrderStatusView{}, err
 	}
+	s.notifyStorefrontWorkspace(ctx, o.WorkspaceID, fmt.Sprintf("Order %s cancelled by customer", o.OrderReference), cleanReason)
 	return s.buildPublicOrderStatusView(ctx, updated)
 }
 
@@ -1044,4 +1087,43 @@ func (s *Service) PostPublicOrderMessage(ctx context.Context, rawToken, rawMessa
 		return PublicOrderStatusView{}, err
 	}
 	return s.buildPublicOrderStatusView(ctx, o)
+}
+
+func (s *Service) RequestPublicOrderReturn(ctx context.Context, rawToken, reason string) (PublicOrderStatusView, error) {
+	cleanReason := sanitizePublicText(reason, 400)
+	if cleanReason == "" {
+		cleanReason = "Customer requested a return"
+	}
+	o, err := s.queries.GetStorefrontOrderByPublicTokenHash(ctx, hashOpaqueToken(rawToken))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return PublicOrderStatusView{}, ErrNotFound
+	}
+	if err != nil {
+		return PublicOrderStatusView{}, err
+	}
+	if o.FulfilmentStatus != "fulfilled" && o.FulfilmentStatus != "partially_fulfilled" {
+		return PublicOrderStatusView{}, errors.New("returns can only be requested for fulfilled orders")
+	}
+	if _, err := s.queries.CreateStorefrontOrderEvent(ctx, db.CreateStorefrontOrderEventParams{
+		WorkspaceID:     o.WorkspaceID,
+		OrderID:         o.ID,
+		EventType:       "return_requested",
+		ActorType:       "customer",
+		CustomerVisible: true,
+		Message:         pgtype.Text{String: cleanReason, Valid: true},
+	}); err != nil {
+		return PublicOrderStatusView{}, err
+	}
+	s.notifyStorefrontWorkspace(ctx, o.WorkspaceID, fmt.Sprintf("Return requested for %s", o.OrderReference), cleanReason)
+	return s.buildPublicOrderStatusView(ctx, o)
+}
+
+func (s *Service) notifyStorefrontWorkspace(ctx context.Context, ws int64, title, body string) {
+	_, _ = s.pool.Exec(ctx, `
+		INSERT INTO notifications (workspace_id, user_id, category, title, body, action_url)
+		SELECT m.workspace_id, m.user_id, 'orders', $2, $3, '/store'
+		FROM workspace_memberships m
+		WHERE m.workspace_id = $1 AND m.status = 'active'
+		LIMIT 5
+	`, ws, title, body)
 }

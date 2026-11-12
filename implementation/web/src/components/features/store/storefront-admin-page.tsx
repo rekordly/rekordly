@@ -296,7 +296,20 @@ function StorefrontAdminContent({ workspaceId, currency }: WorkspaceInfo) {
       ) : tab === "orders" ? (
         <div className="space-y-4">
           <div className="flex justify-end">
-            <a href={`/api/v1/orders/export`} target="_blank" className="text-xs font-medium text-primary underline">Export CSV</a>
+            <AppButton
+              size="sm"
+              variant="secondary"
+              label="Export CSV"
+              onPress={async () => {
+                const blob = await financeApi.exportMerchantOrdersCsv(workspaceId);
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = "storefront-orders.csv";
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+            />
           </div>
           <DataView<MerchantOrder>
             title="Storefront order requests"

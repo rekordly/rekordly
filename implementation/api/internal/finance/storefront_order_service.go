@@ -365,6 +365,7 @@ func (s *Service) RequestOrderChange(ctx context.Context, ws, user, orderID int6
 	if err := tx.Commit(ctx); err != nil {
 		return MerchantOrderView{}, err
 	}
+	s.notifyStorefrontWorkspace(ctx, ws, fmt.Sprintf("Order %s revision sent", o.OrderReference), "Proposed changes were sent to the customer")
 	return s.buildMerchantOrderDetail(ctx, updated)
 }
 
@@ -546,6 +547,7 @@ func (s *Service) ConfirmStorefrontOrder(ctx context.Context, ws, user, orderID 
 		return MerchantOrderView{}, err
 	}
 	invalidateStorefrontCache("")
+	s.notifyStorefrontWorkspace(ctx, ws, fmt.Sprintf("Order %s confirmed", o.OrderReference), "Order confirmed and stock reserved")
 	return s.buildMerchantOrderDetail(ctx, updated)
 }
 
@@ -806,6 +808,7 @@ func (s *Service) FulfilStorefrontOrder(ctx context.Context, ws, user, orderID i
 		return MerchantOrderView{}, err
 	}
 	invalidateStorefrontCache("")
+	s.notifyStorefrontWorkspace(ctx, ws, fmt.Sprintf("Order %s fulfilled", o.OrderReference), "Stock issued and fulfilment recorded")
 	return s.buildMerchantOrderDetail(ctx, updated)
 }
 
@@ -885,12 +888,16 @@ func (s *Service) DeclineOrCancelStorefrontOrder(ctx context.Context, ws, user, 
 	if _, err := tx.Exec(ctx, `UPDATE storefront_orders SET commercial_status=$2, fulfilment_status='unreserved', decline_or_cancel_reason=$3, version=version+1, updated_at=now() WHERE id=$1`, o.ID, nextStatus, cleanReason); err != nil {
 		return MerchantOrderView{}, err
 	}
+	actorType := "merchant"
+	if user == 0 {
+		actorType = "system"
+	}
 	if _, err := q.CreateStorefrontOrderEvent(ctx, db.CreateStorefrontOrderEventParams{
 		WorkspaceID:     ws,
 		OrderID:         o.ID,
 		EventType:       "order_" + nextStatus,
-		ActorType:       "merchant",
-		ActorUserID:     pgtype.Int8{Int64: user, Valid: true},
+		ActorType:       actorType,
+		ActorUserID:     pgtype.Int8{Int64: user, Valid: user > 0},
 		CustomerVisible: true,
 		Message:         pgtype.Text{String: cleanReason, Valid: true},
 	}); err != nil {
@@ -909,6 +916,7 @@ func (s *Service) DeclineOrCancelStorefrontOrder(ctx context.Context, ws, user, 
 		return MerchantOrderView{}, err
 	}
 	invalidateStorefrontCache("")
+	s.notifyStorefrontWorkspace(ctx, ws, fmt.Sprintf("Order %s %s", o.OrderReference, nextStatus), cleanReason)
 	return s.buildMerchantOrderDetail(ctx, updated)
 }
 
@@ -1075,4 +1083,178 @@ func (s *Service) ExportStorefrontOrdersCSV(ctx context.Context, ws int64) ([]by
 	}
 	w.Flush()
 	return buf.Bytes(), w.Error()
+}
+
+type ReturnStorefrontOrderInput struct {
+	Reason string                 `json:"reason"`
+	Lines  []FulfilOrderLineInput `json:"lines"`
+}
+
+func (s *Service) ReturnStorefrontOrder(ctx context.Context, ws, user, orderID int64, in ReturnStorefrontOrderInput) (MerchantOrderView, error) {
+	cleanReason := sanitizePublicText(in.Reason, 400)
+	if cleanReason == "" {
+		cleanReason = "Customer return recorded"
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return MerchantOrderView{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := s.queries.WithTx(tx)
+
+	o, err := q.GetStorefrontOrderForUpdate(ctx, db.GetStorefrontOrderForUpdateParams{WorkspaceID: ws, ID: orderID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return MerchantOrderView{}, ErrNotFound
+	}
+	if err != nil {
+		return MerchantOrderView{}, err
+	}
+	if o.FulfilmentStatus != "fulfilled" && o.FulfilmentStatus != "partially_fulfilled" {
+		return MerchantOrderView{}, errors.New("only fulfilled orders can accept returns")
+	}
+	if !o.OutletID.Valid {
+		return MerchantOrderView{}, errors.New("order has no fulfilment outlet")
+	}
+
+	lines, err := q.ListStorefrontOrderLines(ctx, o.ID)
+	if err != nil {
+		return MerchantOrderView{}, err
+	}
+	reqMap := map[int64]decimal.Decimal{}
+	if len(in.Lines) == 0 {
+		for _, l := range lines {
+			if l.FulfilledQuantity.GreaterThan(decimal.Zero) {
+				reqMap[l.ID] = l.FulfilledQuantity
+			}
+		}
+	} else {
+		for _, il := range in.Lines {
+			qty, _, err := parseRequestQuantity(il.Quantity)
+			if err != nil {
+				return MerchantOrderView{}, err
+			}
+			reqMap[il.OrderLineID] = qty
+		}
+	}
+	if len(reqMap) == 0 {
+		return MerchantOrderView{}, errors.New("no fulfilled quantities selected for return")
+	}
+
+	sort.Slice(lines, func(i, j int) bool { return lines[i].ProductID < lines[j].ProductID })
+	today := time.Now().UTC()
+
+	for _, l := range lines {
+		retQty, ok := reqMap[l.ID]
+		if !ok || retQty.IsZero() {
+			continue
+		}
+		if retQty.GreaterThan(l.FulfilledQuantity) {
+			return MerchantOrderView{}, fmt.Errorf("return quantity exceeds fulfilled quantity on line %s", l.TitleSnapshot)
+		}
+		var prodKind string
+		if err := tx.QueryRow(ctx, `SELECT kind FROM products WHERE workspace_id=$1 AND id=$2`, ws, l.ProductID).Scan(&prodKind); err != nil {
+			return MerchantOrderView{}, err
+		}
+		if prodKind == "stock_tracked" {
+			bal, err := q.GetInventoryBalanceForUpdate(ctx, db.GetInventoryBalanceForUpdateParams{
+				WorkspaceID: ws,
+				LocationID:  o.OutletID.Int64,
+				ProductID:   l.ProductID,
+			})
+			if err != nil {
+				return MerchantOrderView{}, err
+			}
+			var restockVal int64
+			if bal.QuantityOnHand.GreaterThan(decimal.Zero) && bal.ValueOnHandMinor > 0 {
+				unitVal := decimal.NewFromInt(bal.ValueOnHandMinor).Div(bal.QuantityOnHand)
+				restockVal = unitVal.Mul(retQty).Round(0).IntPart()
+			}
+			if _, err := q.UpdateInventoryBalanceQuantities(ctx, db.UpdateInventoryBalanceQuantitiesParams{
+				WorkspaceID:       ws,
+				LocationID:        o.OutletID.Int64,
+				ProductID:         l.ProductID,
+				QuantityOnHand:    bal.QuantityOnHand.Add(retQty),
+				ReservedQuantity:  bal.ReservedQuantity,
+				InTransitQuantity: bal.InTransitQuantity,
+				ValueOnHandMinor:  bal.ValueOnHandMinor + restockVal,
+			}); err != nil {
+				return MerchantOrderView{}, err
+			}
+			if _, err := q.CreateInventoryMovement(ctx, db.CreateInventoryMovementParams{
+				WorkspaceID:        ws,
+				ProductID:          l.ProductID,
+				GoodsReceiptLineID: pgtype.Int8{},
+				LocationID:         pgtype.Int8{Int64: o.OutletID.Int64, Valid: true},
+				MovementType:       "return",
+				SourceType:         "sale",
+				SourceID:           pgtype.Int8{Int64: o.ID, Valid: true},
+				QuantityDelta:      retQty,
+				ValueDeltaMinor:    restockVal,
+				OccurredOn:         pgtype.Date{Time: today, Valid: true},
+			}); err != nil {
+				return MerchantOrderView{}, err
+			}
+		}
+		if _, err := tx.Exec(ctx, `UPDATE storefront_order_lines SET fulfilled_quantity = fulfilled_quantity - $2 WHERE id = $1`, l.ID, retQty); err != nil {
+			return MerchantOrderView{}, err
+		}
+	}
+
+	if _, err := q.CreateStorefrontOrderEvent(ctx, db.CreateStorefrontOrderEventParams{
+		WorkspaceID:     ws,
+		OrderID:         o.ID,
+		EventType:       "return_recorded",
+		ActorType:       "merchant",
+		ActorUserID:     pgtype.Int8{Int64: user, Valid: true},
+		CustomerVisible: true,
+		Message:         pgtype.Text{String: cleanReason, Valid: true},
+	}); err != nil {
+		return MerchantOrderView{}, err
+	}
+	updated, err := q.GetStorefrontOrderByID(ctx, db.GetStorefrontOrderByIDParams{WorkspaceID: ws, ID: o.ID})
+	if err != nil {
+		return MerchantOrderView{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return MerchantOrderView{}, err
+	}
+	invalidateStorefrontCache("")
+	s.notifyStorefrontWorkspace(ctx, ws, fmt.Sprintf("Return recorded for %s", o.OrderReference), cleanReason)
+	return s.buildMerchantOrderDetail(ctx, updated)
+}
+
+func (s *Service) ExpireStaleStorefrontReservations(ctx context.Context) (int, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT workspace_id, id
+		FROM storefront_orders
+		WHERE commercial_status = 'confirmed'
+		  AND fulfilment_status = 'reserved'
+		  AND reservation_expires_at IS NOT NULL
+		  AND reservation_expires_at < now()
+		ORDER BY reservation_expires_at ASC
+		LIMIT 100
+	`)
+	if err != nil {
+		return 0, err
+	}
+	type target struct {
+		ws int64
+		id int64
+	}
+	var targets []target
+	for rows.Next() {
+		var t target
+		if err := rows.Scan(&t.ws, &t.id); err == nil {
+			targets = append(targets, t)
+		}
+	}
+	rows.Close()
+
+	expired := 0
+	for _, t := range targets {
+		if _, err := s.DeclineOrCancelStorefrontOrder(ctx, t.ws, 0, t.id, "cancel", "Reservation expired automatically"); err == nil {
+			expired++
+		}
+	}
+	return expired, nil
 }

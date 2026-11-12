@@ -15,6 +15,7 @@ export function PublicOrderStatusClient({ token }: { token: string }) {
   const qc = useQueryClient();
   const [message, setMessage] = useState("");
   const [cancelReason, setCancelReason] = useState("");
+  const [returnReason, setReturnReason] = useState("");
   const [actionError, setActionError] = useState("");
 
   const orderQuery = useQuery({
@@ -47,6 +48,16 @@ export function PublicOrderStatusClient({ token }: { token: string }) {
     mutationFn: (reason: string) => financeApi.cancelPublicOrder(token, reason),
     onSuccess: () => {
       setCancelReason("");
+      setActionError("");
+      void invalidate();
+    },
+    onError: (err: Error) => setActionError(err.message),
+  });
+
+  const returnMutation = useMutation({
+    mutationFn: (reason: string) => financeApi.requestPublicOrderReturn(token, reason),
+    onSuccess: () => {
+      setReturnReason("");
       setActionError("");
       void invalidate();
     },
@@ -166,6 +177,15 @@ export function PublicOrderStatusClient({ token }: { token: string }) {
               <AppInput label="Cancel order request" placeholder="Optional reason" value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} />
             </div>
             <AppButton size="sm" variant="tertiary" startContent={<Trash />} label="Cancel request" isLoading={cancelMutation.isPending} onPress={() => cancelMutation.mutate(cancelReason)} />
+          </div>
+        ) : null}
+
+        {["fulfilled", "partially_fulfilled"].includes(order.fulfilment_status) ? (
+          <div className="rounded-2xl border border-default bg-surface p-4 flex flex-wrap items-end gap-2">
+            <div className="flex-1 min-w-[200px]">
+              <AppInput label="Request a return" placeholder="Reason for return (damaged, wrong item, etc.)" value={returnReason} onChange={(e) => setReturnReason(e.target.value)} />
+            </div>
+            <AppButton size="sm" variant="secondary" label="Request return" isLoading={returnMutation.isPending} onPress={() => returnMutation.mutate(returnReason)} />
           </div>
         ) : null}
       </div>

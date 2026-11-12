@@ -69,6 +69,25 @@ func main() {
 	defer stop()
 
 	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-shutdownCtx.Done():
+				return
+			case <-ticker.C:
+				sweepCtx, cancel := context.WithTimeout(shutdownCtx, 30*time.Second)
+				if n, err := financeService.ExpireStaleStorefrontReservations(sweepCtx); err != nil {
+					logger.Warn("storefront reservation expiry sweep failed", "error", err)
+				} else if n > 0 {
+					logger.Info("expired stale storefront reservations", "count", n)
+				}
+				cancel()
+			}
+		}
+	}()
+
+	go func() {
 		<-shutdownCtx.Done()
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()

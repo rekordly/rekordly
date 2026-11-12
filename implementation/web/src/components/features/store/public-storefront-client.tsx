@@ -3,7 +3,7 @@
 import { CheckCircle, MagnifyingGlass, ShoppingBag, ShoppingCart, Trash, Warning } from "@phosphor-icons/react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { AppButton } from "@/components/ui/app-button";
 import { AppInput } from "@/components/ui/app-input";
@@ -60,6 +60,59 @@ export function PublicStorefrontClient({ slug }: { slug: string }) {
     queryFn: () => financeApi.getPublicStorefront(slug, { q: searchText || undefined, collection: selectedCol || undefined }),
   });
 
+  // Restore persistent visitor cart from localStorage + backend
+  useEffect(() => {
+    const storageKey = `rekordly_cart:${slug}`;
+    const saved = typeof window !== "undefined" ? window.localStorage.getItem(storageKey) : null;
+    if (!saved) return;
+    let cancelled = false;
+    financeApi
+      .getPublicCart(slug, saved, deliveryMethod)
+      .then((c) => {
+        if (cancelled || !c?.lines?.length) return;
+        setCartToken(c.cart_token || saved);
+        setValidatedCart(c);
+        setCart(
+          c.lines.map((l) => ({
+            storefront_product_id: l.storefront_product_id,
+            title: l.title,
+            variant_name: l.variant_name,
+            price_minor: l.unit_price_minor,
+            quantity: Number(l.quantity) || 1,
+            max_qty: 999,
+          })),
+        );
+      })
+      .catch(() => {
+        if (typeof window !== "undefined") window.localStorage.removeItem(storageKey);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [slug, deliveryMethod]);
+
+  const syncCartMutation = useMutation({
+    mutationFn: (lines: CartDraftLine[]) =>
+      financeApi.upsertPublicCart(slug, {
+        cart_token: cartToken || undefined,
+        lines: lines.map((l) => ({
+          storefront_product_id: l.storefront_product_id,
+          quantity: String(l.quantity),
+          expected_price_minor: l.price_minor,
+        })),
+        delivery_method: deliveryMethod,
+      }),
+    onSuccess: (data) => {
+      setValidatedCart(data);
+      if (data.cart_token) {
+        setCartToken(data.cart_token);
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(`rekordly_cart:${slug}`, data.cart_token);
+        }
+      }
+    },
+  });
+
   const validateCartMutation = useMutation({
     mutationFn: (lines: CartDraftLine[]) =>
       financeApi.validatePublicCart(slug, {
@@ -72,6 +125,15 @@ export function PublicStorefrontClient({ slug }: { slug: string }) {
       }),
     onSuccess: (data) => setValidatedCart(data),
   });
+
+  useEffect(() => {
+    if (cart.length === 0) return;
+    const t = setTimeout(() => {
+      syncCartMutation.mutate(cart);
+    }, 350);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cart, deliveryMethod]);
 
   const submitCheckout = useMutation({
     mutationFn: async () => {
@@ -102,6 +164,9 @@ export function PublicStorefrontClient({ slug }: { slug: string }) {
       setCart([]);
       setCartToken("");
       setValidatedCart(null);
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(`rekordly_cart:${slug}`);
+      }
     },
     onError: (err: Error) => {
       setCheckoutError(err.message);
@@ -307,6 +372,9 @@ export function PublicStorefrontClient({ slug }: { slug: string }) {
                     <StatusPill tone={badge.tone}>{badge.text}</StatusPill>
                   </div>
                   <p className="text-xs text-muted">{current.description || "Contact merchant for custom inquiries."}</p>
+                  <Link href={`/s/${encodeURIComponent(slug)}/products/${current.id}`} className="inline-block text-xs font-medium text-primary underline">
+                    Open shareable product page →
+                  </Link>
                 </div>
               );
             })()}

@@ -20,6 +20,8 @@ func (h *Handler) RegisterStorefrontOrderRoutes(g *gin.RouterGroup) {
 	g.POST("/orders/:id/commands/link-customer", h.linkOrCreateOrderCustomer)
 	g.POST("/orders/:id/commands/create-invoice", h.convertOrderToInvoice)
 	g.POST("/orders/:id/commands/messages", h.postMerchantOrderMessage)
+	g.POST("/orders/:id/commands/return", h.returnStorefrontOrder)
+	g.POST("/orders/commands/expire-reservations", h.expireStaleReservations)
 }
 
 func (h *Handler) listMerchantOrders(c *gin.Context) {
@@ -241,4 +243,35 @@ func (h *Handler) exportMerchantOrders(c *gin.Context) {
 	}
 	c.Header("Content-Disposition", `attachment; filename="storefront-orders.csv"`)
 	c.Data(http.StatusOK, "text/csv; charset=utf-8", csvBytes)
+}
+
+func (h *Handler) returnStorefrontOrder(c *gin.Context) {
+	ws, ok := businessPermission(c, "orders.fulfil", "orders.cancel")
+	if !ok {
+		return
+	}
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	var in ReturnStorefrontOrderInput
+	if err != nil || id <= 0 || c.ShouldBindJSON(&in) != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": "Invalid return request"}})
+		return
+	}
+	order, err := h.service.ReturnStorefrontOrder(c.Request.Context(), ws.WorkspaceID, ws.UserID, id, in)
+	if err != nil {
+		h.storefrontError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"order": order}})
+}
+
+func (h *Handler) expireStaleReservations(c *gin.Context) {
+	if _, ok := businessPermission(c, "orders.confirm", "orders.cancel"); !ok {
+		return
+	}
+	count, err := h.service.ExpireStaleStorefrontReservations(c.Request.Context())
+	if err != nil {
+		h.storefrontError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"expired_count": count}})
 }
