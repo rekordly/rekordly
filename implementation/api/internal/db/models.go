@@ -399,6 +399,7 @@ type Budget struct {
 	Version            int32              `json:"version"`
 	CopiedFromBudgetID pgtype.Int8        `json:"copied_from_budget_id"`
 	Timezone           string             `json:"timezone"`
+	SyncVersion        int64              `json:"sync_version"`
 }
 
 type BudgetAlertEvent struct {
@@ -506,6 +507,40 @@ type CheckoutIntent struct {
 	CreatedByUserID    pgtype.Int8        `json:"created_by_user_id"`
 	VerifiedAt         pgtype.Timestamptz `json:"verified_at"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+type ClientCommandReceipt struct {
+	ID                        int64              `json:"id"`
+	UserID                    int64              `json:"user_id"`
+	WorkspaceID               int64              `json:"workspace_id"`
+	SyncSessionID             pgtype.Int8        `json:"sync_session_id"`
+	InstallationID            string             `json:"installation_id"`
+	ClientCommandID           string             `json:"client_command_id"`
+	IdempotencyKey            string             `json:"idempotency_key"`
+	SupersedesClientCommandID string             `json:"supersedes_client_command_id"`
+	CommandType               string             `json:"command_type"`
+	SchemaVersion             int32              `json:"schema_version"`
+	PayloadHash               string             `json:"payload_hash"`
+	BaseVersionsJson          []byte             `json:"base_versions_json"`
+	DependenciesJson          []byte             `json:"dependencies_json"`
+	Status                    string             `json:"status"`
+	ConflictCode              string             `json:"conflict_code"`
+	SafeMessage               string             `json:"safe_message"`
+	ConflictFieldsJson        []byte             `json:"conflict_fields_json"`
+	AllowedResolutionsJson    []byte             `json:"allowed_resolutions_json"`
+	CurrentSnapshotJson       []byte             `json:"current_snapshot_json"`
+	ServerResourceType        string             `json:"server_resource_type"`
+	ServerResourceID          string             `json:"server_resource_id"`
+	ServerResourceVersion     string             `json:"server_resource_version"`
+	LocalIDMappingsJson       []byte             `json:"local_id_mappings_json"`
+	ResultJson                []byte             `json:"result_json"`
+	HttpStatus                int32              `json:"http_status"`
+	ClientCreatedAt           pgtype.Timestamptz `json:"client_created_at"`
+	ReceivedAt                pgtype.Timestamptz `json:"received_at"`
+	CompletedAt               pgtype.Timestamptz `json:"completed_at"`
+	ExpiresAt                 pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt                 pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                 pgtype.Timestamptz `json:"updated_at"`
 }
 
 type CommercialModeConfig struct {
@@ -1626,6 +1661,7 @@ type MoneyRecord struct {
 	ReversedAt           pgtype.Timestamptz `json:"reversed_at"`
 	ReversalRecordID     pgtype.Int8        `json:"reversal_record_id"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	SyncVersion          int64              `json:"sync_version"`
 }
 
 type MoneyRecordDraft struct {
@@ -1792,6 +1828,44 @@ type OauthLoginAttempt struct {
 	ExpiresAt          pgtype.Timestamptz `json:"expires_at"`
 	CompletedAt        pgtype.Timestamptz `json:"completed_at"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+type OfflineSyncEvent struct {
+	ID              int64              `json:"id"`
+	UserID          int64              `json:"user_id"`
+	WorkspaceID     int64              `json:"workspace_id"`
+	InstallationID  string             `json:"installation_id"`
+	ClientCommandID string             `json:"client_command_id"`
+	CommandType     string             `json:"command_type"`
+	SchemaVersion   int32              `json:"schema_version"`
+	Outcome         string             `json:"outcome"`
+	ConflictCode    string             `json:"conflict_code"`
+	DurationMs      int32              `json:"duration_ms"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
+type OfflineSyncSession struct {
+	ID                  int64              `json:"id"`
+	SessionUuid         pgtype.UUID        `json:"session_uuid"`
+	UserID              int64              `json:"user_id"`
+	WorkspaceID         int64              `json:"workspace_id"`
+	InstallationID      string             `json:"installation_id"`
+	ClientAppVersion    string             `json:"client_app_version"`
+	ClientSchemaVersion int32              `json:"client_schema_version"`
+	ManifestVersion     string             `json:"manifest_version"`
+	EntitlementRevision int64              `json:"entitlement_revision"`
+	PermissionRevision  string             `json:"permission_revision"`
+	Status              string             `json:"status"`
+	CommandCount        int32              `json:"command_count"`
+	ConfirmedCount      int32              `json:"confirmed_count"`
+	ConflictCount       int32              `json:"conflict_count"`
+	FailedCount         int32              `json:"failed_count"`
+	ClientTimezone      string             `json:"client_timezone"`
+	StartedAt           pgtype.Timestamptz `json:"started_at"`
+	ExpiresAt           pgtype.Timestamptz `json:"expires_at"`
+	CompletedAt         pgtype.Timestamptz `json:"completed_at"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 }
 
 type OnboardingProgress struct {

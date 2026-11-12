@@ -97,6 +97,9 @@ func (h *Handler) RegisterRoutes(group *gin.RouterGroup) {
 
 	// Blueprint 14: Notifications, Documents, Files & Sharing
 	h.RegisterBlueprint14Routes(group, protected)
+
+	// Blueprint 15: Offline Sync, Conflicts & Recovery
+	h.RegisterBlueprint15Routes(protected)
 }
 
 // @Summary Create a money account

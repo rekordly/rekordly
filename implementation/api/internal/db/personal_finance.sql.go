@@ -868,7 +868,7 @@ INSERT INTO budgets (
     $6, $7, $8, $9,
     $10, $11, $12, $13, $14,
     $15, $16, $17, $18, $19
-) RETURNING id, workspace_id, name, category_id, scope, period, amount_minor, currency, currency_exponent, start_date, end_date, is_active, notes, idempotency_key, created_by_user_id, created_at, updated_at, status, income_goal_minor, alert_thresholds, version, copied_from_budget_id, timezone
+) RETURNING id, workspace_id, name, category_id, scope, period, amount_minor, currency, currency_exponent, start_date, end_date, is_active, notes, idempotency_key, created_by_user_id, created_at, updated_at, status, income_goal_minor, alert_thresholds, version, copied_from_budget_id, timezone, sync_version
 `
 
 type CreatePersonalBudgetParams struct {
@@ -941,6 +941,7 @@ func (q *Queries) CreatePersonalBudget(ctx context.Context, arg CreatePersonalBu
 		&i.Version,
 		&i.CopiedFromBudgetID,
 		&i.Timezone,
+		&i.SyncVersion,
 	)
 	return i, err
 }
@@ -3427,7 +3428,7 @@ SET name = $3,
     version = version + 1,
     updated_at = now()
 WHERE id = $1 AND workspace_id = $2
-RETURNING id, workspace_id, name, category_id, scope, period, amount_minor, currency, currency_exponent, start_date, end_date, is_active, notes, idempotency_key, created_by_user_id, created_at, updated_at, status, income_goal_minor, alert_thresholds, version, copied_from_budget_id, timezone
+RETURNING id, workspace_id, name, category_id, scope, period, amount_minor, currency, currency_exponent, start_date, end_date, is_active, notes, idempotency_key, created_by_user_id, created_at, updated_at, status, income_goal_minor, alert_thresholds, version, copied_from_budget_id, timezone, sync_version
 `
 
 type UpdatePersonalBudgetPlanParams struct {
@@ -3481,6 +3482,7 @@ func (q *Queries) UpdatePersonalBudgetPlan(ctx context.Context, arg UpdatePerson
 		&i.Version,
 		&i.CopiedFromBudgetID,
 		&i.Timezone,
+		&i.SyncVersion,
 	)
 	return i, err
 }

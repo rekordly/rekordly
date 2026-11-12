@@ -30,8 +30,32 @@ function connectionIsSlow(): boolean {
 
 export function NetworkBanner() {
   const [state, setState] = useState<NetState>("ok");
+  const [waitingWorker, setWaitingWorker] = useState<ServiceWorker | null>(null);
   const stateRef = useRef<NetState>("ok");
   const restoreTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+    navigator.serviceWorker
+      .register("/sw.js", { scope: "/" })
+      .then((reg) => {
+        if (reg.waiting) {
+          setWaitingWorker(reg.waiting);
+        }
+        reg.addEventListener("updatefound", () => {
+          const next = reg.installing;
+          if (!next) return;
+          next.addEventListener("statechange", () => {
+            if (next.state === "installed" && navigator.serviceWorker.controller) {
+              setWaitingWorker(next);
+            }
+          });
+        });
+      })
+      .catch(() => {
+        // Service worker registration is progressive; ignore on unsupported origins.
+      });
+  }, []);
 
   useEffect(() => {
     const set = (next: NetState) => {
@@ -89,7 +113,28 @@ export function NetworkBanner() {
     };
   }, []);
 
-  if (state === "ok") return null;
+  if (state === "ok") {
+    if (!waitingWorker) return null;
+    return (
+      <div
+        role="status"
+        aria-live="polite"
+        className="flex h-9 shrink-0 items-center justify-center gap-3 bg-accent px-4 text-[13px] font-medium text-accent-foreground"
+      >
+        <span>Update available for Rekordly. Local drafts remain safe.</span>
+        <button
+          type="button"
+          className="rounded-md bg-background/20 px-2.5 py-0.5 text-[12px] font-semibold hover:bg-background/30"
+          onClick={() => {
+            waitingWorker.postMessage({ type: "SKIP_WAITING" });
+            window.location.reload();
+          }}
+        >
+          Apply update
+        </button>
+      </div>
+    );
+  }
 
   const config = {
     offline: {

@@ -103,7 +103,7 @@ INSERT INTO money_records (
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, 'confirmed', $8, $9, $10, $11, $12, $13, $14,
     $15, $16, $17, $18, $19, $20
-) RETURNING id, workspace_id, draft_id, transaction_id, direction, scope_type, purpose, entry_method, status, amount_minor, currency, currency_exponent, effective_date, money_account_id, destination_account_id, category_id, counterparty_id, counterparty_name, description, reference, created_by_user_id, confirmed_by_user_id, confirmed_at, reversed_at, reversal_record_id, created_at
+) RETURNING id, workspace_id, draft_id, transaction_id, direction, scope_type, purpose, entry_method, status, amount_minor, currency, currency_exponent, effective_date, money_account_id, destination_account_id, category_id, counterparty_id, counterparty_name, description, reference, created_by_user_id, confirmed_by_user_id, confirmed_at, reversed_at, reversal_record_id, created_at, sync_version
 `
 
 type CreateMoneyRecordParams struct {
@@ -180,6 +180,7 @@ func (q *Queries) CreateMoneyRecord(ctx context.Context, arg CreateMoneyRecordPa
 		&i.ReversedAt,
 		&i.ReversalRecordID,
 		&i.CreatedAt,
+		&i.SyncVersion,
 	)
 	return i, err
 }
@@ -461,7 +462,7 @@ func (q *Queries) DiscardMoneyRecordDraft(ctx context.Context, arg DiscardMoneyR
 }
 
 const getMoneyRecordByDraftID = `-- name: GetMoneyRecordByDraftID :one
-SELECT id, workspace_id, draft_id, transaction_id, direction, scope_type, purpose, entry_method, status, amount_minor, currency, currency_exponent, effective_date, money_account_id, destination_account_id, category_id, counterparty_id, counterparty_name, description, reference, created_by_user_id, confirmed_by_user_id, confirmed_at, reversed_at, reversal_record_id, created_at FROM money_records
+SELECT id, workspace_id, draft_id, transaction_id, direction, scope_type, purpose, entry_method, status, amount_minor, currency, currency_exponent, effective_date, money_account_id, destination_account_id, category_id, counterparty_id, counterparty_name, description, reference, created_by_user_id, confirmed_by_user_id, confirmed_at, reversed_at, reversal_record_id, created_at, sync_version FROM money_records
 WHERE draft_id = $1 AND workspace_id = $2
 `
 
@@ -500,12 +501,13 @@ func (q *Queries) GetMoneyRecordByDraftID(ctx context.Context, arg GetMoneyRecor
 		&i.ReversedAt,
 		&i.ReversalRecordID,
 		&i.CreatedAt,
+		&i.SyncVersion,
 	)
 	return i, err
 }
 
 const getMoneyRecordByID = `-- name: GetMoneyRecordByID :one
-SELECT id, workspace_id, draft_id, transaction_id, direction, scope_type, purpose, entry_method, status, amount_minor, currency, currency_exponent, effective_date, money_account_id, destination_account_id, category_id, counterparty_id, counterparty_name, description, reference, created_by_user_id, confirmed_by_user_id, confirmed_at, reversed_at, reversal_record_id, created_at FROM money_records
+SELECT id, workspace_id, draft_id, transaction_id, direction, scope_type, purpose, entry_method, status, amount_minor, currency, currency_exponent, effective_date, money_account_id, destination_account_id, category_id, counterparty_id, counterparty_name, description, reference, created_by_user_id, confirmed_by_user_id, confirmed_at, reversed_at, reversal_record_id, created_at, sync_version FROM money_records
 WHERE id = $1 AND workspace_id = $2
 `
 
@@ -544,6 +546,7 @@ func (q *Queries) GetMoneyRecordByID(ctx context.Context, arg GetMoneyRecordByID
 		&i.ReversedAt,
 		&i.ReversalRecordID,
 		&i.CreatedAt,
+		&i.SyncVersion,
 	)
 	return i, err
 }
@@ -1063,7 +1066,7 @@ func (q *Queries) ListMoneyRecordParts(ctx context.Context, arg ListMoneyRecordP
 }
 
 const listMoneyRecords = `-- name: ListMoneyRecords :many
-SELECT id, workspace_id, draft_id, transaction_id, direction, scope_type, purpose, entry_method, status, amount_minor, currency, currency_exponent, effective_date, money_account_id, destination_account_id, category_id, counterparty_id, counterparty_name, description, reference, created_by_user_id, confirmed_by_user_id, confirmed_at, reversed_at, reversal_record_id, created_at FROM money_records
+SELECT id, workspace_id, draft_id, transaction_id, direction, scope_type, purpose, entry_method, status, amount_minor, currency, currency_exponent, effective_date, money_account_id, destination_account_id, category_id, counterparty_id, counterparty_name, description, reference, created_by_user_id, confirmed_by_user_id, confirmed_at, reversed_at, reversal_record_id, created_at, sync_version FROM money_records
 WHERE workspace_id = $1
   AND ($3::text IS NULL OR status = $3)
   AND ($4::bigint IS NULL OR id < $4)
@@ -1119,6 +1122,7 @@ func (q *Queries) ListMoneyRecords(ctx context.Context, arg ListMoneyRecordsPara
 			&i.ReversedAt,
 			&i.ReversalRecordID,
 			&i.CreatedAt,
+			&i.SyncVersion,
 		); err != nil {
 			return nil, err
 		}
