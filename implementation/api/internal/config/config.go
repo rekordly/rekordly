@@ -45,6 +45,11 @@ type Config struct {
 	PaystackSecretKey      string
 	PaystackWebhookSecret  string
 	PaystackBaseURL        string
+	ResendAPIKey           string
+	ResendBaseURL          string
+	EmailFrom              string
+	EmailWebhookSecret     string
+	GuestShareBaseURL      string
 }
 
 func Load() (Config, error) {
@@ -71,6 +76,9 @@ func Load() (Config, error) {
 	v.SetDefault("AI_MAX_OUTPUT_TOKENS", 1500)
 	v.SetDefault("COMMERCIAL_MODE", "controlled_beta")
 	v.SetDefault("PAYSTACK_BASE_URL", "https://api.paystack.co")
+	v.SetDefault("RESEND_BASE_URL", "https://api.resend.com")
+	v.SetDefault("EMAIL_FROM", "notifications@rekordly.com")
+	v.SetDefault("GUEST_SHARE_BASE_URL", "http://localhost:3000/share")
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 
@@ -110,6 +118,11 @@ func Load() (Config, error) {
 		PaystackSecretKey:      v.GetString("PAYSTACK_SECRET_KEY"),
 		PaystackWebhookSecret:  v.GetString("PAYSTACK_WEBHOOK_SECRET"),
 		PaystackBaseURL:        strings.TrimRight(strings.TrimSpace(v.GetString("PAYSTACK_BASE_URL")), "/"),
+		ResendAPIKey:           v.GetString("RESEND_API_KEY"),
+		ResendBaseURL:          strings.TrimRight(strings.TrimSpace(v.GetString("RESEND_BASE_URL")), "/"),
+		EmailFrom:              v.GetString("EMAIL_FROM"),
+		EmailWebhookSecret:     v.GetString("EMAIL_WEBHOOK_SECRET"),
+		GuestShareBaseURL:      strings.TrimRight(strings.TrimSpace(v.GetString("GUEST_SHARE_BASE_URL")), "/"),
 	}
 
 	if cfg.DatabaseURL == "" {

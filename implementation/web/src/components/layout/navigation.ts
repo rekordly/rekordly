@@ -117,6 +117,7 @@ const NAVIGATION: Readonly<Record<ShellMode, NavGroup[]>> = {
         { label: "Tax readiness", href: "/reports/tax", icon: Calculator, permission: PERMISSIONS.REPORTS_VIEW_BASIC },
         { label: "Type what happened", href: "/capture", icon: Sparkle, permission: PERMISSIONS.AI_USE },
         { label: "CSV Imports", href: "/transactions/import", icon: UploadSimple, permission: PERMISSIONS.IMPORTS_CREATE },
+        { label: "Documents & Files", href: "/documents", icon: FileText, permission: PERMISSIONS.DOCUMENTS_VIEW_ARTIFACTS },
         { label: "Automation & Jobs", href: "/automation", icon: GearSix, permission: PERMISSIONS.AUTOMATION_MANAGE },
       ],
     },

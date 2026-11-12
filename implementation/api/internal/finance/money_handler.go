@@ -94,6 +94,9 @@ func (h *Handler) RegisterRoutes(group *gin.RouterGroup) {
 
 	// Blueprint 13: Plans, Billing, Entitlements & Downgrades
 	h.RegisterBlueprint13Routes(group, protected)
+
+	// Blueprint 14: Notifications, Documents, Files & Sharing
+	h.RegisterBlueprint14Routes(group, protected)
 }
 
 // @Summary Create a money account

@@ -13,6 +13,7 @@ import (
 	"github.com/rekordly/rekordly-api/internal/ai"
 	"github.com/rekordly/rekordly-api/internal/billing"
 	"github.com/rekordly/rekordly-api/internal/db"
+	"github.com/rekordly/rekordly-api/internal/notify"
 )
 
 var (
@@ -29,16 +30,25 @@ var (
 )
 
 type Service struct {
-	pool             *pgxpool.Pool
-	queries          *db.Queries
-	planLimitChecker PlanLimitChecker
-	evidenceUploader EvidenceUploadAuthorizer
-	dnsLookupTXT     func(string) ([]string, error)
-	aiOrchestrator   *ai.Orchestrator
-	paymentProvider  billing.PaymentProvider
+	pool              *pgxpool.Pool
+	queries           *db.Queries
+	planLimitChecker  PlanLimitChecker
+	evidenceUploader  EvidenceUploadAuthorizer
+	dnsLookupTXT      func(string) ([]string, error)
+	aiOrchestrator    *ai.Orchestrator
+	paymentProvider   billing.PaymentProvider
+	emailProvider     notify.EmailProvider
+	guestShareBaseURL string
 }
 
 type ServiceOption func(*Service)
+
+func WithEmailProvider(provider notify.EmailProvider, guestShareBaseURL string) ServiceOption {
+	return func(service *Service) {
+		service.emailProvider = provider
+		service.guestShareBaseURL = strings.TrimRight(strings.TrimSpace(guestShareBaseURL), "/")
+	}
+}
 
 func WithPaymentProvider(provider billing.PaymentProvider) ServiceOption {
 	return func(service *Service) { service.paymentProvider = provider }

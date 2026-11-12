@@ -465,6 +465,11 @@ func (w *worker) processBlueprint12Job(ctx context.Context, j bp12Job) error {
 		return err
 	case "billing_expire_beta_grants", "billing_reconcile_subscriptions", "billing_storefront_grace_check":
 		return nil
+	case "bp14_expire_shares":
+		_, err := w.pool.Exec(ctx, `UPDATE share_grants SET revoked_at = now() WHERE revoked_at IS NULL AND expires_at < now()`)
+		return err
+	case "bp14_project_outbox", "bp14_render_pdf", "bp14_send_email", "bp14_delete_asset", "bp14_storage_reconcile":
+		return nil
 	default:
 		return fmt.Errorf("job_type %s requires api-context execution", j.JobType)
 	}

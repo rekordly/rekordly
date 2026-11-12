@@ -38,6 +38,19 @@ export const PERMISSIONS = {
   BILLING_MANAGE_SUBJECTS: "billing.manage_subjects",
   BILLING_OVERRIDE: "billing.override",
   BILLING_RECONCILE: "billing.reconcile",
+  NOTIFICATIONS_VIEW: "notifications.view",
+  NOTIFICATIONS_MANAGE_PREFERENCES: "notifications.manage_preferences",
+  DOCUMENTS_RENDER: "documents.render",
+  DOCUMENTS_VIEW_ARTIFACTS: "documents.view_artifacts",
+  SHARES_CREATE: "shares.create",
+  SHARES_REVOKE: "shares.revoke",
+  DOCUMENTS_SEND: "documents.send",
+  DELIVERIES_VIEW: "deliveries.view",
+  DELIVERIES_RETRY: "deliveries.retry",
+  FILES_MANAGE: "files.manage",
+  FILES_LINK: "files.link",
+  FILES_DELETE: "files.delete",
+  EVIDENCE_VIEW_PRIVATE: "evidence.view_private",
 } as const;
 
 export const WILDCARD_PERMISSION = "*";

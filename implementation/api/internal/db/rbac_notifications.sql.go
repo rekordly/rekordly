@@ -51,7 +51,7 @@ INSERT INTO notifications (
     workspace_id, user_id, category, title, body, action_url
 ) VALUES (
     $1, $2, $3, $4, $5, $6
-) RETURNING id, workspace_id, user_id, category, title, body, action_url, is_read, read_at, created_at
+) RETURNING id, workspace_id, user_id, category, title, body, action_url, is_read, read_at, created_at, template_key, template_version, severity, resource_type, resource_id, action_key, dedupe_key, archived_at, metadata
 `
 
 type CreateNotificationParams struct {
@@ -84,6 +84,15 @@ func (q *Queries) CreateNotification(ctx context.Context, arg CreateNotification
 		&i.IsRead,
 		&i.ReadAt,
 		&i.CreatedAt,
+		&i.TemplateKey,
+		&i.TemplateVersion,
+		&i.Severity,
+		&i.ResourceType,
+		&i.ResourceID,
+		&i.ActionKey,
+		&i.DedupeKey,
+		&i.ArchivedAt,
+		&i.Metadata,
 	)
 	return i, err
 }
@@ -151,7 +160,7 @@ func (q *Queries) GetWorkspaceProfile(ctx context.Context, id int64) (GetWorkspa
 }
 
 const listNotificationsForUser = `-- name: ListNotificationsForUser :many
-SELECT id, workspace_id, user_id, category, title, body, action_url, is_read, read_at, created_at FROM notifications
+SELECT id, workspace_id, user_id, category, title, body, action_url, is_read, read_at, created_at, template_key, template_version, severity, resource_type, resource_id, action_key, dedupe_key, archived_at, metadata FROM notifications
 WHERE user_id = $1
   AND ($3::bigint IS NULL OR workspace_id IS NULL OR workspace_id = $3)
 ORDER BY created_at DESC, id DESC
@@ -184,6 +193,15 @@ func (q *Queries) ListNotificationsForUser(ctx context.Context, arg ListNotifica
 			&i.IsRead,
 			&i.ReadAt,
 			&i.CreatedAt,
+			&i.TemplateKey,
+			&i.TemplateVersion,
+			&i.Severity,
+			&i.ResourceType,
+			&i.ResourceID,
+			&i.ActionKey,
+			&i.DedupeKey,
+			&i.ArchivedAt,
+			&i.Metadata,
 		); err != nil {
 			return nil, err
 		}
@@ -395,7 +413,7 @@ UPDATE notifications
 SET is_read = true,
     read_at = NOW()
 WHERE id = $1 AND user_id = $2
-RETURNING id, workspace_id, user_id, category, title, body, action_url, is_read, read_at, created_at
+RETURNING id, workspace_id, user_id, category, title, body, action_url, is_read, read_at, created_at, template_key, template_version, severity, resource_type, resource_id, action_key, dedupe_key, archived_at, metadata
 `
 
 type MarkNotificationReadParams struct {
@@ -417,6 +435,15 @@ func (q *Queries) MarkNotificationRead(ctx context.Context, arg MarkNotification
 		&i.IsRead,
 		&i.ReadAt,
 		&i.CreatedAt,
+		&i.TemplateKey,
+		&i.TemplateVersion,
+		&i.Severity,
+		&i.ResourceType,
+		&i.ResourceID,
+		&i.ActionKey,
+		&i.DedupeKey,
+		&i.ArchivedAt,
+		&i.Metadata,
 	)
 	return i, err
 }

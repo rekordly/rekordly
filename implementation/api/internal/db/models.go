@@ -616,6 +616,65 @@ type DebitNoteItem struct {
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
+type Delivery struct {
+	ID                 int64              `json:"id"`
+	WorkspaceID        int64              `json:"workspace_id"`
+	DocumentType       string             `json:"document_type"`
+	DocumentID         int64              `json:"document_id"`
+	ArtifactID         pgtype.Int8        `json:"artifact_id"`
+	ShareGrantID       pgtype.Int8        `json:"share_grant_id"`
+	Channel            string             `json:"channel"`
+	RecipientMasked    string             `json:"recipient_masked"`
+	RecipientDigest    string             `json:"recipient_digest"`
+	TemplateKey        string             `json:"template_key"`
+	TemplateVersion    string             `json:"template_version"`
+	Status             string             `json:"status"`
+	Provider           string             `json:"provider"`
+	ProviderMessageID  string             `json:"provider_message_id"`
+	IdempotencyKey     string             `json:"idempotency_key"`
+	Attempts           int32              `json:"attempts"`
+	IsResend           bool               `json:"is_resend"`
+	ResendOfDeliveryID pgtype.Int8        `json:"resend_of_delivery_id"`
+	LastErrorClass     string             `json:"last_error_class"`
+	LastErrorMessage   string             `json:"last_error_message"`
+	CreatedByUserID    pgtype.Int8        `json:"created_by_user_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+}
+
+type DeliveryAttempt struct {
+	ID                int64              `json:"id"`
+	DeliveryID        int64              `json:"delivery_id"`
+	WorkspaceID       int64              `json:"workspace_id"`
+	AttemptNumber     int32              `json:"attempt_number"`
+	Status            string             `json:"status"`
+	ProviderMessageID string             `json:"provider_message_id"`
+	ErrorClass        string             `json:"error_class"`
+	ErrorMessage      string             `json:"error_message"`
+	Retryable         bool               `json:"retryable"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
+type DocumentArtifact struct {
+	ID                  int64              `json:"id"`
+	WorkspaceID         int64              `json:"workspace_id"`
+	DocumentType        string             `json:"document_type"`
+	DocumentID          int64              `json:"document_id"`
+	Version             int32              `json:"version"`
+	RenderSchemaVersion string             `json:"render_schema_version"`
+	SnapshotJson        []byte             `json:"snapshot_json"`
+	SnapshotHash        string             `json:"snapshot_hash"`
+	PdfBytes            []byte             `json:"pdf_bytes"`
+	PdfHash             string             `json:"pdf_hash"`
+	ByteSize            int64              `json:"byte_size"`
+	PageCount           int32              `json:"page_count"`
+	MimeType            string             `json:"mime_type"`
+	Status              string             `json:"status"`
+	SupersededByID      pgtype.Int8        `json:"superseded_by_id"`
+	CreatedByUserID     pgtype.Int8        `json:"created_by_user_id"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+}
+
 type DocumentVersion struct {
 	ID              int64              `json:"id"`
 	WorkspaceID     int64              `json:"workspace_id"`
@@ -626,6 +685,28 @@ type DocumentVersion struct {
 	Snapshot        []byte             `json:"snapshot"`
 	CreatedByUserID pgtype.Int8        `json:"created_by_user_id"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
+type EmailSuppression struct {
+	ID              int64              `json:"id"`
+	WorkspaceID     int64              `json:"workspace_id"`
+	EmailDigest     string             `json:"email_digest"`
+	EmailMasked     string             `json:"email_masked"`
+	Reason          string             `json:"reason"`
+	ProviderEventID string             `json:"provider_event_id"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
+type EmailWebhookEvent struct {
+	ID                int64              `json:"id"`
+	Provider          string             `json:"provider"`
+	EventID           string             `json:"event_id"`
+	EventType         string             `json:"event_type"`
+	ProviderMessageID string             `json:"provider_message_id"`
+	SignatureValid    bool               `json:"signature_valid"`
+	EventOccurredAt   pgtype.Timestamptz `json:"event_occurred_at"`
+	ProcessingState   string             `json:"processing_state"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 }
 
 type EntitlementOverride struct {
@@ -791,6 +872,40 @@ type FailedJob struct {
 	RetriedJobID     pgtype.Int8        `json:"retried_job_id"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+type File struct {
+	ID                   int64              `json:"id"`
+	WorkspaceID          int64              `json:"workspace_id"`
+	UploadedByUserID     pgtype.Int8        `json:"uploaded_by_user_id"`
+	FileClass            string             `json:"file_class"`
+	OriginalFilename     string             `json:"original_filename"`
+	MimeType             string             `json:"mime_type"`
+	ByteSize             int64              `json:"byte_size"`
+	Sha256Hash           string             `json:"sha256_hash"`
+	Provider             string             `json:"provider"`
+	ProviderPublicID     string             `json:"provider_public_id"`
+	ProviderResourceType string             `json:"provider_resource_type"`
+	ProviderDeliveryType string             `json:"provider_delivery_type"`
+	ProviderVersion      string             `json:"provider_version"`
+	ScanStatus           string             `json:"scan_status"`
+	RetentionPolicy      string             `json:"retention_policy"`
+	DeleteAfter          pgtype.Timestamptz `json:"delete_after"`
+	DeletionStatus       string             `json:"deletion_status"`
+	StorageReservationID pgtype.Int8        `json:"storage_reservation_id"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
+type FileLink struct {
+	ID             int64              `json:"id"`
+	FileID         int64              `json:"file_id"`
+	WorkspaceID    int64              `json:"workspace_id"`
+	ResourceType   string             `json:"resource_type"`
+	ResourceID     int64              `json:"resource_id"`
+	LinkedByUserID pgtype.Int8        `json:"linked_by_user_id"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UnlinkedAt     pgtype.Timestamptz `json:"unlinked_at"`
 }
 
 type GoodsReceipt struct {
@@ -1612,16 +1727,57 @@ type MoneyTransaction struct {
 }
 
 type Notification struct {
+	ID              int64              `json:"id"`
+	WorkspaceID     pgtype.Int8        `json:"workspace_id"`
+	UserID          int64              `json:"user_id"`
+	Category        string             `json:"category"`
+	Title           string             `json:"title"`
+	Body            string             `json:"body"`
+	ActionUrl       pgtype.Text        `json:"action_url"`
+	IsRead          bool               `json:"is_read"`
+	ReadAt          pgtype.Timestamptz `json:"read_at"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	TemplateKey     string             `json:"template_key"`
+	TemplateVersion string             `json:"template_version"`
+	Severity        string             `json:"severity"`
+	ResourceType    string             `json:"resource_type"`
+	ResourceID      int64              `json:"resource_id"`
+	ActionKey       string             `json:"action_key"`
+	DedupeKey       pgtype.Text        `json:"dedupe_key"`
+	ArchivedAt      pgtype.Timestamptz `json:"archived_at"`
+	Metadata        []byte             `json:"metadata"`
+}
+
+type NotificationOutbox struct {
+	ID               int64              `json:"id"`
+	WorkspaceID      int64              `json:"workspace_id"`
+	EventType        string             `json:"event_type"`
+	Category         string             `json:"category"`
+	TemplateKey      string             `json:"template_key"`
+	TemplateVersion  string             `json:"template_version"`
+	Severity         string             `json:"severity"`
+	ResourceType     string             `json:"resource_type"`
+	ResourceID       int64              `json:"resource_id"`
+	ActionKey        string             `json:"action_key"`
+	ActionUrl        string             `json:"action_url"`
+	Title            string             `json:"title"`
+	Body             string             `json:"body"`
+	RecipientUserIds []byte             `json:"recipient_user_ids"`
+	SafeMetadata     []byte             `json:"safe_metadata"`
+	DedupeKey        string             `json:"dedupe_key"`
+	Status           string             `json:"status"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	ProjectedAt      pgtype.Timestamptz `json:"projected_at"`
+}
+
+type NotificationPreference struct {
 	ID          int64              `json:"id"`
-	WorkspaceID pgtype.Int8        `json:"workspace_id"`
 	UserID      int64              `json:"user_id"`
+	WorkspaceID pgtype.Int8        `json:"workspace_id"`
 	Category    string             `json:"category"`
-	Title       string             `json:"title"`
-	Body        string             `json:"body"`
-	ActionUrl   pgtype.Text        `json:"action_url"`
-	IsRead      bool               `json:"is_read"`
-	ReadAt      pgtype.Timestamptz `json:"read_at"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	Channel     string             `json:"channel"`
+	Enabled     bool               `json:"enabled"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
 type OauthLoginAttempt struct {
@@ -2170,6 +2326,20 @@ type Refund struct {
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 }
 
+type RenderJob struct {
+	ID             int64              `json:"id"`
+	WorkspaceID    int64              `json:"workspace_id"`
+	ArtifactID     int64              `json:"artifact_id"`
+	DocumentType   string             `json:"document_type"`
+	DocumentID     int64              `json:"document_id"`
+	IdempotencyKey string             `json:"idempotency_key"`
+	Status         string             `json:"status"`
+	Attempts       int32              `json:"attempts"`
+	ErrorMessage   string             `json:"error_message"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	FinishedAt     pgtype.Timestamptz `json:"finished_at"`
+}
+
 type ReportExport struct {
 	ID              int64              `json:"id"`
 	WorkspaceID     int64              `json:"workspace_id"`
@@ -2280,6 +2450,37 @@ type Session struct {
 	RevocationReason    pgtype.Text        `json:"revocation_reason"`
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 	CsrfDigest          []byte             `json:"csrf_digest"`
+}
+
+type ShareAccessEvent struct {
+	ID                int64              `json:"id"`
+	ShareGrantID      pgtype.Int8        `json:"share_grant_id"`
+	WorkspaceID       pgtype.Int8        `json:"workspace_id"`
+	EventType         string             `json:"event_type"`
+	IpHash            string             `json:"ip_hash"`
+	UserAgentRedacted string             `json:"user_agent_redacted"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
+type ShareGrant struct {
+	ID              int64              `json:"id"`
+	WorkspaceID     int64              `json:"workspace_id"`
+	TokenHash       string             `json:"token_hash"`
+	ResourceType    string             `json:"resource_type"`
+	ResourceID      int64              `json:"resource_id"`
+	ArtifactID      pgtype.Int8        `json:"artifact_id"`
+	Version         int32              `json:"version"`
+	Permissions     []byte             `json:"permissions"`
+	Purpose         string             `json:"purpose"`
+	CreatedByUserID pgtype.Int8        `json:"created_by_user_id"`
+	EffectiveFrom   pgtype.Timestamptz `json:"effective_from"`
+	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
+	RevokedAt       pgtype.Timestamptz `json:"revoked_at"`
+	RevokedByUserID pgtype.Int8        `json:"revoked_by_user_id"`
+	AccessCount     int32              `json:"access_count"`
+	DownloadCount   int32              `json:"download_count"`
+	LastAccessedAt  pgtype.Timestamptz `json:"last_accessed_at"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 }
 
 type SocialLinkAttempt struct {
