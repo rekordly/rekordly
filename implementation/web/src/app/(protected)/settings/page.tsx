@@ -17,6 +17,7 @@ import { toast } from "@heroui/react";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
+import { AccountSecurityPrivacyPanel, SupportWorkspacePanel } from "@/components/features/bp16-settings-panels";
 import { Alert } from "@/components/ui/alert";
 import { AppButton } from "@/components/ui/app-button";
 import { FormDrawer } from "@/components/ui/form-drawer";
@@ -29,6 +30,8 @@ const SETTINGS_TABS = [
   { key: "profile", label: "Workspace Profile" },
   { key: "team", label: "Team & Permissions" },
   { key: "sessions", label: "Active Sessions" },
+  { key: "account", label: "Account, Privacy & Deletion" },
+  { key: "support", label: "Support" },
 ] as const;
 
 const PERMISSION_CATALOG = [
@@ -60,7 +63,7 @@ interface SessionRow {
 }
 
 function SettingsContent({ workspaceId }: WorkspaceInfo) {
-  const [tab, setTab] = useState<"profile" | "team" | "sessions">("profile");
+  const [tab, setTab] = useState<"profile" | "team" | "sessions" | "account" | "support">("profile");
 
   const profileQuery = useQuery({
     queryKey: ["settings-profile", workspaceId],
@@ -216,6 +219,9 @@ function SettingsContent({ workspaceId }: WorkspaceInfo) {
       />
 
       <Segmented aria-label="Settings sections" options={SETTINGS_TABS} value={tab} onChange={setTab} />
+
+      {tab === "account" && <AccountSecurityPrivacyPanel />}
+      {tab === "support" && <SupportWorkspacePanel />}
 
       {tab === "profile" && (
         <form onSubmit={handleSaveProfile} className="max-w-2xl rounded-3xl border border-border/60 bg-surface p-6 space-y-5">

@@ -51,6 +51,19 @@ type AddOnInstance struct {
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 }
 
+type AdminRecoveryAction struct {
+	ID                   int64              `json:"id"`
+	SupportCaseID        pgtype.Int8        `json:"support_case_id"`
+	WorkspaceID          int64              `json:"workspace_id"`
+	ActionType           string             `json:"action_type"`
+	Reason               string             `json:"reason"`
+	DryRun               bool               `json:"dry_run"`
+	IdempotencyKey       string             `json:"idempotency_key"`
+	ReconciliationStatus string             `json:"reconciliation_status"`
+	ExecutedBy           string             `json:"executed_by"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+}
+
 type AiDraft struct {
 	ID                   int64              `json:"id"`
 	WorkspaceID          int64              `json:"workspace_id"`
@@ -553,6 +566,44 @@ type CommercialModeConfig struct {
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
+type ConsentPreference struct {
+	ID         int64              `json:"id"`
+	UserID     int64              `json:"user_id"`
+	ConsentKey string             `json:"consent_key"`
+	Granted    bool               `json:"granted"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ContactMethod struct {
+	ID              int64              `json:"id"`
+	UserID          int64              `json:"user_id"`
+	MethodType      string             `json:"method_type"`
+	NormalizedValue string             `json:"normalized_value"`
+	MaskedValue     string             `json:"masked_value"`
+	VerifiedAt      pgtype.Timestamptz `json:"verified_at"`
+	IsPrimary       bool               `json:"is_primary"`
+	IsLogin         bool               `json:"is_login"`
+	IsRecovery      bool               `json:"is_recovery"`
+	NotifyEligible  bool               `json:"notify_eligible"`
+	AddedAt         pgtype.Timestamptz `json:"added_at"`
+	LastUsedAt      pgtype.Timestamptz `json:"last_used_at"`
+	RemovedAt       pgtype.Timestamptz `json:"removed_at"`
+}
+
+type ContactVerificationChallenge struct {
+	ID                    int64              `json:"id"`
+	UserID                int64              `json:"user_id"`
+	ContactMethodID       int64              `json:"contact_method_id"`
+	Purpose               string             `json:"purpose"`
+	DestinationNormalized string             `json:"destination_normalized"`
+	CodeHash              string             `json:"code_hash"`
+	Attempts              int32              `json:"attempts"`
+	MaxAttempts           int32              `json:"max_attempts"`
+	ExpiresAt             pgtype.Timestamptz `json:"expires_at"`
+	ConsumedAt            pgtype.Timestamptz `json:"consumed_at"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+}
+
 type Counterparty struct {
 	ID                  int64              `json:"id"`
 	WorkspaceID         int64              `json:"workspace_id"`
@@ -648,6 +699,42 @@ type DebitNoteItem struct {
 	Quantity       int32              `json:"quantity"`
 	UnitPriceMinor int64              `json:"unit_price_minor"`
 	AmountMinor    int64              `json:"amount_minor"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type DeletionCase struct {
+	ID                     int64              `json:"id"`
+	UserID                 int64              `json:"user_id"`
+	Scope                  string             `json:"scope"`
+	WorkspaceID            pgtype.Int8        `json:"workspace_id"`
+	Status                 string             `json:"status"`
+	Reason                 string             `json:"reason"`
+	GraceDeadlineAt        pgtype.Timestamptz `json:"grace_deadline_at"`
+	SubscriptionReconciled bool               `json:"subscription_reconciled"`
+	PublicAccessRevokedAt  pgtype.Timestamptz `json:"public_access_revoked_at"`
+	PurgeManifestJson      []byte             `json:"purge_manifest_json"`
+	CancelledAt            pgtype.Timestamptz `json:"cancelled_at"`
+	PurgedAt               pgtype.Timestamptz `json:"purged_at"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+}
+
+type DeletionTask struct {
+	ID             int64              `json:"id"`
+	DeletionCaseID int64              `json:"deletion_case_id"`
+	ProcessorName  string             `json:"processor_name"`
+	Status         string             `json:"status"`
+	EvidenceRef    string             `json:"evidence_ref"`
+	LastError      string             `json:"last_error"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+type DeletionTombstone struct {
+	ID             int64              `json:"id"`
+	SubjectHash    string             `json:"subject_hash"`
+	Scope          string             `json:"scope"`
+	DeletionCaseID int64              `json:"deletion_case_id"`
+	BackupExpiryAt pgtype.Timestamptz `json:"backup_expiry_at"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
@@ -847,6 +934,26 @@ type EvidenceAsset struct {
 	RetentionUntil   pgtype.Timestamptz `json:"retention_until"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ExportRequest struct {
+	ID                   int64              `json:"id"`
+	UserID               int64              `json:"user_id"`
+	WorkspaceID          pgtype.Int8        `json:"workspace_id"`
+	Scope                string             `json:"scope"`
+	Format               string             `json:"format"`
+	Status               string             `json:"status"`
+	AsOfAt               pgtype.Timestamptz `json:"as_of_at"`
+	ManifestJson         []byte             `json:"manifest_json"`
+	ReconciliationStatus string             `json:"reconciliation_status"`
+	MissingFilesJson     []byte             `json:"missing_files_json"`
+	ChecksumSha256       string             `json:"checksum_sha256"`
+	ArtifactPayloadJson  []byte             `json:"artifact_payload_json"`
+	SafeError            string             `json:"safe_error"`
+	ExpiresAt            pgtype.Timestamptz `json:"expires_at"`
+	DownloadedAt         pgtype.Timestamptz `json:"downloaded_at"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }
 
 type ExternalMessage struct {
@@ -1571,6 +1678,8 @@ type Membership struct {
 	JoinedAt    pgtype.Timestamptz `json:"joined_at"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	SuspendedAt pgtype.Timestamptz `json:"suspended_at"`
+	RemovedAt   pgtype.Timestamptz `json:"removed_at"`
 }
 
 type MixedMoneyGroup struct {
@@ -1935,6 +2044,17 @@ type OwnerTransferGroup struct {
 	CreatedAt              pgtype.Timestamptz `json:"created_at"`
 }
 
+type OwnershipTransferRequest struct {
+	ID          int64              `json:"id"`
+	WorkspaceID int64              `json:"workspace_id"`
+	FromUserID  int64              `json:"from_user_id"`
+	ToUserID    int64              `json:"to_user_id"`
+	Status      string             `json:"status"`
+	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
+	AcceptedAt  pgtype.Timestamptz `json:"accepted_at"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
 type PasswordCredential struct {
 	ID               int64              `json:"id"`
 	UserID           int64              `json:"user_id"`
@@ -2067,6 +2187,20 @@ type PlanVersion struct {
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 }
 
+type PolicyAcceptance struct {
+	ID            int64              `json:"id"`
+	UserID        int64              `json:"user_id"`
+	PolicyType    string             `json:"policy_type"`
+	PolicyVersion string             `json:"policy_version"`
+	ContentHash   string             `json:"content_hash"`
+	PublishedUrl  string             `json:"published_url"`
+	Required      bool               `json:"required"`
+	Locale        string             `json:"locale"`
+	SourceContext string             `json:"source_context"`
+	AcceptedAt    pgtype.Timestamptz `json:"accepted_at"`
+	WithdrawnAt   pgtype.Timestamptz `json:"withdrawn_at"`
+}
+
 type PostingTemplateVersion struct {
 	ID          int64              `json:"id"`
 	TemplateKey string             `json:"template_key"`
@@ -2075,6 +2209,20 @@ type PostingTemplateVersion struct {
 	Spec        []byte             `json:"spec"`
 	IsActive    bool               `json:"is_active"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type PrivacyRequest struct {
+	ID                 int64              `json:"id"`
+	UserID             int64              `json:"user_id"`
+	WorkspaceID        pgtype.Int8        `json:"workspace_id"`
+	RequestType        string             `json:"request_type"`
+	Status             string             `json:"status"`
+	VerificationStatus string             `json:"verification_status"`
+	Summary            string             `json:"summary"`
+	DecisionSummary    string             `json:"decision_summary"`
+	DeadlineAt         pgtype.Timestamptz `json:"deadline_at"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
 
 type ProcurementApprovalPolicy struct {
@@ -2362,6 +2510,17 @@ type PurchaseRequestLine struct {
 	CreatedAt               pgtype.Timestamptz `json:"created_at"`
 }
 
+type RecentAuthGrant struct {
+	ID         int64              `json:"id"`
+	UserID     int64              `json:"user_id"`
+	SessionID  pgtype.Int8        `json:"session_id"`
+	Purpose    string             `json:"purpose"`
+	Strength   string             `json:"strength"`
+	VerifiedAt pgtype.Timestamptz `json:"verified_at"`
+	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
+	ConsumedAt pgtype.Timestamptz `json:"consumed_at"`
+}
+
 type ReconciliationDifference struct {
 	ID                    int64       `json:"id"`
 	RunID                 int64       `json:"run_id"`
@@ -2427,6 +2586,30 @@ type ReportExport struct {
 	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
 	CreatedByUserID pgtype.Int8        `json:"created_by_user_id"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
+type RetentionHold struct {
+	ID           int64              `json:"id"`
+	ScopeType    string             `json:"scope_type"`
+	ScopeID      int64              `json:"scope_id"`
+	ReasonCode   string             `json:"reason_code"`
+	ReasonDetail string             `json:"reason_detail"`
+	AuthorizedBy string             `json:"authorized_by"`
+	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
+	ReleasedAt   pgtype.Timestamptz `json:"released_at"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+type RetentionPolicy struct {
+	ID                  int64              `json:"id"`
+	DataClass           string             `json:"data_class"`
+	PolicyVersion       string             `json:"policy_version"`
+	Purpose             string             `json:"purpose"`
+	LawfulBasis         string             `json:"lawful_basis"`
+	ActiveRetentionDays int32              `json:"active_retention_days"`
+	PostGraceAction     string             `json:"post_grace_action"`
+	BackupWindowDays    int32              `json:"backup_window_days"`
+	EffectiveAt         pgtype.Timestamptz `json:"effective_at"`
 }
 
 type Role struct {
@@ -2503,6 +2686,17 @@ type SalesReturnItem struct {
 	RestockInventory bool               `json:"restock_inventory"`
 	OutletID         pgtype.Int8        `json:"outlet_id"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
+type SecurityEvent struct {
+	ID              int64              `json:"id"`
+	UserID          int64              `json:"user_id"`
+	SessionID       pgtype.Int8        `json:"session_id"`
+	EventType       string             `json:"event_type"`
+	ActorType       string             `json:"actor_type"`
+	DeviceSummary   string             `json:"device_summary"`
+	SafeContextJson []byte             `json:"safe_context_json"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 }
 
 type Session struct {
@@ -3114,6 +3308,54 @@ type SupplierReturnLine struct {
 	ValueMinor         int64           `json:"value_minor"`
 }
 
+type SupportAccessEvent struct {
+	ID         int64              `json:"id"`
+	GrantID    int64              `json:"grant_id"`
+	Action     string             `json:"action"`
+	ActorLabel string             `json:"actor_label"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+}
+
+type SupportAccessGrant struct {
+	ID            int64              `json:"id"`
+	SupportCaseID int64              `json:"support_case_id"`
+	UserID        int64              `json:"user_id"`
+	WorkspaceID   int64              `json:"workspace_id"`
+	ActorLabel    string             `json:"actor_label"`
+	Scope         string             `json:"scope"`
+	Reason        string             `json:"reason"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	RevokedAt     pgtype.Timestamptz `json:"revoked_at"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type SupportCase struct {
+	ID                   int64              `json:"id"`
+	UserID               int64              `json:"user_id"`
+	WorkspaceID          pgtype.Int8        `json:"workspace_id"`
+	Category             string             `json:"category"`
+	Severity             string             `json:"severity"`
+	Status               string             `json:"status"`
+	Summary              string             `json:"summary"`
+	AffectedModule       string             `json:"affected_module"`
+	ReferenceID          string             `json:"reference_id"`
+	DiagnosticConsent    bool               `json:"diagnostic_consent"`
+	DiagnosticBundleJson []byte             `json:"diagnostic_bundle_json"`
+	PreferredChannel     string             `json:"preferred_channel"`
+	VerificationMethod   string             `json:"verification_method"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
+type SupportMessage struct {
+	ID            int64              `json:"id"`
+	SupportCaseID int64              `json:"support_case_id"`
+	SenderType    string             `json:"sender_type"`
+	SenderUserID  pgtype.Int8        `json:"sender_user_id"`
+	Body          string             `json:"body"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
 type TaxCode struct {
 	ID             int64              `json:"id"`
 	WorkspaceID    int64              `json:"workspace_id"`
@@ -3221,6 +3463,25 @@ type User struct {
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 }
 
+type UserProfile struct {
+	UserID              int64              `json:"user_id"`
+	DisplayName         string             `json:"display_name"`
+	AvatarFileID        pgtype.Int8        `json:"avatar_file_id"`
+	Locale              string             `json:"locale"`
+	Timezone            string             `json:"timezone"`
+	DateFormat          string             `json:"date_format"`
+	TimeFormat          string             `json:"time_format"`
+	Theme               string             `json:"theme"`
+	Density             string             `json:"density"`
+	ReducedMotion       bool               `json:"reduced_motion"`
+	HighContrast        bool               `json:"high_contrast"`
+	DefaultLandingPage  string             `json:"default_landing_page"`
+	CurrencyDisplayMode string             `json:"currency_display_mode"`
+	OccupationLabel     string             `json:"occupation_label"`
+	Version             int64              `json:"version"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+}
+
 type VariantOptionValue struct {
 	WorkspaceID   int64 `json:"workspace_id"`
 	VariantID     int64 `json:"variant_id"`
@@ -3272,6 +3533,16 @@ type WorkspaceAiQuota struct {
 	CreditsReserved    int32              `json:"credits_reserved"`
 	PerUserDailyLimit  int32              `json:"per_user_daily_limit"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+}
+
+type WorkspaceSettingsVersion struct {
+	WorkspaceID             int64              `json:"workspace_id"`
+	PersonalSettingsJson    []byte             `json:"personal_settings_json"`
+	BusinessSettingsJson    []byte             `json:"business_settings_json"`
+	Version                 int64              `json:"version"`
+	LastSignificantChangeAt pgtype.Timestamptz `json:"last_significant_change_at"`
+	UpdatedByUserID         pgtype.Int8        `json:"updated_by_user_id"`
+	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
 }
 
 type WorkspaceTaxSetting struct {

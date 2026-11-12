@@ -1125,7 +1125,7 @@ UPDATE memberships
 SET outlet_scope = $3,
     updated_at = NOW()
 WHERE id = $1 AND workspace_id = $2 AND status <> 'removed'
-RETURNING id, workspace_id, user_id, role_id, is_owner, outlet_scope, status, joined_at, created_at, updated_at
+RETURNING id, workspace_id, user_id, role_id, is_owner, outlet_scope, status, joined_at, created_at, updated_at, suspended_at, removed_at
 `
 
 type UpdateMembershipOutletScopeParams struct {
@@ -1149,6 +1149,8 @@ func (q *Queries) UpdateMembershipOutletScope(ctx context.Context, arg UpdateMem
 		&i.JoinedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.SuspendedAt,
+		&i.RemovedAt,
 	)
 	return i, err
 }

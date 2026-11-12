@@ -51,6 +51,19 @@ export const PERMISSIONS = {
   FILES_LINK: "files.link",
   FILES_DELETE: "files.delete",
   EVIDENCE_VIEW_PRIVATE: "evidence.view_private",
+  SETTINGS_MANAGE: "settings.manage",
+  ACCOUNT_PROFILE_MANAGE: "account.profile.manage",
+  ACCOUNT_SECURITY_MANAGE: "account.security.manage",
+  SESSIONS_MANAGE: "sessions.manage",
+  MEMBERS_MANAGE: "members.manage",
+  OWNERSHIP_TRANSFER: "ownership.transfer",
+  EXPORTS_COMPLETE: "exports.complete",
+  PRIVACY_REQUESTS_MANAGE: "privacy.requests.manage",
+  DELETION_REQUEST: "deletion.request",
+  SUPPORT_INTAKE: "support.intake",
+  SUPPORT_ACCESS_GRANT: "support.access.grant",
+  ADMIN_RECOVERY: "admin.recovery",
+  AUDIT_VIEW: "audit.view",
 } as const;
 
 export const WILDCARD_PERMISSION = "*";

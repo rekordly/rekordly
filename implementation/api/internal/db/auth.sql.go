@@ -475,7 +475,7 @@ func (q *Queries) CreateMagicLinkChallenge(ctx context.Context, arg CreateMagicL
 const createMembership = `-- name: CreateMembership :one
 INSERT INTO memberships (workspace_id, user_id, role_id, is_owner, outlet_scope)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, workspace_id, user_id, role_id, is_owner, outlet_scope, status, joined_at, created_at, updated_at
+RETURNING id, workspace_id, user_id, role_id, is_owner, outlet_scope, status, joined_at, created_at, updated_at, suspended_at, removed_at
 `
 
 type CreateMembershipParams struct {
@@ -506,6 +506,8 @@ func (q *Queries) CreateMembership(ctx context.Context, arg CreateMembershipPara
 		&i.JoinedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.SuspendedAt,
+		&i.RemovedAt,
 	)
 	return i, err
 }
@@ -1019,7 +1021,7 @@ func (q *Queries) GetActiveGoogleIdentity(ctx context.Context, arg GetActiveGoog
 }
 
 const getActiveMembership = `-- name: GetActiveMembership :one
-SELECT id, workspace_id, user_id, role_id, is_owner, outlet_scope, status, joined_at, created_at, updated_at FROM memberships
+SELECT id, workspace_id, user_id, role_id, is_owner, outlet_scope, status, joined_at, created_at, updated_at, suspended_at, removed_at FROM memberships
 WHERE workspace_id = $1 AND user_id = $2 AND status <> 'removed'
 `
 
@@ -1042,6 +1044,8 @@ func (q *Queries) GetActiveMembership(ctx context.Context, arg GetActiveMembersh
 		&i.JoinedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.SuspendedAt,
+		&i.RemovedAt,
 	)
 	return i, err
 }
