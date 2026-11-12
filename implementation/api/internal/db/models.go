@@ -38,6 +38,87 @@ type AccountingPeriod struct {
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 }
 
+type AiDraft struct {
+	ID                   int64              `json:"id"`
+	WorkspaceID          int64              `json:"workspace_id"`
+	UserID               int64              `json:"user_id"`
+	AiRequestID          int64              `json:"ai_request_id"`
+	SchemaVersion        string             `json:"schema_version"`
+	Scope                string             `json:"scope"`
+	Direction            string             `json:"direction"`
+	Purpose              string             `json:"purpose"`
+	AmountMajor          string             `json:"amount_major"`
+	AmountMinor          int64              `json:"amount_minor"`
+	Currency             string             `json:"currency"`
+	CurrencyExponent     int16              `json:"currency_exponent"`
+	EffectiveDate        pgtype.Date        `json:"effective_date"`
+	AccountID            pgtype.Int8        `json:"account_id"`
+	AccountAlias         pgtype.Text        `json:"account_alias"`
+	CategoryID           pgtype.Int8        `json:"category_id"`
+	CategoryAlias        pgtype.Text        `json:"category_alias"`
+	CounterpartyID       pgtype.Int8        `json:"counterparty_id"`
+	CounterpartyAlias    pgtype.Text        `json:"counterparty_alias"`
+	Description          string             `json:"description"`
+	FieldConfidence      []byte             `json:"field_confidence"`
+	MissingFields        []byte             `json:"missing_fields"`
+	Warnings             []byte             `json:"warnings"`
+	ClarificationOptions []byte             `json:"clarification_options"`
+	RouteToManualFlow    pgtype.Text        `json:"route_to_manual_flow"`
+	Status               string             `json:"status"`
+	ConfirmedRecordType  pgtype.Text        `json:"confirmed_record_type"`
+	ConfirmedRecordID    pgtype.Int8        `json:"confirmed_record_id"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
+type AiProviderUsageLog struct {
+	ID              int64              `json:"id"`
+	WorkspaceID     int64              `json:"workspace_id"`
+	AiRequestID     pgtype.Int8        `json:"ai_request_id"`
+	Provider        string             `json:"provider"`
+	Model           string             `json:"model"`
+	LatencyMs       int32              `json:"latency_ms"`
+	InputTokens     int32              `json:"input_tokens"`
+	OutputTokens    int32              `json:"output_tokens"`
+	StructuredValid bool               `json:"structured_valid"`
+	FailureClass    pgtype.Text        `json:"failure_class"`
+	IsFallback      bool               `json:"is_fallback"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
+type AiRequest struct {
+	ID              int64              `json:"id"`
+	WorkspaceID     int64              `json:"workspace_id"`
+	UserID          int64              `json:"user_id"`
+	IdempotencyKey  string             `json:"idempotency_key"`
+	Mode            string             `json:"mode"`
+	Status          string             `json:"status"`
+	Provider        pgtype.Text        `json:"provider"`
+	Model           pgtype.Text        `json:"model"`
+	LatencyMs       int32              `json:"latency_ms"`
+	InputTokens     int32              `json:"input_tokens"`
+	OutputTokens    int32              `json:"output_tokens"`
+	StructuredValid bool               `json:"structured_valid"`
+	FailureClass    pgtype.Text        `json:"failure_class"`
+	InputCharCount  int32              `json:"input_char_count"`
+	RedactedSummary string             `json:"redacted_summary"`
+	JobID           pgtype.Int8        `json:"job_id"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+type AiUsageReservation struct {
+	ID              int64              `json:"id"`
+	WorkspaceID     int64              `json:"workspace_id"`
+	UserID          int64              `json:"user_id"`
+	AiRequestID     pgtype.Int8        `json:"ai_request_id"`
+	IdempotencyKey  string             `json:"idempotency_key"`
+	CreditsReserved int32              `json:"credits_reserved"`
+	Status          string             `json:"status"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	SettledAt       pgtype.Timestamptz `json:"settled_at"`
+}
+
 type Asset struct {
 	ID                     int64              `json:"id"`
 	WorkspaceID            int64              `json:"workspace_id"`
@@ -144,6 +225,32 @@ type AuthRateLimit struct {
 	WindowStartedAt pgtype.Timestamptz `json:"window_started_at"`
 	AttemptCount    int32              `json:"attempt_count"`
 	BlockedUntil    pgtype.Timestamptz `json:"blocked_until"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+type AutomationExecution struct {
+	ID             int64              `json:"id"`
+	RuleID         int64              `json:"rule_id"`
+	WorkspaceID    int64              `json:"workspace_id"`
+	IdempotencyKey string             `json:"idempotency_key"`
+	Status         string             `json:"status"`
+	Summary        string             `json:"summary"`
+	AffectedCount  int32              `json:"affected_count"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type AutomationRule struct {
+	ID              int64              `json:"id"`
+	WorkspaceID     int64              `json:"workspace_id"`
+	RuleKey         string             `json:"rule_key"`
+	Name            string             `json:"name"`
+	RuleType        string             `json:"rule_type"`
+	Version         int32              `json:"version"`
+	IsEnabled       bool               `json:"is_enabled"`
+	ConfigJson      []byte             `json:"config_json"`
+	LastRunAt       pgtype.Timestamptz `json:"last_run_at"`
+	CreatedByUserID pgtype.Int8        `json:"created_by_user_id"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
@@ -543,6 +650,22 @@ type ExternalPaymentEvidence struct {
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 }
 
+type FailedJob struct {
+	ID               int64              `json:"id"`
+	JobID            int64              `json:"job_id"`
+	WorkspaceID      int64              `json:"workspace_id"`
+	JobType          string             `json:"job_type"`
+	SourceType       string             `json:"source_type"`
+	SourceID         int64              `json:"source_id"`
+	Attempts         int32              `json:"attempts"`
+	LastErrorClass   string             `json:"last_error_class"`
+	LastErrorMessage string             `json:"last_error_message"`
+	Status           string             `json:"status"`
+	RetriedJobID     pgtype.Int8        `json:"retried_job_id"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
 type GoodsReceipt struct {
 	ID                int64              `json:"id"`
 	WorkspaceID       int64              `json:"workspace_id"`
@@ -597,6 +720,126 @@ type IdempotencyRecord struct {
 	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ImportBatch struct {
+	ID               int64              `json:"id"`
+	WorkspaceID      int64              `json:"workspace_id"`
+	ImportFileID     int64              `json:"import_file_id"`
+	MappingProfileID pgtype.Int8        `json:"mapping_profile_id"`
+	TargetAccountID  pgtype.Int8        `json:"target_account_id"`
+	DefaultCurrency  string             `json:"default_currency"`
+	Status           string             `json:"status"`
+	TotalRows        int32              `json:"total_rows"`
+	ValidCount       int32              `json:"valid_count"`
+	DuplicateCount   int32              `json:"duplicate_count"`
+	MatchCount       int32              `json:"match_count"`
+	InvalidCount     int32              `json:"invalid_count"`
+	ExcludedCount    int32              `json:"excluded_count"`
+	PostedCount      int32              `json:"posted_count"`
+	FailedCount      int32              `json:"failed_count"`
+	CreatedByUserID  pgtype.Int8        `json:"created_by_user_id"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ImportFile struct {
+	ID               int64              `json:"id"`
+	WorkspaceID      int64              `json:"workspace_id"`
+	UploadedByUserID pgtype.Int8        `json:"uploaded_by_user_id"`
+	OriginalFilename string             `json:"original_filename"`
+	MimeType         string             `json:"mime_type"`
+	ByteSize         int64              `json:"byte_size"`
+	Sha256Hash       string             `json:"sha256_hash"`
+	Encoding         string             `json:"encoding"`
+	Delimiter        string             `json:"delimiter"`
+	StorageKey       string             `json:"storage_key"`
+	RawCsvText       string             `json:"raw_csv_text"`
+	ExpiresAt        pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
+type ImportMappingProfile struct {
+	ID               int64              `json:"id"`
+	WorkspaceID      int64              `json:"workspace_id"`
+	Name             string             `json:"name"`
+	MappingJson      []byte             `json:"mapping_json"`
+	DateFormat       string             `json:"date_format"`
+	DecimalSeparator string             `json:"decimal_separator"`
+	SignConvention   string             `json:"sign_convention"`
+	DefaultCurrency  string             `json:"default_currency"`
+	DefaultAccountID pgtype.Int8        `json:"default_account_id"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
+type ImportReconciliation struct {
+	ID                     int64              `json:"id"`
+	BatchID                int64              `json:"batch_id"`
+	WorkspaceID            int64              `json:"workspace_id"`
+	SourceRowCount         int32              `json:"source_row_count"`
+	PostedCount            int32              `json:"posted_count"`
+	MatchedCount           int32              `json:"matched_count"`
+	DuplicateExcludedCount int32              `json:"duplicate_excluded_count"`
+	FailedUnresolvedCount  int32              `json:"failed_unresolved_count"`
+	Reconciled             bool               `json:"reconciled"`
+	CurrencyTotals         []byte             `json:"currency_totals"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+}
+
+type ImportRow struct {
+	ID                int64              `json:"id"`
+	BatchID           int64              `json:"batch_id"`
+	WorkspaceID       int64              `json:"workspace_id"`
+	RowNumber         int32              `json:"row_number"`
+	RowFingerprint    string             `json:"row_fingerprint"`
+	ExternalTxID      string             `json:"external_tx_id"`
+	RawData           []byte             `json:"raw_data"`
+	EffectiveDate     pgtype.Date        `json:"effective_date"`
+	Description       string             `json:"description"`
+	AmountMinor       int64              `json:"amount_minor"`
+	SignedAmountMinor int64              `json:"signed_amount_minor"`
+	Currency          string             `json:"currency"`
+	CurrencyExponent  int16              `json:"currency_exponent"`
+	Direction         string             `json:"direction"`
+	Purpose           string             `json:"purpose"`
+	AccountID         pgtype.Int8        `json:"account_id"`
+	CategoryID        pgtype.Int8        `json:"category_id"`
+	CounterpartyID    pgtype.Int8        `json:"counterparty_id"`
+	BalanceMinor      pgtype.Int8        `json:"balance_minor"`
+	TransferPairGroup string             `json:"transfer_pair_group"`
+	State             string             `json:"state"`
+	ErrorCode         string             `json:"error_code"`
+	ErrorMessage      string             `json:"error_message"`
+	SuggestionSource  string             `json:"suggestion_source"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ImportRowMatch struct {
+	ID              int64              `json:"id"`
+	ImportRowID     int64              `json:"import_row_id"`
+	WorkspaceID     int64              `json:"workspace_id"`
+	MatchKind       string             `json:"match_kind"`
+	MatchedTable    string             `json:"matched_table"`
+	MatchedID       int64              `json:"matched_id"`
+	ConfidenceLabel string             `json:"confidence_label"`
+	Reason          string             `json:"reason"`
+	Status          string             `json:"status"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
+type ImportRowResult struct {
+	ID             int64              `json:"id"`
+	ImportRowID    int64              `json:"import_row_id"`
+	BatchID        int64              `json:"batch_id"`
+	WorkspaceID    int64              `json:"workspace_id"`
+	IdempotencyKey string             `json:"idempotency_key"`
+	Action         string             `json:"action"`
+	TargetType     string             `json:"target_type"`
+	TargetID       int64              `json:"target_id"`
+	LedgerEntryID  pgtype.Int8        `json:"ledger_entry_id"`
+	ErrorMessage   string             `json:"error_message"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
 type InventoryAdjustment struct {
@@ -849,6 +1092,45 @@ type InvoiceTaxLine struct {
 	IsCompound  bool               `json:"is_compound"`
 	SortOrder   int32              `json:"sort_order"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type Job struct {
+	ID               int64              `json:"id"`
+	WorkspaceID      int64              `json:"workspace_id"`
+	UserID           pgtype.Int8        `json:"user_id"`
+	JobType          string             `json:"job_type"`
+	SchemaVersion    string             `json:"schema_version"`
+	SourceType       string             `json:"source_type"`
+	SourceID         int64              `json:"source_id"`
+	Payload          []byte             `json:"payload"`
+	State            string             `json:"state"`
+	Priority         int32              `json:"priority"`
+	AvailableAt      pgtype.Timestamptz `json:"available_at"`
+	Attempts         int32              `json:"attempts"`
+	MaxAttempts      int32              `json:"max_attempts"`
+	TimeoutSeconds   int32              `json:"timeout_seconds"`
+	LockOwner        pgtype.Text        `json:"lock_owner"`
+	LockExpiresAt    pgtype.Timestamptz `json:"lock_expires_at"`
+	LastErrorClass   pgtype.Text        `json:"last_error_class"`
+	LastErrorMessage pgtype.Text        `json:"last_error_message"`
+	IdempotencyKey   pgtype.Text        `json:"idempotency_key"`
+	StartedAt        pgtype.Timestamptz `json:"started_at"`
+	FinishedAt       pgtype.Timestamptz `json:"finished_at"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+type JobAttempt struct {
+	ID            int64              `json:"id"`
+	JobID         int64              `json:"job_id"`
+	WorkspaceID   int64              `json:"workspace_id"`
+	AttemptNumber int32              `json:"attempt_number"`
+	WorkerID      string             `json:"worker_id"`
+	Status        string             `json:"status"`
+	ErrorClass    pgtype.Text        `json:"error_class"`
+	ErrorMessage  pgtype.Text        `json:"error_message"`
+	StartedAt     pgtype.Timestamptz `json:"started_at"`
+	FinishedAt    pgtype.Timestamptz `json:"finished_at"`
 }
 
 type LedgerEntry struct {
@@ -2456,6 +2738,16 @@ type Workspace struct {
 	Address             pgtype.Text        `json:"address"`
 	ContactPhone        pgtype.Text        `json:"contact_phone"`
 	ContactEmail        pgtype.Text        `json:"contact_email"`
+}
+
+type WorkspaceAiQuota struct {
+	WorkspaceID        int64              `json:"workspace_id"`
+	PlanEntitled       bool               `json:"plan_entitled"`
+	MonthlyCreditLimit int32              `json:"monthly_credit_limit"`
+	CreditsUsed        int32              `json:"credits_used"`
+	CreditsReserved    int32              `json:"credits_reserved"`
+	PerUserDailyLimit  int32              `json:"per_user_daily_limit"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
 
 type WorkspaceTaxSetting struct {

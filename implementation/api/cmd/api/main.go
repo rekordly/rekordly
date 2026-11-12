@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/rekordly/rekordly-api/internal/ai"
 	"github.com/rekordly/rekordly-api/internal/auth"
 	"github.com/rekordly/rekordly-api/internal/config"
 	"github.com/rekordly/rekordly-api/internal/database"
@@ -48,11 +49,27 @@ func main() {
 		os.Exit(1)
 	}
 	authHandler := auth.NewHandler(authService, googleOIDC, cfg.Environment == "production")
-	financeService := finance.NewService(pool, finance.WithCloudinaryEvidence(finance.CloudinaryEvidenceConfig{
-		CloudName: cfg.CloudinaryCloudName,
-		APIKey: cfg.CloudinaryAPIKey,
-		APISecret: cfg.CloudinaryAPISecret,
-	}))
+	aiTimeout := time.Duration(cfg.AITimeoutSeconds) * time.Second
+	if aiTimeout <= 0 {
+		aiTimeout = 45 * time.Second
+	}
+	geminiProvider := ai.NewGeminiProvider(cfg.GeminiAPIKey, cfg.GeminiModel, aiTimeout)
+	deepseekProvider := ai.NewDeepSeekProvider(cfg.DeepSeekAPIKey, cfg.DeepSeekModel, aiTimeout)
+	var primaryAI, fallbackAI ai.MoneyDraftProvider = geminiProvider, deepseekProvider
+	if cfg.AIDefaultProvider == "deepseek" {
+		primaryAI, fallbackAI = deepseekProvider, geminiProvider
+	}
+	aiOrch := ai.NewOrchestrator(primaryAI, fallbackAI, aiTimeout, cfg.AIMaxInputChars, cfg.AIMaxOutputTokens)
+
+	financeService := finance.NewService(
+		pool,
+		finance.WithCloudinaryEvidence(finance.CloudinaryEvidenceConfig{
+			CloudName: cfg.CloudinaryCloudName,
+			APIKey:    cfg.CloudinaryAPIKey,
+			APISecret: cfg.CloudinaryAPISecret,
+		}),
+		finance.WithAIOrchestrator(aiOrch),
+	)
 	financeAuthMiddleware := finance.AuthAndWorkspaceMiddleware(pool, authService)
 	financeHandler := finance.NewHandler(financeService, financeAuthMiddleware)
 
@@ -61,7 +78,7 @@ func main() {
 		Handler:           server.NewRouter(cfg, logger, pool.Ping, authHandler, financeHandler),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      15 * time.Second,
+		WriteTimeout:      aiTimeout + 15*time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
 

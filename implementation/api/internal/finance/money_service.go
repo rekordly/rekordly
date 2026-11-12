@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/rekordly/rekordly-api/internal/ai"
 	"github.com/rekordly/rekordly-api/internal/db"
 )
 
@@ -32,9 +33,14 @@ type Service struct {
 	planLimitChecker PlanLimitChecker
 	evidenceUploader EvidenceUploadAuthorizer
 	dnsLookupTXT     func(string) ([]string, error)
+	aiOrchestrator   *ai.Orchestrator
 }
 
 type ServiceOption func(*Service)
+
+func WithAIOrchestrator(orch *ai.Orchestrator) ServiceOption {
+	return func(service *Service) { service.aiOrchestrator = orch }
+}
 
 func WithCloudinaryEvidence(config CloudinaryEvidenceConfig) ServiceOption {
 	return func(service *Service) { service.evidenceUploader = NewCloudinaryEvidenceAuthorizer(config) }

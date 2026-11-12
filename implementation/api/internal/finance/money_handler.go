@@ -88,6 +88,9 @@ func (h *Handler) RegisterRoutes(group *gin.RouterGroup) {
 
 	// Blueprint 11: Chart of Accounts, Journal Engine, Reports, Tax Schedules, Reconciliation & Period Close
 	h.RegisterBlueprint11Routes(protected)
+
+	// Blueprint 12: AI Assistant, CSV Imports, Background Jobs & Deterministic Automation
+	h.RegisterBlueprint12Routes(protected)
 }
 
 // @Summary Create a money account

@@ -1,6 +1,7 @@
-import { redirect } from "next/navigation";
+"use client";
 
-/** Record creation now opens in place from the app shell. */
+import { AICaptureWorkspace } from "@/components/features/ai/ai-capture-workspace";
+
 export default function CapturePage() {
-  redirect("/transactions");
+  return <AICaptureWorkspace />;
 }

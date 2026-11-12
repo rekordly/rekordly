@@ -20,6 +20,15 @@ export const PERMISSIONS = {
   PERIOD_CLOSE: "period.close",
   PERIOD_LOCK: "period.lock",
   PERIOD_REOPEN: "period.reopen",
+  AI_USE: "ai.use",
+  AI_VIEW_USAGE: "ai.view_usage",
+  IMPORTS_CREATE: "imports.create",
+  IMPORTS_REVIEW: "imports.review",
+  IMPORTS_CONFIRM: "imports.confirm",
+  IMPORTS_UNDO: "imports.undo",
+  AUTOMATION_MANAGE: "automation.manage",
+  JOBS_VIEW_FAILURES: "jobs.view_failures",
+  JOBS_RETRY: "jobs.retry",
 } as const;
 
 export const WILDCARD_PERMISSION = "*";

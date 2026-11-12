@@ -31,6 +31,16 @@ type Config struct {
 	CloudinaryCloudName    string
 	CloudinaryAPIKey       string
 	CloudinaryAPISecret    string
+	AIDefaultProvider      string
+	AIFallbackProvider     string
+	GeminiAPIKey           string
+	GeminiModel            string
+	DeepSeekAPIKey         string
+	DeepSeekModel          string
+	AITimeoutSeconds       int
+	AIMaxRetries           int
+	AIMaxInputChars        int
+	AIMaxOutputTokens      int
 }
 
 func Load() (Config, error) {
@@ -47,6 +57,14 @@ func Load() (Config, error) {
 	v.SetDefault("GOOGLE_JWKS_URL", "https://www.googleapis.com/oauth2/v3/certs")
 	v.SetDefault("GOOGLE_ISSUER", "https://accounts.google.com")
 	v.SetDefault("FRONTEND_BASE_URL", "http://localhost:3000")
+	v.SetDefault("AI_DEFAULT_PROVIDER", "gemini")
+	v.SetDefault("AI_FALLBACK_PROVIDER", "deepseek")
+	v.SetDefault("GEMINI_MODEL", "gemini-2.5-flash")
+	v.SetDefault("DEEPSEEK_MODEL", "deepseek-chat")
+	v.SetDefault("AI_TIMEOUT_SECONDS", 45)
+	v.SetDefault("AI_MAX_RETRIES", 2)
+	v.SetDefault("AI_MAX_INPUT_CHARS", 2000)
+	v.SetDefault("AI_MAX_OUTPUT_TOKENS", 1500)
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 
@@ -72,6 +90,16 @@ func Load() (Config, error) {
 		CloudinaryCloudName:    v.GetString("CLOUDINARY_CLOUD_NAME"),
 		CloudinaryAPIKey:       v.GetString("CLOUDINARY_API_KEY"),
 		CloudinaryAPISecret:    v.GetString("CLOUDINARY_API_SECRET"),
+		AIDefaultProvider:      strings.ToLower(strings.TrimSpace(v.GetString("AI_DEFAULT_PROVIDER"))),
+		AIFallbackProvider:     strings.ToLower(strings.TrimSpace(v.GetString("AI_FALLBACK_PROVIDER"))),
+		GeminiAPIKey:           v.GetString("GEMINI_API_KEY"),
+		GeminiModel:            v.GetString("GEMINI_MODEL"),
+		DeepSeekAPIKey:         v.GetString("DEEPSEEK_API_KEY"),
+		DeepSeekModel:          v.GetString("DEEPSEEK_MODEL"),
+		AITimeoutSeconds:       v.GetInt("AI_TIMEOUT_SECONDS"),
+		AIMaxRetries:           v.GetInt("AI_MAX_RETRIES"),
+		AIMaxInputChars:        v.GetInt("AI_MAX_INPUT_CHARS"),
+		AIMaxOutputTokens:      v.GetInt("AI_MAX_OUTPUT_TOKENS"),
 	}
 
 	if cfg.DatabaseURL == "" {

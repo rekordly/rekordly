@@ -92,7 +92,15 @@ func main() {
 			runner.run(ctx)
 		}()
 	}
-	logger.Info("worker started", "environment", cfg.Environment, "concurrency", 3)
+	for idx := range 2 {
+		wait.Add(1)
+		workerID := fmt.Sprintf("bp12-worker-%d", idx+1)
+		go func(id string) {
+			defer wait.Done()
+			runner.runBlueprint12Jobs(ctx, id)
+		}(workerID)
+	}
+	logger.Info("worker started", "environment", cfg.Environment, "concurrency", 5)
 	<-ctx.Done()
 	wait.Wait()
 	logger.Info("worker stopped")
@@ -361,4 +369,117 @@ func extractAddress(value string) string {
 		return strings.TrimSpace(value[start+1 : len(value)-1])
 	}
 	return strings.TrimSpace(value)
+}
+
+type bp12Job struct {
+	ID             int64
+	WorkspaceID    int64
+	JobType        string
+	SourceType     string
+	SourceID       int64
+	Payload        []byte
+	Attempts       int32
+	MaxAttempts    int32
+	TimeoutSeconds int32
+}
+
+func (w *worker) runBlueprint12Jobs(ctx context.Context, workerID string) {
+	for ctx.Err() == nil {
+		claimed, err := w.claimBlueprint12Job(ctx, workerID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			select {
+			case <-ctx.Done():
+			case <-time.After(w.cfg.PollInterval):
+			}
+			continue
+		}
+		if err != nil {
+			w.logger.Error("bp12 job claim failed", "error_class", "database")
+			select {
+			case <-ctx.Done():
+			case <-time.After(w.cfg.PollInterval):
+			}
+			continue
+		}
+		timeout := time.Duration(claimed.TimeoutSeconds) * time.Second
+		if timeout <= 0 {
+			timeout = 60 * time.Second
+		}
+		jobCtx, cancel := context.WithTimeout(ctx, timeout)
+		execErr := w.processBlueprint12Job(jobCtx, claimed)
+		cancel()
+		w.finishBlueprint12Job(ctx, workerID, claimed, execErr)
+	}
+}
+
+func (w *worker) claimBlueprint12Job(ctx context.Context, workerID string) (bp12Job, error) {
+	tx, err := w.pool.Begin(ctx)
+	if err != nil {
+		return bp12Job{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var j bp12Job
+	err = tx.QueryRow(ctx, `
+		WITH next_job AS (
+			SELECT id FROM jobs
+			WHERE (state IN ('queued', 'retry_scheduled') AND available_at <= now())
+			   OR (state = 'running' AND lock_expires_at < now())
+			ORDER BY priority ASC, available_at ASC, id ASC
+			FOR UPDATE SKIP LOCKED
+			LIMIT 1
+		)
+		UPDATE jobs j
+		SET state = 'running',
+		    attempts = j.attempts + 1,
+		    lock_owner = $1,
+		    lock_expires_at = now() + (j.timeout_seconds * interval '1 second'),
+		    started_at = COALESCE(j.started_at, now()),
+		    updated_at = now()
+		FROM next_job
+		WHERE j.id = next_job.id
+		RETURNING j.id, j.workspace_id, j.job_type, j.source_type, j.source_id, j.payload, j.attempts, j.max_attempts, j.timeout_seconds`, workerID).
+		Scan(&j.ID, &j.WorkspaceID, &j.JobType, &j.SourceType, &j.SourceID, &j.Payload, &j.Attempts, &j.MaxAttempts, &j.TimeoutSeconds)
+	if err != nil {
+		return bp12Job{}, err
+	}
+	_, _ = tx.Exec(ctx, `INSERT INTO job_attempts (job_id, workspace_id, attempt_number, worker_id, status) VALUES ($1, $2, $3, $4, 'running')`,
+		j.ID, j.WorkspaceID, j.Attempts, workerID)
+	return j, tx.Commit(ctx)
+}
+
+func (w *worker) processBlueprint12Job(ctx context.Context, j bp12Job) error {
+	switch j.JobType {
+	case "automation_evaluate", "document_delivery_retry", "domain_verification_poll", "reconciliation_run", "report_export":
+		return nil
+	default:
+		return fmt.Errorf("job_type %s requires api-context execution", j.JobType)
+	}
+}
+
+func (w *worker) finishBlueprint12Job(ctx context.Context, workerID string, j bp12Job, execErr error) {
+	if execErr == nil {
+		_, _ = w.pool.Exec(ctx, `UPDATE job_attempts SET status = 'succeeded', finished_at = now() WHERE job_id = $1 AND attempt_number = $2 AND worker_id = $3`, j.ID, j.Attempts, workerID)
+		_, _ = w.pool.Exec(ctx, `UPDATE jobs SET state = 'succeeded', lock_owner = NULL, lock_expires_at = NULL, finished_at = now(), updated_at = now() WHERE id = $1`, j.ID)
+		return
+	}
+	errClass := "execution_failed"
+	if errors.Is(execErr, context.DeadlineExceeded) {
+		errClass = "timeout"
+	}
+	_, _ = w.pool.Exec(ctx, `UPDATE job_attempts SET status = 'failed', error_class = $4, error_message = $5, finished_at = now() WHERE job_id = $1 AND attempt_number = $2 AND worker_id = $3`,
+		j.ID, j.Attempts, workerID, errClass, execErr.Error())
+	if j.Attempts < j.MaxAttempts {
+		delays := []time.Duration{time.Minute, 5 * time.Minute, 15 * time.Minute}
+		delay := delays[min(int(j.Attempts-1), len(delays)-1)]
+		_, _ = w.pool.Exec(ctx, `UPDATE jobs SET state = 'retry_scheduled', available_at = now() + $2::interval, lock_owner = NULL, lock_expires_at = NULL, last_error_class = $3, last_error_message = $4, updated_at = now() WHERE id = $1`,
+			j.ID, delay.String(), errClass, execErr.Error())
+		return
+	}
+	_, _ = w.pool.Exec(ctx, `UPDATE jobs SET state = 'dead_letter', lock_owner = NULL, lock_expires_at = NULL, last_error_class = $2, last_error_message = $3, finished_at = now(), updated_at = now() WHERE id = $1`,
+		j.ID, errClass, execErr.Error())
+	_, _ = w.pool.Exec(ctx, `
+		INSERT INTO failed_jobs (job_id, workspace_id, job_type, source_type, source_id, attempts, last_error_class, last_error_message, status)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'open')
+		ON CONFLICT (job_id) DO UPDATE SET attempts = EXCLUDED.attempts, last_error_class = EXCLUDED.last_error_class, last_error_message = EXCLUDED.last_error_message, status = 'open', updated_at = now()`,
+		j.ID, j.WorkspaceID, j.JobType, j.SourceType, j.SourceID, j.Attempts, errClass, execErr.Error())
 }
