@@ -85,6 +85,9 @@ func (h *Handler) RegisterRoutes(group *gin.RouterGroup) {
 
 	// Blueprint 10: Personal Finance, Budgets, Loans, Assets, Investments, Owner Transfers & All Summary
 	h.RegisterPersonalFinanceRoutes(protected)
+
+	// Blueprint 11: Chart of Accounts, Journal Engine, Reports, Tax Schedules, Reconciliation & Period Close
+	h.RegisterBlueprint11Routes(protected)
 }
 
 // @Summary Create a money account

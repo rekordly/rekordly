@@ -8,7 +8,7 @@
     "start": "next start -H 0.0.0.0",
     "lint": "eslint src tests",
     "type-check": "tsc --noEmit",
-    "test": "npm run type-check && node --test tests/auth.test.ts tests/feature-registry.test.ts tests/session.test.ts tests/personal-finance.test.ts"
+    "test": "npm run type-check && node --test tests/auth.test.ts tests/feature-registry.test.ts tests/session.test.ts tests/personal-finance.test.ts tests/blueprint-11.test.ts"
   },
   "dependencies": {
     "@heroui/react": "3.2.7",

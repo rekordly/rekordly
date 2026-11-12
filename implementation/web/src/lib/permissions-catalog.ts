@@ -6,6 +6,20 @@ export const PERMISSIONS = {
   INVENTORY_VIEW_QUANTITY: "inventory.view_quantity",
   STOREFRONT_VIEW: "storefront.view",
   REPORTS_VIEW_BASIC: "reports.view_basic",
+  LEDGER_VIEW: "ledger.view",
+  LEDGER_VIEW_DETAIL: "ledger.view_detail",
+  CHART_MANAGE: "chart.manage",
+  JOURNAL_CREATE_MANUAL: "journal.create_manual",
+  JOURNAL_APPROVE_MANUAL: "journal.approve_manual",
+  JOURNAL_REVERSE: "journal.reverse",
+  REPORTS_VIEW_ACCOUNTING: "reports.view_accounting",
+  REPORTS_VIEW_TAX: "reports.view_tax",
+  REPORTS_EXPORT: "reports.export",
+  RECONCILIATION_VIEW: "reconciliation.view",
+  RECONCILIATION_RUN: "reconciliation.run",
+  PERIOD_CLOSE: "period.close",
+  PERIOD_LOCK: "period.lock",
+  PERIOD_REOPEN: "period.reopen",
 } as const;
 
 export const WILDCARD_PERMISSION = "*";

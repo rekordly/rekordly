@@ -109,7 +109,7 @@ INSERT INTO ledger_entries (
     workspace_id, source_type, source_id, entry_date, currency, currency_exponent, description
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7
-) RETURNING id, workspace_id, source_type, source_id, entry_date, currency, currency_exponent, description, is_reversed, reversed_by_entry_id, created_at
+) RETURNING id, workspace_id, source_type, source_id, entry_date, currency, currency_exponent, description, is_reversed, reversed_by_entry_id, created_at, template_key, template_version, status, reversal_of_entry_id, accounting_period_id, outlet_id, posted_by_user_id, idempotency_key
 `
 
 type CreateLedgerEntryParams struct {
@@ -145,6 +145,14 @@ func (q *Queries) CreateLedgerEntry(ctx context.Context, arg CreateLedgerEntryPa
 		&i.IsReversed,
 		&i.ReversedByEntryID,
 		&i.CreatedAt,
+		&i.TemplateKey,
+		&i.TemplateVersion,
+		&i.Status,
+		&i.ReversalOfEntryID,
+		&i.AccountingPeriodID,
+		&i.OutletID,
+		&i.PostedByUserID,
+		&i.IdempotencyKey,
 	)
 	return i, err
 }
@@ -154,7 +162,7 @@ INSERT INTO ledger_lines (
     ledger_entry_id, workspace_id, account_id, account_class, debit_minor, credit_minor, description
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7
-) RETURNING id, ledger_entry_id, workspace_id, account_id, account_class, debit_minor, credit_minor, description
+) RETURNING id, ledger_entry_id, workspace_id, account_id, account_class, debit_minor, credit_minor, description, chart_account_id, party_id, outlet_id, tax_code_id, dimension_tags
 `
 
 type CreateLedgerLineParams struct {
@@ -187,6 +195,11 @@ func (q *Queries) CreateLedgerLine(ctx context.Context, arg CreateLedgerLinePara
 		&i.DebitMinor,
 		&i.CreditMinor,
 		&i.Description,
+		&i.ChartAccountID,
+		&i.PartyID,
+		&i.OutletID,
+		&i.TaxCodeID,
+		&i.DimensionTags,
 	)
 	return i, err
 }
@@ -479,7 +492,7 @@ func (q *Queries) GetCategoryByNameAndDirection(ctx context.Context, arg GetCate
 }
 
 const getLedgerEntryByID = `-- name: GetLedgerEntryByID :one
-SELECT id, workspace_id, source_type, source_id, entry_date, currency, currency_exponent, description, is_reversed, reversed_by_entry_id, created_at FROM ledger_entries
+SELECT id, workspace_id, source_type, source_id, entry_date, currency, currency_exponent, description, is_reversed, reversed_by_entry_id, created_at, template_key, template_version, status, reversal_of_entry_id, accounting_period_id, outlet_id, posted_by_user_id, idempotency_key FROM ledger_entries
 WHERE id = $1 AND workspace_id = $2
 `
 
@@ -503,12 +516,20 @@ func (q *Queries) GetLedgerEntryByID(ctx context.Context, arg GetLedgerEntryByID
 		&i.IsReversed,
 		&i.ReversedByEntryID,
 		&i.CreatedAt,
+		&i.TemplateKey,
+		&i.TemplateVersion,
+		&i.Status,
+		&i.ReversalOfEntryID,
+		&i.AccountingPeriodID,
+		&i.OutletID,
+		&i.PostedByUserID,
+		&i.IdempotencyKey,
 	)
 	return i, err
 }
 
 const getLedgerLinesByEntryID = `-- name: GetLedgerLinesByEntryID :many
-SELECT id, ledger_entry_id, workspace_id, account_id, account_class, debit_minor, credit_minor, description FROM ledger_lines
+SELECT id, ledger_entry_id, workspace_id, account_id, account_class, debit_minor, credit_minor, description, chart_account_id, party_id, outlet_id, tax_code_id, dimension_tags FROM ledger_lines
 WHERE ledger_entry_id = $1 AND workspace_id = $2
 ORDER BY id ASC
 `
@@ -536,6 +557,11 @@ func (q *Queries) GetLedgerLinesByEntryID(ctx context.Context, arg GetLedgerLine
 			&i.DebitMinor,
 			&i.CreditMinor,
 			&i.Description,
+			&i.ChartAccountID,
+			&i.PartyID,
+			&i.OutletID,
+			&i.TaxCodeID,
+			&i.DimensionTags,
 		); err != nil {
 			return nil, err
 		}
@@ -944,7 +970,7 @@ UPDATE ledger_entries
 SET is_reversed = true,
     reversed_by_entry_id = $3
 WHERE id = $1 AND workspace_id = $2
-RETURNING id, workspace_id, source_type, source_id, entry_date, currency, currency_exponent, description, is_reversed, reversed_by_entry_id, created_at
+RETURNING id, workspace_id, source_type, source_id, entry_date, currency, currency_exponent, description, is_reversed, reversed_by_entry_id, created_at, template_key, template_version, status, reversal_of_entry_id, accounting_period_id, outlet_id, posted_by_user_id, idempotency_key
 `
 
 type MarkLedgerEntryReversedParams struct {
@@ -968,6 +994,14 @@ func (q *Queries) MarkLedgerEntryReversed(ctx context.Context, arg MarkLedgerEnt
 		&i.IsReversed,
 		&i.ReversedByEntryID,
 		&i.CreatedAt,
+		&i.TemplateKey,
+		&i.TemplateVersion,
+		&i.Status,
+		&i.ReversalOfEntryID,
+		&i.AccountingPeriodID,
+		&i.OutletID,
+		&i.PostedByUserID,
+		&i.IdempotencyKey,
 	)
 	return i, err
 }

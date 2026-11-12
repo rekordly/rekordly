@@ -697,7 +697,7 @@ func (q *Queries) GetMoneyRecordDraftForUpdate(ctx context.Context, arg GetMoney
 }
 
 const getMoneyRecordLedgerEntry = `-- name: GetMoneyRecordLedgerEntry :one
-SELECT le.id, le.workspace_id, le.source_type, le.source_id, le.entry_date, le.currency, le.currency_exponent, le.description, le.is_reversed, le.reversed_by_entry_id, le.created_at
+SELECT le.id, le.workspace_id, le.source_type, le.source_id, le.entry_date, le.currency, le.currency_exponent, le.description, le.is_reversed, le.reversed_by_entry_id, le.created_at, le.template_key, le.template_version, le.status, le.reversal_of_entry_id, le.accounting_period_id, le.outlet_id, le.posted_by_user_id, le.idempotency_key
 FROM ledger_entries le
 JOIN money_records mr ON mr.transaction_id = le.source_id
 WHERE mr.id = $1
@@ -726,6 +726,14 @@ func (q *Queries) GetMoneyRecordLedgerEntry(ctx context.Context, arg GetMoneyRec
 		&i.IsReversed,
 		&i.ReversedByEntryID,
 		&i.CreatedAt,
+		&i.TemplateKey,
+		&i.TemplateVersion,
+		&i.Status,
+		&i.ReversalOfEntryID,
+		&i.AccountingPeriodID,
+		&i.OutletID,
+		&i.PostedByUserID,
+		&i.IdempotencyKey,
 	)
 	return i, err
 }
