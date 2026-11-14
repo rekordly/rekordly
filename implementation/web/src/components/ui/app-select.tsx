@@ -51,10 +51,10 @@ export function AppSelect({
 }: AppSelectProps) {
   const heightClass =
     size === 'sm'
-      ? 'h-8 text-xs py-1 px-2.5'
+      ? 'h-8 text-[12px] py-1 px-2.5'
       : size === 'lg'
-        ? 'h-12 text-sm px-4'
-        : 'h-10 text-xs px-3';
+        ? 'h-12 text-[15px] px-4'
+        : 'h-11 text-[14px] px-3.5';
 
   return (
     <div className={`flex flex-col gap-1.5 ${className}`}>
@@ -76,26 +76,27 @@ export function AppSelect({
         className="w-full"
       >
         <Select.Trigger
-          className={`flex w-full items-center justify-between gap-2 rounded-xl border border-field-border bg-field text-foreground outline-none transition-colors hover:border-field-border-hover focus:border-accent cursor-pointer shadow-none ${heightClass} ${triggerClassName}`}
+          data-invalid={error ? true : undefined}
+          className={`field-shell flex w-full cursor-pointer items-center justify-between gap-2 shadow-none ${heightClass} ${triggerClassName}`}
         >
-          <Select.Value className="text-xs truncate font-medium text-foreground" />
+          <Select.Value className="truncate text-foreground data-[placeholder]:text-field-placeholder" />
           <Select.Indicator className="text-muted shrink-0" />
         </Select.Trigger>
-        <Select.Popover className="w-(--trigger-width) min-w-20 max-h-72 overflow-y-auto rounded-2xl border border-border bg-overlay p-1 shadow-2xl backdrop-blur-xl z-50">
+        <Select.Popover className="animate-fade-up z-50 max-h-72 w-(--trigger-width) min-w-20 overflow-y-auto rounded-2xl border border-border bg-overlay p-1 shadow-xl">
           <ListBox className="outline-none space-y-0.5">
             {options.map((opt) => (
               <ListBox.Item
                 key={opt.key}
                 id={opt.key}
                 textValue={opt.label}
-                className="flex items-center justify-between rounded-xl px-3 py-2 text-xs font-medium text-foreground cursor-pointer transition-colors hover:bg-surface focus:bg-surface outline-none"
+                className="flex cursor-pointer items-center justify-between rounded-xl px-3 py-2.5 text-[13px] font-medium text-foreground outline-none transition-colors hover:bg-surface-secondary focus:bg-surface-secondary data-[selected=true]:bg-primary-soft data-[selected=true]:text-primary-soft-foreground"
               >
                 <div className="flex items-center gap-2 min-w-0">
                   {opt.icon}
                   <div className="flex flex-col min-w-0">
                     <span className="truncate">{opt.label}</span>
                     {opt.description && (
-                      <span className="text-[10px] text-muted truncate">{opt.description}</span>
+                      <span className="truncate text-[11px] text-muted">{opt.description}</span>
                     )}
                   </div>
                 </div>
@@ -105,8 +106,8 @@ export function AppSelect({
           </ListBox>
         </Select.Popover>
       </Select>
-      {error && <p className="text-[11px] font-medium text-danger">{error}</p>}
-      {description && !error && <p className="text-[11px] text-muted">{description}</p>}
+      {error && <p className="animate-fade-up text-[12px] font-medium text-danger">{error}</p>}
+      {description && !error && <p className="text-[12px] text-muted">{description}</p>}
     </div>
   );
 }

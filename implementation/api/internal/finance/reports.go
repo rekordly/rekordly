@@ -44,6 +44,34 @@ type CategorySpending struct {
 	TotalMinor int64  `json:"total_minor,string"`
 }
 
+// PeriodTotals are the income and expense of the comparison period.
+type PeriodTotals struct {
+	FromDate     string `json:"from_date"`
+	ToDate       string `json:"to_date"`
+	IncomeMinor  int64  `json:"income_minor,string"`
+	ExpenseMinor int64  `json:"expense_minor,string"`
+	NetMinor     int64  `json:"net_minor,string"`
+}
+
+// OpenBalances are amounts still unpaid today, whatever the period.
+type OpenBalances struct {
+	SalesUnpaidMinor     int64 `json:"sales_unpaid_minor,string"`
+	SalesUnpaidCount     int64 `json:"sales_unpaid_count"`
+	InvoicesUnpaidMinor  int64 `json:"invoices_unpaid_minor,string"`
+	InvoicesUnpaidCount  int64 `json:"invoices_unpaid_count"`
+	InvoicesOverdueMinor int64 `json:"invoices_overdue_minor,string"`
+	InvoicesOverdueCount int64 `json:"invoices_overdue_count"`
+	PurchasesUnpaidMinor int64 `json:"purchases_unpaid_minor,string"`
+	PurchasesUnpaidCount int64 `json:"purchases_unpaid_count"`
+}
+
+// DailyFinance is one day of ledger income and expense.
+type DailyFinance struct {
+	Date         string `json:"date"`
+	IncomeMinor  int64  `json:"income_minor,string"`
+	ExpenseMinor int64  `json:"expense_minor,string"`
+}
+
 // FinanceSummary holds dashboard totals, all computed on the server.
 type FinanceSummary struct {
 	FromDate           string             `json:"from_date"`
@@ -56,6 +84,18 @@ type FinanceSummary struct {
 	CashBalanceMinor   int64              `json:"cash_balance_minor,string"`
 	Monthly            []MonthlyFinance   `json:"monthly"`
 	SpendingByCategory []CategorySpending `json:"spending_by_category"`
+	// Previous is the window just before this one, used for change chips.
+	Previous   PeriodTotals `json:"previous"`
+	Open       OpenBalances `json:"open"`
+	SalesMinor int64        `json:"sales_minor,string"`
+	SalesCount int64        `json:"sales_count"`
+	// Collected so far on the sales made in this period.
+	SalesPaidMinor     int64 `json:"sales_paid_minor,string"`
+	PurchasesMinor     int64 `json:"purchases_minor,string"`
+	PurchasesPaidMinor int64 `json:"purchases_paid_minor,string"`
+	PurchasesCount     int64 `json:"purchases_count"`
+	// LastSevenDays ends on to_date and always has seven entries.
+	LastSevenDays []DailyFinance `json:"last_7_days"`
 }
 
 func resolveSummaryWindow(fromDate, toDate string, now time.Time) (time.Time, time.Time, error) {
@@ -83,6 +123,47 @@ func resolveSummaryWindow(fromDate, toDate string, now time.Time) (time.Time, ti
 		return time.Time{}, time.Time{}, errors.New("the date range cannot be longer than two years")
 	}
 	return from, to, nil
+}
+
+// previousWindow returns the comparison window. A window that starts on the 1st
+// compares with the same days the same number of months earlier (1-13 Nov vs 1-13 Oct);
+// any other window compares with the same number of days immediately before.
+func previousWindow(from, to time.Time) (time.Time, time.Time) {
+	if from.Day() == 1 {
+		months := (to.Year()-from.Year())*12 + int(to.Month()-from.Month()) + 1
+		prevFrom := from.AddDate(0, -months, 0)
+		prevTo := shiftMonthsClamped(to, -months)
+		return prevFrom, prevTo
+	}
+	days := int(to.Sub(from).Hours()/24) + 1
+	prevTo := from.AddDate(0, 0, -1)
+	return prevTo.AddDate(0, 0, -(days - 1)), prevTo
+}
+
+// shiftMonthsClamped moves a date by whole months, keeping it inside the target month (31 Mar - 1 month = 28/29 Feb).
+func shiftMonthsClamped(t time.Time, months int) time.Time {
+	firstOfTarget := time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC).AddDate(0, months, 0)
+	lastDay := firstOfTarget.AddDate(0, 1, -1).Day()
+	day := t.Day()
+	if day > lastDay {
+		day = lastDay
+	}
+	return time.Date(firstOfTarget.Year(), firstOfTarget.Month(), day, 0, 0, 0, 0, time.UTC)
+}
+
+// fillDays returns seven consecutive days from start, with zero for days that have no entries.
+func fillDays(start time.Time, rows []db.GetDailyIncomeExpenseRow) []DailyFinance {
+	byDay := make(map[string]db.GetDailyIncomeExpenseRow, len(rows))
+	for _, row := range rows {
+		byDay[row.Day.Time.Format("2006-01-02")] = row
+	}
+	out := make([]DailyFinance, 0, 7)
+	for i := 0; i < 7; i++ {
+		key := start.AddDate(0, 0, i).Format("2006-01-02")
+		row := byDay[key]
+		out = append(out, DailyFinance{Date: key, IncomeMinor: row.IncomeMinor, ExpenseMinor: row.ExpenseMinor})
+	}
+	return out
 }
 
 // GetFinanceSummary aggregates in SQL; no raw records reach the client.
@@ -125,7 +206,58 @@ func (s *Service) GetFinanceSummary(ctx context.Context, workspaceID int64, from
 		return FinanceSummary{}, fmt.Errorf("spending by category: %w", err)
 	}
 
+	prevFrom, prevTo := previousWindow(from, to)
+	prevTotals, err := s.queries.GetIncomeExpenseTotals(ctx, db.GetIncomeExpenseTotalsParams{
+		WorkspaceID: workspaceID, Currency: currency,
+		FromDate: pgtype.Date{Time: prevFrom, Valid: true}, ToDate: pgtype.Date{Time: prevTo, Valid: true},
+	})
+	if err != nil {
+		return FinanceSummary{}, fmt.Errorf("previous totals: %w", err)
+	}
+	open, err := s.queries.GetOpenBalances(ctx, db.GetOpenBalancesParams{
+		WorkspaceID: workspaceID, Currency: currency, Today: pgtype.Date{Time: time.Now().UTC(), Valid: true},
+	})
+	if err != nil {
+		return FinanceSummary{}, fmt.Errorf("open balances: %w", err)
+	}
+	sales, err := s.queries.GetSalesTotals(ctx, db.GetSalesTotalsParams{
+		WorkspaceID: workspaceID, Currency: currency, FromDate: fromParam, ToDate: toParam,
+	})
+	if err != nil {
+		return FinanceSummary{}, fmt.Errorf("sales totals: %w", err)
+	}
+
+	purchases, err := s.queries.GetPurchaseTotals(ctx, db.GetPurchaseTotalsParams{
+		WorkspaceID: workspaceID, Currency: currency, FromDate: fromParam, ToDate: toParam,
+	})
+	if err != nil {
+		return FinanceSummary{}, fmt.Errorf("purchase totals: %w", err)
+	}
+	weekFrom := to.AddDate(0, 0, -6)
+	days, err := s.queries.GetDailyIncomeExpense(ctx, db.GetDailyIncomeExpenseParams{
+		WorkspaceID: workspaceID, Currency: currency,
+		FromDate: pgtype.Date{Time: weekFrom, Valid: true}, ToDate: toParam,
+	})
+	if err != nil {
+		return FinanceSummary{}, fmt.Errorf("daily totals: %w", err)
+	}
+
 	summary := FinanceSummary{
+		Previous: PeriodTotals{
+			FromDate:     prevFrom.Format("2006-01-02"),
+			ToDate:       prevTo.Format("2006-01-02"),
+			IncomeMinor:  prevTotals.IncomeMinor,
+			ExpenseMinor: prevTotals.ExpenseMinor,
+			NetMinor:     prevTotals.IncomeMinor - prevTotals.ExpenseMinor,
+		},
+		Open:               OpenBalances(open),
+		SalesMinor:         sales.TotalMinor,
+		SalesCount:         sales.SaleCount,
+		SalesPaidMinor:     sales.PaidMinor,
+		PurchasesMinor:     purchases.TotalMinor,
+		PurchasesPaidMinor: purchases.PaidMinor,
+		PurchasesCount:     purchases.PurchaseCount,
+		LastSevenDays:      fillDays(weekFrom, days),
 		FromDate:           from.Format("2006-01-02"),
 		ToDate:             to.Format("2006-01-02"),
 		Currency:           currency,

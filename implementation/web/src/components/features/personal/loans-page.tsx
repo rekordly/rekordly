@@ -25,7 +25,8 @@ import {
 import type { LoanDetail, LoanEvent } from "@/types/personal-finance";
 
 import { MoneyField, NotesField, SelectField, TextInputField } from "../finance/fields";
-import { useAccountOptions, useFinanceAction, WorkspaceGate, type WorkspaceInfo } from "../finance/shared";
+import { useFinanceAction, WorkspaceGate, type WorkspaceInfo } from "../finance/shared";
+import { AccountField } from "@/components/pickers";
 
 const TABS = [
   { key: "all", label: "All loans" },
@@ -69,8 +70,6 @@ function LoansContent({ workspaceId, currency, isBusiness }: WorkspaceInfo) {
     queryFn: () => personalApi.getLoan(workspaceId, selectedLoan!.loan.id),
     enabled: Boolean(selectedLoan) && !isBusiness,
   });
-
-  const accounts = useAccountOptions(workspaceId);
   const today = new Date().toISOString().split("T")[0];
 
   const createForm = useForm<LoanCreateValues>({
@@ -303,7 +302,7 @@ function LoansContent({ workspaceId, currency, isBusiness }: WorkspaceInfo) {
           Opening loan balance (already existed before Rekordly — no current cash movement)
         </label>
         {!isOpening ? (
-          <SelectField control={createForm.control} name="money_account_id" label="Receiving / paying account" options={accounts.options} />
+          <AccountField control={createForm.control} name="money_account_id" label="Receiving / paying account" workspaceId={workspaceId} />
         ) : null}
         <NotesField control={createForm.control} name="notes" label="Notes" />
       </FormDrawer>
@@ -325,7 +324,7 @@ function LoansContent({ workspaceId, currency, isBusiness }: WorkspaceInfo) {
         isSubmitting={recordRepayment.isPending}
         onSubmit={repayForm.handleSubmit((v) => recordRepayment.mutate(v))}
       >
-        <SelectField control={repayForm.control} name="money_account_id" label="Account" options={accounts.options} />
+        <AccountField control={repayForm.control} name="money_account_id" label="Account" workspaceId={workspaceId} />
         <TextInputField control={repayForm.control} name="effective_date" label="Date" type="date" />
         <MoneyField control={repayForm.control} name="total_amount" label="Total payment" currency={currency} exponent={2} />
         <MoneyField control={repayForm.control} name="principal" label="Principal portion" currency={currency} exponent={2} />

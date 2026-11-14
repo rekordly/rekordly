@@ -108,7 +108,7 @@ INSERT INTO product_variants (
     is_default, is_active
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
-) RETURNING id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor
+) RETURNING id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor, compare_at_price_minor
 `
 
 type CreateVariantParams struct {
@@ -155,12 +155,13 @@ func (q *Queries) CreateVariant(ctx context.Context, arg CreateVariantParams) (P
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CostPriceMinor,
+		&i.CompareAtPriceMinor,
 	)
 	return i, err
 }
 
 const getVariantByID = `-- name: GetVariantByID :one
-SELECT id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor FROM product_variants
+SELECT id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor, compare_at_price_minor FROM product_variants
 WHERE workspace_id = $1 AND id = $2
 `
 
@@ -187,6 +188,7 @@ func (q *Queries) GetVariantByID(ctx context.Context, arg GetVariantByIDParams) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CostPriceMinor,
+		&i.CompareAtPriceMinor,
 	)
 	return i, err
 }
@@ -317,7 +319,7 @@ func (q *Queries) ListVariantOptionValuesForProduct(ctx context.Context, arg Lis
 }
 
 const listVariantsByProductID = `-- name: ListVariantsByProductID :many
-SELECT id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor FROM product_variants
+SELECT id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor, compare_at_price_minor FROM product_variants
 WHERE workspace_id = $1 AND product_id = $2
 ORDER BY is_default DESC, id ASC
 `
@@ -351,6 +353,7 @@ func (q *Queries) ListVariantsByProductID(ctx context.Context, arg ListVariantsB
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.CostPriceMinor,
+			&i.CompareAtPriceMinor,
 		); err != nil {
 			return nil, err
 		}
@@ -372,7 +375,7 @@ SET name = $3,
     is_active = $8,
     updated_at = now()
 WHERE workspace_id = $1 AND id = $2
-RETURNING id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor
+RETURNING id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor, compare_at_price_minor
 `
 
 type UpdateVariantParams struct {
@@ -413,6 +416,7 @@ func (q *Queries) UpdateVariant(ctx context.Context, arg UpdateVariantParams) (P
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CostPriceMinor,
+		&i.CompareAtPriceMinor,
 	)
 	return i, err
 }

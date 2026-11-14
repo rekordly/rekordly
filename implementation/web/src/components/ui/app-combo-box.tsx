@@ -60,10 +60,10 @@ export function AppComboBox({
 }: AppComboBoxProps) {
   const heightClass =
     size === 'sm'
-      ? 'h-8 text-xs py-1 px-2.5'
+      ? 'h-8 text-[12px] py-1 px-2.5'
       : size === 'lg'
-        ? 'h-12 text-sm px-4'
-        : 'h-10 text-xs px-3';
+        ? 'h-12 text-[15px] px-4'
+        : 'h-11 text-[14px] px-3.5';
 
   // Check if current text exists in options
   const currentText = inputValue?.trim().toLowerCase() || '';
@@ -99,11 +99,12 @@ export function AppComboBox({
         className="w-full"
       >
         <ComboBox.InputGroup
-          className={`flex w-full items-center justify-between gap-2 rounded-xl border border-field-border bg-field text-foreground transition-colors hover:border-field-border-hover focus-within:border-accent ${heightClass} ${inputClassName}`}
+          data-invalid={error ? true : undefined}
+          className={`field-shell flex w-full items-center justify-between gap-2 ${heightClass} ${inputClassName}`}
         >
           <Input
             placeholder={placeholder}
-            className="w-full bg-transparent text-xs font-medium text-foreground placeholder:text-muted outline-none border-none shadow-none focus:ring-0"
+            className="w-full border-none bg-transparent text-foreground shadow-none outline-none placeholder:text-field-placeholder focus:ring-0"
             onKeyDown={(e) => {
               if (e.key === 'Enter' && showCustomOption && onCustomValueSubmit && inputValue) {
                 e.preventDefault();
@@ -116,7 +117,7 @@ export function AppComboBox({
           </ComboBox.Trigger>
         </ComboBox.InputGroup>
 
-        <ComboBox.Popover className="w-(--trigger-width) min-w-48 max-h-72 overflow-y-auto rounded-2xl border border-border bg-overlay p-1 shadow-2xl backdrop-blur-xl z-50">
+        <ComboBox.Popover className="animate-fade-up z-50 max-h-72 w-(--trigger-width) min-w-48 overflow-y-auto rounded-2xl border border-border bg-overlay p-1 shadow-xl">
           <ListBox className="outline-none space-y-0.5">
             {showCustomOption && (
               <ListBox.Item
@@ -128,7 +129,7 @@ export function AppComboBox({
                     onCustomValueSubmit(inputValue.trim());
                   }
                 }}
-                className="flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-primary hover:bg-primary/10 focus:bg-primary/10 cursor-pointer transition-colors outline-none border-b border-border/50 mb-1"
+                className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-[13px] font-semibold text-primary hover:bg-primary/10 focus:bg-primary/10 cursor-pointer transition-colors outline-none border-b border-border/50 mb-1"
               >
                 <Plus size={14} weight="bold" className="shrink-0 text-primary" />
                 <span className="truncate">Add &quot;{inputValue}&quot; as new</span>
@@ -139,7 +140,7 @@ export function AppComboBox({
                 key={opt.key}
                 id={opt.key}
                 textValue={opt.label}
-                className="flex items-center justify-between rounded-xl px-3 py-2 text-xs font-medium text-foreground cursor-pointer transition-colors hover:bg-surface focus:bg-surface outline-none"
+                className="flex cursor-pointer items-center justify-between rounded-xl px-3 py-2.5 text-[13px] font-medium text-foreground outline-none transition-colors hover:bg-surface-secondary focus:bg-surface-secondary"
               >
                 <div className="flex items-center gap-2 min-w-0">
                   {opt.icon}
@@ -155,8 +156,8 @@ export function AppComboBox({
           </ListBox>
         </ComboBox.Popover>
       </ComboBox>
-      {error && <p className="text-[11px] font-medium text-danger">{error}</p>}
-      {description && !error && <p className="text-[11px] text-muted">{description}</p>}
+      {error && <p className="animate-fade-up text-[12px] font-medium text-danger">{error}</p>}
+      {description && !error && <p className="text-[12px] text-muted">{description}</p>}
     </div>
   );
 }

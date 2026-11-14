@@ -19,12 +19,12 @@ import { financeApi, formatMinorAmount, moneyKeys } from "@/lib/money";
 import { walletDepositSchema, type WalletDepositValues } from "@/lib/schemas/finance.schemas";
 import type { WalletTransaction } from "@/types/finance";
 
-import { MoneyField, NotesField, SelectField, TextInputField } from "./fields";
-import { useAccountOptions, useContacts, useFinanceAction, WorkspaceGate, type WorkspaceInfo } from "./shared";
+import { MoneyField, NotesField, TextInputField } from "./fields";
+import { useContacts, useFinanceAction, WorkspaceGate, type WorkspaceInfo } from "./shared";
+import { AccountField } from "@/components/pickers";
 
 function WalletsContent({ workspaceId, currency }: WorkspaceInfo) {
   const customers = useContacts(workspaceId, "customers");
-  const accounts = useAccountOptions(workspaceId);
   const [selected, setSelected] = useState<string>("");
   const [isOpen, setIsOpen] = useState(false);
   const customerId = Number(selected) || null;
@@ -146,7 +146,7 @@ function WalletsContent({ workspaceId, currency }: WorkspaceInfo) {
         onSubmit={form.handleSubmit((values) => deposit.mutate(values))}
       >
         <MoneyField control={form.control} name="amount" label="Amount" currency={currency} isRequired />
-        <SelectField control={form.control} name="account_id" label="Received into" placeholder="Choose account" options={accounts.options} isRequired />
+        <AccountField control={form.control} name="account_id" label="Received into" workspaceId={workspaceId} isRequired />
         <TextInputField control={form.control} name="reference" label="Reference" placeholder="Optional" />
         <NotesField control={form.control} name="notes" label="Notes" />
       </FormDrawer>

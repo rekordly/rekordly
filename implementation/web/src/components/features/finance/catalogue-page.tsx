@@ -5,17 +5,14 @@ import {
   ArrowsLeftRight,
   BookmarkSimple,
   ClipboardText,
-  Package,
-  Plus,
   SealCheck,
-  ShoppingBag,
   Storefront,
   Warehouse,
   WarningCircle,
-  Wrench,
 } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import Link from "next/link";
 import { useForm } from "react-hook-form";
 
 import { AppButton } from "@/components/ui/app-button";
@@ -59,10 +56,10 @@ import type {
 
 import { MoneyField, NotesField, SelectField, TextInputField } from "./fields";
 import { useFinanceAction, WorkspaceGate, type WorkspaceInfo } from "./shared";
+import { InventoryStats } from "./section-stats";
 
 const INVENTORY_TABS = [
   { key: "balances", label: "Stock balances" },
-  { key: "catalogue", label: "Catalogue" },
   { key: "outlets", label: "Outlets" },
   { key: "transfers", label: "Transfers" },
   { key: "counts", label: "Stock counts" },
@@ -104,20 +101,6 @@ const ADJUSTMENT_REASONS = [
   { key: "correction", label: "Inventory Data Correction" },
   { key: "other", label: "Other Reason" },
 ];
-
-function kindLabel(kind: CatalogueItem["kind"]) {
-  if (kind === "non_stock") return "Product";
-  if (kind === "stock_tracked") return "Stock product";
-  return "Service";
-}
-
-function kindIcon(kind: CatalogueItem["kind"]) {
-  return kind === "service" ? Wrench : kind === "stock_tracked" ? Package : ShoppingBag;
-}
-
-function ItemStatus({ status }: { status: CatalogueItem["status"] }) {
-  return <StatusPill tone={status === "active" ? "success" : "neutral"}>{capitalise(status)}</StatusPill>;
-}
 
 function TransferStatusPill({ status }: { status: StockTransfer["status"] }) {
   const tone = status === "received" ? "success" : status === "dispatched" ? "warning" : "neutral";
@@ -432,16 +415,17 @@ function CatalogueContent({ workspaceId, currency }: WorkspaceInfo) {
   return (
     <Page>
       <PageHeader
-        title="Catalogue & Inventory"
-        description="Comprehensive 4-state inventory tracking, multi-outlet management, and product variant options."
+        title="Inventory"
+        description="Stock on hand across outlets, with transfers, counts and adjustments. Products live under Products."
         actions={
           <div className="flex flex-wrap gap-2">
             <AppButton variant="secondary" startContent={<Warehouse weight="duotone" />} label="Opening stock" onPress={() => setIsOpeningStockOpen(true)} />
             <AppButton variant="secondary" startContent={<Storefront weight="duotone" />} label="New outlet" onPress={() => setIsOutletOpen(true)} />
-            <AppButton startContent={<Plus weight="bold" />} label="Add item" onPress={() => setIsItemOpen(true)} />
+            <Link href="/products" className="inline-flex h-10 items-center gap-2 rounded-full bg-accent px-5 text-[14px] font-medium text-accent-foreground transition-opacity hover:opacity-90">Manage products</Link>
           </div>
         }
       />
+      <InventoryStats workspaceId={workspaceId} currency={currency} />
 
       <Segmented aria-label="Inventory sections" options={INVENTORY_TABS} value={tab} onChange={setTab} />
 
@@ -487,69 +471,6 @@ function CatalogueContent({ workspaceId, currency }: WorkspaceInfo) {
               ]}
             />
           )}
-        />
-      )}
-
-      {/* TAB 2: CATALOGUE & VARIANTS */}
-      {tab === "catalogue" && (
-        <DataView<CatalogueItem>
-          title="Products & services"
-          rows={catalogue.data ?? []}
-          rowKey={(item) => item.id}
-          isLoading={catalogue.isPending}
-          isError={catalogue.isError}
-          searchPlaceholder="Search products or SKU"
-          getSearchText={(item) => `${item.name} ${item.sku ?? ""} ${item.kind}`}
-          empty={
-            <EmptyState
-              icon={Package}
-              title="No products or services yet"
-              description="Add items you sell to make them available across sales and invoices."
-              action={<AppButton startContent={<Plus weight="bold" />} label="Add item" onPress={() => setIsItemOpen(true)} />}
-            />
-          }
-          columns={[
-            { key: "name", label: "Item", render: (item) => <span className="font-medium text-foreground">{item.name}</span> },
-            { key: "type", label: "Type", render: (item) => kindLabel(item.kind) },
-            { key: "sku", label: "SKU", render: (item) => item.sku || "—" },
-            { key: "status", label: "Status", render: (item) => <ItemStatus status={item.status} /> },
-            {
-              key: "price",
-              label: "Selling price",
-              align: "right",
-              render: (item) => <span className="tabular font-semibold">{formatMinorAmount(item.selling_price_minor, item.currency, item.currency_exponent)}</span>,
-            },
-            {
-              key: "actions",
-              label: "Options & Variants",
-              align: "right",
-              render: (item) => (
-                <AppButton
-                  size="sm"
-                  variant="secondary"
-                  label="Variants"
-                  onPress={() => setSelectedProductForVariants(item)}
-                />
-              ),
-            },
-          ]}
-          renderCard={(item) => {
-            const Icon = kindIcon(item.kind);
-            return (
-              <RecordCard
-                icon={<Icon size={18} weight="duotone" aria-hidden="true" />}
-                iconClassName="bg-primary-soft text-primary"
-                reference={item.sku || kindLabel(item.kind)}
-                title={item.name}
-                amount={formatMinorAmount(item.selling_price_minor, item.currency, item.currency_exponent)}
-                status={<ItemStatus status={item.status} />}
-                meta={[
-                  { label: "Unit", value: item.unit_name },
-                  { label: "Stock", value: item.kind === "stock_tracked" ? "Tracked" : "Not tracked" },
-                ]}
-              />
-            );
-          }}
         />
       )}
 

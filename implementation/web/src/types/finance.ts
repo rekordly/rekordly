@@ -1124,6 +1124,28 @@ export interface FinanceSummary {
   cash_balance_minor: string;
   monthly: { month: string; income_minor: string; expense_minor: string }[];
   spending_by_category: { category: string; total_minor: string }[];
+  /** The comparison window just before this one (same days a month earlier for month windows). */
+  previous?: { from_date: string; to_date: string; income_minor: string; expense_minor: string; net_minor: string };
+  /** Unpaid amounts today, independent of the period. */
+  open?: {
+    sales_unpaid_minor: string;
+    sales_unpaid_count: number;
+    invoices_unpaid_minor: string;
+    invoices_unpaid_count: number;
+    invoices_overdue_minor: string;
+    invoices_overdue_count: number;
+    purchases_unpaid_minor: string;
+    purchases_unpaid_count: number;
+  };
+  sales_minor?: string;
+  sales_count?: number;
+  /** Collected so far on the sales made in this period. */
+  sales_paid_minor?: string;
+  purchases_minor?: string;
+  purchases_paid_minor?: string;
+  purchases_count?: number;
+  /** Seven consecutive days ending on to_date. */
+  last_7_days?: { date: string; income_minor: string; expense_minor: string }[];
 }
 
 

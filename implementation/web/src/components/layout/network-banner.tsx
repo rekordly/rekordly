@@ -36,6 +36,15 @@ export function NetworkBanner() {
 
   useEffect(() => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+    // Dev chunks keep the same file names between edits, so a caching worker would
+    // serve stale CSS and code. Only production builds get the worker.
+    if (process.env.NODE_ENV !== "production") {
+      void navigator.serviceWorker.getRegistrations().then((registrations) => {
+        registrations.forEach((registration) => void registration.unregister());
+      });
+      void caches?.keys().then((keys) => keys.forEach((key) => void caches.delete(key)));
+      return;
+    }
     navigator.serviceWorker
       .register("/sw.js", { scope: "/" })
       .then((reg) => {

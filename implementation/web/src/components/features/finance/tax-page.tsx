@@ -15,7 +15,8 @@ import { DataView } from "@/components/ui/data-view";
 import { FormDrawer } from "@/components/ui/form-drawer";
 import { EmptyState, Page, PageHeader, Segmented, StatusPill } from "@/components/ui/page";
 import { RecordCard } from "@/components/ui/record-card";
-import { StatCard } from "@/components/ui/stat-card";
+import { KpiCard } from "@/components/ui/cards";
+import { KpiRow } from "./dashboard-parts";
 import { ledgerApi, ledgerKeys } from "@/lib/ledger";
 import { financeApi, formatMinorAmount, moneyApi, moneyKeys } from "@/lib/money";
 import { PERMISSIONS } from "@/lib/permissions-catalog";
@@ -229,12 +230,12 @@ function TaxContent({ workspaceId, currency, isBusiness }: WorkspaceInfo) {
 
       {report.isError ? <Alert status="error" description="Unable to load the tax report for this workspace." /> : null}
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-        <StatCard tag="Taxable sales" tone="success" gradient compact isLoading={report.isPending} title={show(data?.output_vat.taxable_sales_minor)} description={`${data?.output_vat.total_count ?? 0} records`} icon={<ArrowDownLeft size={22} />} />
-        <StatCard tag="Output VAT" tone="primary" gradient compact isLoading={report.isPending} title={show(data?.output_vat.output_vat_minor)} description="Charged on sales" icon={<Percent size={22} />} />
-        <StatCard tag="Input VAT" tone="secondary" gradient compact isLoading={report.isPending} title={show(data?.input_vat.input_vat_minor)} description={`${data?.input_vat.purchases_count ?? 0} purchases`} icon={<ArrowUpRight size={22} />} />
-        <StatCard tag="Net VAT" tone={netStatus === "payable" ? "danger" : "success"} gradient compact isLoading={report.isPending} title={show(data?.net_vat.net_vat_payable_minor)} description={netDescription} icon={<Scales size={22} />} />
-      </div>
+      <KpiRow className="lg:grid-cols-4">
+        <KpiCard loading={report.isPending} icon={ArrowDownLeft} label="Taxable sales" value={show(data?.output_vat.taxable_sales_minor)} hint={`${data?.output_vat.total_count ?? 0} records`} />
+        <KpiCard loading={report.isPending} icon={Percent} label="Output VAT" value={show(data?.output_vat.output_vat_minor)} hint="Charged on sales" />
+        <KpiCard loading={report.isPending} icon={ArrowUpRight} label="Input VAT" value={show(data?.input_vat.input_vat_minor)} hint={`${data?.input_vat.purchases_count ?? 0} purchases`} />
+        <KpiCard loading={report.isPending} tone="accent" icon={Scales} label="Net VAT" value={show(data?.net_vat.net_vat_payable_minor)} hint={netDescription} />
+      </KpiRow>
 
       <Alert
         status="info"

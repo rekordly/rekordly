@@ -52,7 +52,9 @@ import {
   PurchaseOrderEditorDrawer,
   ReceiptBillDrawer,
 } from "./procurement-drawers";
-import { StatusBadge, useAccountOptions, useContacts, useFinanceAction, WorkspaceGate, type WorkspaceInfo } from "./shared";
+import { StatusBadge, useContacts, useFinanceAction, WorkspaceGate, type WorkspaceInfo } from "./shared";
+import { ProcurementStats } from "./section-stats";
+import { AccountField, ContactField } from "@/components/pickers";
 
 const EMPTY_LINE = { product_id: "", description: "", quantity: "1", unit_name: "each", estimated_unit_price: "" };
 const PROCUREMENT_TABS = [
@@ -134,7 +136,6 @@ function ProcurementContent({ workspaceId, currency }: WorkspaceInfo) {
   const refunds = useQuery({ queryKey: [...moneyKeys.workspace(workspaceId), "supplier-refunds"], queryFn: () => financeApi.listSupplierRefunds(workspaceId) });
   const procurementReport = useQuery({ queryKey: [...moneyKeys.workspace(workspaceId), "procurement-report"], queryFn: () => financeApi.procurementReport(workspaceId) });
   const returnOptions = useQuery({ queryKey: [...moneyKeys.workspace(workspaceId), "return-options", returnReceipt?.id], queryFn: () => financeApi.listReturnOptions(workspaceId, returnReceipt!.id), enabled: Boolean(returnReceipt) });
-  const accounts = useAccountOptions(workspaceId);
   const products = useQuery({
     queryKey: [...moneyKeys.workspace(workspaceId), "catalogue"],
     queryFn: () => financeApi.listCatalogueItems(workspaceId),
@@ -357,6 +358,7 @@ function ProcurementContent({ workspaceId, currency }: WorkspaceInfo) {
         }
         actions={pageActions}
       />
+      <ProcurementStats workspaceId={workspaceId} currency={currency} />
       <Segmented aria-label="Procurement documents" options={PROCUREMENT_TABS} value={tab} onChange={setTab} />
 
       {tab === "requests" ? (
@@ -605,8 +607,8 @@ function ProcurementContent({ workspaceId, currency }: WorkspaceInfo) {
         />
       )}
 
-      <FormDrawer isOpen={isOpen} onOpenChange={(open) => !open && close()} title="New purchase request" description="Saving or submitting this request does not buy, receive or pay for anything." submitLabel="Save draft" isSubmitting={create.isPending} onSubmit={form.handleSubmit((values) => create.mutate(values))}>
-        <SelectField control={form.control} name="supplier_id" label="Suggested supplier" placeholder="Choose later if needed" options={(suppliers.data ?? []).map((supplier) => ({ key: String(supplier.id), label: supplier.name }))} />
+      <FormDrawer isOpen={isOpen} onOpenChange={(open) => !open && close()} title="New purchase request" size="lg" description="Saving or submitting this request does not buy, receive or pay for anything." submitLabel="Save draft" isSubmitting={create.isPending} onSubmit={form.handleSubmit((values) => create.mutate(values))}>
+        <ContactField control={form.control} name="supplier_id" label="Suggested supplier" workspaceId={workspaceId} kind="suppliers" />
         <TextInputField control={form.control} name="needed_by" label="Needed by" type="date" />
         <SelectField control={form.control} name="priority" label="Priority" options={[{ key: "low", label: "Low" }, { key: "normal", label: "Normal" }, { key: "high", label: "High" }, { key: "urgent", label: "Urgent" }]} />
         <NotesField control={form.control} name="reason" label="Why is this needed?" placeholder="Restock office supplies for the new team" />
@@ -668,8 +670,8 @@ function ProcurementContent({ workspaceId, currency }: WorkspaceInfo) {
 
       <ApprovalPolicyDrawer workspaceId={workspaceId} isOpen={isPolicyOpen} onClose={() => setIsPolicyOpen(false)} />
 
-      <FormDrawer isOpen={isDirectBillOpen} onOpenChange={(open) => !open && setIsDirectBillOpen(false)} title="Direct supplier bill" description="Use this for an expense or service invoice that has no goods receipt. Approval posts the expense or asset to Accounts Payable." submitLabel="Save bill" isSubmitting={createDirectBill.isPending} onSubmit={directBillForm.handleSubmit((values) => createDirectBill.mutate(values))}>
-        <SelectField control={directBillForm.control} name="supplier_id" label="Supplier" isRequired placeholder="Choose supplier" options={(suppliers.data ?? []).map((supplier) => ({ key: String(supplier.id), label: supplier.name }))} />
+      <FormDrawer isOpen={isDirectBillOpen} onOpenChange={(open) => !open && setIsDirectBillOpen(false)} title="Direct supplier bill" size="lg" description="Use this for an expense or service invoice that has no goods receipt. Approval posts the expense or asset to Accounts Payable." submitLabel="Save bill" isSubmitting={createDirectBill.isPending} onSubmit={directBillForm.handleSubmit((values) => createDirectBill.mutate(values))}>
+        <ContactField control={directBillForm.control} name="supplier_id" label="Supplier" workspaceId={workspaceId} kind="suppliers" clearable={false} />
         <SelectField control={directBillForm.control} name="bill_type" label="Bill type" options={[{ key: "direct_expense", label: "Expense" }, { key: "direct_service", label: "Service" }]} />
         <MoneyField control={directBillForm.control} name="amount" label="Amount" currency={currency} isRequired />
         <div className="grid grid-cols-2 gap-3"><TextInputField control={directBillForm.control} name="bill_date" label="Bill date" type="date" isRequired /><TextInputField control={directBillForm.control} name="due_date" label="Due date" type="date" /></div>
@@ -701,8 +703,8 @@ function ProcurementContent({ workspaceId, currency }: WorkspaceInfo) {
       </FormDrawer>
 
       <FormDrawer isOpen={isAdvanceOpen} onOpenChange={(open) => !open && setIsAdvanceOpen(false)} title="Record supplier advance" description="This records a real cash/bank prepayment as a Supplier Advances asset. It does not create an expense, stock, or payable." submitLabel="Record advance" isSubmitting={createAdvance.isPending} onSubmit={advanceForm.handleSubmit((values) => createAdvance.mutate(values))}>
-        <SelectField control={advanceForm.control} name="supplier_id" label="Supplier" isRequired placeholder="Choose supplier" options={(suppliers.data ?? []).map((supplier) => ({ key: String(supplier.id), label: supplier.name }))} />
-        <SelectField control={advanceForm.control} name="money_account_id" label="Paid from" isRequired placeholder="Choose cash or bank account" options={accounts.options} />
+        <ContactField control={advanceForm.control} name="supplier_id" label="Supplier" workspaceId={workspaceId} kind="suppliers" clearable={false} />
+        <AccountField control={advanceForm.control} name="money_account_id" label="Paid from" workspaceId={workspaceId} isRequired />
         <MoneyField control={advanceForm.control} name="amount" label="Advance amount" currency={currency} isRequired />
         <TextInputField control={advanceForm.control} name="payment_date" label="Payment date" type="date" isRequired />
         <NotesField control={advanceForm.control} name="notes" label="Note" placeholder="Optional PO, pro-forma, or agreement reference" />
@@ -725,13 +727,13 @@ function ProcurementContent({ workspaceId, currency }: WorkspaceInfo) {
       </FormDrawer>
 
       <FormDrawer isOpen={Boolean(refundTarget)} onOpenChange={(open) => !open && setRefundTarget(null)} title="Record supplier cash refund" description="Record cash/bank refunded back into the business for an unapplied credit." submitLabel="Record refund" isSubmitting={createRefund.isPending} onSubmit={refundForm.handleSubmit((values) => createRefund.mutate(values))}>
-        <SelectField control={refundForm.control} name="money_account_id" label="Received into account" isRequired placeholder="Choose cash or bank account" options={accounts.options} />
+        <AccountField control={refundForm.control} name="money_account_id" label="Received into account" workspaceId={workspaceId} isRequired />
         <MoneyField control={refundForm.control} name="amount" label="Refund amount" currency={refundTarget?.currency || currency} isRequired />
         <TextInputField control={refundForm.control} name="refund_date" label="Refund date" type="date" isRequired />
         <NotesField control={refundForm.control} name="reason" label="Reason" placeholder="Cash refund settlement" isRequired />
       </FormDrawer>
 
-      <FormDrawer isOpen={Boolean(matchBill)} onOpenChange={(open) => !open && setMatchBill(null)} title="Three-way match" description="Server-derived comparison of the purchase order, accepted receipt and supplier bill." submitLabel="Close" isSubmitting={false} onSubmit={(event) => { event.preventDefault(); setMatchBill(null); }}>
+      <FormDrawer isOpen={Boolean(matchBill)} onOpenChange={(open) => !open && setMatchBill(null)} title="Three-way match" size="lg" description="Server-derived comparison of the purchase order, accepted receipt and supplier bill." submitLabel="Close" isSubmitting={false} onSubmit={(event) => { event.preventDefault(); setMatchBill(null); }}>
         {billMatch.isPending ? (
           <p className="text-sm text-muted">Calculating match…</p>
         ) : billMatch.data ? (
@@ -748,7 +750,7 @@ function ProcurementContent({ workspaceId, currency }: WorkspaceInfo) {
         )}
       </FormDrawer>
 
-      <FormDrawer isOpen={Boolean(orderDetail)} onOpenChange={(open) => !open && setOrderDetail(null)} title={orderDetail ? `Purchase order ${orderDetail.order_number || `#${orderDetail.id}`}` : "Purchase order"} description="Operational commitment, version history, and audit timeline." submitLabel="Close" isSubmitting={false} onSubmit={(event) => { event.preventDefault(); setOrderDetail(null); }}>
+      <FormDrawer isOpen={Boolean(orderDetail)} onOpenChange={(open) => !open && setOrderDetail(null)} title={orderDetail ? `Purchase order ${orderDetail.order_number || `#${orderDetail.id}`}` : "Purchase order"} size="lg" description="Operational commitment, version history, and audit timeline." submitLabel="Close" isSubmitting={false} onSubmit={(event) => { event.preventDefault(); setOrderDetail(null); }}>
         {orderDetailQuery.isPending ? (
           <p className="text-sm text-muted">Loading order detail…</p>
         ) : orderDetailQuery.data ? (

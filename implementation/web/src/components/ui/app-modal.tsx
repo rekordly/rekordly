@@ -13,7 +13,7 @@ export interface AppModalProps {
   onOpenChange: (open: boolean) => void;
   title: React.ReactNode;
   description?: React.ReactNode;
-  /** sm ≈ 420px (confirmations), md ≈ 520px (forms), lg ≈ 640px */
+  /** sm ≈ 380px (confirmations), md ≈ 460px (forms), lg ≈ 520px */
   size?: 'sm' | 'md' | 'lg';
   /** Shows "Step x of y" with progress bars above the title. */
   step?: { current: number; total: number };
@@ -23,7 +23,7 @@ export interface AppModalProps {
   onSubmit?: (e: React.FormEvent<HTMLFormElement>) => void;
 }
 
-const WIDTH = { sm: 'max-w-[420px]', md: 'max-w-[520px]', lg: 'max-w-[640px]' } as const;
+const WIDTH = { sm: 'max-w-[380px]', md: 'max-w-[460px]', lg: 'max-w-[520px]' } as const;
 
 export function AppModal({
   isOpen,

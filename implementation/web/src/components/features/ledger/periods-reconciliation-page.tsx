@@ -17,6 +17,7 @@ import { formatMinorAmount } from "@/lib/money";
 import type { AccountingPeriod, PeriodCloseChecklistResult, ReconciliationRunDetail } from "@/types/ledger";
 
 import { useFinanceAction, WorkspaceGate, type WorkspaceInfo } from "../finance/shared";
+import { PeriodStats } from "../finance/section-stats";
 
 const TABS = [
   { key: "periods", label: "Accounting Periods" },
@@ -120,6 +121,7 @@ function PeriodsReconContent({ workspaceId, currency }: WorkspaceInfo) {
           )
         }
       />
+      <PeriodStats workspaceId={workspaceId} />
 
       <Segmented aria-label="Periods or Reconciliation" options={TABS} value={tab} onChange={setTab} />
 

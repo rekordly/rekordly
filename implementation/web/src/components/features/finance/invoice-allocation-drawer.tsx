@@ -13,8 +13,9 @@ import { financeApi, formatMinorAmount, listRecords, moneyKeys } from "@/lib/mon
 import { invoiceAllocationSchema, type InvoiceAllocationValues } from "@/lib/schemas/finance.schemas";
 import type { Invoice } from "@/types/finance";
 
-import { MoneyField, NotesField, SelectField, TextInputField } from "./fields";
-import { today, useAccountOptions, useContacts, useFinanceAction } from "./shared";
+import { MoneyField, NotesField, TextInputField } from "./fields";
+import { today, useFinanceAction } from "./shared";
+import { AccountField, ContactField } from "@/components/pickers";
 
 const ZERO = BigInt(0);
 const TEN = BigInt(10);
@@ -61,8 +62,6 @@ export function InvoiceAllocationDrawer({
   isOpen: boolean;
   onClose: () => void;
 }) {
-  const accounts = useAccountOptions(workspaceId);
-  const customers = useContacts(workspaceId, "customers");
   const form = useForm<InvoiceAllocationValues>({
     resolver: zodResolver(invoiceAllocationSchema),
     defaultValues: { customer_id: "", date: today(), amount: "", account_id: "", allocations: {}, reference: "", notes: "" },
@@ -142,17 +141,10 @@ export function InvoiceAllocationDrawer({
       isSubmitting={create.isPending}
       onSubmit={submit}
     >
-      <SelectField
-        control={form.control}
-        name="customer_id"
-        label="Customer"
-        placeholder={customers.isPending ? "Loading customers…" : "Choose customer"}
-        options={(customers.data ?? []).map((customer) => ({ key: String(customer.id), label: customer.name }))}
-        isRequired
-      />
+      <ContactField control={form.control} name="customer_id" label="Customer" workspaceId={workspaceId} kind="customers" clearable={false} />
       <MoneyField control={form.control} name="amount" label="Receipt total" currency={currency} isRequired />
       <TextInputField control={form.control} name="date" label="Date" type="date" isRequired />
-      <SelectField control={form.control} name="account_id" label="Received into" placeholder={accounts.isPending ? "Loading accounts…" : "Choose account"} options={accounts.options} isRequired />
+      <AccountField control={form.control} name="account_id" label="Received into" workspaceId={workspaceId} isRequired />
 
       {customerID ? (
         <section className="space-y-3 border-t border-divider pt-4" aria-label="Invoice allocations">

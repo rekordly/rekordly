@@ -30,6 +30,7 @@ import type { CatalogueItem, MerchantOrder, Storefront, StorefrontDomain } from 
 
 import { StatusBadge, useFinanceAction, WorkspaceGate, type WorkspaceInfo } from "../finance/shared";
 import { MerchantOrderDetailDrawer, PublishVariantDrawer } from "./storefront-admin-drawers";
+import { StorefrontStats } from "../finance/section-stats";
 
 const ADMIN_TABS = [
   { key: "overview", label: "Overview" },
@@ -186,6 +187,7 @@ function StorefrontAdminContent({ workspaceId, currency }: WorkspaceInfo) {
           </div>
         }
       />
+      <StorefrontStats workspaceId={workspaceId} />
 
       <Segmented aria-label="Storefront sections" options={ADMIN_TABS} value={tab} onChange={setTab} />
 

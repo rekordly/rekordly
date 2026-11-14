@@ -118,11 +118,20 @@ func (s *Service) CreateCatalogueItem(ctx context.Context, workspaceID, userID i
 	if err != nil {
 		return CatalogueItem{}, fmt.Errorf("create product: %w", err)
 	}
+	// Quick adds (from a sale or invoice) get a readable SKU too.
+	sku := optionalPgText(strings.ToUpper(strings.TrimSpace(in.SKU)))
+	if !sku.Valid {
+		generated, err := generateSKU(ctx, qtx, workspaceID, product.ID, name, pgtype.Int8{})
+		if err != nil {
+			return CatalogueItem{}, err
+		}
+		sku = pgtype.Text{String: generated, Valid: true}
+	}
 	variant, err := qtx.CreateProductVariant(ctx, db.CreateProductVariantParams{
 		WorkspaceID:       workspaceID,
 		ProductID:         product.ID,
 		Name:              "Default",
-		Sku:               optionalPgText(strings.ToUpper(strings.TrimSpace(in.SKU))),
+		Sku:               sku,
 		Barcode:           optionalPgText(in.Barcode),
 		SellingPriceMinor: price,
 		Currency:          currency,

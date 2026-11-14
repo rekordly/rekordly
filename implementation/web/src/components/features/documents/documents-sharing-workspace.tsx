@@ -18,6 +18,7 @@ import { hasWorkspacePermission, useActiveWorkspace } from "@/stores/workspace-s
 import type { DeliveryRecord, ShareGrant, WhatsAppHandoffResult, WorkspaceFile } from "@/types/docs-sharing";
 
 import { WorkspaceGate, type WorkspaceInfo } from "../finance/shared";
+import { FileStats } from "../finance/section-stats";
 
 const TABS = [
   { key: "sharing", label: "Document Sharing & Delivery" },
@@ -146,6 +147,7 @@ function DocumentsSharingContent({ workspaceId }: WorkspaceInfo) {
         title="Documents, Sharing & Files"
         description="Immutable PDF artifacts, hashed guest share links, WhatsApp handoff, HTTPS email deliveries, and private authenticated files."
       />
+      <FileStats workspaceId={workspaceId} />
 
       <Segmented aria-label="Documents and files tabs" options={TABS} value={tab} onChange={setTab} />
 

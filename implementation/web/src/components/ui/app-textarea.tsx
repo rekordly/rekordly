@@ -89,19 +89,17 @@ export const AppTextarea = forwardRef<HTMLTextAreaElement, AppTextareaProps>(
           placeholder={placeholder}
           disabled={isDisabled}
           required={isRequired}
-          className={`w-full rounded-xl border bg-field text-foreground p-3.5 text-sm placeholder:text-field-placeholder transition-colors outline-none shadow-none resize-y ${
-            invalid
-              ? 'border-danger ring-1 ring-danger/30'
-              : 'border-field-border focus:border-focus focus:ring-1 focus:ring-focus/30'
-          } ${isDisabled ? 'opacity-60 cursor-not-allowed bg-disabled' : ''} ${className ?? ''}`}
+          data-invalid={invalid || undefined}
+          data-disabled={isDisabled || undefined}
+          className={`field-shell w-full resize-y p-3.5 text-[14px] shadow-none placeholder:text-field-placeholder ${className ?? ''}`}
         />
 
         {description && !invalid && (
-          <Description className="text-xs text-muted mt-1">{description}</Description>
+          <Description className="text-[12px] text-muted">{description}</Description>
         )}
 
         {errorMessage && (
-          <FieldError className="text-xs text-danger font-medium mt-1 animate-in fade-in duration-200">
+          <FieldError className="animate-fade-up text-[12px] font-medium text-danger">
             {errorMessage}
           </FieldError>
         )}

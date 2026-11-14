@@ -17,6 +17,7 @@ import { formatMinorAmount } from "@/lib/money";
 import type { ChartAccount, LedgerEntry, ManualJournalDraft } from "@/types/ledger";
 
 import { useFinanceAction, WorkspaceGate, type WorkspaceInfo } from "../finance/shared";
+import { LedgerStats } from "../finance/section-stats";
 
 const TABS = [
   { key: "chart", label: "Chart of Accounts" },
@@ -167,6 +168,7 @@ function LedgerContent({ workspaceId, currency }: WorkspaceInfo) {
           </div>
         }
       />
+      <LedgerStats workspaceId={workspaceId} />
 
       <Segmented aria-label="Ledger sections" options={TABS} value={tab} onChange={setTab} />
 

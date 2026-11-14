@@ -23,6 +23,7 @@ import type { BankLine, BankReconDetail, BankReconciliation, MoneyAccount, Money
 
 import { MoneyField, NotesField, SelectField, TextInputField } from "./fields";
 import { money, useFinanceAction, WorkspaceGate, type WorkspaceInfo } from "./shared";
+import { PageStats } from "./page-stats";
 
 const TABS = [
   { key: "accounts", label: "Accounts" },
@@ -324,6 +325,7 @@ function AccountsContent({ workspaceId, currency, isBusiness }: WorkspaceInfo) {
           )
         }
       />
+      <PageStats kind="accounts" workspaceId={workspaceId} currency={currency} />
 
       <Segmented aria-label="Accounts sections" options={TABS} value={tab} onChange={setTab} />
 

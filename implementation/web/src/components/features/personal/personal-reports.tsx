@@ -9,7 +9,11 @@ import { Alert } from "@/components/ui/alert";
 import { AppButton } from "@/components/ui/app-button";
 import { DashboardCard } from "@/components/ui/dashboard-card";
 import { Page, PageHeader, SectionHeader, Segmented, StatusPill } from "@/components/ui/page";
-import { StatCard } from "@/components/ui/stat-card";
+import { ArrowDownLeft, ArrowsLeftRight, ArrowUpRight, PiggyBank } from "@phosphor-icons/react";
+
+import { KpiCard } from "@/components/ui/cards";
+
+import { KpiRow } from "../finance/dashboard-parts";
 import { formatDate } from "@/lib/format";
 import { formatMinorAmount } from "@/lib/money";
 import { personalApi, personalKeys } from "@/lib/personal-finance";
@@ -150,14 +154,14 @@ function PersonalReportsContent({ workspaceId, currency, isBusiness }: Workspace
           title="Cash movement vs Income & Expense"
           description={d ? `${formatDate(d.from_date)} to ${formatDate(d.to_date)} · ${d.currency}` : "Selected period"}
         />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <StatCard tag="Cash inflow" title={show(d?.cash_inflow_minor)} tone="success" isLoading={loading} />
-          <StatCard tag="Cash outflow" title={show(d?.cash_outflow_minor)} tone="warning" isLoading={loading} />
-          <StatCard tag="Net cash movement" title={show(d?.net_cash_movement_minor)} isLoading={loading} />
-          <StatCard tag="Income" title={show(d?.income_minor)} tone="success" isLoading={loading} />
-          <StatCard tag="Expense" title={show(d?.expense_minor)} tone="warning" isLoading={loading} />
-          <StatCard tag="Net income" title={show(d?.net_income_minor)} isLoading={loading} />
-        </div>
+        <KpiRow className="lg:grid-cols-3">
+          <KpiCard loading={loading} icon={ArrowDownLeft} label="Cash inflow" value={show(d?.cash_inflow_minor)} hint="All money that came in" />
+          <KpiCard loading={loading} icon={ArrowUpRight} label="Cash outflow" value={show(d?.cash_outflow_minor)} hint="All money that went out" />
+          <KpiCard loading={loading} tone="accent" icon={ArrowsLeftRight} label="Net cash movement" value={show(d?.net_cash_movement_minor)} hint="Inflow minus outflow" />
+          <KpiCard loading={loading} icon={ArrowDownLeft} label="Income" value={show(d?.income_minor)} hint="Excludes loans and transfers" />
+          <KpiCard loading={loading} icon={ArrowUpRight} label="Expense" value={show(d?.expense_minor)} hint="Excludes loans and transfers" />
+          <KpiCard loading={loading} icon={PiggyBank} label="Net income" value={show(d?.net_income_minor)} hint="Income minus expense" />
+        </KpiRow>
       </div>
 
       {/* 3. Period Comparison */}

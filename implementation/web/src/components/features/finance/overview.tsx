@@ -10,7 +10,9 @@ import { CategoryPieChart, RevenueChart } from "@/components/charts/charts";
 import { Alert } from "@/components/ui/alert";
 import { DashboardCard } from "@/components/ui/dashboard-card";
 import { Page, PageHeader, SectionHeader, Segmented } from "@/components/ui/page";
-import { StatCard } from "@/components/ui/stat-card";
+import { KpiCard } from "@/components/ui/cards";
+
+import { KpiRow } from "./dashboard-parts";
 import { formatDate } from "@/lib/format";
 import { financeApi, formatMinorAmount, listRecords, moneyKeys } from "@/lib/money";
 import { useActiveWorkspace } from "@/stores/workspace-store";
@@ -130,12 +132,12 @@ function WorkspaceOverview({
         </DashboardCard>
       ) : null}
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-        <StatCard tag="Income" tone="success" gradient compact isLoading={isLoading} title={show(data?.income_minor)} icon={<ArrowDownLeft size={22} />} />
-        <StatCard tag="Expenses" tone="danger" gradient compact isLoading={isLoading} title={show(data?.expense_minor)} icon={<ArrowUpRight size={22} />} />
-        <StatCard tag="Net" tone="primary" gradient compact isLoading={isLoading} title={show(data?.net_minor)} icon={<ChartLineUp size={22} />} />
-        <StatCard tag="Cash balance" tone="secondary" gradient compact isLoading={isLoading} title={show(data?.cash_balance_minor)} description="Across active accounts" icon={<Vault size={22} />} />
-      </div>
+      <KpiRow className="lg:grid-cols-4">
+        <KpiCard loading={isLoading} icon={ArrowDownLeft} label="Income" value={show(data?.income_minor)} hint="In this period" />
+        <KpiCard loading={isLoading} icon={ArrowUpRight} label="Expenses" value={show(data?.expense_minor)} hint="In this period" />
+        <KpiCard loading={isLoading} icon={ChartLineUp} label={Number(data?.net_minor ?? 0) < 0 ? "Net loss" : "Net profit"} value={show(data?.net_minor)} hint="Income minus expenses" />
+        <KpiCard loading={isLoading} tone="accent" icon={Vault} label="Cash balance" value={show(data?.cash_balance_minor)} hint="Across active accounts" />
+      </KpiRow>
 
       {showRecent ? <Segmented aria-label="Dashboard sections" options={SECTIONS} value={section} onChange={setSection} /> : null}
 

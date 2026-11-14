@@ -19,6 +19,7 @@ import type { Contact } from "@/types/finance";
 
 import { MoneyField, NotesField, TextInputField } from "./fields";
 import { useContacts, useFinanceAction, WorkspaceGate, type WorkspaceInfo } from "./shared";
+import { ContactStats } from "./section-stats";
 
 type Kind = "customers" | "suppliers";
 
@@ -148,6 +149,7 @@ function ContactsContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
         description="The customers you sell to and the suppliers you buy from."
         actions={<AppButton startContent={<Plus weight="bold" />} label={`Add ${singular}`} onPress={() => setIsOpen(true)} />}
       />
+      <ContactStats workspaceId={workspaceId} currency={currency} />
       <Segmented aria-label="Contact type" options={KIND_OPTIONS} value={kind} onChange={setKind} />
       <DataView<Contact>
         key={kind}

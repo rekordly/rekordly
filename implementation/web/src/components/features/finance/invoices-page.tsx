@@ -21,7 +21,6 @@ import {
   Prohibit,
   ShareNetwork,
   Trash,
-  UserPlus,
   Wallet,
   WhatsappLogo,
   XCircle,
@@ -29,9 +28,7 @@ import {
 import { useMemo, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 
-import { Alert } from "@/components/ui/alert";
 import { AppButton } from "@/components/ui/app-button";
-import { AppComboBox, type AppComboBoxOption } from "@/components/ui/app-combo-box";
 import { AppRowActions } from "@/components/ui/app-row-actions";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataView } from "@/components/ui/data-view";
@@ -55,7 +52,10 @@ import type { DebitNote, DocumentVersion, Estimate, ExternalMessage, ExternalPay
 
 import { MoneyField, NotesField, TextInputField } from "./fields";
 import { PaymentDrawer, type PaymentPreset } from "./payment-drawer";
-import { money, StatusBadge, today, useContacts, useFinanceAction, useRecords, WorkspaceGate, type WorkspaceInfo } from "./shared";
+import { money, StatusBadge, today, daysFromToday, useContacts, useFinanceAction, useRecords, WorkspaceGate, type WorkspaceInfo } from "./shared";
+import { DocumentReview } from "./document-review";
+import { ContactField, LineItemsField } from "@/components/pickers";
+import { PageStats } from "./page-stats";
 
 type PendingAction =
   | { kind: "finalize"; invoice: Invoice }
@@ -65,7 +65,6 @@ type PendingAction =
   | { kind: "convert_proforma"; invoice: Invoice }
   | { kind: "convert_estimate"; estimate: Estimate };
 
-const BLANK_ITEM = { description: "", quantity: "1", unit_price: "", discount_amount: "" };
 
 function computePreviewTax(
   taxLines: Array<{ name: string; rate_percent: string; is_compound: boolean }> | undefined,
@@ -238,14 +237,15 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
       customer_id: "",
       document_kind: "invoice",
       issue_date: today(),
-      due_date: today(),
+      // Matches the default terms: payment is due within 14 days.
+      due_date: daysFromToday(14),
       tax_amount: "",
       discount_amount: "",
       delivery_fee_amount: "",
       notes: "",
       terms: "Payment is due within 14 days of invoice date.",
       tax_lines: [],
-      items: [BLANK_ITEM],
+      items: [],
     },
     mode: "onChange",
   });
@@ -265,7 +265,7 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
       notes: "This quotation is valid for 14 days from issue date.",
       terms: "Standard commercial delivery terms apply.",
       tax_lines: [],
-      items: [BLANK_ITEM],
+      items: [],
     },
     mode: "onChange",
   });
@@ -650,15 +650,6 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
       summary: `${invoice.invoice_number}: ${money(invoice.paid_amount_minor, invoice)} paid of ${money(invoice.total_amount_minor, invoice)}. This clears the invoice receivable; it does not create sales revenue again.`,
     });
 
-  // Customer options for ComboBox
-  const customerOptions: AppComboBoxOption[] = useMemo(() => {
-    return (customers.data ?? []).map((c) => ({
-      key: String(c.id),
-      label: c.name,
-      description: c.phone || c.email || undefined,
-    }));
-  }, [customers.data]);
-
   // Selected customer for review steps
   const selectedInvoiceCustomer = useMemo(() => {
     if (isCreatingCustomerInline && newCustomerName) {
@@ -845,6 +836,7 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
           </div>
         }
       />
+      <PageStats kind="invoices" workspaceId={workspaceId} currency={currency} />
 
       {/* View Switcher Tabs */}
       <div className="flex flex-wrap items-center gap-2 border-b border-border/40 pb-3 mb-2">
@@ -1132,124 +1124,33 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
       <FormDrawer
         isOpen={isInvoiceOpen}
         onOpenChange={(open) => !open && closeInvoiceDrawer()}
-        title={`New Invoice — Step ${invoiceStep} of 3`}
+        title="New invoice"
+        size="lg"
+        step={{ current: invoiceStep, total: 3, labels: INVOICE_STEPS.map((s) => s.title) }}
         description={INVOICE_STEPS[invoiceStep - 1].description}
       >
         <div className="flex flex-col gap-6">
-          <div className="flex items-center justify-between border-b border-border/40 pb-4">
-            {INVOICE_STEPS.map((s) => (
-              <div key={s.step} className="flex items-center gap-2">
-                <div
-                  className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold ${
-                    invoiceStep === s.step
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : invoiceStep > s.step
-                        ? "bg-primary/20 text-primary font-bold"
-                        : "bg-surface-secondary text-muted"
-                  }`}
-                >
-                  {invoiceStep > s.step ? "✓" : s.step}
-                </div>
-                <span className={`text-xs font-medium hidden sm:inline ${invoiceStep === s.step ? "text-foreground font-semibold" : "text-muted"}`}>
-                  {s.title}
-                </span>
-              </div>
-            ))}
-          </div>
 
           {/* STEP 1: Items */}
           {invoiceStep === 1 && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <p className="text-[14px] font-semibold text-foreground">Line Items</p>
-                <span className="text-xs text-muted">Currency: {currency}</span>
-              </div>
-              {invoiceItems.fields.map((field, index) => (
-                <div key={field.id} className="space-y-3 rounded-2xl bg-surface-secondary/70 p-4 border border-border/40">
-                  <TextInputField control={invoiceForm.control} name={`items.${index}.description`} label={`Item ${index + 1}`} isRequired />
-                  <div className="grid grid-cols-[1fr_2fr_2fr_auto] items-start gap-3">
-                    <TextInputField control={invoiceForm.control} name={`items.${index}.quantity`} label="Qty" isRequired />
-                    <MoneyField control={invoiceForm.control} name={`items.${index}.unit_price`} label="Unit price" currency={currency} isRequired />
-                    <MoneyField control={invoiceForm.control} name={`items.${index}.discount_amount`} label="Line discount" currency={currency} />
-                    <div className="pt-6">
-                      <AppButton isIconOnly variant="ghost" aria-label="Remove item" isDisabled={invoiceItems.fields.length === 1} onPress={() => invoiceItems.remove(index)}>
-                        <Trash size={18} className="text-danger" />
-                      </AppButton>
-                    </div>
-                  </div>
-                </div>
-              ))}
-              <AppButton variant="tertiary" size="sm" startContent={<Plus weight="bold" />} label="Add another item" onPress={() => invoiceItems.append(BLANK_ITEM)} />
-              <div className="mt-4 rounded-xl bg-surface-secondary p-3 text-right">
-                <span className="text-xs text-muted">Subtotal: </span>
-                <span className="text-sm font-semibold text-foreground tabular">
-                  {currency} {invSubtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-              </div>
-            </div>
+            <LineItemsField
+              workspaceId={workspaceId}
+              currency={currency}
+              items={watchedInvItems ?? []}
+              onAdd={(line) => {
+                invoiceItems.append(line);
+                invoiceForm.clearErrors("items");
+              }}
+              onUpdate={(index, line) => invoiceItems.update(index, line)}
+              onRemove={(index) => invoiceItems.remove(index)}
+              error={(invoiceForm.formState.errors.items as { message?: string; root?: { message?: string } } | undefined)?.message ?? (invoiceForm.formState.errors.items as { root?: { message?: string } } | undefined)?.root?.message}
+            />
           )}
 
           {/* STEP 2: Customer */}
           {invoiceStep === 2 && (
             <div className="space-y-4">
-              <AppComboBox
-                label="Customer"
-                placeholder="Search existing customer or type new..."
-                options={customerOptions}
-                selectedKey={isCreatingCustomerInline ? null : watchedInvCustomerId || null}
-                inputValue={isCreatingCustomerInline ? newCustomerName : undefined}
-                onSelectionChange={(key) => {
-                  if (key) {
-                    setIsCreatingCustomerInline(false);
-                    setNewCustomerName("");
-                    invoiceForm.setValue("customer_id", key, { shouldValidate: true });
-                  }
-                }}
-                onCustomValueSubmit={(name) => {
-                  setIsCreatingCustomerInline(true);
-                  setNewCustomerName(name);
-                  invoiceForm.setValue("customer_id", name, { shouldValidate: true });
-                }}
-                onInputChange={(val) => {
-                  if (isCreatingCustomerInline) {
-                    setNewCustomerName(val);
-                    invoiceForm.setValue("customer_id", val);
-                  }
-                }}
-                allowsCustomValue={true}
-                isRequired
-              />
-
-              {isCreatingCustomerInline && (
-                <div className="rounded-2xl bg-primary-soft/30 p-4 border border-primary/20 space-y-3">
-                  <div className="flex items-center gap-2 text-xs font-semibold text-primary">
-                    <UserPlus size={16} weight="bold" />
-                    <span>Adding &ldquo;{newCustomerName}&rdquo; as new customer</span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs text-muted block mb-1">Phone</label>
-                      <input
-                        type="tel"
-                        placeholder="+234..."
-                        value={newCustomerPhone}
-                        onChange={(e) => setNewCustomerPhone(e.target.value)}
-                        className="w-full h-9 rounded-xl bg-surface-primary border border-border px-3 text-xs text-foreground focus:outline-none focus:border-primary"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted block mb-1">Email</label>
-                      <input
-                        type="email"
-                        placeholder="client@example.com"
-                        value={newCustomerEmail}
-                        onChange={(e) => setNewCustomerEmail(e.target.value)}
-                        className="w-full h-9 rounded-xl bg-surface-primary border border-border px-3 text-xs text-foreground focus:outline-none focus:border-primary"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
+              <ContactField control={invoiceForm.control} name="customer_id" workspaceId={workspaceId} kind="customers" clearable={false} />
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <TextInputField control={invoiceForm.control} name="issue_date" label="Issue date" type="date" isRequired />
@@ -1324,63 +1225,16 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
 
           {/* STEP 3: Review */}
           {invoiceStep === 3 && (
-            <div className="space-y-4">
-              <div className="rounded-2xl border border-border/60 bg-surface-secondary/40 p-4 space-y-3">
-                <div className="flex items-center justify-between border-b border-border/40 pb-2">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted">Customer</span>
-                  <span className="text-xs font-medium text-foreground">{selectedInvoiceCustomer?.name || watchedInvCustomerId || "Walk-in"}</span>
-                </div>
-                <div className="flex items-center justify-between border-b border-border/40 pb-2">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted">Dates</span>
-                  <span className="text-xs text-foreground">{watchedInvIssueDate} → {watchedInvDueDate}</span>
-                </div>
-                <div className="space-y-1.5 pt-1">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted block">Items</span>
-                  {watchedInvItems.map((item, idx) => (
-                    <div key={idx} className="flex justify-between text-xs text-foreground">
-                      <span>{item.quantity}x {item.description || "Item"}</span>
-                      <span className="tabular font-medium">
-                        {currency} {((parseFloat(item.quantity || "0") || 0) * (parseFloat(item.unit_price || "0") || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-                <div className="border-t border-border pt-2 space-y-1">
-                  <div className="flex justify-between text-xs text-muted">
-                    <span>Subtotal</span>
-                    <span className="tabular">{currency} {invSubtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                  </div>
-                  {invDiscount > 0 && (
-                    <div className="flex justify-between text-xs text-emerald-600">
-                      <span>Discount</span>
-                      <span className="tabular">-{currency} {invDiscount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                    </div>
-                  )}
-                  {invTax > 0 && (
-                    <div className="flex justify-between text-xs text-muted">
-                      <span>Tax</span>
-                      <span className="tabular">{currency} {invTax.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                    </div>
-                  )}
-                  {invDelivery > 0 && (
-                    <div className="flex justify-between text-xs text-muted">
-                      <span>Delivery fee</span>
-                      <span className="tabular">{currency} {invDelivery.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between text-sm font-bold text-foreground pt-1 border-t border-border/40">
-                    <span>Total Amount</span>
-                    <span className="tabular text-primary font-bold">{currency} {invTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                  </div>
-                </div>
-              </div>
-              {watchedInvTerms && (
-                <div className="rounded-xl bg-surface-secondary/70 p-3 text-xs text-muted">
-                  <span className="font-semibold text-foreground block mb-0.5">Terms:</span>
-                  {watchedInvTerms}
-                </div>
-              )}
-            </div>
+            <DocumentReview
+              kind="invoice"
+              currency={currency}
+              party={selectedInvoiceCustomer?.name || watchedInvCustomerId || "Walk-in customer"}
+              issueDate={watchedInvIssueDate}
+              dueDate={watchedInvDueDate}
+              items={watchedInvItems ?? []}
+              amounts={{ subtotal: invSubtotal, discount: invDiscount, tax: invTax, delivery: invDelivery, total: invTotal }}
+              terms={watchedInvTerms || undefined}
+            />
           )}
 
           {/* Navigation */}
@@ -1412,124 +1266,33 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
       <FormDrawer
         isOpen={isEstimateOpen}
         onOpenChange={(open) => !open && closeEstimateDrawer()}
-        title={`New Quotation — Step ${estimateStep} of 3`}
+        title="New quotation"
+        size="lg"
+        step={{ current: estimateStep, total: 3, labels: ESTIMATE_STEPS.map((s) => s.title) }}
         description={ESTIMATE_STEPS[estimateStep - 1].description}
       >
         <div className="flex flex-col gap-6">
-          <div className="flex items-center justify-between border-b border-border/40 pb-4">
-            {ESTIMATE_STEPS.map((s) => (
-              <div key={s.step} className="flex items-center gap-2">
-                <div
-                  className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold ${
-                    estimateStep === s.step
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : estimateStep > s.step
-                        ? "bg-primary/20 text-primary font-bold"
-                        : "bg-surface-secondary text-muted"
-                  }`}
-                >
-                  {estimateStep > s.step ? "✓" : s.step}
-                </div>
-                <span className={`text-xs font-medium hidden sm:inline ${estimateStep === s.step ? "text-foreground font-semibold" : "text-muted"}`}>
-                  {s.title}
-                </span>
-              </div>
-            ))}
-          </div>
 
           {/* ESTIMATE STEP 1: Items */}
           {estimateStep === 1 && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <p className="text-[14px] font-semibold text-foreground">Quotation Items</p>
-                <span className="text-xs text-muted">Currency: {currency}</span>
-              </div>
-              {estimateItems.fields.map((field, index) => (
-                <div key={field.id} className="space-y-3 rounded-2xl bg-surface-secondary/70 p-4 border border-border/40">
-                  <TextInputField control={estimateForm.control} name={`items.${index}.description`} label={`Line ${index + 1}`} isRequired />
-                  <div className="grid grid-cols-[1fr_2fr_2fr_auto] items-start gap-3">
-                    <TextInputField control={estimateForm.control} name={`items.${index}.quantity`} label="Qty" isRequired />
-                    <MoneyField control={estimateForm.control} name={`items.${index}.unit_price`} label="Unit price" currency={currency} isRequired />
-                    <MoneyField control={estimateForm.control} name={`items.${index}.discount_amount`} label="Line discount" currency={currency} />
-                    <div className="pt-6">
-                      <AppButton isIconOnly variant="ghost" aria-label="Remove item" isDisabled={estimateItems.fields.length === 1} onPress={() => estimateItems.remove(index)}>
-                        <Trash size={18} className="text-danger" />
-                      </AppButton>
-                    </div>
-                  </div>
-                </div>
-              ))}
-              <AppButton variant="tertiary" size="sm" startContent={<Plus weight="bold" />} label="Add item" onPress={() => estimateItems.append(BLANK_ITEM)} />
-              <div className="mt-4 rounded-xl bg-surface-secondary p-3 text-right">
-                <span className="text-xs text-muted">Subtotal: </span>
-                <span className="text-sm font-semibold text-foreground tabular">
-                  {currency} {estSubtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-              </div>
-            </div>
+            <LineItemsField
+              workspaceId={workspaceId}
+              currency={currency}
+              items={watchedEstItems ?? []}
+              onAdd={(line) => {
+                estimateItems.append(line);
+                estimateForm.clearErrors("items");
+              }}
+              onUpdate={(index, line) => estimateItems.update(index, line)}
+              onRemove={(index) => estimateItems.remove(index)}
+              error={(estimateForm.formState.errors.items as { message?: string; root?: { message?: string } } | undefined)?.message ?? (estimateForm.formState.errors.items as { root?: { message?: string } } | undefined)?.root?.message}
+            />
           )}
 
           {/* ESTIMATE STEP 2: Customer & Expiry */}
           {estimateStep === 2 && (
             <div className="space-y-4">
-              <AppComboBox
-                label="Customer / Prospect"
-                placeholder="Search or type prospective client..."
-                options={customerOptions}
-                selectedKey={isCreatingCustomerInline ? null : watchedEstCustomerId || null}
-                inputValue={isCreatingCustomerInline ? newCustomerName : undefined}
-                onSelectionChange={(key) => {
-                  if (key) {
-                    setIsCreatingCustomerInline(false);
-                    setNewCustomerName("");
-                    estimateForm.setValue("customer_id", key, { shouldValidate: true });
-                  }
-                }}
-                onCustomValueSubmit={(name) => {
-                  setIsCreatingCustomerInline(true);
-                  setNewCustomerName(name);
-                  estimateForm.setValue("customer_id", name, { shouldValidate: true });
-                }}
-                onInputChange={(val) => {
-                  if (isCreatingCustomerInline) {
-                    setNewCustomerName(val);
-                    estimateForm.setValue("customer_id", val);
-                  }
-                }}
-                allowsCustomValue={true}
-                isRequired
-              />
-
-              {isCreatingCustomerInline && (
-                <div className="rounded-2xl bg-primary-soft/30 p-4 border border-primary/20 space-y-3">
-                  <div className="flex items-center gap-2 text-xs font-semibold text-primary">
-                    <UserPlus size={16} weight="bold" />
-                    <span>Adding &ldquo;{newCustomerName}&rdquo; as new contact</span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs text-muted block mb-1">Phone</label>
-                      <input
-                        type="tel"
-                        placeholder="+234..."
-                        value={newCustomerPhone}
-                        onChange={(e) => setNewCustomerPhone(e.target.value)}
-                        className="w-full h-9 rounded-xl bg-surface-primary border border-border px-3 text-xs text-foreground focus:outline-none focus:border-primary"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted block mb-1">Email</label>
-                      <input
-                        type="email"
-                        placeholder="client@example.com"
-                        value={newCustomerEmail}
-                        onChange={(e) => setNewCustomerEmail(e.target.value)}
-                        className="w-full h-9 rounded-xl bg-surface-primary border border-border px-3 text-xs text-foreground focus:outline-none focus:border-primary"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
+              <ContactField control={estimateForm.control} name="customer_id" workspaceId={workspaceId} kind="customers" label="Customer or prospect" clearable={false} />
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <TextInputField control={estimateForm.control} name="issue_date" label="Issue date" type="date" isRequired />
@@ -1576,63 +1339,16 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
 
           {/* ESTIMATE STEP 3: Review */}
           {estimateStep === 3 && (
-            <div className="space-y-4">
-              <div className="rounded-2xl border border-border/60 bg-surface-secondary/40 p-4 space-y-3">
-                <div className="flex items-center justify-between border-b border-border/40 pb-2">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted">Customer</span>
-                  <span className="text-xs font-medium text-foreground">{selectedEstimateCustomer?.name || watchedEstCustomerId || "Prospective Client"}</span>
-                </div>
-                <div className="flex items-center justify-between border-b border-border/40 pb-2">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted">Validity</span>
-                  <span className="text-xs text-foreground">{watchedEstIssueDate} → {watchedEstExpiryDate}</span>
-                </div>
-                <div className="space-y-1.5 pt-1">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted block">Items</span>
-                  {watchedEstItems.map((item, idx) => (
-                    <div key={idx} className="flex justify-between text-xs text-foreground">
-                      <span>{item.quantity}x {item.description || "Item"}</span>
-                      <span className="tabular font-medium">
-                        {currency} {((parseFloat(item.quantity || "0") || 0) * (parseFloat(item.unit_price || "0") || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-                <div className="border-t border-border pt-2 space-y-1">
-                  <div className="flex justify-between text-xs text-muted">
-                    <span>Subtotal</span>
-                    <span className="tabular">{currency} {estSubtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                  </div>
-                  {estDiscount > 0 && (
-                    <div className="flex justify-between text-xs text-emerald-600">
-                      <span>Discount</span>
-                      <span className="tabular">-{currency} {estDiscount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                    </div>
-                  )}
-                  {estTax > 0 && (
-                    <div className="flex justify-between text-xs text-muted">
-                      <span>Tax</span>
-                      <span className="tabular">{currency} {estTax.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                    </div>
-                  )}
-                  {estDelivery > 0 && (
-                    <div className="flex justify-between text-xs text-muted">
-                      <span>Delivery fee</span>
-                      <span className="tabular">{currency} {estDelivery.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between text-sm font-bold text-foreground pt-1 border-t border-border/40">
-                    <span>Total Estimate</span>
-                    <span className="tabular text-primary font-bold">{currency} {estTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                  </div>
-                </div>
-              </div>
-              {watchedEstTerms && (
-                <div className="rounded-xl bg-surface-secondary/70 p-3 text-xs text-muted">
-                  <span className="font-semibold text-foreground block mb-0.5">Terms:</span>
-                  {watchedEstTerms}
-                </div>
-              )}
-            </div>
+            <DocumentReview
+              kind="quotation"
+              currency={currency}
+              party={selectedEstimateCustomer?.name || watchedEstCustomerId || "Prospective client"}
+              issueDate={watchedEstIssueDate}
+              dueDate={watchedEstExpiryDate}
+              items={watchedEstItems ?? []}
+              amounts={{ subtotal: estSubtotal, discount: estDiscount, tax: estTax, delivery: estDelivery, total: estTotal }}
+              terms={watchedEstTerms || undefined}
+            />
           )}
 
           {/* Navigation */}
@@ -1821,7 +1537,8 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
       <FormDrawer
         isOpen={isReturnOpen}
         onOpenChange={(open) => !open && closeReturnDrawer()}
-        title="Issue Credit Note / Sales Return"
+        title="Credit note or sales return"
+        size="lg"
         description={returnInvoice ? `Return goods or issue credit against ${returnInvoice.invoice_number}` : undefined}
         onSubmit={returnForm.handleSubmit((values: SalesReturnValues) => createSalesReturnAction.mutate(values))}
         submitLabel="Issue Credit Note"
@@ -1936,7 +1653,8 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
       <FormDrawer
         isOpen={isDebitNoteOpen}
         onOpenChange={(open) => !open && setIsDebitNoteOpen(false)}
-        title="New Debit Note"
+        title="New debit note"
+        size="lg"
         description="Issue a positive billing adjustment or post-invoice surcharge."
         submitLabel="Issue Debit Note"
         isSubmitting={dnSaving}

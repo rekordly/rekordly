@@ -18,6 +18,7 @@ var (
 	ErrForbiddenRecord       = errors.New("linked record does not belong to workspace")
 	ErrForbiddenParty        = errors.New("counterparty does not belong to workspace")
 	ErrLegsSumMismatch       = errors.New("sum of payment legs does not match payment total")
+	ErrPaidExceedsTotal      = errors.New("amount paid cannot be more than the total")
 	ErrNoPaymentLegs         = errors.New("at least one payment leg is required")
 	ErrNegativeLegAmount     = errors.New("payment leg amount must be greater than zero")
 	ErrAlreadyFullyPaid      = errors.New("record is already fully paid")
@@ -314,16 +315,20 @@ func (s *Service) CreateSale(ctx context.Context, workspaceID, userID int64, in 
 	var payments []PaymentDetail
 	// If immediate payment legs provided, record payment
 	if len(in.PaymentLegs) > 0 {
+		paidMinor, legs, err := settlementLegs(in.PaymentLegs, totalMinor, exponent)
+		if err != nil {
+			return SaleDetail{}, err
+		}
 		pmt, err := s.createPaymentInternal(ctx, qtx, workspaceID, userID, CreatePaymentInput{
 			Direction:        "incoming",
 			PaymentDate:      in.SaleDate,
-			TotalAmountMinor: totalMinor,
+			TotalAmountMinor: paidMinor,
 			Currency:         currency,
 			CounterpartyID:   in.CustomerID,
 			CounterpartyName: customerName,
 			LinkedRecordType: "sale",
 			LinkedRecordID:   &saleRecord.ID,
-			PaymentLegs:      in.PaymentLegs,
+			PaymentLegs:      legs,
 			Reference:        in.Reference,
 			Notes:            "Immediate settlement for sale #" + fmt.Sprint(saleRecord.ID),
 		})
@@ -571,16 +576,20 @@ func (s *Service) CreatePurchase(ctx context.Context, workspaceID, userID int64,
 
 	var payments []PaymentDetail
 	if len(in.PaymentLegs) > 0 {
+		paidMinor, legs, err := settlementLegs(in.PaymentLegs, totalMinor, exponent)
+		if err != nil {
+			return PurchaseDetail{}, err
+		}
 		pmt, err := s.createPaymentInternal(ctx, qtx, workspaceID, userID, CreatePaymentInput{
 			Direction:        "outgoing",
 			PaymentDate:      in.PurchaseDate,
-			TotalAmountMinor: totalMinor,
+			TotalAmountMinor: paidMinor,
 			Currency:         currency,
 			CounterpartyID:   in.SupplierID,
 			CounterpartyName: supplierName,
 			LinkedRecordType: "purchase",
 			LinkedRecordID:   &purchaseRecord.ID,
-			PaymentLegs:      in.PaymentLegs,
+			PaymentLegs:      legs,
 			Reference:        in.Reference,
 			Notes:            "Immediate settlement for purchase #" + fmt.Sprint(purchaseRecord.ID),
 		})
@@ -1455,4 +1464,34 @@ func (s *Service) ListPayments(ctx context.Context, workspaceID int64, f ListPay
 		LinkedRecordID:   linkedIDParam,
 		BeforeID:         beforeIDParam,
 	})
+}
+
+// settlementLegs prepares the payment taken when a sale or purchase is recorded.
+// It may cover the whole total or only part of it (part payment), never more.
+// A single leg with no amount means "paid in full".
+func settlementLegs(legs []PaymentLegInput, totalMinor int64, exponent int) (int64, []PaymentLegInput, error) {
+	out := make([]PaymentLegInput, len(legs))
+	var paid int64
+	for i, leg := range legs {
+		amount := leg.AmountMinor
+		if leg.AmountMajor != "" {
+			parsed, err := ParseMajorToMinor(leg.AmountMajor, exponent)
+			if err != nil {
+				return 0, nil, err
+			}
+			amount = parsed
+		}
+		if amount == 0 && len(legs) == 1 {
+			amount = totalMinor
+		}
+		if amount <= 0 {
+			return 0, nil, ErrNegativeAmount
+		}
+		out[i] = PaymentLegInput{MoneyAccountID: leg.MoneyAccountID, AmountMinor: amount}
+		paid += amount
+	}
+	if paid > totalMinor {
+		return 0, nil, ErrPaidExceedsTotal
+	}
+	return paid, out, nil
 }

@@ -55,7 +55,7 @@ export const AppButton = forwardRef<HTMLButtonElement, AppButtonProps>(function 
   const iconSize = ICON_SIZE[size ?? 'md'];
 
   const classes = [
-    'font-medium tracking-[-0.01em] gap-2',
+    'font-medium tracking-[-0.01em] gap-2 transition-transform duration-150 active:scale-[0.97]',
     shape === 'pill' ? 'rounded-full' : 'rounded-xl',
     !isIconOnly && size === 'md' && 'h-10 px-5',
     !isIconOnly && size === 'lg' && 'h-12 px-6 text-[15px]',

@@ -28,6 +28,7 @@ import type { Payment, PaymentDetail } from "@/types/finance";
 import { PaymentDrawer } from "./payment-drawer";
 import { InvoiceAllocationDrawer } from "./invoice-allocation-drawer";
 import { money, StatusBadge, useAccountOptions, useRecords, WorkspaceGate, type WorkspaceInfo } from "./shared";
+import { PageStats } from "./page-stats";
 
 function PaymentsContent({ workspaceId, currency, startOpen }: WorkspaceInfo & { startOpen: boolean }) {
   const [isOpen, setIsOpen] = useState(startOpen);
@@ -102,6 +103,7 @@ function PaymentsContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
           </div>
         }
       />
+      <PageStats kind="payments" workspaceId={workspaceId} currency={currency} />
       <DataView<Payment>
         title="Payments"
         rows={payments.rows}

@@ -31,6 +31,58 @@ func (q *Queries) GetCashBalance(ctx context.Context, arg GetCashBalanceParams) 
 	return balance_minor, err
 }
 
+const getDailyIncomeExpense = `-- name: GetDailyIncomeExpense :many
+SELECT
+    le.entry_date::date AS day,
+    COALESCE(SUM(CASE WHEN ll.account_class = 'revenue' THEN ll.credit_minor - ll.debit_minor ELSE 0 END), 0)::bigint AS income_minor,
+    COALESCE(SUM(CASE WHEN ll.account_class = 'expense' THEN ll.debit_minor - ll.credit_minor ELSE 0 END), 0)::bigint AS expense_minor
+FROM ledger_lines ll
+JOIN ledger_entries le ON le.id = ll.ledger_entry_id AND le.workspace_id = ll.workspace_id
+WHERE ll.workspace_id = $1
+  AND le.currency = $2::text
+  AND le.entry_date BETWEEN $3 AND $4
+GROUP BY 1
+ORDER BY 1
+`
+
+type GetDailyIncomeExpenseParams struct {
+	WorkspaceID int64       `json:"workspace_id"`
+	Currency    string      `json:"currency"`
+	FromDate    pgtype.Date `json:"from_date"`
+	ToDate      pgtype.Date `json:"to_date"`
+}
+
+type GetDailyIncomeExpenseRow struct {
+	Day          pgtype.Date `json:"day"`
+	IncomeMinor  int64       `json:"income_minor"`
+	ExpenseMinor int64       `json:"expense_minor"`
+}
+
+func (q *Queries) GetDailyIncomeExpense(ctx context.Context, arg GetDailyIncomeExpenseParams) ([]GetDailyIncomeExpenseRow, error) {
+	rows, err := q.db.Query(ctx, getDailyIncomeExpense,
+		arg.WorkspaceID,
+		arg.Currency,
+		arg.FromDate,
+		arg.ToDate,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetDailyIncomeExpenseRow{}
+	for rows.Next() {
+		var i GetDailyIncomeExpenseRow
+		if err := rows.Scan(&i.Day, &i.IncomeMinor, &i.ExpenseMinor); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getIncomeExpenseTotals = `-- name: GetIncomeExpenseTotals :one
 SELECT
     COALESCE(SUM(CASE WHEN ll.account_class = 'revenue' THEN ll.credit_minor - ll.debit_minor ELSE 0 END), 0)::bigint AS income_minor,
@@ -116,6 +168,139 @@ func (q *Queries) GetMonthlyIncomeExpense(ctx context.Context, arg GetMonthlyInc
 		return nil, err
 	}
 	return items, nil
+}
+
+const getOpenBalances = `-- name: GetOpenBalances :one
+SELECT
+    (SELECT COALESCE(SUM(s.total_amount_minor - s.paid_amount_minor), 0) FROM sales s
+      WHERE s.workspace_id = $1 AND s.currency = $2::text AND s.status IN ('unpaid', 'partially_paid'))::bigint AS sales_unpaid_minor,
+    (SELECT COUNT(*) FROM sales s
+      WHERE s.workspace_id = $1 AND s.currency = $2::text AND s.status IN ('unpaid', 'partially_paid'))::bigint AS sales_unpaid_count,
+    (SELECT COALESCE(SUM(i.total_amount_minor - i.paid_amount_minor), 0) FROM invoices i
+      WHERE i.workspace_id = $1 AND i.currency = $2::text AND i.document_kind = 'invoice'
+        AND i.status IN ('finalized', 'partially_paid'))::bigint AS invoices_unpaid_minor,
+    (SELECT COUNT(*) FROM invoices i
+      WHERE i.workspace_id = $1 AND i.currency = $2::text AND i.document_kind = 'invoice'
+        AND i.status IN ('finalized', 'partially_paid'))::bigint AS invoices_unpaid_count,
+    (SELECT COALESCE(SUM(i.total_amount_minor - i.paid_amount_minor), 0) FROM invoices i
+      WHERE i.workspace_id = $1 AND i.currency = $2::text AND i.document_kind = 'invoice'
+        AND i.status IN ('finalized', 'partially_paid') AND i.due_date < $3::date)::bigint AS invoices_overdue_minor,
+    (SELECT COUNT(*) FROM invoices i
+      WHERE i.workspace_id = $1 AND i.currency = $2::text AND i.document_kind = 'invoice'
+        AND i.status IN ('finalized', 'partially_paid') AND i.due_date < $3::date)::bigint AS invoices_overdue_count,
+    (SELECT COALESCE(SUM(p.total_amount_minor - p.paid_amount_minor), 0) FROM purchases p
+      WHERE p.workspace_id = $1 AND p.currency = $2::text AND p.status IN ('unpaid', 'partially_paid'))::bigint AS purchases_unpaid_minor,
+    (SELECT COUNT(*) FROM purchases p
+      WHERE p.workspace_id = $1 AND p.currency = $2::text AND p.status IN ('unpaid', 'partially_paid'))::bigint AS purchases_unpaid_count
+`
+
+type GetOpenBalancesParams struct {
+	WorkspaceID int64       `json:"workspace_id"`
+	Currency    string      `json:"currency"`
+	Today       pgtype.Date `json:"today"`
+}
+
+type GetOpenBalancesRow struct {
+	SalesUnpaidMinor     int64 `json:"sales_unpaid_minor"`
+	SalesUnpaidCount     int64 `json:"sales_unpaid_count"`
+	InvoicesUnpaidMinor  int64 `json:"invoices_unpaid_minor"`
+	InvoicesUnpaidCount  int64 `json:"invoices_unpaid_count"`
+	InvoicesOverdueMinor int64 `json:"invoices_overdue_minor"`
+	InvoicesOverdueCount int64 `json:"invoices_overdue_count"`
+	PurchasesUnpaidMinor int64 `json:"purchases_unpaid_minor"`
+	PurchasesUnpaidCount int64 `json:"purchases_unpaid_count"`
+}
+
+// What customers still owe and what is still owed to suppliers, right now.
+// Sales and invoices are separate records, so they are reported separately.
+func (q *Queries) GetOpenBalances(ctx context.Context, arg GetOpenBalancesParams) (GetOpenBalancesRow, error) {
+	row := q.db.QueryRow(ctx, getOpenBalances, arg.WorkspaceID, arg.Currency, arg.Today)
+	var i GetOpenBalancesRow
+	err := row.Scan(
+		&i.SalesUnpaidMinor,
+		&i.SalesUnpaidCount,
+		&i.InvoicesUnpaidMinor,
+		&i.InvoicesUnpaidCount,
+		&i.InvoicesOverdueMinor,
+		&i.InvoicesOverdueCount,
+		&i.PurchasesUnpaidMinor,
+		&i.PurchasesUnpaidCount,
+	)
+	return i, err
+}
+
+const getPurchaseTotals = `-- name: GetPurchaseTotals :one
+SELECT
+    COALESCE(SUM(p.total_amount_minor), 0)::bigint AS total_minor,
+    COALESCE(SUM(p.paid_amount_minor), 0)::bigint AS paid_minor,
+    COUNT(*)::bigint AS purchase_count
+FROM purchases p
+WHERE p.workspace_id = $1
+  AND p.currency = $2::text
+  AND p.status IN ('unpaid', 'partially_paid', 'paid')
+  AND p.purchase_date BETWEEN $3 AND $4
+`
+
+type GetPurchaseTotalsParams struct {
+	WorkspaceID int64       `json:"workspace_id"`
+	Currency    string      `json:"currency"`
+	FromDate    pgtype.Date `json:"from_date"`
+	ToDate      pgtype.Date `json:"to_date"`
+}
+
+type GetPurchaseTotalsRow struct {
+	TotalMinor    int64 `json:"total_minor"`
+	PaidMinor     int64 `json:"paid_minor"`
+	PurchaseCount int64 `json:"purchase_count"`
+}
+
+func (q *Queries) GetPurchaseTotals(ctx context.Context, arg GetPurchaseTotalsParams) (GetPurchaseTotalsRow, error) {
+	row := q.db.QueryRow(ctx, getPurchaseTotals,
+		arg.WorkspaceID,
+		arg.Currency,
+		arg.FromDate,
+		arg.ToDate,
+	)
+	var i GetPurchaseTotalsRow
+	err := row.Scan(&i.TotalMinor, &i.PaidMinor, &i.PurchaseCount)
+	return i, err
+}
+
+const getSalesTotals = `-- name: GetSalesTotals :one
+SELECT
+    COALESCE(SUM(s.total_amount_minor), 0)::bigint AS total_minor,
+    COALESCE(SUM(s.paid_amount_minor), 0)::bigint AS paid_minor,
+    COUNT(*)::bigint AS sale_count
+FROM sales s
+WHERE s.workspace_id = $1
+  AND s.currency = $2::text
+  AND s.status IN ('unpaid', 'partially_paid', 'paid')
+  AND s.sale_date BETWEEN $3 AND $4
+`
+
+type GetSalesTotalsParams struct {
+	WorkspaceID int64       `json:"workspace_id"`
+	Currency    string      `json:"currency"`
+	FromDate    pgtype.Date `json:"from_date"`
+	ToDate      pgtype.Date `json:"to_date"`
+}
+
+type GetSalesTotalsRow struct {
+	TotalMinor int64 `json:"total_minor"`
+	PaidMinor  int64 `json:"paid_minor"`
+	SaleCount  int64 `json:"sale_count"`
+}
+
+func (q *Queries) GetSalesTotals(ctx context.Context, arg GetSalesTotalsParams) (GetSalesTotalsRow, error) {
+	row := q.db.QueryRow(ctx, getSalesTotals,
+		arg.WorkspaceID,
+		arg.Currency,
+		arg.FromDate,
+		arg.ToDate,
+	)
+	var i GetSalesTotalsRow
+	err := row.Scan(&i.TotalMinor, &i.PaidMinor, &i.SaleCount)
+	return i, err
 }
 
 const getSpendingByCategory = `-- name: GetSpendingByCategory :many

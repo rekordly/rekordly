@@ -262,8 +262,8 @@ func (h *Handler) getOnboardingChecklist(c *gin.Context) {
 
 	var acctCount, incomeCount, expenseCount, customerCount, invoiceCount int64
 	_ = h.service.pool.QueryRow(c.Request.Context(), `SELECT COUNT(*) FROM money_accounts WHERE workspace_id = $1`, wsCtx.WorkspaceID).Scan(&acctCount)
-	_ = h.service.pool.QueryRow(c.Request.Context(), `SELECT COUNT(*) FROM money_transactions WHERE workspace_id = $1 AND direction = 'money_in' AND status = 'posted'`, wsCtx.WorkspaceID).Scan(&incomeCount)
-	_ = h.service.pool.QueryRow(c.Request.Context(), `SELECT COUNT(*) FROM money_transactions WHERE workspace_id = $1 AND direction = 'money_out' AND status = 'posted'`, wsCtx.WorkspaceID).Scan(&expenseCount)
+	_ = h.service.pool.QueryRow(c.Request.Context(), `SELECT (SELECT COUNT(*) FROM money_transactions WHERE workspace_id = $1 AND direction = 'money_in' AND status = 'posted') + (SELECT COUNT(*) FROM sales WHERE workspace_id = $1 AND status IN ('unpaid', 'partially_paid', 'paid'))`, wsCtx.WorkspaceID).Scan(&incomeCount)
+	_ = h.service.pool.QueryRow(c.Request.Context(), `SELECT (SELECT COUNT(*) FROM money_transactions WHERE workspace_id = $1 AND direction = 'money_out' AND status = 'posted') + (SELECT COUNT(*) FROM purchases WHERE workspace_id = $1 AND status IN ('unpaid', 'partially_paid', 'paid'))`, wsCtx.WorkspaceID).Scan(&expenseCount)
 	_ = h.service.pool.QueryRow(c.Request.Context(), `SELECT COUNT(*) FROM counterparties WHERE workspace_id = $1 AND merged_into_id IS NULL`, wsCtx.WorkspaceID).Scan(&customerCount)
 	_ = h.service.pool.QueryRow(c.Request.Context(), `SELECT COUNT(*) FROM invoices WHERE workspace_id = $1`, wsCtx.WorkspaceID).Scan(&invoiceCount)
 

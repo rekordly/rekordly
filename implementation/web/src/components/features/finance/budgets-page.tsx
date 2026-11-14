@@ -20,7 +20,9 @@ import { budgetSchema, type BudgetValues } from "@/lib/schemas/finance.schemas";
 import type { Budget } from "@/types/finance";
 
 import { MoneyField, NotesField, SelectField, TextInputField } from "./fields";
-import { money, useCategoryOptions, useFinanceAction, WorkspaceGate, type WorkspaceInfo } from "./shared";
+import { money, useFinanceAction, WorkspaceGate, type WorkspaceInfo } from "./shared";
+import { BudgetStats } from "./section-stats";
+import { CategoryField } from "@/components/pickers";
 
 const PERIODS = [
   { key: "monthly", label: "Monthly" },
@@ -59,7 +61,6 @@ function BudgetsContent({ workspaceId, currency, isBusiness }: WorkspaceInfo) {
     queryKey: [...moneyKeys.workspace(workspaceId), "budgets"],
     queryFn: () => financeApi.listBudgets(workspaceId),
   });
-  const categories = useCategoryOptions(workspaceId, "money_out");
 
   const now = new Date();
   const form = useForm<BudgetValues>({
@@ -118,6 +119,7 @@ function BudgetsContent({ workspaceId, currency, isBusiness }: WorkspaceInfo) {
         description="Spending limits, and how close you are to them."
         actions={<AppButton startContent={<Plus weight="bold" />} label="New budget" onPress={() => setIsOpen(true)} />}
       />
+      <BudgetStats workspaceId={workspaceId} currency={currency} budgets={budgets.data ?? []} />
       <DataView<Budget>
         title="Budgets"
         searchPlaceholder="Search budgets"
@@ -167,7 +169,7 @@ function BudgetsContent({ workspaceId, currency, isBusiness }: WorkspaceInfo) {
         <TextInputField control={form.control} name="name" label="Name" placeholder="Monthly supplies" isRequired />
         <MoneyField control={form.control} name="amount" label="Limit" currency={currency} isRequired />
         <SelectField control={form.control} name="period" label="Period" options={PERIODS} isRequired />
-        <SelectField control={form.control} name="category_id" label="Category" placeholder="All spending" options={categories} />
+        <CategoryField control={form.control} name="category_id" label="Category" placeholder="All spending" workspaceId={workspaceId} direction="money_out" />
         <div className="grid gap-4 sm:grid-cols-2">
           <TextInputField control={form.control} name="start_date" label="Starts" type="date" isRequired />
           <TextInputField control={form.control} name="end_date" label="Ends" type="date" isRequired />

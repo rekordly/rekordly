@@ -18,6 +18,7 @@ import { hasWorkspacePermission, useActiveWorkspace } from "@/stores/workspace-s
 import type { AutomationRule, FailedJob } from "@/types/ai-imports";
 
 import { WorkspaceGate, type WorkspaceInfo } from "../finance/shared";
+import { AutomationStats } from "../finance/section-stats";
 
 const TABS = [
   { key: "rules", label: "Automation Rules" },
@@ -135,6 +136,7 @@ function AutomationJobsContent({ workspaceId }: WorkspaceInfo) {
           ) : null
         }
       />
+      <AutomationStats workspaceId={workspaceId} />
 
       <Segmented aria-label="Automation sections" options={TABS} value={tab} onChange={setTab} />
 

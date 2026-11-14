@@ -28,7 +28,8 @@ import {
 import type { PersonalAssetRecord } from "@/types/personal-finance";
 
 import { MoneyField, NotesField, SelectField, TextInputField } from "../finance/fields";
-import { useAccountOptions, useFinanceAction, WorkspaceGate, type WorkspaceInfo } from "../finance/shared";
+import { useFinanceAction, WorkspaceGate, type WorkspaceInfo } from "../finance/shared";
+import { AccountField } from "@/components/pickers";
 
 const ASSET_TYPES = [
   { key: "vehicle", label: "Vehicle" },
@@ -49,7 +50,6 @@ function AssetsContent({ workspaceId, currency, isBusiness }: WorkspaceInfo) {
     queryFn: () => personalApi.listAssets(workspaceId),
     enabled: !isBusiness,
   });
-  const accounts = useAccountOptions(workspaceId);
   const today = new Date().toISOString().split("T")[0];
 
   const createForm = useForm<AssetCreateValues>({
@@ -293,7 +293,7 @@ function AssetsContent({ workspaceId, currency, isBusiness }: WorkspaceInfo) {
           Opening existing asset (no current cash movement)
         </label>
         {!isOpening ? (
-          <SelectField control={acquireForm.control} name="money_account_id" label="Paid from account" options={accounts.options} />
+          <AccountField control={acquireForm.control} name="money_account_id" label="Paid from account" workspaceId={workspaceId} />
         ) : null}
         <NotesField control={acquireForm.control} name="notes" label="Notes" />
       </FormDrawer>
@@ -309,7 +309,7 @@ function AssetsContent({ workspaceId, currency, isBusiness }: WorkspaceInfo) {
         <TextInputField control={disposeForm.control} name="disposal_date" label="Disposal date" type="date" />
         <MoneyField control={disposeForm.control} name="proceeds" label="Proceeds" currency={currency} exponent={2} />
         <MoneyField control={disposeForm.control} name="disposal_costs" label="Disposal costs" currency={currency} exponent={2} />
-        <SelectField control={disposeForm.control} name="money_account_id" label="Receiving account" options={accounts.options} />
+        <AccountField control={disposeForm.control} name="money_account_id" label="Receiving account" workspaceId={workspaceId} />
         <TextInputField control={disposeForm.control} name="counterparty_name" label="Buyer / counterparty (optional)" />
         <NotesField control={disposeForm.control} name="notes" label="Notes" />
       </FormDrawer>

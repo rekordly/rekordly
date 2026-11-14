@@ -20,21 +20,33 @@ interface Command {
 export function CommandMenu() {
   const router = useRouter();
   const openMoneyRecord = useUIStore((state) => state.openMoneyRecord);
-  const { groups, addActions } = useNavigation();
-  const [open, setOpen] = useState(false);
+  const { groups, addActions, accountLinks } = useNavigation();
+  const open = useUIStore((state) => state.isCommandMenuOpen);
+  const setOpen = useUIStore((state) => state.setCommandMenuOpen);
   const [query, setQuery] = useState("");
 
   const commands = useMemo<Command[]>(
     () => [
       ...groups.flatMap((group) =>
-        group.items.map((item) => ({
-          key: `nav-${item.href}`,
-          label: item.label,
-          description: group.title,
-          href: item.href,
-          icon: item.icon,
-        })),
+        group.items.flatMap((item) =>
+          item.children
+            ? item.children.map((child) => ({
+                key: `nav-${child.href}`,
+                label: child.label,
+                description: item.label,
+                href: child.href,
+                icon: item.icon,
+              }))
+            : [{ key: `nav-${item.href}`, label: item.label, description: group.title, href: item.href, icon: item.icon }],
+        ),
       ),
+      ...accountLinks.map((link) => ({
+        key: `nav-${link.href}`,
+        label: link.label,
+        description: "Account",
+        href: link.href,
+        icon: link.icon,
+      })),
       ...addActions.map((action) => ({
         key: `add-${action.direction}`,
         label: action.label,
@@ -43,7 +55,7 @@ export function CommandMenu() {
         icon: action.icon,
       })),
     ],
-    [addActions, groups],
+    [accountLinks, addActions, groups],
   );
 
   const visible = useMemo(
@@ -65,7 +77,7 @@ export function CommandMenu() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, []);
+  }, [setOpen]);
 
   const choose = (command: Command) => {
     if (command.direction) openMoneyRecord(command.direction);
@@ -76,27 +88,6 @@ export function CommandMenu() {
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="hidden h-10 w-full max-w-[420px] cursor-pointer items-center gap-2.5 rounded-full bg-background px-4 text-left text-[13px] text-field-placeholder transition-colors hover:bg-surface-secondary md:flex"
-      >
-        <MagnifyingGlass size={18} className="text-muted" aria-hidden="true" />
-        <span className="flex-1 truncate">Search pages and actions…</span>
-        <Kbd className="text-[11px]">
-          <Kbd.Abbr keyValue="ctrl" />
-          <Kbd.Content>K</Kbd.Content>
-        </Kbd>
-      </button>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        aria-label="Search pages and actions"
-        className="grid size-10 cursor-pointer place-items-center rounded-full text-foreground transition-colors hover:bg-default md:hidden"
-      >
-        <MagnifyingGlass size={20} aria-hidden="true" />
-      </button>
-
       <Modal isOpen={open} onOpenChange={setOpen}>
         <Modal.Backdrop variant="blur">
           <Modal.Container placement="center" size="lg">

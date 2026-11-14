@@ -7,7 +7,7 @@ import {
   useActiveWorkspace,
 } from "@/stores/workspace-store";
 
-import { addActionsFor, navigationFor } from "./navigation";
+import { accountLinksFor, addActionsFor, navigationFor } from "./navigation";
 
 /** Navigation and add actions for the workspace in view, filtered by its permissions. */
 export function useNavigation() {
@@ -17,6 +17,7 @@ export function useNavigation() {
       scope,
       groups: navigationFor(scope.mode, (permission) => hasWorkspacePermission(scope, permission)),
       addActions: addActionsFor(scope.mode),
+      accountLinks: accountLinksFor((permission) => hasWorkspacePermission(scope, permission)),
     }),
     [scope],
   );

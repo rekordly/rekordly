@@ -15,6 +15,7 @@ import { useUIStore } from "@/stores/ui-store";
 import type { MoneyTransaction } from "@/types/finance";
 
 import { money, StatusBadge, useFinanceAction, useRecords, WorkspaceGate, type WorkspaceInfo } from "./finance/shared";
+import { PageStats } from "./finance/page-stats";
 
 const DIRECTION_STYLE = {
   money_in: { icon: ArrowDownLeft, box: "bg-primary-soft text-primary", sign: "+" },
@@ -22,7 +23,7 @@ const DIRECTION_STYLE = {
   transfer: { icon: ArrowsLeftRight, box: "bg-secondary-soft text-secondary-soft-foreground", sign: "" },
 } as const;
 
-function TransactionsContent({ workspaceId }: WorkspaceInfo) {
+function TransactionsContent({ workspaceId, currency }: WorkspaceInfo) {
   const [voiding, setVoiding] = useState<MoneyTransaction | null>(null);
   const openMoneyRecord = useUIStore((state) => state.openMoneyRecord);
   const transactions = useRecords<MoneyTransaction>("transactions", workspaceId);
@@ -58,6 +59,7 @@ function TransactionsContent({ workspaceId }: WorkspaceInfo) {
         description="Money that came in, went out, or moved between your accounts."
         actions={<AppButton startContent={<Plus weight="bold" />} label="Add record" onPress={() => openMoneyRecord("money_out")} />}
       />
+      <PageStats kind="records" workspaceId={workspaceId} currency={currency} />
 
       <DataView<MoneyTransaction>
         title="Records"

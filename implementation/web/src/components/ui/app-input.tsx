@@ -50,7 +50,7 @@ export interface AppInputProps
 }
 
 const ICON_SIZE = { sm: 16, md: 18, lg: 20 } as const;
-const GROUP_HEIGHT = { sm: 'h-9 text-xs', md: 'h-11 text-sm', lg: 'h-12 text-[15px]' } as const;
+const GROUP_HEIGHT = { sm: 'h-9 text-[13px]', md: 'h-11 text-[14px]', lg: 'h-12 text-[15px]' } as const;
 
 /** "1234567.5" → "1,234,567.5" (display only). */
 export function groupDigits(raw: string): string {
@@ -183,11 +183,9 @@ export const AppInput = forwardRef<HTMLInputElement, AppInputProps>(function App
       {/* Input Field: Uses InputGroup when prefix or suffix icons exist to eliminate text overlap */}
       {hasGroup ? (
         <InputGroup
-          className={`w-full rounded-xl border bg-field text-foreground transition-colors shadow-none ${heightClass} ${
-            invalid
-              ? 'border-danger ring-1 ring-danger/30'
-              : 'border-field-border focus-within:border-focus focus-within:ring-1 focus-within:ring-focus/30'
-          } ${isDisabled ? 'opacity-60 cursor-not-allowed bg-disabled' : ''}`}
+          data-invalid={invalid || undefined}
+          data-disabled={isDisabled || undefined}
+          className={`field-shell w-full shadow-none ${heightClass}`}
         >
           {startContent && (
             <InputGroup.Prefix className="border-none bg-transparent pl-3.5 pr-2 flex items-center text-muted shrink-0 shadow-none">
@@ -227,22 +225,20 @@ export const AppInput = forwardRef<HTMLInputElement, AppInputProps>(function App
           placeholder={placeholder}
           disabled={isDisabled}
           required={isRequired}
-          className={`w-full rounded-xl border bg-field text-foreground px-3.5 placeholder:text-field-placeholder transition-colors outline-none shadow-none ${heightClass} ${
-            invalid
-              ? 'border-danger ring-1 ring-danger/30'
-              : 'border-field-border focus:border-focus focus:ring-1 focus:ring-focus/30'
-          } ${isDisabled ? 'opacity-60 cursor-not-allowed bg-disabled' : ''} ${className ?? ''}`}
+          data-invalid={invalid || undefined}
+          data-disabled={isDisabled || undefined}
+          className={`field-shell w-full px-3.5 placeholder:text-field-placeholder shadow-none ${heightClass} ${className ?? ''}`}
         />
       )}
 
       {/* Helper description */}
       {description && !invalid && (
-        <Description className="text-xs text-muted mt-1">{description}</Description>
+        <Description className="text-[12px] text-muted">{description}</Description>
       )}
 
       {/* Validation error message */}
       {errorMessage && (
-        <FieldError className="text-xs text-danger font-medium mt-1 animate-in fade-in duration-200">
+        <FieldError className="animate-fade-up text-[12px] font-medium text-danger">
           {errorMessage}
         </FieldError>
       )}

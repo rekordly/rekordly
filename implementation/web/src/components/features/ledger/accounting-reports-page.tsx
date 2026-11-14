@@ -19,6 +19,7 @@ import { formatMinorAmount } from "@/lib/money";
 import type { ReportExportRow } from "@/types/ledger";
 
 import { useFinanceAction, WorkspaceGate, type WorkspaceInfo } from "../finance/shared";
+import { PageStats } from "../finance/page-stats";
 
 const REPORT_TYPES = [
   { key: "trial_balance", label: "Trial Balance" },
@@ -95,6 +96,7 @@ function AccountingReportsContent({ workspaceId, currency }: WorkspaceInfo) {
           </div>
         }
       />
+      <PageStats kind="records" workspaceId={workspaceId} currency={currency} />
 
       <div className="flex flex-wrap items-center gap-3">
         <select
@@ -116,11 +118,11 @@ function AccountingReportsContent({ workspaceId, currency }: WorkspaceInfo) {
       ) : null}
 
       {r && !r.invariant_passed ? (
-        <Alert status="error" description={`Accounting invariant failed (${r.warnings.join("; ")}). Report cannot be treated as trusted.`} />
+        <Alert status="error" description={`Accounting invariant failed (${(r.warnings ?? []).join("; ")}). Report cannot be treated as trusted.`} />
       ) : null}
 
-      {r && r.warnings.length > 0 && r.invariant_passed ? (
-        <Alert status="warning" description={r.warnings.join(" · ")} />
+      {r && (r.warnings ?? []).length > 0 && r.invariant_passed ? (
+        <Alert status="warning" description={(r.warnings ?? []).join(" · ")} />
       ) : null}
 
       {r ? (
@@ -136,17 +138,17 @@ function AccountingReportsContent({ workspaceId, currency }: WorkspaceInfo) {
 
           <DataView
             title={r.title}
-            rows={r.rows}
+            rows={r.rows ?? []}
             rowKey={(row) => row.key}
             isLoading={report.isPending}
             isError={report.isError}
             columns={[
-              ...r.columns.map((col) => ({
+              ...(r.columns ?? []).map((col) => ({
                 key: col.key,
                 label: col.label,
                 align: col.align,
                 render: (row: (typeof r.rows)[number]) => {
-                  const val = row.values[col.key] ?? "";
+                  const val = row?.values?.[col.key] ?? "";
                   if (col.key.endsWith("_minor") || col.key.includes("debit") || col.key.includes("credit")) {
                     return <span className="tabular">{formatMinorAmount(val || "0", r.currency, r.currency_exponent)}</span>;
                   }
@@ -165,13 +167,16 @@ function AccountingReportsContent({ workspaceId, currency }: WorkspaceInfo) {
                   ) : null,
               },
             ]}
-            renderCard={(row) => (
-              <RecordCard
-                icon={<FileText size={18} weight="duotone" aria-hidden="true" />}
-                title={row.label}
-                amount={row.values[r.columns[r.columns.length - 1]?.key] ?? ""}
-              />
-            )}
+            renderCard={(row) => {
+              const lastCol = (r.columns ?? [])[(r.columns ?? []).length - 1];
+              return (
+                <RecordCard
+                  icon={<FileText size={18} weight="duotone" aria-hidden="true" />}
+                  title={row.label}
+                  amount={lastCol ? row?.values?.[lastCol.key] ?? "" : ""}
+                />
+              );
+            }}
             empty={<EmptyState icon={FileText} title="No rows in this period" description="No posted activity matches the selected report filters." />}
           />
         </DashboardCard>

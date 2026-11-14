@@ -10,7 +10,8 @@ import { financeApi } from "@/lib/money";
 import { paymentSchema, type PaymentValues } from "@/lib/schemas/finance.schemas";
 
 import { MoneyField, NotesField, SelectField, TextInputField } from "./fields";
-import { today, useAccountOptions, useFinanceAction } from "./shared";
+import { today, useFinanceAction } from "./shared";
+import { AccountField } from "@/components/pickers";
 
 export interface PaymentPreset {
   direction: "incoming" | "outgoing";
@@ -40,7 +41,6 @@ export function PaymentDrawer({
   preset?: PaymentPreset;
   defaultSplit?: boolean;
 }) {
-  const accounts = useAccountOptions(workspaceId);
   const form = useForm<PaymentValues>({
     resolver: zodResolver(paymentSchema),
     values: {
@@ -153,14 +153,7 @@ export function PaymentDrawer({
       </div>
 
       {!splitEnabled ? (
-        <SelectField
-          control={form.control}
-          name="account_id"
-          label="Account"
-          placeholder={accounts.isPending ? "Loading accounts…" : "Choose account"}
-          options={accounts.options}
-          isRequired
-        />
+        <AccountField control={form.control} name="account_id" label="Account" workspaceId={workspaceId} isRequired />
       ) : (
         <div className="space-y-3 rounded-2xl border border-border/60 bg-surface-secondary/30 p-3">
           <div className="flex items-center justify-between">
@@ -190,14 +183,7 @@ export function PaymentDrawer({
                   </button>
                 ) : null}
               </div>
-              <SelectField
-                control={form.control}
-                name={`legs.${index}.account_id`}
-                label="Account"
-                placeholder="Choose account"
-                options={accounts.options}
-                isRequired
-              />
+              <AccountField control={form.control} name={`legs.${index}.account_id`} label="Account" workspaceId={workspaceId} isRequired />
               <MoneyField
                 control={form.control}
                 name={`legs.${index}.amount`}

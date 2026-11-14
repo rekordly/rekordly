@@ -2327,17 +2327,60 @@ type ProcurementAttachment struct {
 }
 
 type Product struct {
+	ID               int64              `json:"id"`
+	WorkspaceID      int64              `json:"workspace_id"`
+	Name             string             `json:"name"`
+	Description      pgtype.Text        `json:"description"`
+	Kind             string             `json:"kind"`
+	Status           string             `json:"status"`
+	UnitName         string             `json:"unit_name"`
+	IdempotencyKey   string             `json:"idempotency_key"`
+	CreatedByUserID  pgtype.Int8        `json:"created_by_user_id"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	ShortDescription pgtype.Text        `json:"short_description"`
+	LongDescription  pgtype.Text        `json:"long_description"`
+	ImageUrls        []byte             `json:"image_urls"`
+	ArchivedAt       pgtype.Timestamptz `json:"archived_at"`
+}
+
+type ProductCollection struct {
+	ID          int64              `json:"id"`
+	WorkspaceID int64              `json:"workspace_id"`
+	Name        string             `json:"name"`
+	Description pgtype.Text        `json:"description"`
+	Position    int32              `json:"position"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ProductCollectionItem struct {
+	WorkspaceID  int64              `json:"workspace_id"`
+	CollectionID int64              `json:"collection_id"`
+	ProductID    int64              `json:"product_id"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+type ProductEvent struct {
+	ID          int64              `json:"id"`
+	WorkspaceID int64              `json:"workspace_id"`
+	ProductID   int64              `json:"product_id"`
+	EventType   string             `json:"event_type"`
+	Summary     string             `json:"summary"`
+	ActorUserID pgtype.Int8        `json:"actor_user_id"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type ProductImportBatch struct {
 	ID              int64              `json:"id"`
 	WorkspaceID     int64              `json:"workspace_id"`
-	Name            string             `json:"name"`
-	Description     pgtype.Text        `json:"description"`
-	Kind            string             `json:"kind"`
-	Status          string             `json:"status"`
-	UnitName        string             `json:"unit_name"`
-	IdempotencyKey  string             `json:"idempotency_key"`
+	FileName        string             `json:"file_name"`
+	TotalRows       int32              `json:"total_rows"`
+	CreatedCount    int32              `json:"created_count"`
+	FailedCount     int32              `json:"failed_count"`
+	Errors          []byte             `json:"errors"`
 	CreatedByUserID pgtype.Int8        `json:"created_by_user_id"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
 type ProductOption struct {
@@ -2359,21 +2402,44 @@ type ProductOptionValue struct {
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
+type ProductOutlet struct {
+	WorkspaceID int64              `json:"workspace_id"`
+	ProductID   int64              `json:"product_id"`
+	LocationID  int64              `json:"location_id"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type ProductPriceHistory struct {
+	ID                   int64              `json:"id"`
+	WorkspaceID          int64              `json:"workspace_id"`
+	ProductID            int64              `json:"product_id"`
+	VariantID            int64              `json:"variant_id"`
+	OldSellingPriceMinor pgtype.Int8        `json:"old_selling_price_minor"`
+	NewSellingPriceMinor int64              `json:"new_selling_price_minor"`
+	OldCostPriceMinor    pgtype.Int8        `json:"old_cost_price_minor"`
+	NewCostPriceMinor    int64              `json:"new_cost_price_minor"`
+	Currency             string             `json:"currency"`
+	CurrencyExponent     int32              `json:"currency_exponent"`
+	ChangedByUserID      pgtype.Int8        `json:"changed_by_user_id"`
+	ChangedAt            pgtype.Timestamptz `json:"changed_at"`
+}
+
 type ProductVariant struct {
-	ID                int64              `json:"id"`
-	WorkspaceID       int64              `json:"workspace_id"`
-	ProductID         int64              `json:"product_id"`
-	Name              string             `json:"name"`
-	Sku               pgtype.Text        `json:"sku"`
-	Barcode           pgtype.Text        `json:"barcode"`
-	SellingPriceMinor int64              `json:"selling_price_minor"`
-	Currency          string             `json:"currency"`
-	CurrencyExponent  int32              `json:"currency_exponent"`
-	IsDefault         bool               `json:"is_default"`
-	IsActive          bool               `json:"is_active"`
-	CreatedAt         pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
-	CostPriceMinor    int64              `json:"cost_price_minor"`
+	ID                  int64              `json:"id"`
+	WorkspaceID         int64              `json:"workspace_id"`
+	ProductID           int64              `json:"product_id"`
+	Name                string             `json:"name"`
+	Sku                 pgtype.Text        `json:"sku"`
+	Barcode             pgtype.Text        `json:"barcode"`
+	SellingPriceMinor   int64              `json:"selling_price_minor"`
+	Currency            string             `json:"currency"`
+	CurrencyExponent    int32              `json:"currency_exponent"`
+	IsDefault           bool               `json:"is_default"`
+	IsActive            bool               `json:"is_active"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	CostPriceMinor      int64              `json:"cost_price_minor"`
+	CompareAtPriceMinor pgtype.Int8        `json:"compare_at_price_minor"`
 }
 
 type ProjectionRebuildRun struct {

@@ -7,6 +7,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useIsFetching } from '@tanstack/react-query';
 import { type Icon as PhosphorIcon } from '@phosphor-icons/react';
 
 /* -------------------------------------------------------------------------- */
@@ -33,9 +34,43 @@ export interface PageHeaderProps {
   actions?: React.ReactNode;
   /** Optional leading visual (avatar on detail pages). */
   leading?: React.ReactNode;
+  /** Keep the actions beside the title on phones too (for a single compact control). */
+  inlineActions?: boolean;
 }
 
-export function PageHeader({ title, description, back, badge, actions, leading }: PageHeaderProps) {
+/** Whether data is still loading, shown beside every page title (desktop). */
+function PageStatus() {
+  const isFetching = useIsFetching() > 0;
+  return (
+    <span className="hidden items-center gap-3 lg:inline-flex">
+      <span role="status" className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 py-0.5 text-[12px] font-medium text-muted">
+        <span className={`size-1.5 rounded-full ${isFetching ? 'animate-pulse bg-secondary' : 'bg-success'}`} />
+        {isFetching ? 'Syncing…' : 'Up to date'}
+      </span>
+    </span>
+  );
+}
+
+export function PageHeader({ title, description, back, badge, actions, leading, inlineActions = false }: PageHeaderProps) {
+  // Inline: the control sits beside the title and the description runs full width underneath.
+  if (inlineActions) {
+    return (
+      <div className="pt-2">
+        {back && <div className="mb-1 text-[13px] font-medium text-muted lg:hidden">{back}</div>}
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
+            {leading}
+            <h1 className="text-[24px] font-bold leading-tight tracking-[-0.02em] text-foreground">{title}</h1>
+            {badge}
+            <PageStatus />
+          </div>
+          {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+        </div>
+        {description && <p className="mt-1 text-[14px] text-muted">{description}</p>}
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-5 pt-2 sm:flex-row sm:items-end sm:justify-between">
       <div className="flex min-w-0 items-center gap-4">
@@ -43,8 +78,9 @@ export function PageHeader({ title, description, back, badge, actions, leading }
         <div className="min-w-0">
           {back && <div className="mb-1 text-[13px] font-medium text-muted lg:hidden">{back}</div>}
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-[28px] font-bold leading-tight tracking-[-0.03em] text-foreground">{title}</h1>
+            <h1 className="text-[24px] font-bold leading-tight tracking-[-0.02em] text-foreground">{title}</h1>
             {badge}
+            <PageStatus />
           </div>
           {description && <p className="mt-1 text-[14px] text-muted">{description}</p>}
         </div>

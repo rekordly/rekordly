@@ -19,6 +19,13 @@ export function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/** The date a number of days from today, as YYYY-MM-DD. */
+export function daysFromToday(days: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 export interface WorkspaceInfo {
   workspaceId: number;
   currency: string;

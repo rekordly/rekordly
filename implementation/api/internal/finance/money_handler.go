@@ -49,6 +49,7 @@ func (h *Handler) RegisterRoutes(group *gin.RouterGroup) {
 	// Product and service catalogue. Stock commands are registered separately
 	// once immutable movements and costing are implemented.
 	h.RegisterCatalogueRoutes(protected)
+	h.RegisterProductV2Routes(protected)
 	h.RegisterInventoryRoutes(protected)
 	h.RegisterOutletRoutes(protected)
 	h.RegisterStockReservationRoutes(protected)

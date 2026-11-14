@@ -7,11 +7,14 @@ import Link from "next/link";
 import { Alert } from "@/components/ui/alert";
 import { DashboardCard } from "@/components/ui/dashboard-card";
 import { SectionHeader, StatusPill } from "@/components/ui/page";
+import { KpiCard } from "@/components/ui/cards";
 import { StatCard } from "@/components/ui/stat-card";
 import { formatDate } from "@/lib/format";
 import { formatMinorAmount } from "@/lib/money";
 import { personalApi, personalKeys } from "@/lib/personal-finance";
 import type { AuthorizedWorkspace } from "@/types/auth";
+
+import { KpiRow } from "../finance/dashboard-parts";
 
 export function PersonalHome({ workspace, fromDate, toDate }: { workspace: AuthorizedWorkspace; fromDate?: string; toDate?: string }) {
   const dash = useQuery({
@@ -239,26 +242,23 @@ export function AllOwnerSummaryView({
             title={`Combined ${curr.currency} cash position`}
             description={`Eliminated ${formatMinorAmount(curr.eliminated_transfer_minor, curr.currency, curr.currency_exponent)} in mirrored owner transfers`}
           />
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard
-              tag="Combined cash balance"
-              title={formatMinorAmount(curr.combined_cash_balance_minor, curr.currency, curr.currency_exponent)}
+          <KpiRow className="lg:grid-cols-4">
+            <KpiCard
+              tone="accent"
+              icon={Vault}
+              label="Combined cash balance"
+              value={formatMinorAmount(curr.combined_cash_balance_minor, curr.currency, curr.currency_exponent)}
+              hint="Across all your spaces"
             />
-            <StatCard
-              tag="External inflow"
-              title={formatMinorAmount(curr.combined_inflow_minor, curr.currency, curr.currency_exponent)}
-              tone="success"
+            <KpiCard icon={ArrowDownLeft} label="External inflow" value={formatMinorAmount(curr.combined_inflow_minor, curr.currency, curr.currency_exponent)} hint="From outside your spaces" />
+            <KpiCard icon={ArrowUpRight} label="External outflow" value={formatMinorAmount(curr.combined_outflow_minor, curr.currency, curr.currency_exponent)} hint="To outside your spaces" />
+            <KpiCard
+              icon={ChartLineUp}
+              label="Net cash movement"
+              value={formatMinorAmount(curr.combined_net_cash_movement_minor, curr.currency, curr.currency_exponent)}
+              hint="Inflow minus outflow"
             />
-            <StatCard
-              tag="External outflow"
-              title={formatMinorAmount(curr.combined_outflow_minor, curr.currency, curr.currency_exponent)}
-              tone="warning"
-            />
-            <StatCard
-              tag="Net cash movement"
-              title={formatMinorAmount(curr.combined_net_cash_movement_minor, curr.currency, curr.currency_exponent)}
-            />
-          </div>
+          </KpiRow>
         </div>
       ))}
 

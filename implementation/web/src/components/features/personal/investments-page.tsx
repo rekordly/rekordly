@@ -26,7 +26,8 @@ import {
 import type { InvestmentRecord } from "@/types/personal-finance";
 
 import { MoneyField, NotesField, SelectField, TextInputField } from "../finance/fields";
-import { useAccountOptions, useFinanceAction, WorkspaceGate, type WorkspaceInfo } from "../finance/shared";
+import { useFinanceAction, WorkspaceGate, type WorkspaceInfo } from "../finance/shared";
+import { AccountField } from "@/components/pickers";
 
 const INVESTMENT_TYPES = [
   { key: "shares_funds", label: "Shares & funds" },
@@ -53,7 +54,6 @@ function InvestmentsContent({ workspaceId, currency, isBusiness }: WorkspaceInfo
     queryFn: () => personalApi.listInvestments(workspaceId),
     enabled: !isBusiness,
   });
-  const accounts = useAccountOptions(workspaceId);
   const today = new Date().toISOString().split("T")[0];
 
   const createForm = useForm<InvestmentCreateValues>({
@@ -275,7 +275,7 @@ function InvestmentsContent({ workspaceId, currency, isBusiness }: WorkspaceInfo
         <MoneyField control={eventForm.control} name="amount" label="Amount" currency={currency} exponent={2} />
         <TextInputField control={eventForm.control} name="units_delta" label="Units (optional)" placeholder="0" />
         {evType !== "opening" ? (
-          <SelectField control={eventForm.control} name="money_account_id" label="Money account" options={accounts.options} />
+          <AccountField control={eventForm.control} name="money_account_id" label="Money account" workspaceId={workspaceId} />
         ) : null}
         <NotesField control={eventForm.control} name="notes" label="Notes" />
       </FormDrawer>

@@ -7,6 +7,9 @@ export type MoneyRecordDirection = "money_in" | "money_out" | "transfer";
 interface UIState {
   isSidebarCollapsed: boolean;
   isMobileDrawerOpen: boolean;
+  /** The page and action search (Ctrl/Cmd K). Opened from the sidebar or the phone bar. */
+  isCommandMenuOpen: boolean;
+  setCommandMenuOpen: (open: boolean) => void;
   /** The shared quick-record drawer lives in the app shell, not in a route. */
   moneyRecordDirection: MoneyRecordDirection | null;
   /** How desktop lists are shown. Phones always get cards. */
@@ -27,6 +30,8 @@ export const useUIStore = create<UIState>()(
     (set) => ({
       isSidebarCollapsed: false,
       isMobileDrawerOpen: false,
+      isCommandMenuOpen: false,
+      setCommandMenuOpen: (isCommandMenuOpen) => set({ isCommandMenuOpen }),
       moneyRecordDirection: null,
       recordView: "table",
       setRecordView: (recordView) => set({ recordView }),
