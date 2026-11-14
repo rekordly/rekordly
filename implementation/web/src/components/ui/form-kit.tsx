@@ -511,7 +511,7 @@ export function ChipMultiSelect({
   return (
     <div className="space-y-1.5">
       {label ? <p className="text-[13px] font-medium">{label}</p> : null}
-      {description ? <p className="text-[12px] text-muted">{description}</p> : null}
+      {description && options.length ? <p className="text-[12px] text-muted">{description}</p> : null}
       <div role="group" aria-label={label} className="flex flex-wrap gap-2 pt-0.5">
         {options.length === 0 && emptyText ? <p className="text-[13px] text-muted">{emptyText}</p> : null}
         {options.map((option) => {

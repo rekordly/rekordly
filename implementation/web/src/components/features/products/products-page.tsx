@@ -12,7 +12,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 
 import { AppButton } from "@/components/ui/app-button";
-import { AppSelect } from "@/components/ui/app-select";
+import { FilterDropdown } from "@/components/ui/filter-dropdown";
 import { KpiCard } from "@/components/ui/cards";
 import { DataView } from "@/components/ui/data-view";
 import { EmptyState, Page, PageHeader, Segmented, StatusPill, type StatusTone } from "@/components/ui/page";
@@ -32,10 +32,10 @@ const STATUS_TONE: Record<ProductStatus, StatusTone> = { active: "success", draf
 const STATUS_LABEL: Record<ProductStatus, string> = { active: "Active", draft: "Draft", archived: "Archived" };
 
 const STATUS_FILTERS = [
-  { key: "all", label: "All" },
-  { key: "active", label: "Active" },
-  { key: "draft", label: "Drafts" },
-  { key: "archived", label: "Archived" },
+  { key: "all", label: "All", description: "Every product" },
+  { key: "active", label: "Active", description: "On sale now" },
+  { key: "draft", label: "Drafts", description: "Not on sale yet" },
+  { key: "archived", label: "Archived", description: "Hidden from new sales" },
 ] as const;
 
 type StatusFilter = (typeof STATUS_FILTERS)[number]["key"];
@@ -190,16 +190,13 @@ function ProductsContent({ workspaceId, currency }: WorkspaceInfo) {
           onSelectionChange={onSelection}
           filters={
             <>
-              <Segmented size="sm" aria-label="Status" options={STATUS_FILTERS} value={status} onChange={setStatus} />
+              <FilterDropdown label="Status" options={STATUS_FILTERS} value={status} onChange={setStatus} />
               {(collections.data ?? []).length ? (
-                <AppSelect
-                  aria-label="Collection"
-                  size="sm"
-                  className="w-44"
-                  placeholder="All collections"
-                  options={[{ key: "", label: "All collections" }, ...(collections.data ?? []).map((collection) => ({ key: String(collection.id), label: collection.name }))]}
-                  selectedKey={collectionId || ""}
-                  onSelectionChange={setCollectionId}
+                <FilterDropdown
+                  label="Collection"
+                  options={[{ key: "", label: "All" }, ...(collections.data ?? []).map((collection) => ({ key: String(collection.id), label: collection.name }))]}
+                  value={collectionId || ""}
+                  onChange={setCollectionId}
                 />
               ) : null}
             </>

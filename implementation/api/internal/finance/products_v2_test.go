@@ -102,3 +102,24 @@ func TestMoneyLabel(t *testing.T) {
 		}
 	}
 }
+
+func TestSanitizeRichText(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{`<p>Hello <strong>there</strong></p>`, `<p>Hello <strong>there</strong></p>`},
+		{`<p onclick="x()">Hi</p><script>alert(1)</script>`, `<p>Hi</p>`},
+		{`<a href="javascript:alert(1)">bad</a>`, `<a>bad</a>`},
+		{`<a href="https://example.com" style="x">ok</a>`, `<a href="https://example.com" rel="noopener noreferrer nofollow" target="_blank">ok</a>`},
+		{`<h1>Big</h1><img src=x onerror=alert(1)><ul><li><p>One</p></li></ul>`, `Big<ul><li><p>One</p></li></ul>`},
+		{`<p><em>unclosed`, `<p><em>unclosed</em></p>`},
+		{`<p>a &lt; b</p><hr><br/>`, `<p>a &lt; b</p><hr><br>`},
+		{`<style>p{}</style><p></p>`, ``},
+		{`<p></p><p>Hi</p><p></p><p>Yo</p><p></p>`, `<p>Hi</p><p></p><p>Yo</p>`},
+		{`<p>Hi</p><p></p><p></p>`, `<p>Hi</p>`},
+		{`<svg><script>alert(1)</script></svg><p>x</p>`, `<p>x</p>`},
+	}
+	for _, c := range cases {
+		if got := SanitizeRichText(c.in); got != c.want {
+			t.Errorf("SanitizeRichText(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}

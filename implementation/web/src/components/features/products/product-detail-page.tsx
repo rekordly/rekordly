@@ -28,6 +28,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { FormDrawer } from "@/components/ui/form-drawer";
 import { EmptyState, Page, Segmented, StatusPill, type StatusTone } from "@/components/ui/page";
 import { MoneyInput } from "@/components/ui/money-input";
+import { RichText } from "@/components/ui/rich-text-editor";
 import { productTypeLabel, toMinor, unitLabel, useOutlets, useProductCollections } from "@/components/pickers";
 import { KpiRow } from "@/components/features/finance/dashboard-parts";
 import { useFinanceAction, WorkspaceGate, type WorkspaceInfo } from "@/components/features/finance/shared";
@@ -324,7 +325,7 @@ function ProductDetailContent({ workspaceId, productId }: WorkspaceInfo & { prod
               </div>
               <div>
                 <p className="text-[12px] font-semibold text-muted">Long description</p>
-                <p className="mt-0.5 text-[14px] whitespace-pre-line">{product.long_description || <span className="text-muted">Not added yet</span>}</p>
+                {product.long_description ? <RichText html={product.long_description} className="mt-0.5" /> : <p className="mt-0.5 text-[14px] text-muted">Not added yet</p>}
               </div>
             </div>
           </Panel>

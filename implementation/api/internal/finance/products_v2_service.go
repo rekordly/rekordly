@@ -217,7 +217,12 @@ func validateProduct(in SaveProductInput, defaultCurrency string) (validProduct,
 		return out, errors.New("short description must be at most 300 characters")
 	}
 	long := strings.TrimSpace(in.LongDescription)
-	if len([]rune(long)) > 10000 {
+	// Formatted text comes from the editor as HTML; keep only its safe tags.
+	// Plain text (e.g. from an import) stays as it is and is shown as text.
+	if strings.Contains(long, "<") {
+		long = SanitizeRichText(long)
+	}
+	if len(long) > maxRichTextBytes {
 		return out, errors.New("long description is too long")
 	}
 	out.description = optionalPgText(in.Description)

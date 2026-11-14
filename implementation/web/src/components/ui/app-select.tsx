@@ -79,7 +79,10 @@ export function AppSelect({
           data-invalid={error ? true : undefined}
           className={`field-shell flex w-full cursor-pointer items-center justify-between gap-2 shadow-none ${heightClass} ${triggerClassName}`}
         >
-          <Select.Value className="truncate text-foreground data-[placeholder]:text-field-placeholder" />
+          {/* The field shows only the chosen label; descriptions stay in the list. */}
+          <Select.Value className="truncate text-foreground data-[placeholder]:text-field-placeholder">
+            {({ selectedText, isPlaceholder }: { selectedText?: string | null; isPlaceholder?: boolean }) => (isPlaceholder ? placeholder : selectedText)}
+          </Select.Value>
           <Select.Indicator className="text-muted shrink-0" />
         </Select.Trigger>
         <Select.Popover className="animate-fade-up z-50 max-h-72 w-(--trigger-width) min-w-20 overflow-y-auto rounded-2xl border border-border bg-overlay p-1 shadow-xl">

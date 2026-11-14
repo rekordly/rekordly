@@ -1,7 +1,7 @@
 "use client";
 
 // Add or edit a product, in three steps:
-// 1. Basics: type, name, unit, prices, SKU   2. Stock and where it is sold   3. Store details
+// 1. Basics: type, name, unit, prices, SKU   2. Store details   3. Stock and where it is sold
 // A live preview sits on the right. Editing can jump to any step and save from any step.
 
 import { ArrowLeft, ArrowRight, Barcode, ImageSquare, Info } from "@phosphor-icons/react";
@@ -14,9 +14,9 @@ import { Alert } from "@/components/ui/alert";
 import { AppButton } from "@/components/ui/app-button";
 import { AppInput } from "@/components/ui/app-input";
 import { AppSelect } from "@/components/ui/app-select";
-import { AppTextarea } from "@/components/ui/app-textarea";
 import { FormGrid, FormPage, FormSection, StepNav } from "@/components/ui/form-kit";
 import { MoneyInput } from "@/components/ui/money-input";
+import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import {
   CollectionPicker,
   ImageUploader,
@@ -34,8 +34,8 @@ import type { ProductDetail, ProductKind, SaveProductPayload } from "@/types/pro
 
 const STEPS = [
   { label: "Basics", description: "Type, name and price" },
-  { label: "Stock & availability", description: "Outlets and collections" },
   { label: "Store details", description: "Images and descriptions" },
+  { label: "Stock & availability", description: "Outlets and collections" },
 ];
 
 const EXPONENT = 2;
@@ -164,11 +164,11 @@ function ProductForm({ workspaceId, currency, detail }: WorkspaceInfo & { detail
       if (price <= BigInt(0)) next.price = "Enter a selling price";
       if (form.compareAt && toMinor(form.compareAt) <= price) next.compareAt = "Make it higher than the selling price, or leave it empty";
     }
-    if (which === 2 && !isEdit && form.kind === "stock_tracked" && form.openingStock) {
+    if (which === 3 && !isEdit && form.kind === "stock_tracked" && form.openingStock) {
       if (!/^\d+(\.\d{1,4})?$/.test(form.openingStock)) next.openingStock = "Enter a number";
       else if (Number(form.openingStock) > 0 && cost <= BigInt(0)) next.openingStock = "Add a cost price in Basics so this stock can be valued";
     }
-    if (which === 3 && form.shortDescription.length > 300) next.shortDescription = "Keep this under 300 characters";
+    if (which === 2 && form.shortDescription.length > 300) next.shortDescription = "Keep this under 300 characters";
     return next;
   };
 
@@ -313,8 +313,31 @@ function ProductForm({ workspaceId, currency, detail }: WorkspaceInfo & { detail
 
       {step === 2 ? (
         <div className="animate-fade-up space-y-4">
+          <FormSection title="Images" description="Shown on your online store and on shared links.">
+            <ImageUploader workspaceId={workspaceId} value={form.images} onChange={(urls) => set("images", urls)} />
+          </FormSection>
+          <FormSection title="Descriptions" description="For your public store. Both are optional.">
+            <AppInput
+              label="Short description"
+              placeholder="One line shoppers see first"
+              value={form.shortDescription}
+              onChange={(event) => set("shortDescription", event.target.value)}
+              errorMessage={errors.shortDescription}
+              description={`${form.shortDescription.length} / 300`}
+            />
+            <RichTextEditor
+              label="Long description"
+              placeholder="Materials, sizes, care, what is included…"
+              value={form.longDescription}
+              onChange={(html) => set("longDescription", html)}
+            />
+          </FormSection>
+        </div>
+      ) : null}
+      {step === 3 ? (
+        <div className="animate-fade-up space-y-4">
           <FormSection title="Where it is sold">
-            <OutletPicker workspaceId={workspaceId} value={form.outletIds} onChange={(ids) => set("outletIds", ids)} />
+            <OutletPicker workspaceId={workspaceId} value={form.outletIds} onChange={(ids) => set("outletIds", ids)} label="" />
           </FormSection>
 
           {form.kind === "stock_tracked" ? (
@@ -351,30 +374,6 @@ function ProductForm({ workspaceId, currency, detail }: WorkspaceInfo & { detail
         </div>
       ) : null}
 
-      {step === 3 ? (
-        <div className="animate-fade-up space-y-4">
-          <FormSection title="Images" description="Shown on your online store and on shared links.">
-            <ImageUploader workspaceId={workspaceId} value={form.images} onChange={(urls) => set("images", urls)} />
-          </FormSection>
-          <FormSection title="Descriptions" description="For your public store. Both are optional.">
-            <AppInput
-              label="Short description"
-              placeholder="One line shoppers see first"
-              value={form.shortDescription}
-              onChange={(event) => set("shortDescription", event.target.value)}
-              errorMessage={errors.shortDescription}
-              description={`${form.shortDescription.length} / 300`}
-            />
-            <AppTextarea
-              label="Long description"
-              rows={6}
-              placeholder="Materials, sizes, care, what is included…"
-              value={form.longDescription}
-              onChange={(event) => set("longDescription", event.target.value)}
-            />
-          </FormSection>
-        </div>
-      ) : null}
     </FormPage>
   );
 }
