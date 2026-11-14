@@ -108,6 +108,21 @@ func (s *Service) CreateOutlet(ctx context.Context, workspaceID, userID int64, i
 			return OutletView{}, err
 		}
 		codeParam = pgtype.Text{String: codeStr, Valid: true}
+	} else {
+		// No code given: make one from the name, like "Lekki shop" -> "LEKSHO", adding -2, -3… if taken.
+		base := skuPrefix(in.Name)
+		for n := 1; n < 1000; n++ {
+			candidate := base
+			if n > 1 {
+				candidate = fmt.Sprintf("%s-%d", base, n)
+			}
+			if _, err := s.queries.GetInventoryLocationByCode(ctx, db.GetInventoryLocationByCodeParams{WorkspaceID: workspaceID, Lower: candidate}); errors.Is(err, pgx.ErrNoRows) {
+				codeParam = pgtype.Text{String: candidate, Valid: true}
+				break
+			} else if err != nil {
+				return OutletView{}, err
+			}
+		}
 	}
 
 	var addressParam, phoneParam pgtype.Text

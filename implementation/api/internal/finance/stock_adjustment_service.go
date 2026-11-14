@@ -74,6 +74,7 @@ func (s *Service) CreateStockAdjustment(ctx context.Context, workspaceID, userID
 	validReasons := map[string]bool{
 		"damage": true, "spoilage": true, "shrinkage": true,
 		"internal_use": true, "correction": true, "other": true,
+		"restock": true, "found": true, "lost": true, "expired": true,
 	}
 	if !validReasons[reason] {
 		return StockAdjustmentView{}, fmt.Errorf("invalid reason code: %s", in.ReasonCode)

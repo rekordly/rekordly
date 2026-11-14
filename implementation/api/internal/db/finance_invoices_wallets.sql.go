@@ -98,19 +98,21 @@ func (q *Queries) CreateInvoice(ctx context.Context, arg CreateInvoiceParams) (I
 
 const createInvoiceItem = `-- name: CreateInvoiceItem :one
 INSERT INTO invoice_items (
-    invoice_id, workspace_id, description, quantity, unit_price_minor, amount_minor
+    invoice_id, workspace_id, description, quantity, unit_price_minor, amount_minor, product_id, variant_id
 ) VALUES (
-    $1, $2, $3, $4, $5, $6
-) RETURNING id, invoice_id, workspace_id, description, quantity, unit_price_minor, amount_minor, created_at, discount_minor
+    $1, $2, $3, $4, $5, $6, $7, $8
+) RETURNING id, invoice_id, workspace_id, description, quantity, unit_price_minor, amount_minor, created_at, discount_minor, product_id, variant_id
 `
 
 type CreateInvoiceItemParams struct {
-	InvoiceID      int64  `json:"invoice_id"`
-	WorkspaceID    int64  `json:"workspace_id"`
-	Description    string `json:"description"`
-	Quantity       int32  `json:"quantity"`
-	UnitPriceMinor int64  `json:"unit_price_minor"`
-	AmountMinor    int64  `json:"amount_minor"`
+	InvoiceID      int64       `json:"invoice_id"`
+	WorkspaceID    int64       `json:"workspace_id"`
+	Description    string      `json:"description"`
+	Quantity       int32       `json:"quantity"`
+	UnitPriceMinor int64       `json:"unit_price_minor"`
+	AmountMinor    int64       `json:"amount_minor"`
+	ProductID      pgtype.Int8 `json:"product_id"`
+	VariantID      pgtype.Int8 `json:"variant_id"`
 }
 
 func (q *Queries) CreateInvoiceItem(ctx context.Context, arg CreateInvoiceItemParams) (InvoiceItem, error) {
@@ -121,6 +123,8 @@ func (q *Queries) CreateInvoiceItem(ctx context.Context, arg CreateInvoiceItemPa
 		arg.Quantity,
 		arg.UnitPriceMinor,
 		arg.AmountMinor,
+		arg.ProductID,
+		arg.VariantID,
 	)
 	var i InvoiceItem
 	err := row.Scan(
@@ -133,6 +137,8 @@ func (q *Queries) CreateInvoiceItem(ctx context.Context, arg CreateInvoiceItemPa
 		&i.AmountMinor,
 		&i.CreatedAt,
 		&i.DiscountMinor,
+		&i.ProductID,
+		&i.VariantID,
 	)
 	return i, err
 }
@@ -513,7 +519,7 @@ func (q *Queries) GetOrCreateCustomerWallet(ctx context.Context, arg GetOrCreate
 }
 
 const listInvoiceItemsByInvoiceID = `-- name: ListInvoiceItemsByInvoiceID :many
-SELECT id, invoice_id, workspace_id, description, quantity, unit_price_minor, amount_minor, created_at, discount_minor FROM invoice_items
+SELECT id, invoice_id, workspace_id, description, quantity, unit_price_minor, amount_minor, created_at, discount_minor, product_id, variant_id FROM invoice_items
 WHERE invoice_id = $1 AND workspace_id = $2
 ORDER BY id ASC
 `
@@ -542,6 +548,8 @@ func (q *Queries) ListInvoiceItemsByInvoiceID(ctx context.Context, arg ListInvoi
 			&i.AmountMinor,
 			&i.CreatedAt,
 			&i.DiscountMinor,
+			&i.ProductID,
+			&i.VariantID,
 		); err != nil {
 			return nil, err
 		}
@@ -754,7 +762,7 @@ UPDATE invoice_items
 SET discount_minor = $3,
     amount_minor = $4
 WHERE id = $1 AND workspace_id = $2
-RETURNING id, invoice_id, workspace_id, description, quantity, unit_price_minor, amount_minor, created_at, discount_minor
+RETURNING id, invoice_id, workspace_id, description, quantity, unit_price_minor, amount_minor, created_at, discount_minor, product_id, variant_id
 `
 
 type SetInvoiceItemDiscountParams struct {
@@ -782,6 +790,8 @@ func (q *Queries) SetInvoiceItemDiscount(ctx context.Context, arg SetInvoiceItem
 		&i.AmountMinor,
 		&i.CreatedAt,
 		&i.DiscountMinor,
+		&i.ProductID,
+		&i.VariantID,
 	)
 	return i, err
 }

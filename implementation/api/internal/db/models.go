@@ -1516,6 +1516,8 @@ type InvoiceItem struct {
 	AmountMinor    int64              `json:"amount_minor"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	DiscountMinor  int64              `json:"discount_minor"`
+	ProductID      pgtype.Int8        `json:"product_id"`
+	VariantID      pgtype.Int8        `json:"variant_id"`
 }
 
 type InvoiceShare struct {
@@ -2493,6 +2495,20 @@ type Purchase struct {
 	SubtotalMinor    pgtype.Int8        `json:"subtotal_minor"`
 	TaxAmountMinor   int64              `json:"tax_amount_minor"`
 	OutletID         pgtype.Int8        `json:"outlet_id"`
+	LocationID       pgtype.Int8        `json:"location_id"`
+}
+
+type PurchaseItem struct {
+	ID            int64              `json:"id"`
+	WorkspaceID   int64              `json:"workspace_id"`
+	PurchaseID    int64              `json:"purchase_id"`
+	ProductID     pgtype.Int8        `json:"product_id"`
+	VariantID     pgtype.Int8        `json:"variant_id"`
+	Description   string             `json:"description"`
+	Quantity      decimal.Decimal    `json:"quantity"`
+	UnitCostMinor int64              `json:"unit_cost_minor"`
+	AmountMinor   int64              `json:"amount_minor"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 }
 
 type PurchaseOrder struct {
@@ -2805,6 +2821,20 @@ type Sale struct {
 	SubtotalMinor    pgtype.Int8        `json:"subtotal_minor"`
 	TaxAmountMinor   int64              `json:"tax_amount_minor"`
 	OutletID         pgtype.Int8        `json:"outlet_id"`
+	LocationID       pgtype.Int8        `json:"location_id"`
+}
+
+type SaleItem struct {
+	ID             int64              `json:"id"`
+	WorkspaceID    int64              `json:"workspace_id"`
+	SaleID         int64              `json:"sale_id"`
+	ProductID      pgtype.Int8        `json:"product_id"`
+	VariantID      pgtype.Int8        `json:"variant_id"`
+	Description    string             `json:"description"`
+	Quantity       decimal.Decimal    `json:"quantity"`
+	UnitPriceMinor int64              `json:"unit_price_minor"`
+	AmountMinor    int64              `json:"amount_minor"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
 type SalesReturn struct {

@@ -29,6 +29,7 @@ import { FormDrawer } from "@/components/ui/form-drawer";
 import { EmptyState, Page, Segmented, StatusPill, type StatusTone } from "@/components/ui/page";
 import { MoneyInput } from "@/components/ui/money-input";
 import { RichText } from "@/components/ui/rich-text-editor";
+import { ProductStockPanel } from "./product-stock";
 import { productTypeLabel, toMinor, unitLabel, useOutlets, useProductCollections } from "@/components/pickers";
 import { KpiRow } from "@/components/features/finance/dashboard-parts";
 import { useFinanceAction, WorkspaceGate, type WorkspaceInfo } from "@/components/features/finance/shared";
@@ -366,27 +367,7 @@ function ProductDetailContent({ workspaceId, productId }: WorkspaceInfo & { prod
       {tab === "variants" ? <VariantsPanel workspaceId={workspaceId} detail={detail.data} /> : null}
 
       {tab === "stock" ? (
-        <Panel title="Stock by outlet" action={<Link href="/inventory" className="text-[13px] font-semibold text-primary hover:underline">Adjust in Inventory</Link>}>
-          {product.kind !== "stock_tracked" ? (
-            <p className="text-[13px] text-muted">Stock is not counted for this product. Change its type to “Product with stock” to track it.</p>
-          ) : detail.data.stock.length === 0 ? (
-            <p className="text-[13px] text-muted">No stock recorded yet. Use a stock count or a goods receipt in Inventory.</p>
-          ) : (
-            <ul className="divide-y divide-separator">
-              {detail.data.stock.map((line) => (
-                <li key={line.location_id} className="flex items-center justify-between gap-3 py-3">
-                  <span className="text-[14px] font-medium">{line.location_name}</span>
-                  <span className="text-right text-[13px] tabular">
-                    <span className="block font-semibold">
-                      {Number(line.quantity_on_hand)} {unit}
-                    </span>
-                    <span className="block text-[12px] text-muted">Worth {formatMinorAmount(line.value_on_hand_minor, product.currency, product.currency_exponent)}</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
+        <ProductStockPanel workspaceId={workspaceId} detail={detail.data} />
       ) : null}
 
       {tab === "prices" ? (

@@ -232,6 +232,8 @@ export const invoiceSchema = z
           quantity: z.string().regex(/^[1-9]\d{0,5}$/, "Enter a whole quantity"),
           unit_price: amount("Enter a price"),
           discount_amount: optionalAmount.optional(),
+          product_id: z.number().int().positive().optional(),
+          tracks_stock: z.boolean().optional(),
         }),
       )
       .min(1, "Add at least one item"),

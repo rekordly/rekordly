@@ -1,11 +1,12 @@
 "use client";
 
-// Products and line items for invoices and quotations (and any document with lines).
-// Items show as compact rows. "Add item" opens a drawer that lists the catalogue;
+// Product lines for invoices, quotations, sales and purchases.
+// Items show as compact rows. "Add item" opens a drawer that lists your products;
 // choosing a product, adding a new item, or editing a row all use ONE item form.
 // A new item can also be saved to the product list from that same form.
+// A line keeps the product it came from, so stock products move stock when the record is saved.
 
-import { Minus, PencilSimple, Plus, Trash } from "@phosphor-icons/react";
+import { Minus, PencilSimple, Plus, Trash, WarningCircle } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
@@ -14,17 +15,31 @@ import { AppInput } from "@/components/ui/app-input";
 import { PickerDrawer, type PickerItem } from "@/components/ui/form-kit";
 import { MoneyInput } from "@/components/ui/money-input";
 import { createIdempotencyKey } from "@/lib/utils";
-import { financeApi, formatMinorAmount, moneyKeys } from "@/lib/money";
-import type { CatalogueItem } from "@/types/finance";
+import { financeApi, formatMinorAmount } from "@/lib/money";
+import { productKeys, productsApi } from "@/lib/products";
+import type { Product } from "@/types/products";
 
 export interface LineItem {
   description: string;
   quantity: string;
   unit_price: string;
   discount_amount?: string;
+  /** The product this line sells or buys, when it came from (or was saved to) your products. */
+  product_id?: number;
+  /** True when that product counts stock. */
+  tracks_stock?: boolean;
 }
 
+/** Where the lines are used: changes the wording and which price is suggested. */
+export type LineItemsContext = "invoice" | "sale" | "purchase";
+
 const EXPONENT = 2;
+
+const WORDS: Record<LineItemsContext, { add: string; price: string; placeholder: string }> = {
+  invoice: { add: "Add to invoice", price: "Unit price", placeholder: "What you are billing for" },
+  sale: { add: "Add to sale", price: "Unit price", placeholder: "What you sold" },
+  purchase: { add: "Add to purchase", price: "Cost per unit", placeholder: "What you bought" },
+};
 
 /** Major decimal string → minor units as bigint, never via floating point. */
 export function toMinor(major?: string): bigint {
@@ -50,6 +65,16 @@ export function lineTotal(line: LineItem): bigint {
   return net > BigInt(0) ? net : BigInt(0);
 }
 
+/** "12.0000" → "12" */
+export function stockNumber(quantity?: string): string {
+  const value = Number(quantity ?? "0");
+  return Number.isFinite(value) ? String(Math.round(value * 10000) / 10000) : "0";
+}
+
+function unitWord(unit: string) {
+  return unit.replace(/ \(.*\)/, "").toLowerCase() || "pc";
+}
+
 /* -------------------------------------------------------------------------- */
 /* The one item form                                                           */
 /* -------------------------------------------------------------------------- */
@@ -57,20 +82,23 @@ export function lineTotal(line: LineItem): bigint {
 function ItemForm({
   workspaceId,
   currency,
+  context,
   initial,
-  fromCatalogue,
+  product,
   isEditing,
   onSave,
   onCancel,
 }: {
   workspaceId: number;
   currency: string;
+  context: LineItemsContext;
   initial: LineItem;
-  fromCatalogue: boolean;
+  product?: Product;
   isEditing: boolean;
   onSave: (line: LineItem) => void;
   onCancel: () => void;
 }) {
+  const words = WORDS[context];
   const [line, setLine] = useState<LineItem>(initial);
   const [showDiscount, setShowDiscount] = useState(Boolean(initial.discount_amount));
   const [saveToProducts, setSaveToProducts] = useState(false);
@@ -79,7 +107,9 @@ function ItemForm({
   const [saving, setSaving] = useState(false);
   const show = (minor: bigint) => formatMinorAmount(minor.toString(), currency, EXPONENT);
   const quantity = Number(/^\d+$/.test(line.quantity) ? line.quantity : "0");
-  const canSaveToProducts = !fromCatalogue && !isEditing;
+  const canSaveToProducts = !line.product_id && !isEditing;
+  const inStock = product?.kind === "stock_tracked" ? Number(product.quantity_on_hand) : null;
+  const short = context !== "purchase" && inStock !== null && quantity > inStock;
 
   const step = (delta: number) => setLine({ ...line, quantity: String(Math.max(1, quantity + delta)) });
 
@@ -91,21 +121,24 @@ function ItemForm({
     setErrors(next);
     if (Object.keys(next).length) return;
 
+    let productId = line.product_id;
     if (canSaveToProducts && saveToProducts) {
       setSaving(true);
       try {
-        await financeApi.createCatalogueItem(
+        const price = line.unit_price.replace(/,/g, "");
+        const result = (await financeApi.createCatalogueItem(
           workspaceId,
-          { name: line.description.trim(), kind, status: "active", selling_price: line.unit_price.replace(/,/g, ""), currency },
+          { name: line.description.trim(), kind, status: "active", selling_price: price, currency },
           createIdempotencyKey("catalogue"),
-        );
+        )) as { item?: { id?: number } } | undefined;
+        productId = result?.item?.id;
       } catch (cause) {
         setSaving(false);
         setErrors({ save: cause instanceof Error ? cause.message : "Could not save to your products" });
         return;
       }
     }
-    onSave({ ...line, description: line.description.trim() });
+    onSave({ ...line, description: line.description.trim(), product_id: productId });
   };
 
   return (
@@ -113,8 +146,8 @@ function ItemForm({
       <AppInput
         label="Item"
         isRequired
-        autoFocus={!fromCatalogue}
-        placeholder="What you are billing for"
+        autoFocus={!product}
+        placeholder={words.placeholder}
         value={line.description}
         onChange={(event) => setLine({ ...line, description: event.target.value })}
         errorMessage={errors.description}
@@ -140,7 +173,7 @@ function ItemForm({
           </div>
         </div>
         <MoneyInput
-          label="Unit price"
+          label={words.price}
           isRequired
           currency={currency}
           exponent={EXPONENT}
@@ -151,22 +184,35 @@ function ItemForm({
         />
       </div>
 
-      {showDiscount ? (
-        <div className="animate-fade-up">
-          <MoneyInput
-            label="Discount on this item"
-            currency={currency}
-            exponent={EXPONENT}
-            placeholder="0.00"
-            value={line.discount_amount ?? ""}
-            onValueChange={(value) => setLine({ ...line, discount_amount: value })}
-          />
-        </div>
-      ) : (
-        <button type="button" onClick={() => setShowDiscount(true)} className="cursor-pointer text-[13px] font-semibold text-primary hover:underline">
-          + Add a discount
-        </button>
-      )}
+      {inStock !== null ? (
+        <p className={`flex items-center gap-1.5 text-[12px] ${short ? "font-medium text-danger" : "text-muted"}`}>
+          {short ? <WarningCircle size={14} weight="fill" aria-hidden="true" /> : null}
+          {context === "purchase"
+            ? `${stockNumber(product?.quantity_on_hand)} ${unitWord(product?.unit_name ?? "")} in stock now. This purchase adds ${quantity || 0}.`
+            : short
+              ? `Only ${stockNumber(product?.quantity_on_hand)} ${unitWord(product?.unit_name ?? "")} in stock. Add stock first, or lower the quantity.`
+              : `${stockNumber(product?.quantity_on_hand)} ${unitWord(product?.unit_name ?? "")} in stock. Saving takes ${quantity || 0} out.`}
+        </p>
+      ) : null}
+
+      {context === "invoice" ? (
+        showDiscount ? (
+          <div className="animate-fade-up">
+            <MoneyInput
+              label="Discount on this item"
+              currency={currency}
+              exponent={EXPONENT}
+              placeholder="0.00"
+              value={line.discount_amount ?? ""}
+              onValueChange={(value) => setLine({ ...line, discount_amount: value })}
+            />
+          </div>
+        ) : (
+          <button type="button" onClick={() => setShowDiscount(true)} className="cursor-pointer text-[13px] font-semibold text-primary hover:underline">
+            + Add a discount
+          </button>
+        )
+      ) : null}
 
       {canSaveToProducts ? (
         <div className="rounded-xl border border-border p-3">
@@ -219,7 +265,7 @@ function ItemForm({
 
       <div className="flex gap-2 pt-1">
         <AppButton variant="ghost" label="Back" className="flex-1" onPress={onCancel} />
-        <AppButton label={isEditing ? "Update item" : "Add to invoice"} className="flex-[2]" isLoading={saving} onPress={() => void submit()} />
+        <AppButton label={isEditing ? "Update item" : words.add} className="flex-[2]" isLoading={saving} onPress={() => void submit()} />
       </div>
     </div>
   );
@@ -237,6 +283,7 @@ export function LineItemsEditor({
   onUpdate,
   onRemove,
   error,
+  context = "invoice",
 }: {
   workspaceId: number;
   currency: string;
@@ -245,22 +292,30 @@ export function LineItemsEditor({
   onUpdate: (index: number, line: LineItem) => void;
   onRemove: (index: number) => void;
   error?: string;
+  context?: LineItemsContext;
 }) {
+  const filter = { status: "active" };
   const catalogue = useQuery({
-    queryKey: [...moneyKeys.workspace(workspaceId), "catalogue"],
-    queryFn: () => financeApi.listCatalogueItems(workspaceId),
+    queryKey: productKeys.list(workspaceId, filter),
+    queryFn: () => productsApi.list(workspaceId, filter),
   });
   const [drawer, setDrawer] = useState<{ key: number; editIndex?: number } | null>(null);
   const [openCount, setOpenCount] = useState(0);
   const show = (minor: bigint) => formatMinorAmount(minor.toString(), currency, EXPONENT);
   const subtotal = items.reduce((sum, line) => sum + lineTotal(line), BigInt(0));
 
-  const products: CatalogueItem[] = (catalogue.data ?? []).filter((item) => item.status === "active");
+  const products: Product[] = catalogue.data ?? [];
+  const priceOf = (product: Product) => (context === "purchase" && BigInt(product.cost_price_minor) > BigInt(0) ? product.cost_price_minor : product.selling_price_minor);
   const pickerItems: PickerItem[] = products.map((product) => ({
     id: `cat-${product.id}`,
     label: product.name,
-    description: product.kind === "service" ? "Service" : product.unit_name || "Product",
-    meta: formatMinorAmount(product.selling_price_minor, product.currency, product.currency_exponent),
+    description:
+      product.kind === "service"
+        ? "Service"
+        : product.kind === "stock_tracked"
+          ? `${stockNumber(product.quantity_on_hand)} ${unitWord(product.unit_name)} in stock`
+          : unitWord(product.unit_name),
+    meta: formatMinorAmount(priceOf(product), product.currency, product.currency_exponent),
   }));
 
   // A fresh key each time, so the drawer always opens on its first view.
@@ -292,7 +347,10 @@ export function LineItemsEditor({
             <li key={`${line.description}-${index}`} className="animate-fade-up flex items-center gap-3 bg-surface px-3.5 py-3">
               <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-surface-secondary text-[12px] font-bold tabular">{index + 1}</span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[14px] font-semibold">{line.description}</span>
+                <span className="flex items-center gap-1.5 truncate text-[14px] font-semibold">
+                  {line.description}
+                  {line.tracks_stock ? <span className="rounded-full bg-primary-soft px-1.5 py-0.5 text-[10px] font-semibold text-primary-soft-foreground">Stock</span> : null}
+                </span>
                 <span className="block text-[12px] text-muted tabular">
                   {line.quantity} × {show(toMinor(line.unit_price))}
                   {toMinor(line.discount_amount) > BigInt(0) ? ` − ${show(toMinor(line.discount_amount))}` : ""}
@@ -337,24 +395,33 @@ export function LineItemsEditor({
           formTitle={editing ? "Edit item" : undefined}
           startInForm={editing ? { item: { id: `line-${drawer.editIndex}`, label: editing.description } } : undefined}
           renderCreate={({ initialName, item, done, cancel }) => {
-            const product = item?.id.startsWith("cat-") ? products.find((candidate) => `cat-${candidate.id}` === item.id) : undefined;
+            const picked = item?.id.startsWith("cat-") ? products.find((candidate) => `cat-${candidate.id}` === item.id) : undefined;
+            const product = picked ?? (editing?.product_id ? products.find((candidate) => candidate.id === editing.product_id) : undefined);
             const initial: LineItem = editing
               ? editing
-              : product
-                ? { description: product.name, quantity: "1", unit_price: minorToMajor(product.selling_price_minor, product.currency_exponent), discount_amount: "" }
+              : picked
+                ? {
+                    description: picked.name,
+                    quantity: "1",
+                    unit_price: minorToMajor(priceOf(picked), picked.currency_exponent),
+                    discount_amount: "",
+                    product_id: picked.id,
+                    tracks_stock: picked.kind === "stock_tracked",
+                  }
                 : { description: initialName, quantity: "1", unit_price: "", discount_amount: "" };
             return (
               <ItemForm
                 workspaceId={workspaceId}
                 currency={currency}
+                context={context}
                 initial={initial}
-                fromCatalogue={Boolean(product)}
+                product={product}
                 isEditing={Boolean(editing)}
                 onCancel={editing ? () => setDrawer(null) : cancel}
                 onSave={(line) => {
                   if (editing && drawer.editIndex !== undefined) onUpdate(drawer.editIndex, line);
                   else onAdd(line);
-                  if (!product && !editing) void catalogue.refetch();
+                  if (!picked && !editing) void catalogue.refetch();
                   done({ id: "done", label: line.description });
                 }}
               />

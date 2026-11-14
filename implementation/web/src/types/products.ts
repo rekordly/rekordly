@@ -118,3 +118,33 @@ export interface ImageUploadAuthorization {
   max_bytes: string;
   expires_at: string;
 }
+
+export interface ProductStockMovement {
+  id: number;
+  kind: string;
+  source_type: string;
+  source_id?: number;
+  /** Plain words, e.g. "Sold", "Bought", "Damaged". */
+  summary: string;
+  party?: string;
+  reference?: string;
+  location_id?: number;
+  location_name: string;
+  /** Signed decimal text: "-3" or "12.5". */
+  quantity_delta: string;
+  value_delta_minor: string;
+  occurred_on: string;
+  created_at: string;
+}
+
+export type StockAddReason = "restock" | "found" | "correction";
+export type StockRemoveReason = "damage" | "lost" | "expired" | "internal_use" | "correction" | "other";
+
+export interface ProductStockChange {
+  direction: "add" | "remove";
+  quantity: string;
+  reason: StockAddReason | StockRemoveReason;
+  unit_cost?: string;
+  outlet_id?: number;
+  note?: string;
+}

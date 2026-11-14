@@ -207,7 +207,7 @@ INSERT INTO purchases (
     status, category_id, notes, reference, idempotency_key, created_by_user_id
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
-) RETURNING id, workspace_id, supplier_id, supplier_name, purchase_date, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, category_id, notes, reference, idempotency_key, created_by_user_id, created_at, updated_at, subtotal_minor, tax_amount_minor, outlet_id
+) RETURNING id, workspace_id, supplier_id, supplier_name, purchase_date, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, category_id, notes, reference, idempotency_key, created_by_user_id, created_at, updated_at, subtotal_minor, tax_amount_minor, outlet_id, location_id
 `
 
 type CreatePurchaseParams struct {
@@ -266,6 +266,7 @@ func (q *Queries) CreatePurchase(ctx context.Context, arg CreatePurchaseParams) 
 		&i.SubtotalMinor,
 		&i.TaxAmountMinor,
 		&i.OutletID,
+		&i.LocationID,
 	)
 	return i, err
 }
@@ -277,7 +278,7 @@ INSERT INTO sales (
     status, notes, reference, idempotency_key, created_by_user_id
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
-) RETURNING id, workspace_id, customer_id, customer_name, sale_date, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, reference, idempotency_key, created_by_user_id, created_at, updated_at, subtotal_minor, tax_amount_minor, outlet_id
+) RETURNING id, workspace_id, customer_id, customer_name, sale_date, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, reference, idempotency_key, created_by_user_id, created_at, updated_at, subtotal_minor, tax_amount_minor, outlet_id, location_id
 `
 
 type CreateSaleParams struct {
@@ -333,6 +334,7 @@ func (q *Queries) CreateSale(ctx context.Context, arg CreateSaleParams) (Sale, e
 		&i.SubtotalMinor,
 		&i.TaxAmountMinor,
 		&i.OutletID,
+		&i.LocationID,
 	)
 	return i, err
 }
@@ -440,7 +442,7 @@ func (q *Queries) GetPaymentByIdempotency(ctx context.Context, arg GetPaymentByI
 }
 
 const getPurchaseByID = `-- name: GetPurchaseByID :one
-SELECT id, workspace_id, supplier_id, supplier_name, purchase_date, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, category_id, notes, reference, idempotency_key, created_by_user_id, created_at, updated_at, subtotal_minor, tax_amount_minor, outlet_id FROM purchases
+SELECT id, workspace_id, supplier_id, supplier_name, purchase_date, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, category_id, notes, reference, idempotency_key, created_by_user_id, created_at, updated_at, subtotal_minor, tax_amount_minor, outlet_id, location_id FROM purchases
 WHERE id = $1 AND workspace_id = $2
 `
 
@@ -473,12 +475,13 @@ func (q *Queries) GetPurchaseByID(ctx context.Context, arg GetPurchaseByIDParams
 		&i.SubtotalMinor,
 		&i.TaxAmountMinor,
 		&i.OutletID,
+		&i.LocationID,
 	)
 	return i, err
 }
 
 const getPurchaseByIdempotency = `-- name: GetPurchaseByIdempotency :one
-SELECT id, workspace_id, supplier_id, supplier_name, purchase_date, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, category_id, notes, reference, idempotency_key, created_by_user_id, created_at, updated_at, subtotal_minor, tax_amount_minor, outlet_id FROM purchases
+SELECT id, workspace_id, supplier_id, supplier_name, purchase_date, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, category_id, notes, reference, idempotency_key, created_by_user_id, created_at, updated_at, subtotal_minor, tax_amount_minor, outlet_id, location_id FROM purchases
 WHERE workspace_id = $1 AND idempotency_key = $2 AND status <> 'voided'
 `
 
@@ -511,12 +514,13 @@ func (q *Queries) GetPurchaseByIdempotency(ctx context.Context, arg GetPurchaseB
 		&i.SubtotalMinor,
 		&i.TaxAmountMinor,
 		&i.OutletID,
+		&i.LocationID,
 	)
 	return i, err
 }
 
 const getSaleByID = `-- name: GetSaleByID :one
-SELECT id, workspace_id, customer_id, customer_name, sale_date, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, reference, idempotency_key, created_by_user_id, created_at, updated_at, subtotal_minor, tax_amount_minor, outlet_id FROM sales
+SELECT id, workspace_id, customer_id, customer_name, sale_date, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, reference, idempotency_key, created_by_user_id, created_at, updated_at, subtotal_minor, tax_amount_minor, outlet_id, location_id FROM sales
 WHERE id = $1 AND workspace_id = $2
 `
 
@@ -548,12 +552,13 @@ func (q *Queries) GetSaleByID(ctx context.Context, arg GetSaleByIDParams) (Sale,
 		&i.SubtotalMinor,
 		&i.TaxAmountMinor,
 		&i.OutletID,
+		&i.LocationID,
 	)
 	return i, err
 }
 
 const getSaleByIdempotency = `-- name: GetSaleByIdempotency :one
-SELECT id, workspace_id, customer_id, customer_name, sale_date, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, reference, idempotency_key, created_by_user_id, created_at, updated_at, subtotal_minor, tax_amount_minor, outlet_id FROM sales
+SELECT id, workspace_id, customer_id, customer_name, sale_date, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, reference, idempotency_key, created_by_user_id, created_at, updated_at, subtotal_minor, tax_amount_minor, outlet_id, location_id FROM sales
 WHERE workspace_id = $1 AND idempotency_key = $2 AND status <> 'voided'
 `
 
@@ -585,6 +590,7 @@ func (q *Queries) GetSaleByIdempotency(ctx context.Context, arg GetSaleByIdempot
 		&i.SubtotalMinor,
 		&i.TaxAmountMinor,
 		&i.OutletID,
+		&i.LocationID,
 	)
 	return i, err
 }
@@ -793,7 +799,7 @@ func (q *Queries) ListPayments(ctx context.Context, arg ListPaymentsParams) ([]P
 }
 
 const listPurchases = `-- name: ListPurchases :many
-SELECT id, workspace_id, supplier_id, supplier_name, purchase_date, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, category_id, notes, reference, idempotency_key, created_by_user_id, created_at, updated_at, subtotal_minor, tax_amount_minor, outlet_id FROM purchases
+SELECT id, workspace_id, supplier_id, supplier_name, purchase_date, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, category_id, notes, reference, idempotency_key, created_by_user_id, created_at, updated_at, subtotal_minor, tax_amount_minor, outlet_id, location_id FROM purchases
 WHERE workspace_id = $1
   AND ($3::date IS NULL OR purchase_date >= $3)
   AND ($4::date IS NULL OR purchase_date <= $4)
@@ -855,6 +861,7 @@ func (q *Queries) ListPurchases(ctx context.Context, arg ListPurchasesParams) ([
 			&i.SubtotalMinor,
 			&i.TaxAmountMinor,
 			&i.OutletID,
+			&i.LocationID,
 		); err != nil {
 			return nil, err
 		}
@@ -867,7 +874,7 @@ func (q *Queries) ListPurchases(ctx context.Context, arg ListPurchasesParams) ([
 }
 
 const listSales = `-- name: ListSales :many
-SELECT id, workspace_id, customer_id, customer_name, sale_date, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, reference, idempotency_key, created_by_user_id, created_at, updated_at, subtotal_minor, tax_amount_minor, outlet_id FROM sales
+SELECT id, workspace_id, customer_id, customer_name, sale_date, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, reference, idempotency_key, created_by_user_id, created_at, updated_at, subtotal_minor, tax_amount_minor, outlet_id, location_id FROM sales
 WHERE workspace_id = $1
   AND ($3::date IS NULL OR sale_date >= $3)
   AND ($4::date IS NULL OR sale_date <= $4)
@@ -928,6 +935,7 @@ func (q *Queries) ListSales(ctx context.Context, arg ListSalesParams) ([]Sale, e
 			&i.SubtotalMinor,
 			&i.TaxAmountMinor,
 			&i.OutletID,
+			&i.LocationID,
 		); err != nil {
 			return nil, err
 		}
@@ -1037,7 +1045,7 @@ SET paid_amount_minor = paid_amount_minor + $3,
     END,
     updated_at = now()
 WHERE id = $1 AND workspace_id = $2
-RETURNING id, workspace_id, supplier_id, supplier_name, purchase_date, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, category_id, notes, reference, idempotency_key, created_by_user_id, created_at, updated_at, subtotal_minor, tax_amount_minor, outlet_id
+RETURNING id, workspace_id, supplier_id, supplier_name, purchase_date, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, category_id, notes, reference, idempotency_key, created_by_user_id, created_at, updated_at, subtotal_minor, tax_amount_minor, outlet_id, location_id
 `
 
 type UpdatePurchasePaidAmountParams struct {
@@ -1070,6 +1078,7 @@ func (q *Queries) UpdatePurchasePaidAmount(ctx context.Context, arg UpdatePurcha
 		&i.SubtotalMinor,
 		&i.TaxAmountMinor,
 		&i.OutletID,
+		&i.LocationID,
 	)
 	return i, err
 }
@@ -1084,7 +1093,7 @@ SET paid_amount_minor = paid_amount_minor + $3,
     END,
     updated_at = now()
 WHERE id = $1 AND workspace_id = $2
-RETURNING id, workspace_id, customer_id, customer_name, sale_date, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, reference, idempotency_key, created_by_user_id, created_at, updated_at, subtotal_minor, tax_amount_minor, outlet_id
+RETURNING id, workspace_id, customer_id, customer_name, sale_date, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, reference, idempotency_key, created_by_user_id, created_at, updated_at, subtotal_minor, tax_amount_minor, outlet_id, location_id
 `
 
 type UpdateSalePaidAmountParams struct {
@@ -1116,6 +1125,7 @@ func (q *Queries) UpdateSalePaidAmount(ctx context.Context, arg UpdateSalePaidAm
 		&i.SubtotalMinor,
 		&i.TaxAmountMinor,
 		&i.OutletID,
+		&i.LocationID,
 	)
 	return i, err
 }
@@ -1164,7 +1174,7 @@ UPDATE purchases
 SET status = 'voided',
     updated_at = now()
 WHERE id = $1 AND workspace_id = $2 AND status <> 'voided'
-RETURNING id, workspace_id, supplier_id, supplier_name, purchase_date, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, category_id, notes, reference, idempotency_key, created_by_user_id, created_at, updated_at, subtotal_minor, tax_amount_minor, outlet_id
+RETURNING id, workspace_id, supplier_id, supplier_name, purchase_date, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, category_id, notes, reference, idempotency_key, created_by_user_id, created_at, updated_at, subtotal_minor, tax_amount_minor, outlet_id, location_id
 `
 
 type VoidPurchaseParams struct {
@@ -1196,6 +1206,7 @@ func (q *Queries) VoidPurchase(ctx context.Context, arg VoidPurchaseParams) (Pur
 		&i.SubtotalMinor,
 		&i.TaxAmountMinor,
 		&i.OutletID,
+		&i.LocationID,
 	)
 	return i, err
 }
@@ -1205,7 +1216,7 @@ UPDATE sales
 SET status = 'voided',
     updated_at = now()
 WHERE id = $1 AND workspace_id = $2 AND status <> 'voided'
-RETURNING id, workspace_id, customer_id, customer_name, sale_date, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, reference, idempotency_key, created_by_user_id, created_at, updated_at, subtotal_minor, tax_amount_minor, outlet_id
+RETURNING id, workspace_id, customer_id, customer_name, sale_date, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, reference, idempotency_key, created_by_user_id, created_at, updated_at, subtotal_minor, tax_amount_minor, outlet_id, location_id
 `
 
 type VoidSaleParams struct {
@@ -1236,6 +1247,7 @@ func (q *Queries) VoidSale(ctx context.Context, arg VoidSaleParams) (Sale, error
 		&i.SubtotalMinor,
 		&i.TaxAmountMinor,
 		&i.OutletID,
+		&i.LocationID,
 	)
 	return i, err
 }

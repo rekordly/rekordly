@@ -9,6 +9,8 @@ import type {
   ProductImportBatch,
   ProductKind,
   ProductPriceChange,
+  ProductStockChange,
+  ProductStockMovement,
   SaveProductPayload,
 } from "@/types/products";
 
@@ -49,6 +51,12 @@ export const productsApi = {
     const result = await apiClient.get<{ events: ProductEvent[] }>(`/api/v1/catalogue/products/${id}/events`, headers(workspaceId));
     return result.events ?? [];
   },
+  async stockMovements(workspaceId: number, id: number) {
+    const result = await apiClient.get<{ movements: ProductStockMovement[] }>(`/api/v1/catalogue/products/${id}/stock-movements?limit=100`, headers(workspaceId));
+    return result.movements ?? [];
+  },
+  changeStock: (workspaceId: number, id: number, body: ProductStockChange, key: string) =>
+    apiClient.post<unknown, unknown>(`/api/v1/catalogue/products/${id}/stock`, { ...body, idempotency_key: key }, headers(workspaceId, key)),
   async collections(workspaceId: number) {
     const result = await apiClient.get<{ collections: ProductCollection[] }>("/api/v1/catalogue/collections", headers(workspaceId));
     return result.collections ?? [];
@@ -101,6 +109,7 @@ export const productKeys = {
   detail: (workspaceId: number, id: number) => [...moneyKeys.workspace(workspaceId), "products", "detail", id] as const,
   priceHistory: (workspaceId: number, id: number) => [...moneyKeys.workspace(workspaceId), "products", "price-history", id] as const,
   events: (workspaceId: number, id: number) => [...moneyKeys.workspace(workspaceId), "products", "events", id] as const,
+  stock: (workspaceId: number, id: number) => [...moneyKeys.workspace(workspaceId), "products", "stock", id] as const,
   collections: (workspaceId: number) => [...moneyKeys.workspace(workspaceId), "products", "collections"] as const,
   imports: (workspaceId: number) => [...moneyKeys.workspace(workspaceId), "products", "imports"] as const,
 };

@@ -29,6 +29,9 @@ type InvoiceItemInput struct {
 	UnitPrice      string `json:"unit_price"` // optional major string
 	DiscountMinor  int64  `json:"discount_minor"`
 	DiscountAmount string `json:"discount_amount"`
+	// Optional: the product this line sells. Stock products leave stock when the invoice is finalized.
+	ProductID *int64 `json:"product_id"`
+	VariantID *int64 `json:"variant_id"`
 }
 
 type CreateInvoiceInput struct {
@@ -130,6 +133,8 @@ func (s *Service) CreateInvoice(ctx context.Context, workspaceID, userID int64, 
 		unitPrice     int64
 		discountMinor int64
 		amountMinor   int64
+		productID     pgtype.Int8
+		variantID     pgtype.Int8
 	}
 	var computedItems []computedItem
 
@@ -170,12 +175,18 @@ func (s *Service) CreateInvoice(ctx context.Context, workspaceID, userID int64, 
 		lineAmount := grossLine - itemDisc
 		subtotalMinor += lineAmount
 
+		productID, variantID, err := invoiceItemProduct(ctx, s.queries, workspaceID, item)
+		if err != nil {
+			return InvoiceDetail{}, err
+		}
 		computedItems = append(computedItems, computedItem{
 			desc:          desc,
 			qty:           item.Quantity,
 			unitPrice:     unitPrice,
 			discountMinor: itemDisc,
 			amountMinor:   lineAmount,
+			productID:     productID,
+			variantID:     variantID,
 		})
 	}
 
@@ -316,6 +327,8 @@ func (s *Service) CreateInvoice(ctx context.Context, workspaceID, userID int64, 
 			Quantity:       it.qty,
 			UnitPriceMinor: it.unitPrice,
 			AmountMinor:    it.amountMinor,
+			ProductID:      it.productID,
+			VariantID:      it.variantID,
 		})
 		if err != nil {
 			return InvoiceDetail{}, fmt.Errorf("create invoice item: %w", err)
@@ -355,6 +368,9 @@ func (s *Service) CreateInvoice(ctx context.Context, workspaceID, userID int64, 
 	// If finalized standard invoice immediately, post double-entry ledger entries!
 	if status == "finalized" && invRecord.DocumentKind == "invoice" {
 		if err := s.postInvoiceLedger(ctx, qtx, workspaceID, invRecord); err != nil {
+			return InvoiceDetail{}, err
+		}
+		if err := issueInvoiceStock(ctx, qtx, workspaceID, invRecord); err != nil {
 			return InvoiceDetail{}, err
 		}
 	}
@@ -450,6 +466,10 @@ func (s *Service) UpdateDraftInvoice(ctx context.Context, workspaceID, userID, i
 			}
 			lineAmount := grossLine - item.DiscountMinor
 			subtotalMinor += lineAmount
+			productID, variantID, err := invoiceItemProduct(ctx, qtx, workspaceID, item)
+			if err != nil {
+				return InvoiceDetail{}, err
+			}
 			rec, err := qtx.CreateInvoiceItem(ctx, db.CreateInvoiceItemParams{
 				InvoiceID:      orig.ID,
 				WorkspaceID:    workspaceID,
@@ -457,6 +477,8 @@ func (s *Service) UpdateDraftInvoice(ctx context.Context, workspaceID, userID, i
 				Quantity:       item.Quantity,
 				UnitPriceMinor: item.UnitPriceMinor,
 				AmountMinor:    lineAmount,
+				ProductID:      productID,
+				VariantID:      variantID,
 			})
 			if err != nil {
 				return InvoiceDetail{}, err
@@ -585,6 +607,9 @@ func (s *Service) FinalizeInvoice(ctx context.Context, workspaceID, userID, invo
 	// Post double-entry ledger entries only for standard invoices (proforma is non-posting)!
 	if finalized.DocumentKind == "invoice" {
 		if err := s.postInvoiceLedger(ctx, qtx, workspaceID, finalized); err != nil {
+			return InvoiceDetail{}, err
+		}
+		if err := issueInvoiceStock(ctx, qtx, workspaceID, finalized); err != nil {
 			return InvoiceDetail{}, err
 		}
 	}
@@ -768,6 +793,13 @@ func (s *Service) VoidInvoice(ctx context.Context, workspaceID, userID, invoiceI
 	})
 	if err != nil {
 		return InvoiceDetail{}, fmt.Errorf("void invoice: %w", err)
+	}
+
+	// Stock the invoice took out goes back.
+	if orig.DocumentKind == "invoice" {
+		if err := returnIssuedStockTx(ctx, qtx, workspaceID, "invoice", orig.ID, time.Now().UTC(), orig.Currency); err != nil {
+			return InvoiceDetail{}, err
+		}
 	}
 
 	// If was finalized standard invoice, reverse the balanced ledger entry!

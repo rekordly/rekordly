@@ -1,7 +1,8 @@
 "use client";
 
 // Full-page form for recording a sale or a purchase.
-// 1. Who and when  2. Amount  3. Payment  (+ More options, collapsed)
+// 1. Who and when  2. Items (or just the total)  3. Payment  (+ More options, collapsed)
+// Stock products in the items move stock: a sale takes them out, a purchase adds them.
 // A live summary sits on the right; the action bar sticks to the bottom.
 // Customers and suppliers are chosen in a drawer that can add a new one in place.
 
@@ -14,7 +15,8 @@ import { AppButton } from "@/components/ui/app-button";
 import { AppInput } from "@/components/ui/app-input";
 import { AppTextarea } from "@/components/ui/app-textarea";
 import { ChoiceCards, FormGrid, FormPage, FormSection, SuccessPanel, SummaryPanel } from "@/components/ui/form-kit";
-import { AccountPicker, CategoryPicker, ContactPicker, type ContactValue } from "@/components/pickers";
+import { AccountPicker, CategoryPicker, ContactPicker, LineItemsField, lineTotal, useOutlets, type ContactValue, type LineItem } from "@/components/pickers";
+import { AppSelect } from "@/components/ui/app-select";
 import { MoneyInput } from "@/components/ui/money-input";
 import { formatDate } from "@/lib/format";
 import { financeApi, formatMinorAmount } from "@/lib/money";
@@ -34,6 +36,9 @@ const COPY = {
     fallback: "Walk-in customer",
     partyHint: "Leave blank for a walk-in customer.",
     amountLabel: "Total sale amount",
+    itemsTitle: "What was sold",
+    itemsHint: "Add items so stock goes down by itself, or just enter the total.",
+    outletLabel: "Sold from",
     accountLabel: "Paid into",
     paid: "Paid in full",
     part: "Part paid",
@@ -53,6 +58,9 @@ const COPY = {
     fallback: "Unnamed supplier",
     partyHint: "Leave blank if you did not get the supplier's name.",
     amountLabel: "Total purchase amount",
+    itemsTitle: "What was bought",
+    itemsHint: "Add items so stock goes up by itself, or just enter the total.",
+    outletLabel: "Received at",
     accountLabel: "Paid from",
     paid: "Paid in full",
     part: "Part paid",
@@ -94,17 +102,22 @@ function TradeForm({ workspaceId, currency, kind }: WorkspaceInfo & { kind: Kind
   const [categoryId, setCategoryId] = useState("");
   const [reference, setReference] = useState("");
   const [notes, setNotes] = useState("");
+  const [items, setItems] = useState<LineItem[]>([]);
+  const [outletId, setOutletId] = useState("");
+  const outlets = useOutlets(workspaceId);
+  const activeOutlets = (outlets.data ?? []).filter((outlet) => outlet.is_active !== false);
+  const movesStock = items.some((line) => line.tracks_stock);
   const [errors, setErrors] = useState<Errors>({});
   const [saved, setSaved] = useState<{ total: bigint; paid: bigint; party: string } | null>(null);
 
-  const total = toMinor(amount);
+  const total = items.length ? items.reduce((sum, line) => sum + lineTotal(line), BigInt(0)) : toMinor(amount);
   const paidNow = status === "paid" ? total : status === "part" ? toMinor(paidAmount) : BigInt(0);
   const balance = total - paidNow > BigInt(0) ? total - paidNow : BigInt(0);
   const show = (minor: bigint) => formatMinorAmount(minor.toString(), currency, EXPONENT);
 
   const validate = (): Errors => {
     const next: Errors = {};
-    if (total <= BigInt(0)) next.amount = "Enter an amount greater than zero";
+    if (total <= BigInt(0)) next.amount = items.length ? "Give your items a price" : "Add items, or enter an amount greater than zero";
     if (!date) next.date = "Choose a date";
     if (status !== "unpaid" && !accountId) next.account = `Choose where the money was ${kind === "sale" ? "paid into" : "paid from"}`;
     if (status === "part") {
@@ -121,7 +134,21 @@ function TradeForm({ workspaceId, currency, kind }: WorkspaceInfo & { kind: Kind
       const partyId = party ? Number(party.id) : undefined;
       const legs =
         status === "unpaid" ? undefined : [{ money_account_id: Number(accountId), ...(status === "part" ? { amount: paidAmount.replace(/,/g, "") } : {}) }];
-      const common = { currency, amount: amount.replace(/,/g, ""), reference: reference.trim() || undefined, notes: notes.trim() || undefined, payment_legs: legs };
+      const lines = items.map((line) => ({
+        description: line.description,
+        quantity: line.quantity,
+        unit_price: line.unit_price.replace(/,/g, ""),
+        product_id: line.product_id,
+      }));
+      const common = {
+        currency,
+        amount: items.length ? undefined : amount.replace(/,/g, ""),
+        items: lines.length ? lines : undefined,
+        outlet_id: movesStock && outletId ? Number(outletId) : undefined,
+        reference: reference.trim() || undefined,
+        notes: notes.trim() || undefined,
+        payment_legs: legs,
+      };
       return kind === "sale"
         ? financeApi.createSale(workspaceId, { ...common, customer_id: partyId, customer_name: party?.name || copy.fallback, sale_date: date }, key)
         : financeApi.createPurchase(
@@ -147,6 +174,7 @@ function TradeForm({ workspaceId, currency, kind }: WorkspaceInfo & { kind: Kind
     setParty(null);
     setDate(today());
     setAmount("");
+    setItems([]);
     setStatus("paid");
     setPaidAmount("");
     setReference("");
@@ -217,21 +245,48 @@ function TradeForm({ workspaceId, currency, kind }: WorkspaceInfo & { kind: Kind
         </FormGrid>
       </FormSection>
 
-      <FormSection step={2} title="Amount" description="The full value, even if only part was paid.">
-        <MoneyInput
-          label={copy.amountLabel}
-          isRequired
-          size="lg"
+      <FormSection step={2} title={copy.itemsTitle} description={copy.itemsHint}>
+        <LineItemsField
+          workspaceId={workspaceId}
           currency={currency}
-          exponent={EXPONENT}
-          placeholder="0.00"
-          value={amount}
-          onValueChange={(value) => {
-            setAmount(value);
+          context={kind}
+          items={items}
+          onAdd={(line) => {
+            setItems([...items, line]);
             if (errors.amount) setErrors({ ...errors, amount: undefined });
           }}
-          errorMessage={errors.amount}
+          onUpdate={(index, line) => setItems(items.map((current, at) => (at === index ? line : current)))}
+          onRemove={(index) => setItems(items.filter((_, at) => at !== index))}
+          error={items.length ? errors.amount : undefined}
         />
+        {movesStock && activeOutlets.length > 1 ? (
+          <div className="animate-fade-up">
+            <AppSelect
+              label={copy.outletLabel}
+              placeholder="Main outlet"
+              options={activeOutlets.map((outlet) => ({ key: String(outlet.id), label: outlet.is_default ? `${outlet.name} (main)` : outlet.name }))}
+              selectedKey={outletId || String(activeOutlets.find((outlet) => outlet.is_default)?.id ?? "")}
+              onSelectionChange={setOutletId}
+              description={kind === "sale" ? "Stock is taken from this outlet." : "Stock is added to this outlet."}
+            />
+          </div>
+        ) : null}
+        {items.length === 0 ? (
+          <MoneyInput
+            label={`Or enter the ${copy.amountLabel.toLowerCase()}`}
+            size="lg"
+            currency={currency}
+            exponent={EXPONENT}
+            placeholder="0.00"
+            value={amount}
+            onValueChange={(value) => {
+              setAmount(value);
+              if (errors.amount) setErrors({ ...errors, amount: undefined });
+            }}
+            errorMessage={errors.amount}
+            description="The full value, even if only part was paid. Stock does not change without items."
+          />
+        ) : null}
       </FormSection>
 
       <FormSection step={3} title="Payment" description="How much has been paid so far.">

@@ -21,6 +21,8 @@ func (h *Handler) RegisterProductV2Routes(protected *gin.RouterGroup) {
 	protected.POST("/catalogue/products/:id/restore", h.restoreProduct)
 	protected.GET("/catalogue/products/:id/price-history", h.productPriceHistory)
 	protected.GET("/catalogue/products/:id/events", h.productEvents)
+	protected.GET("/catalogue/products/:id/stock-movements", h.productStockMovements)
+	protected.POST("/catalogue/products/:id/stock", h.changeProductStock)
 	protected.POST("/catalogue/product-images/authorize", h.authorizeProductImage)
 	protected.GET("/catalogue/collections", h.listProductCollections)
 	protected.POST("/catalogue/collections", h.createProductCollection)

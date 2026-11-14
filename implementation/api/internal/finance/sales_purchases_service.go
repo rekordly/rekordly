@@ -216,10 +216,14 @@ type CreateSaleInput struct {
 	Reference        string            `json:"reference"`
 	IdempotencyKey   string            `json:"idempotency_key"`
 	PaymentLegs      []PaymentLegInput `json:"payment_legs"` // optional immediate settlement
+	// Items are optional. Stock products in them leave stock from OutletID (or the main outlet).
+	Items    []StockLineInput `json:"items"`
+	OutletID int64            `json:"outlet_id"`
 }
 
 type SaleDetail struct {
 	Sale     db.Sale         `json:"sale"`
+	Items    []db.SaleItem   `json:"items"`
 	Payments []PaymentDetail `json:"payments,omitempty"`
 }
 
@@ -250,6 +254,13 @@ func (s *Service) CreateSale(ctx context.Context, workspaceID, userID int64, in 
 			return SaleDetail{}, err
 		}
 		totalMinor = parsed
+	}
+	items, itemsTotal, err := prepareStockLines(ctx, s.queries, workspaceID, in.Items, exponent)
+	if err != nil {
+		return SaleDetail{}, err
+	}
+	if totalMinor <= 0 {
+		totalMinor = itemsTotal
 	}
 	if totalMinor <= 0 {
 		return SaleDetail{}, ErrNegativeAmount
@@ -311,6 +322,10 @@ func (s *Service) CreateSale(ctx context.Context, workspaceID, userID int64, in 
 	if err != nil {
 		return SaleDetail{}, fmt.Errorf("create sale record: %w", err)
 	}
+	savedItems, err := recordSaleItems(ctx, qtx, workspaceID, saleRecord.ID, in.OutletID, items, saleDate, currency)
+	if err != nil {
+		return SaleDetail{}, err
+	}
 
 	var payments []PaymentDetail
 	// If immediate payment legs provided, record payment
@@ -353,6 +368,7 @@ func (s *Service) CreateSale(ctx context.Context, workspaceID, userID int64, in 
 
 	return SaleDetail{
 		Sale:     saleRecord,
+		Items:    savedItems,
 		Payments: payments,
 	}, nil
 }
@@ -390,8 +406,13 @@ func (s *Service) GetSale(ctx context.Context, workspaceID, saleID int64) (SaleD
 		})
 	}
 
+	items, err := s.queries.ListSaleItems(ctx, db.ListSaleItemsParams{WorkspaceID: workspaceID, SaleID: saleID})
+	if err != nil {
+		return SaleDetail{}, err
+	}
 	return SaleDetail{
 		Sale:     sale,
+		Items:    items,
 		Payments: payments,
 	}, nil
 }
@@ -465,11 +486,16 @@ type CreatePurchaseInput struct {
 	Reference        string            `json:"reference"`
 	IdempotencyKey   string            `json:"idempotency_key"`
 	PaymentLegs      []PaymentLegInput `json:"payment_legs"` // optional immediate settlement
+	// Items are optional. Stock products in them are added to OutletID (or the main outlet)
+	// at the price paid, which also updates their average cost.
+	Items    []StockLineInput `json:"items"`
+	OutletID int64            `json:"outlet_id"`
 }
 
 type PurchaseDetail struct {
-	Purchase db.Purchase     `json:"purchase"`
-	Payments []PaymentDetail `json:"payments,omitempty"`
+	Purchase db.Purchase       `json:"purchase"`
+	Items    []db.PurchaseItem `json:"items"`
+	Payments []PaymentDetail   `json:"payments,omitempty"`
 }
 
 func (s *Service) CreatePurchase(ctx context.Context, workspaceID, userID int64, in CreatePurchaseInput) (PurchaseDetail, error) {
@@ -499,6 +525,13 @@ func (s *Service) CreatePurchase(ctx context.Context, workspaceID, userID int64,
 			return PurchaseDetail{}, err
 		}
 		totalMinor = parsed
+	}
+	items, itemsTotal, err := prepareStockLines(ctx, s.queries, workspaceID, in.Items, exponent)
+	if err != nil {
+		return PurchaseDetail{}, err
+	}
+	if totalMinor <= 0 {
+		totalMinor = itemsTotal
 	}
 	if totalMinor <= 0 {
 		return PurchaseDetail{}, ErrNegativeAmount
@@ -573,6 +606,10 @@ func (s *Service) CreatePurchase(ctx context.Context, workspaceID, userID int64,
 	if err != nil {
 		return PurchaseDetail{}, fmt.Errorf("create purchase record: %w", err)
 	}
+	savedItems, err := recordPurchaseItems(ctx, qtx, workspaceID, purchaseRecord.ID, in.OutletID, items, purchaseDate, currency)
+	if err != nil {
+		return PurchaseDetail{}, err
+	}
 
 	var payments []PaymentDetail
 	if len(in.PaymentLegs) > 0 {
@@ -613,6 +650,7 @@ func (s *Service) CreatePurchase(ctx context.Context, workspaceID, userID int64,
 
 	return PurchaseDetail{
 		Purchase: purchaseRecord,
+		Items:    savedItems,
 		Payments: payments,
 	}, nil
 }
@@ -650,8 +688,13 @@ func (s *Service) GetPurchase(ctx context.Context, workspaceID, purchaseID int64
 		})
 	}
 
+	items, err := s.queries.ListPurchaseItems(ctx, db.ListPurchaseItemsParams{WorkspaceID: workspaceID, PurchaseID: purchaseID})
+	if err != nil {
+		return PurchaseDetail{}, err
+	}
 	return PurchaseDetail{
 		Purchase: purchase,
+		Items:    items,
 		Payments: payments,
 	}, nil
 }

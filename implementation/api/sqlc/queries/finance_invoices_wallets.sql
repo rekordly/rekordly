@@ -83,9 +83,9 @@ RETURNING *;
 
 -- name: CreateInvoiceItem :one
 INSERT INTO invoice_items (
-    invoice_id, workspace_id, description, quantity, unit_price_minor, amount_minor
+    invoice_id, workspace_id, description, quantity, unit_price_minor, amount_minor, product_id, variant_id
 ) VALUES (
-    $1, $2, $3, $4, $5, $6
+    $1, $2, $3, $4, $5, $6, sqlc.narg('product_id'), sqlc.narg('variant_id')
 ) RETURNING *;
 
 -- name: ListInvoiceItemsByInvoiceID :many
