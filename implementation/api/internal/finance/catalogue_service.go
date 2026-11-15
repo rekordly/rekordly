@@ -217,6 +217,12 @@ type ProductOptionView struct {
 	Name      string   `json:"name"`
 	Position  int32    `json:"position"`
 	Values    []string `json:"values"`
+	ValueDetails []ProductOptionValueView `json:"value_details,omitempty"`
+}
+
+type ProductOptionValueView struct {
+	ID int64 `json:"id"`
+	Value string `json:"value"`
 }
 
 type CreateVariantInput struct {
@@ -245,10 +251,13 @@ type VariantView struct {
 	Barcode           *string           `json:"barcode,omitempty"`
 	SellingPriceMinor int64             `json:"selling_price_minor"`
 	CostPriceMinor    int64             `json:"cost_price_minor"`
+	CompareAtPriceMinor *int64          `json:"compare_at_price_minor,omitempty"`
 	Currency          string            `json:"currency"`
 	CurrencyExponent  int32             `json:"currency_exponent"`
 	IsDefault         bool              `json:"is_default"`
 	IsActive          bool              `json:"is_active"`
+	ArchivedAt        *time.Time        `json:"archived_at,omitempty"`
+	QuantityOnHand    string            `json:"quantity_on_hand"`
 	OptionValues      map[string]string `json:"option_values,omitempty"`
 }
 
@@ -355,8 +364,10 @@ func (s *Service) ListProductOptions(ctx context.Context, workspaceID, productID
 	}
 
 	valsByOpt := make(map[int64][]string)
+	detailsByOpt := make(map[int64][]ProductOptionValueView)
 	for _, v := range allVals {
 		valsByOpt[v.OptionID] = append(valsByOpt[v.OptionID], v.Value)
+		detailsByOpt[v.OptionID] = append(detailsByOpt[v.OptionID], ProductOptionValueView{ID: v.ID, Value: v.Value})
 	}
 
 	out := make([]ProductOptionView, 0, len(opts))
@@ -367,6 +378,7 @@ func (s *Service) ListProductOptions(ctx context.Context, workspaceID, productID
 			Name:      o.Name,
 			Position:  o.Position,
 			Values:    valsByOpt[o.ID],
+			ValueDetails: detailsByOpt[o.ID],
 		})
 	}
 	return out, nil
@@ -511,6 +523,8 @@ func (s *Service) ListProductVariants(ctx context.Context, workspaceID, productI
 
 	out := make([]VariantView, 0, len(variants))
 	for _, v := range variants {
+		stock, err := s.queries.CountVariantStock(ctx, db.CountVariantStockParams{WorkspaceID: workspaceID, VariantID: v.ID})
+		if err != nil { return nil, err }
 		out = append(out, VariantView{
 			ID:                v.ID,
 			ProductID:         v.ProductID,
@@ -519,10 +533,13 @@ func (s *Service) ListProductVariants(ctx context.Context, workspaceID, productI
 			Barcode:           nullableText(v.Barcode),
 			SellingPriceMinor: v.SellingPriceMinor,
 			CostPriceMinor:    v.CostPriceMinor,
+			CompareAtPriceMinor: int64Ptr(v.CompareAtPriceMinor),
 			Currency:          v.Currency,
 			CurrencyExponent:  v.CurrencyExponent,
 			IsDefault:         v.IsDefault,
 			IsActive:          v.IsActive,
+			ArchivedAt:        timePtr(v.ArchivedAt),
+			QuantityOnHand:    stock.String(),
 			OptionValues:      optValsByVariant[v.ID],
 		})
 	}

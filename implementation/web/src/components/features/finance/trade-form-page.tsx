@@ -139,6 +139,7 @@ function TradeForm({ workspaceId, currency, kind }: WorkspaceInfo & { kind: Kind
         quantity: line.quantity,
         unit_price: line.unit_price.replace(/,/g, ""),
         product_id: line.product_id,
+        variant_id: line.variant_id,
       }));
       const common = {
         currency,

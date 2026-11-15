@@ -60,9 +60,19 @@ type ProductStockLine struct {
 
 type ProductDetail struct {
 	Product       ProductSummary     `json:"product"`
+	Options       []ProductOptionView `json:"options"`
+	Variants      []VariantView       `json:"variants"`
+	VariantStock  []VariantStockLine   `json:"variant_stock"`
 	OutletIDs     []int64            `json:"outlet_ids"`
 	CollectionIDs []int64            `json:"collection_ids"`
 	Stock         []ProductStockLine `json:"stock"`
+}
+
+type VariantStockLine struct {
+	VariantID int64 `json:"variant_id"`
+	LocationID int64 `json:"location_id"`
+	LocationName string `json:"location_name"`
+	QuantityOnHand string `json:"quantity_on_hand"`
 }
 
 // SaveProductInput is shared by create, edit and import.
@@ -439,7 +449,31 @@ func (s *Service) GetProduct(ctx context.Context, workspaceID, productID int64) 
 	if collections == nil {
 		collections = []int64{}
 	}
-	return ProductDetail{Product: summary, OutletIDs: outlets, CollectionIDs: collections, Stock: stock}, nil
+	options, err := s.ListProductOptions(ctx, workspaceID, productID)
+	if err != nil { return ProductDetail{}, err }
+	variants, err := s.ListProductVariants(ctx, workspaceID, productID)
+	if err != nil { return ProductDetail{}, err }
+	variantRows, err := s.queries.ListVariantStockByProduct(ctx, db.ListVariantStockByProductParams{WorkspaceID: workspaceID, ProductID: productID})
+	if err != nil { return ProductDetail{}, err }
+	variantStock := make([]VariantStockLine, 0, len(variantRows))
+	for _, row := range variantRows { variantStock = append(variantStock, VariantStockLine{VariantID: row.VariantID, LocationID: row.LocationID, LocationName: row.LocationName, QuantityOnHand: row.QuantityOnHand.String()}) }
+	if len(options) > 0 {
+		filtered := make([]ProductOptionView, 0, len(options))
+		for _, option := range options {
+			values := make([]string, 0, len(option.Values))
+			details := make([]ProductOptionValueView, 0, len(option.ValueDetails))
+			for _, value := range option.ValueDetails {
+				for _, variant := range variants {
+					if !variant.IsDefault && variant.ArchivedAt == nil && variant.OptionValues[option.Name] == value.Value {
+						values = append(values, value.Value); details = append(details, value); break
+					}
+				}
+			}
+			if len(details) > 0 { option.Values, option.ValueDetails = values, details; filtered = append(filtered, option) }
+		}
+		options = filtered
+	}
+	return ProductDetail{Product: summary, Options: options, Variants: variants, VariantStock: variantStock, OutletIDs: outlets, CollectionIDs: collections, Stock: stock}, nil
 }
 
 // ---------------- create ----------------

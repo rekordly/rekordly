@@ -233,6 +233,7 @@ export const invoiceSchema = z
           unit_price: amount("Enter a price"),
           discount_amount: optionalAmount.optional(),
           product_id: z.number().int().positive().optional(),
+          variant_id: z.number().int().positive().optional(),
           tracks_stock: z.boolean().optional(),
         }),
       )

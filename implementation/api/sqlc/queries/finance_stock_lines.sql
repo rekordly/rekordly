@@ -27,12 +27,14 @@ ORDER BY id;
 
 -- name: ListProductMovements :many
 SELECT m.id, m.movement_type, m.source_type, m.source_id, m.quantity_delta, m.value_delta_minor,
-       m.occurred_on, m.created_at, m.location_id,
+       m.occurred_on, m.created_at, m.location_id, m.variant_id,
+       COALESCE(v.name, '')::text AS variant_name,
        COALESCE(l.name, '')::text AS location_name,
        COALESCE(sa.reference, pu.reference, inv.invoice_number, ad.adjustment_number, '')::text AS source_reference,
        COALESCE(sa.customer_name, pu.supplier_name, inv.customer_name, ad.reason_code, '')::text AS source_party
 FROM inventory_movements m
 LEFT JOIN inventory_locations l ON l.id = m.location_id
+LEFT JOIN product_variants v ON v.id = m.variant_id AND v.workspace_id = m.workspace_id
 LEFT JOIN sales sa ON m.source_type = 'sale' AND sa.id = m.source_id
 LEFT JOIN purchases pu ON m.source_type = 'purchase' AND pu.id = m.source_id
 LEFT JOIN invoices inv ON m.source_type = 'invoice' AND inv.id = m.source_id

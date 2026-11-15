@@ -26,6 +26,7 @@ import { productKeys, productsApi } from "@/lib/products";
 import type { Product, ProductStatus } from "@/types/products";
 
 import { ProductCollections } from "./product-collections";
+import { BulkPriceDrawer } from "./product-price-drawer";
 import { downloadProductTemplate, ProductImportDrawer, ProductImportHistoryDrawer } from "./product-import";
 
 const STATUS_TONE: Record<ProductStatus, StatusTone> = { active: "success", draft: "warning", archived: "neutral" };
@@ -92,6 +93,7 @@ function ProductsContent({ workspaceId, currency }: WorkspaceInfo) {
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [importOpen, setImportOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [priceOpen, setPriceOpen] = useState(false);
 
   // One full list feeds the tiles and the filters, so switching filters is instant.
   const products = useQuery({ queryKey: productKeys.list(workspaceId, {}), queryFn: () => productsApi.list(workspaceId) });
@@ -203,7 +205,10 @@ function ProductsContent({ workspaceId, currency }: WorkspaceInfo) {
           }
           toolbarActions={
             selected.length ? (
-              <AppButton size="sm" variant="secondary" startContent={<DownloadSimple />} label={`Export ${selected.length}`} onPress={() => exportProducts(selected, "rekordly-products-selected.csv")} />
+              <>
+                <AppButton size="sm" variant="secondary" startContent={<Tag />} label="Change prices" onPress={() => setPriceOpen(true)} />
+                <AppButton size="sm" variant="secondary" startContent={<DownloadSimple />} label={`Export ${selected.length}`} onPress={() => exportProducts(selected, "rekordly-products-selected.csv")} />
+              </>
             ) : null
           }
           empty={
@@ -280,6 +285,7 @@ function ProductsContent({ workspaceId, currency }: WorkspaceInfo) {
 
       <ProductImportDrawer workspaceId={workspaceId} currency={currency} isOpen={importOpen} onClose={() => setImportOpen(false)} />
       <ProductImportHistoryDrawer workspaceId={workspaceId} isOpen={historyOpen} onClose={() => setHistoryOpen(false)} />
+      {priceOpen && selected.length ? <BulkPriceDrawer workspaceId={workspaceId} products={selected} onClose={() => setPriceOpen(false)} /> : null}
     </Page>
   );
 }

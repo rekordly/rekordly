@@ -90,6 +90,7 @@ export interface ProductVariant {
   currency_exponent: number;
   is_default: boolean;
   is_active: boolean;
+  quantity_on_hand?: string;
   option_values?: Record<string, string>;
 }
 

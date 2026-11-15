@@ -13,24 +13,31 @@ import (
 )
 
 const applyInventoryBalanceDelta = `-- name: ApplyInventoryBalanceDelta :one
-UPDATE inventory_balances SET quantity_on_hand=quantity_on_hand+$4,value_on_hand_minor=value_on_hand_minor+$5,version=version+1,updated_at=now() WHERE workspace_id=$1 AND location_id=$2 AND product_id=$3 AND quantity_on_hand+$4 >= 0 AND value_on_hand_minor+$5 >= 0 RETURNING id, workspace_id, location_id, product_id, quantity_on_hand, value_on_hand_minor, costing_method, version, updated_at, reserved_quantity, in_transit_quantity, variant_id
+UPDATE inventory_balances b SET quantity_on_hand = quantity_on_hand + $1,
+  value_on_hand_minor = value_on_hand_minor + $2, version = version + 1, updated_at = now()
+WHERE b.workspace_id = $3 AND b.location_id = $4
+  AND b.variant_id = COALESCE($5::bigint,
+    (SELECT v.id FROM product_variants v WHERE v.workspace_id = $3 AND v.product_id = $6 AND v.is_default))
+  AND quantity_on_hand + $1 >= 0 AND value_on_hand_minor + $2 >= 0 RETURNING id, workspace_id, location_id, product_id, quantity_on_hand, value_on_hand_minor, costing_method, version, updated_at, reserved_quantity, in_transit_quantity, variant_id
 `
 
 type ApplyInventoryBalanceDeltaParams struct {
-	WorkspaceID      int64           `json:"workspace_id"`
-	LocationID       int64           `json:"location_id"`
-	ProductID        int64           `json:"product_id"`
 	QuantityOnHand   decimal.Decimal `json:"quantity_on_hand"`
 	ValueOnHandMinor int64           `json:"value_on_hand_minor"`
+	WorkspaceID      int64           `json:"workspace_id"`
+	LocationID       int64           `json:"location_id"`
+	VariantID        pgtype.Int8     `json:"variant_id"`
+	ProductID        int64           `json:"product_id"`
 }
 
 func (q *Queries) ApplyInventoryBalanceDelta(ctx context.Context, arg ApplyInventoryBalanceDeltaParams) (InventoryBalance, error) {
 	row := q.db.QueryRow(ctx, applyInventoryBalanceDelta,
-		arg.WorkspaceID,
-		arg.LocationID,
-		arg.ProductID,
 		arg.QuantityOnHand,
 		arg.ValueOnHandMinor,
+		arg.WorkspaceID,
+		arg.LocationID,
+		arg.VariantID,
+		arg.ProductID,
 	)
 	var i InventoryBalance
 	err := row.Scan(
@@ -314,17 +321,25 @@ func (q *Queries) CreateSupplierReturnLine(ctx context.Context, arg CreateSuppli
 }
 
 const getInventoryBalanceForUpdate = `-- name: GetInventoryBalanceForUpdate :one
-SELECT id, workspace_id, location_id, product_id, quantity_on_hand, value_on_hand_minor, costing_method, version, updated_at, reserved_quantity, in_transit_quantity, variant_id FROM inventory_balances WHERE workspace_id=$1 AND location_id=$2 AND product_id=$3 FOR UPDATE
+SELECT id, workspace_id, location_id, product_id, quantity_on_hand, value_on_hand_minor, costing_method, version, updated_at, reserved_quantity, in_transit_quantity, variant_id FROM inventory_balances b WHERE b.workspace_id = $1 AND b.location_id = $2
+  AND b.variant_id = COALESCE($3::bigint,
+    (SELECT v.id FROM product_variants v WHERE v.workspace_id = $1 AND v.product_id = $4 AND v.is_default)) FOR UPDATE
 `
 
 type GetInventoryBalanceForUpdateParams struct {
-	WorkspaceID int64 `json:"workspace_id"`
-	LocationID  int64 `json:"location_id"`
-	ProductID   int64 `json:"product_id"`
+	WorkspaceID int64       `json:"workspace_id"`
+	LocationID  int64       `json:"location_id"`
+	VariantID   pgtype.Int8 `json:"variant_id"`
+	ProductID   int64       `json:"product_id"`
 }
 
 func (q *Queries) GetInventoryBalanceForUpdate(ctx context.Context, arg GetInventoryBalanceForUpdateParams) (InventoryBalance, error) {
-	row := q.db.QueryRow(ctx, getInventoryBalanceForUpdate, arg.WorkspaceID, arg.LocationID, arg.ProductID)
+	row := q.db.QueryRow(ctx, getInventoryBalanceForUpdate,
+		arg.WorkspaceID,
+		arg.LocationID,
+		arg.VariantID,
+		arg.ProductID,
+	)
 	var i InventoryBalance
 	err := row.Scan(
 		&i.ID,

@@ -140,7 +140,7 @@ func (s *Service) StartStockCount(ctx context.Context, workspaceID, userID int64
 			WorkspaceID:      workspaceID,
 			CountID:          cnt.ID,
 			ProductID:        b.ProductID,
-			VariantID:        b.VariantID,
+			VariantID:        pgtype.Int8{Int64: b.VariantID, Valid: true},
 			ExpectedQuantity: b.QuantityOnHand,
 			CountedQuantity:  pgtype.Numeric{Valid: false},
 			VarianceQuantity: decimal.Zero,
@@ -294,6 +294,7 @@ func (s *Service) ApproveAndPostStockCount(ctx context.Context, workspaceID, use
 			WorkspaceID: workspaceID,
 			LocationID:  cnt.LocationID,
 			ProductID:   line.ProductID,
+			VariantID:   line.VariantID,
 		})
 		if err != nil {
 			return StockCountView{}, err
@@ -325,6 +326,7 @@ func (s *Service) ApproveAndPostStockCount(ctx context.Context, workspaceID, use
 			WorkspaceID:       workspaceID,
 			LocationID:        cnt.LocationID,
 			ProductID:         line.ProductID,
+			VariantID:         line.VariantID,
 			QuantityOnHand:    newQty,
 			ReservedQuantity:  bal.ReservedQuantity,
 			InTransitQuantity: bal.InTransitQuantity,
@@ -337,6 +339,7 @@ func (s *Service) ApproveAndPostStockCount(ctx context.Context, workspaceID, use
 		if _, err := q.CreateInventoryMovement(ctx, db.CreateInventoryMovementParams{
 			WorkspaceID:        workspaceID,
 			ProductID:          line.ProductID,
+			VariantID:          line.VariantID,
 			GoodsReceiptLineID: pgtype.Int8{},
 			LocationID:         pgtype.Int8{Int64: cnt.LocationID, Valid: true},
 			MovementType:       "adjustment",

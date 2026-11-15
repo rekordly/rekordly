@@ -17,9 +17,16 @@ INSERT INTO supplier_returns(workspace_id,supplier_id,goods_receipt_id,effective
 -- name: CreateSupplierReturnLine :one
 INSERT INTO supplier_return_lines(workspace_id,supplier_return_id,goods_receipt_line_id,product_id,location_id,quantity,value_minor) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *;
 -- name: GetInventoryBalanceForUpdate :one
-SELECT * FROM inventory_balances WHERE workspace_id=$1 AND location_id=$2 AND product_id=$3 FOR UPDATE;
+SELECT * FROM inventory_balances b WHERE b.workspace_id = @workspace_id AND b.location_id = @location_id
+  AND b.variant_id = COALESCE(sqlc.narg('variant_id')::bigint,
+    (SELECT v.id FROM product_variants v WHERE v.workspace_id = @workspace_id AND v.product_id = @product_id AND v.is_default)) FOR UPDATE;
 -- name: ApplyInventoryBalanceDelta :one
-UPDATE inventory_balances SET quantity_on_hand=quantity_on_hand+$4,value_on_hand_minor=value_on_hand_minor+$5,version=version+1,updated_at=now() WHERE workspace_id=$1 AND location_id=$2 AND product_id=$3 AND quantity_on_hand+$4 >= 0 AND value_on_hand_minor+$5 >= 0 RETURNING *;
+UPDATE inventory_balances b SET quantity_on_hand = quantity_on_hand + @quantity_on_hand,
+  value_on_hand_minor = value_on_hand_minor + @value_on_hand_minor, version = version + 1, updated_at = now()
+WHERE b.workspace_id = @workspace_id AND b.location_id = @location_id
+  AND b.variant_id = COALESCE(sqlc.narg('variant_id')::bigint,
+    (SELECT v.id FROM product_variants v WHERE v.workspace_id = @workspace_id AND v.product_id = @product_id AND v.is_default))
+  AND quantity_on_hand + @quantity_on_hand >= 0 AND value_on_hand_minor + @value_on_hand_minor >= 0 RETURNING *;
 -- name: GetSupplierCreditByIdempotency :one
 SELECT * FROM supplier_credits WHERE workspace_id=$1 AND idempotency_key=$2;
 -- name: GetSupplierCreditsForReturnTotal :one

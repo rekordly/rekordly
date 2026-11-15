@@ -89,10 +89,20 @@ func prepareStockLines(ctx context.Context, q *db.Queries, workspaceID int64, li
 				return nil, 0, fmt.Errorf("item %d: choose the product for this variant", index+1)
 			}
 			variant, err := q.GetVariantByID(ctx, db.GetVariantByIDParams{WorkspaceID: workspaceID, ID: *line.VariantID})
-			if err != nil || variant.ProductID != prepared.product.ID {
+			if err != nil || variant.ProductID != prepared.product.ID || !variant.IsActive {
 				return nil, 0, fmt.Errorf("item %d: this variant does not belong to %s", index+1, prepared.product.Name)
 			}
 			prepared.variantID = pgtype.Int8{Int64: variant.ID, Valid: true}
+		}
+		if prepared.product != nil {
+			var err error
+			prepared.variantID, err = stockVariant(ctx, q, workspaceID, *prepared.product, prepared.variantID)
+			if err != nil { return nil, 0, fmt.Errorf("item %d: %w", index+1, err) }
+			variant, err := q.GetVariantByID(ctx, db.GetVariantByIDParams{WorkspaceID: workspaceID, ID: prepared.variantID.Int64})
+			if err != nil { return nil, 0, err }
+			if !variant.IsDefault {
+				prepared.description += " · " + variant.Name
+			}
 		}
 		if prepared.description == "" {
 			return nil, 0, fmt.Errorf("item %d: describe the item", index+1)
@@ -118,19 +128,57 @@ func prepareStockLines(ctx context.Context, q *db.Queries, workspaceID int64, li
 	return out, total, nil
 }
 
+// stockVariant requires a choice for products with options and otherwise uses
+// the single default variant for existing records.
+func stockVariant(ctx context.Context, q *db.Queries, workspaceID int64, product db.Product, selected pgtype.Int8) (pgtype.Int8, error) {
+	variants, err := q.ListVariantsByProductID(ctx, db.ListVariantsByProductIDParams{WorkspaceID: workspaceID, ProductID: product.ID})
+	if err != nil {
+		return pgtype.Int8{}, err
+	}
+	hasOptions := false
+	var defaultID int64
+	for _, v := range variants {
+		if v.IsDefault {
+			defaultID = v.ID
+		} else if v.IsActive && !v.ArchivedAt.Valid {
+			hasOptions = true
+		}
+	}
+	if hasOptions && !selected.Valid {
+		return pgtype.Int8{}, fmt.Errorf("choose a variant for %s", product.Name)
+	}
+	if selected.Valid {
+		variant, err := q.GetVariantByID(ctx, db.GetVariantByIDParams{WorkspaceID: workspaceID, ID: selected.Int64})
+		if err != nil || variant.ProductID != product.ID || !variant.IsActive || variant.ArchivedAt.Valid || (hasOptions && variant.IsDefault) {
+			return pgtype.Int8{}, fmt.Errorf("choose an active variant of %s", product.Name)
+		}
+		return selected, nil
+	}
+	if defaultID > 0 {
+		return pgtype.Int8{Int64: defaultID, Valid: true}, nil
+	}
+	return pgtype.Int8{}, fmt.Errorf("%s has no default variant", product.Name)
+}
+
 // issueStockTx takes stock out for a sale or invoice, at its average cost, and records the
 // cost of goods sold. It refuses to take more than is available.
-func issueStockTx(ctx context.Context, q *db.Queries, workspaceID int64, product db.Product, location db.InventoryLocation, qty decimal.Decimal, date time.Time, sourceType string, sourceID int64, currency string) error {
-	bal, err := q.GetInventoryBalanceForUpdate(ctx, db.GetInventoryBalanceForUpdateParams{WorkspaceID: workspaceID, LocationID: location.ID, ProductID: product.ID})
+func issueStockTx(ctx context.Context, q *db.Queries, workspaceID int64, product db.Product, variantID pgtype.Int8, location db.InventoryLocation, qty decimal.Decimal, date time.Time, sourceType string, sourceID int64, currency string) error {
+	itemName := product.Name
+	if variantID.Valid {
+		if variant, err := q.GetVariantByID(ctx, db.GetVariantByIDParams{WorkspaceID: workspaceID, ID: variantID.Int64}); err == nil && !variant.IsDefault && strings.TrimSpace(variant.Name) != "" {
+			itemName = fmt.Sprintf("%s (%s)", product.Name, variant.Name)
+		}
+	}
+	bal, err := q.GetInventoryBalanceForUpdate(ctx, db.GetInventoryBalanceForUpdateParams{WorkspaceID: workspaceID, LocationID: location.ID, ProductID: product.ID, VariantID: variantID})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return &InsufficientStockError{Product: product.Name, Location: location.Name, Available: decimal.Zero, Unit: product.UnitName}
+		return &InsufficientStockError{Product: itemName, Location: location.Name, Available: decimal.Zero, Unit: product.UnitName}
 	}
 	if err != nil {
 		return err
 	}
 	available := bal.QuantityOnHand.Sub(bal.ReservedQuantity)
 	if available.LessThan(qty) {
-		return &InsufficientStockError{Product: product.Name, Location: location.Name, Available: available, Unit: product.UnitName}
+		return &InsufficientStockError{Product: itemName, Location: location.Name, Available: available, Unit: product.UnitName}
 	}
 	var cost int64
 	newQty := bal.QuantityOnHand.Sub(qty)
@@ -143,14 +191,14 @@ func issueStockTx(ctx context.Context, q *db.Queries, workspaceID int64, product
 		}
 	}
 	if _, err := q.UpdateInventoryBalanceQuantities(ctx, db.UpdateInventoryBalanceQuantitiesParams{
-		WorkspaceID: workspaceID, LocationID: location.ID, ProductID: product.ID,
+		WorkspaceID: workspaceID, LocationID: location.ID, ProductID: product.ID, VariantID: variantID,
 		QuantityOnHand: newQty, ReservedQuantity: bal.ReservedQuantity, InTransitQuantity: bal.InTransitQuantity,
 		ValueOnHandMinor: bal.ValueOnHandMinor - cost,
 	}); err != nil {
 		return fmt.Errorf("update stock for %s: %w", product.Name, err)
 	}
 	movement, err := q.CreateInventoryMovement(ctx, db.CreateInventoryMovementParams{
-		WorkspaceID: workspaceID, ProductID: product.ID, LocationID: pgtype.Int8{Int64: location.ID, Valid: true},
+		WorkspaceID: workspaceID, ProductID: product.ID, VariantID: variantID, LocationID: pgtype.Int8{Int64: location.ID, Valid: true},
 		MovementType: "sale", SourceType: sourceType, SourceID: pgtype.Int8{Int64: sourceID, Valid: true},
 		QuantityDelta: qty.Neg(), ValueDeltaMinor: -cost, OccurredOn: pgtype.Date{Time: date, Valid: true},
 	})
@@ -167,15 +215,15 @@ func issueStockTx(ctx context.Context, q *db.Queries, workspaceID int64, product
 // receiveStockTx adds bought stock at what was paid, which also moves the average cost.
 // The purchase payment is posted as an expense elsewhere, so the stock part is moved
 // from expense to the inventory asset here.
-func receiveStockTx(ctx context.Context, q *db.Queries, workspaceID int64, product db.Product, location db.InventoryLocation, qty decimal.Decimal, value int64, date time.Time, sourceType string, sourceID int64, currency string) error {
+func receiveStockTx(ctx context.Context, q *db.Queries, workspaceID int64, product db.Product, variantID pgtype.Int8, location db.InventoryLocation, qty decimal.Decimal, value int64, date time.Time, sourceType string, sourceID int64, currency string) error {
 	if _, err := q.CreateInventoryCostingSettings(ctx, db.CreateInventoryCostingSettingsParams{WorkspaceID: workspaceID, Currency: currency}); err != nil {
 		return err
 	}
-	if _, err := q.UpsertInventoryBalance(ctx, db.UpsertInventoryBalanceParams{WorkspaceID: workspaceID, LocationID: location.ID, ProductID: product.ID, QuantityOnHand: qty, ValueOnHandMinor: value}); err != nil {
+	if _, err := q.UpsertInventoryBalance(ctx, db.UpsertInventoryBalanceParams{WorkspaceID: workspaceID, LocationID: location.ID, ProductID: product.ID, VariantID: variantID, QuantityOnHand: qty, ValueOnHandMinor: value}); err != nil {
 		return fmt.Errorf("update stock for %s: %w", product.Name, err)
 	}
 	movement, err := q.CreateInventoryMovement(ctx, db.CreateInventoryMovementParams{
-		WorkspaceID: workspaceID, ProductID: product.ID, LocationID: pgtype.Int8{Int64: location.ID, Valid: true},
+		WorkspaceID: workspaceID, ProductID: product.ID, VariantID: variantID, LocationID: pgtype.Int8{Int64: location.ID, Valid: true},
 		MovementType: "purchase", SourceType: sourceType, SourceID: pgtype.Int8{Int64: sourceID, Valid: true},
 		QuantityDelta: qty, ValueDeltaMinor: value, OccurredOn: pgtype.Date{Time: date, Valid: true},
 	})
@@ -201,11 +249,11 @@ func returnIssuedStockTx(ctx context.Context, q *db.Queries, workspaceID int64, 
 		}
 		qty := m.QuantityDelta.Neg()
 		value := -m.ValueDeltaMinor
-		if _, err := q.UpsertInventoryBalance(ctx, db.UpsertInventoryBalanceParams{WorkspaceID: workspaceID, LocationID: m.LocationID.Int64, ProductID: m.ProductID, QuantityOnHand: qty, ValueOnHandMinor: value}); err != nil {
+		if _, err := q.UpsertInventoryBalance(ctx, db.UpsertInventoryBalanceParams{WorkspaceID: workspaceID, LocationID: m.LocationID.Int64, ProductID: m.ProductID, VariantID: pgtype.Int8{Int64: m.VariantID, Valid: true}, QuantityOnHand: qty, ValueOnHandMinor: value}); err != nil {
 			return err
 		}
 		returned, err := q.CreateInventoryMovement(ctx, db.CreateInventoryMovementParams{
-			WorkspaceID: workspaceID, ProductID: m.ProductID, LocationID: m.LocationID,
+			WorkspaceID: workspaceID, ProductID: m.ProductID, VariantID: pgtype.Int8{Int64: m.VariantID, Valid: true}, LocationID: m.LocationID,
 			MovementType: "return", SourceType: sourceType, SourceID: m.SourceID,
 			QuantityDelta: qty, ValueDeltaMinor: value, OccurredOn: pgtype.Date{Time: date, Valid: true},
 		})
@@ -241,6 +289,8 @@ func postStockLedger(ctx context.Context, q *db.Queries, workspaceID int64, sour
 
 type ProductStockMovement struct {
 	ID              int64     `json:"id"`
+	VariantID       int64     `json:"variant_id"`
+	VariantName     string    `json:"variant_name"`
 	Kind            string    `json:"kind"`
 	SourceType      string    `json:"source_type"`
 	SourceID        *int64    `json:"source_id,omitempty"`
@@ -314,7 +364,8 @@ func (s *Service) ListProductStockMovements(ctx context.Context, workspaceID, pr
 	out := make([]ProductStockMovement, 0, len(rows))
 	for _, row := range rows {
 		item := ProductStockMovement{
-			ID: row.ID, Kind: row.MovementType, SourceType: row.SourceType, Summary: movementSummary(row),
+			ID: row.ID, VariantID: row.VariantID, VariantName: row.VariantName,
+			Kind: row.MovementType, SourceType: row.SourceType, Summary: movementSummary(row),
 			Reference: row.SourceReference, LocationName: row.LocationName,
 			QuantityDelta: row.QuantityDelta.String(), ValueDeltaMinor: fmt.Sprintf("%d", row.ValueDeltaMinor),
 			CreatedAt: row.CreatedAt.Time,

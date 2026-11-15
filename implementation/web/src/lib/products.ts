@@ -12,6 +12,7 @@ import type {
   ProductStockChange,
   ProductStockMovement,
   SaveProductPayload,
+  SaveOptionsPayload,
 } from "@/types/products";
 
 import { apiClient, workspaceHeaders } from "./api.ts";
@@ -41,6 +42,8 @@ export const productsApi = {
     apiClient.post<unknown, ProductDetail>("/api/v1/catalogue/products", { ...body, idempotency_key: key }, headers(workspaceId, key)),
   update: (workspaceId: number, id: number, body: SaveProductPayload) =>
     apiClient.patch<unknown, ProductDetail>(`/api/v1/catalogue/products/${id}`, body, headers(workspaceId)),
+  saveOptions: (workspaceId: number, id: number, body: SaveOptionsPayload, key: string) =>
+    apiClient.put<unknown, ProductDetail>(`/api/v1/catalogue/products/${id}/options`, { ...body, idempotency_key: key }, headers(workspaceId, key)),
   archive: (workspaceId: number, id: number) => apiClient.post<unknown, ProductDetail>(`/api/v1/catalogue/products/${id}/archive`, {}, headers(workspaceId)),
   restore: (workspaceId: number, id: number) => apiClient.post<unknown, ProductDetail>(`/api/v1/catalogue/products/${id}/restore`, {}, headers(workspaceId)),
   async priceHistory(workspaceId: number, id: number) {

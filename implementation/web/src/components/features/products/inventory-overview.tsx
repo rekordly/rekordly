@@ -4,13 +4,14 @@
 // products at once — counting a shelf and managing outlets. Adding, removing and moving
 // stock for one product happens on that product's Stock tab.
 
-import { ClipboardText, Coins, Cube, Plus, Storefront, Warehouse, WarningCircle } from "@phosphor-icons/react";
+import { ClipboardText, Coins, Cube, Plus, Star, Storefront, Warehouse, WarningCircle } from "@phosphor-icons/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
 
 import { AppButton } from "@/components/ui/app-button";
 import { AppInput } from "@/components/ui/app-input";
+import { AppRowActions } from "@/components/ui/app-row-actions";
 import { AppSelect } from "@/components/ui/app-select";
 import { KpiCard } from "@/components/ui/cards";
 import { DataView } from "@/components/ui/data-view";
@@ -98,12 +99,14 @@ function CountDrawer({ workspaceId, rows, outletId, outletName, onClose }: { wor
         {rows.map((row) => {
           const value = counts[row.product.id] ?? "";
           const difference = value === "" ? 0 : Number(value) - row.quantity;
+          const hasVariants = (row.product.variant_count ?? 1) > 1;
           return (
             <li key={row.product.id} className="flex items-center justify-between gap-3 py-2.5">
               <span className="min-w-0">
                 <span className="block truncate text-[14px] font-medium">{row.product.name}</span>
                 <span className="block text-[12px] text-muted">
                   System: {stockNumber(String(row.quantity))} {unitOf(row.product)}
+                  {hasVariants ? ` · ${row.product.variant_count} variants` : ""}
                   {difference !== 0 ? (
                     <span className={`ml-1.5 font-semibold ${difference < 0 ? "text-secondary" : "text-primary"}`}>
                       {difference > 0 ? "+" : "−"}
@@ -112,14 +115,20 @@ function CountDrawer({ workspaceId, rows, outletId, outletName, onClose }: { wor
                   ) : null}
                 </span>
               </span>
-              <input
-                aria-label={`Counted ${row.product.name}`}
-                inputMode="decimal"
-                placeholder={stockNumber(String(row.quantity))}
-                value={value}
-                onChange={(event) => setCounts({ ...counts, [row.product.id]: event.target.value.replace(/[^\d.]/g, "") })}
-                className="field-shell h-10 w-24 shrink-0 px-3 text-right text-[14px] font-semibold tabular outline-none"
-              />
+              {hasVariants ? (
+                <Link href={`/products/${row.product.id}`} onClick={onClose} className="shrink-0 text-[12px] font-semibold text-primary hover:underline">
+                  Count variants →
+                </Link>
+              ) : (
+                <input
+                  aria-label={`Counted ${row.product.name}`}
+                  inputMode="decimal"
+                  placeholder={stockNumber(String(row.quantity))}
+                  value={value}
+                  onChange={(event) => setCounts({ ...counts, [row.product.id]: event.target.value.replace(/[^\d.]/g, "") })}
+                  className="field-shell h-10 w-24 shrink-0 px-3 text-right text-[14px] font-semibold tabular outline-none"
+                />
+              )}
             </li>
           );
         })}
@@ -195,6 +204,16 @@ function InventoryContent({ workspaceId, currency }: WorkspaceInfo) {
         valueMinor: lines.reduce((sum, line) => sum + BigInt(line.value_on_hand_minor), BigInt(0)),
       };
     });
+
+  const makeMain = useFinanceAction(workspaceId, (id: number) => financeApi.updateOutlet(workspaceId, id, { is_default: true }), {
+    success: "Main outlet changed",
+  });
+  const outletMenu = (outlet: InventoryOutlet) => (
+    <AppRowActions
+      ariaLabel={`Actions for ${outlet.name}`}
+      items={[{ key: "main", label: "Make main outlet", icon: <Star size={15} />, onClick: () => makeMain.mutate(outlet.id), disabled: outlet.is_default }]}
+    />
+  );
 
   const outletRows: OutletRow[] = activeOutlets.map((outlet) => {
     const lines = (balances.data ?? []).filter((line) => line.location_id === outlet.id);
@@ -281,7 +300,9 @@ function InventoryContent({ workspaceId, currency }: WorkspaceInfo) {
               render: (row) => (
                 <Link href={`/products/${row.product.id}`} className="font-medium hover:underline">
                   {row.product.name}
-                  <span className="block text-[12px] font-normal text-muted">{row.product.sku ?? ""}</span>
+                  <span className="block text-[12px] font-normal text-muted">
+                    {[row.product.sku, (row.product.variant_count ?? 1) > 1 ? `Across ${row.product.variant_count} variants` : null].filter(Boolean).join(" · ")}
+                  </span>
                 </Link>
               ),
             },
@@ -359,6 +380,7 @@ function InventoryContent({ workspaceId, currency }: WorkspaceInfo) {
             { key: "type", label: "Type", render: (row) => outletTypeLabel(row.outlet.location_type) },
             { key: "products", label: "Products in stock", align: "right", render: (row) => <span className="tabular">{row.productsInStock}</span> },
             { key: "value", label: "Stock value", align: "right", render: (row) => <span className="font-semibold tabular">{money(row.valueMinor)}</span> },
+            { key: "actions", label: "", align: "right", render: (row) => outletMenu(row.outlet) },
           ]}
           renderCard={(row) => (
             <article className="rounded-2xl border border-border bg-surface p-4">
@@ -374,7 +396,10 @@ function InventoryContent({ workspaceId, currency }: WorkspaceInfo) {
                     </span>
                   </span>
                 </span>
-                {row.outlet.is_default ? <StatusPill tone="success">Main</StatusPill> : null}
+                <span className="flex shrink-0 items-center gap-1">
+                  {row.outlet.is_default ? <StatusPill tone="success">Main</StatusPill> : null}
+                  {outletMenu(row.outlet)}
+                </span>
               </div>
               <p className="mt-4 text-[13px] text-muted">
                 Stock worth <span className="font-semibold text-foreground tabular">{money(row.valueMinor)}</span> across {row.productsInStock} products

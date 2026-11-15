@@ -38,9 +38,28 @@ export interface ProductStockLine {
 
 export interface ProductDetail {
   product: Product;
+  options: ProductOption[];
+  variants: ProductVariant[];
+  variant_stock: { variant_id: number; location_id: number; location_name: string; quantity_on_hand: string }[];
   outlet_ids: number[];
   collection_ids: number[];
   stock: ProductStockLine[];
+}
+
+export interface ProductOptionValue { id: number; value: string }
+export interface ProductOption { id: number; name: string; position: number; values: string[]; value_details: ProductOptionValue[] }
+export interface ProductVariant {
+  id: number; name: string; sku?: string | null; barcode?: string | null;
+  selling_price_minor: string; cost_price_minor: string; compare_at_price_minor?: string | null;
+  is_default: boolean; is_active: boolean; option_values?: Record<string, string>;
+  archived_at?: string | null;
+  quantity_on_hand: string;
+}
+
+export interface SaveOptionsPayload {
+  options: { id?: number; name: string; values: { id?: number; value: string }[] }[];
+  variants: { id?: number; option_values: string[]; selling_price: string; cost_price?: string;
+    compare_at_price?: string; sku?: string; barcode?: string; is_active: boolean }[];
 }
 
 /** Shared by create, edit and import. Prices are major-unit decimal strings. */
@@ -121,6 +140,8 @@ export interface ImageUploadAuthorization {
 
 export interface ProductStockMovement {
   id: number;
+  variant_id?: number;
+  variant_name?: string;
   kind: string;
   source_type: string;
   source_id?: number;
@@ -141,6 +162,7 @@ export type StockAddReason = "restock" | "found" | "correction";
 export type StockRemoveReason = "damage" | "lost" | "expired" | "internal_use" | "correction" | "other";
 
 export interface ProductStockChange {
+  variant_id?: number;
   direction: "add" | "remove";
   quantity: string;
   reason: StockAddReason | StockRemoveReason;

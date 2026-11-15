@@ -17,6 +17,7 @@ func (h *Handler) RegisterProductV2Routes(protected *gin.RouterGroup) {
 	protected.GET("/catalogue/product-imports", h.listProductImports)
 	protected.GET("/catalogue/products/:id", h.getProductV2)
 	protected.PATCH("/catalogue/products/:id", h.updateProductV2)
+	protected.PUT("/catalogue/products/:id/options", h.saveProductOptionsV2)
 	protected.POST("/catalogue/products/:id/archive", h.archiveProduct)
 	protected.POST("/catalogue/products/:id/restore", h.restoreProduct)
 	protected.GET("/catalogue/products/:id/price-history", h.productPriceHistory)
@@ -28,6 +29,22 @@ func (h *Handler) RegisterProductV2Routes(protected *gin.RouterGroup) {
 	protected.POST("/catalogue/collections", h.createProductCollection)
 	protected.PATCH("/catalogue/collections/:id", h.updateProductCollection)
 	protected.DELETE("/catalogue/collections/:id", h.deleteProductCollection)
+}
+
+func (h *Handler) saveProductOptionsV2(c *gin.Context) {
+	wsCtx, ok := businessWorkspace(c)
+	if !ok { return }
+	id, ok := productID(c)
+	if !ok { return }
+	var in SaveProductOptionsInput
+	if err := c.ShouldBindJSON(&in); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": err.Error()}})
+		return
+	}
+	if in.IdempotencyKey == "" { in.IdempotencyKey = c.GetHeader("Idempotency-Key") }
+	detail, err := h.service.SaveProductOptions(c.Request.Context(), wsCtx.WorkspaceID, wsCtx.UserID, id, in)
+	if err != nil { productError(c, err, "SAVE_OPTIONS_FAILED"); return }
+	c.JSON(http.StatusOK, gin.H{"data": detail})
 }
 
 func productID(c *gin.Context) (int64, bool) {

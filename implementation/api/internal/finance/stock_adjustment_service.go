@@ -141,11 +141,22 @@ func (s *Service) CreateStockAdjustment(ctx context.Context, workspaceID, userID
 		if err != nil {
 			return StockAdjustmentView{}, fmt.Errorf("product %d: %w", l.ProductID, err)
 		}
+		var requested pgtype.Int8
+		if l.VariantID != nil && *l.VariantID > 0 {
+			variant, err := q.GetVariantByID(ctx, db.GetVariantByIDParams{WorkspaceID: workspaceID, ID: *l.VariantID})
+			if err != nil || variant.ProductID != prod.ID || !variant.IsActive {
+				return StockAdjustmentView{}, fmt.Errorf("choose an active variant of %s", prod.Name)
+			}
+			requested = pgtype.Int8{Int64: variant.ID, Valid: true}
+		}
+		variantID, err := stockVariant(ctx, q, workspaceID, prod, requested)
+		if err != nil { return StockAdjustmentView{}, err }
 
 		bal, err := q.GetInventoryBalanceForUpdate(ctx, db.GetInventoryBalanceForUpdateParams{
 			WorkspaceID: workspaceID,
 			LocationID:  loc.ID,
 			ProductID:   prod.ID,
+			VariantID:   variantID,
 		})
 		if errors.Is(err, pgx.ErrNoRows) {
 			if delta.IsNegative() {
@@ -155,6 +166,7 @@ func (s *Service) CreateStockAdjustment(ctx context.Context, workspaceID, userID
 				WorkspaceID:      workspaceID,
 				LocationID:       loc.ID,
 				ProductID:        prod.ID,
+				VariantID:        variantID,
 				QuantityOnHand:   decimal.Zero,
 				ValueOnHandMinor: 0,
 			})
@@ -200,6 +212,7 @@ func (s *Service) CreateStockAdjustment(ctx context.Context, workspaceID, userID
 			WorkspaceID:       workspaceID,
 			LocationID:        loc.ID,
 			ProductID:         prod.ID,
+			VariantID:         variantID,
 			QuantityOnHand:    newQty,
 			ReservedQuantity:  bal.ReservedQuantity,
 			InTransitQuantity: bal.InTransitQuantity,
@@ -219,6 +232,7 @@ func (s *Service) CreateStockAdjustment(ctx context.Context, workspaceID, userID
 		if _, err := q.CreateInventoryMovement(ctx, db.CreateInventoryMovementParams{
 			WorkspaceID:        workspaceID,
 			ProductID:          prod.ID,
+			VariantID:          variantID,
 			GoodsReceiptLineID: pgtype.Int8{},
 			LocationID:         pgtype.Int8{Int64: loc.ID, Valid: true},
 			MovementType:       "adjustment",
@@ -231,16 +245,11 @@ func (s *Service) CreateStockAdjustment(ctx context.Context, workspaceID, userID
 			return StockAdjustmentView{}, err
 		}
 
-		var vID pgtype.Int8
-		if l.VariantID != nil && *l.VariantID > 0 {
-			vID = pgtype.Int8{Int64: *l.VariantID, Valid: true}
-		}
-
 		line, err := q.CreateStockAdjustmentLine(ctx, db.CreateStockAdjustmentLineParams{
 			WorkspaceID:    workspaceID,
 			AdjustmentID:   adj.ID,
 			ProductID:      prod.ID,
-			VariantID:      vID,
+			VariantID:      variantID,
 			QuantityDelta:  delta,
 			UnitCostMinor:  unitCostMinor,
 			TotalCostMinor: totalCostMinor,

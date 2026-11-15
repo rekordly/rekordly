@@ -147,6 +147,8 @@ func (s *Service) CreateStockTransfer(ctx context.Context, workspaceID, userID i
 		if l.VariantID != nil && *l.VariantID > 0 {
 			vID = pgtype.Int8{Int64: *l.VariantID, Valid: true}
 		}
+		vID, err = stockVariant(ctx, q, workspaceID, prod, vID)
+		if err != nil { return TransferView{}, err }
 
 		line, err := q.CreateStockTransferLine(ctx, db.CreateStockTransferLineParams{
 			WorkspaceID:        workspaceID,
@@ -234,6 +236,7 @@ func (s *Service) DispatchStockTransfer(ctx context.Context, workspaceID, userID
 			WorkspaceID: workspaceID,
 			LocationID:  trf.SourceLocationID,
 			ProductID:   line.ProductID,
+			VariantID:   line.VariantID,
 		})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return TransferView{}, ErrInsufficientStock
@@ -267,6 +270,7 @@ func (s *Service) DispatchStockTransfer(ctx context.Context, workspaceID, userID
 			WorkspaceID:       workspaceID,
 			LocationID:        trf.SourceLocationID,
 			ProductID:         line.ProductID,
+			VariantID:         line.VariantID,
 			QuantityOnHand:    newSrcQty,
 			ReservedQuantity:  srcBal.ReservedQuantity,
 			InTransitQuantity: srcBal.InTransitQuantity,
@@ -279,6 +283,7 @@ func (s *Service) DispatchStockTransfer(ctx context.Context, workspaceID, userID
 		if _, err := q.CreateInventoryMovement(ctx, db.CreateInventoryMovementParams{
 			WorkspaceID:        workspaceID,
 			ProductID:          line.ProductID,
+			VariantID:          line.VariantID,
 			GoodsReceiptLineID: pgtype.Int8{},
 			LocationID:         pgtype.Int8{Int64: trf.SourceLocationID, Valid: true},
 			MovementType:       "transfer_out",
@@ -296,6 +301,7 @@ func (s *Service) DispatchStockTransfer(ctx context.Context, workspaceID, userID
 			WorkspaceID: workspaceID,
 			LocationID:  trf.DestinationLocationID,
 			ProductID:   line.ProductID,
+			VariantID:   line.VariantID,
 		})
 		if errors.Is(err, pgx.ErrNoRows) {
 			// initialize balance for destination
@@ -303,6 +309,7 @@ func (s *Service) DispatchStockTransfer(ctx context.Context, workspaceID, userID
 				WorkspaceID:      workspaceID,
 				LocationID:       trf.DestinationLocationID,
 				ProductID:        line.ProductID,
+				VariantID:        line.VariantID,
 				QuantityOnHand:   decimal.Zero,
 				ValueOnHandMinor: 0,
 			})
@@ -318,6 +325,7 @@ func (s *Service) DispatchStockTransfer(ctx context.Context, workspaceID, userID
 			WorkspaceID:       workspaceID,
 			LocationID:        trf.DestinationLocationID,
 			ProductID:         line.ProductID,
+			VariantID:         line.VariantID,
 			QuantityOnHand:    dstBal.QuantityOnHand,
 			ReservedQuantity:  dstBal.ReservedQuantity,
 			InTransitQuantity: newInTransit,
@@ -424,6 +432,7 @@ func (s *Service) ReceiveStockTransfer(ctx context.Context, workspaceID, userID,
 			WorkspaceID: workspaceID,
 			LocationID:  trf.DestinationLocationID,
 			ProductID:   line.ProductID,
+			VariantID:   line.VariantID,
 		})
 		if err != nil {
 			return TransferView{}, err
@@ -444,6 +453,7 @@ func (s *Service) ReceiveStockTransfer(ctx context.Context, workspaceID, userID,
 			WorkspaceID:       workspaceID,
 			LocationID:        trf.DestinationLocationID,
 			ProductID:         line.ProductID,
+			VariantID:         line.VariantID,
 			QuantityOnHand:    newOnHand,
 			ReservedQuantity:  dstBal.ReservedQuantity,
 			InTransitQuantity: newInTransit,
@@ -456,6 +466,7 @@ func (s *Service) ReceiveStockTransfer(ctx context.Context, workspaceID, userID,
 		if _, err := q.CreateInventoryMovement(ctx, db.CreateInventoryMovementParams{
 			WorkspaceID:        workspaceID,
 			ProductID:          line.ProductID,
+			VariantID:          line.VariantID,
 			GoodsReceiptLineID: pgtype.Int8{},
 			LocationID:         pgtype.Int8{Int64: trf.DestinationLocationID, Valid: true},
 			MovementType:       "transfer_in",

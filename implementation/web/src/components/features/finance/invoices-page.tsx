@@ -461,6 +461,7 @@ function InvoicesContent({ workspaceId, currency, startOpen }: WorkspaceInfo & {
             unit_price: item.unit_price,
             discount_amount: item.discount_amount || undefined,
             product_id: item.product_id || undefined,
+            variant_id: item.variant_id || undefined,
           })),
         },
         key,

@@ -8,7 +8,7 @@
 
 import { Minus, PencilSimple, Plus, Trash, WarningCircle } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, type ComponentProps } from "react";
 
 import { AppButton } from "@/components/ui/app-button";
 import { AppInput } from "@/components/ui/app-input";
@@ -18,6 +18,7 @@ import { createIdempotencyKey } from "@/lib/utils";
 import { financeApi, formatMinorAmount } from "@/lib/money";
 import { productKeys, productsApi } from "@/lib/products";
 import type { Product } from "@/types/products";
+import type { ProductVariant } from "@/types/finance";
 
 export interface LineItem {
   description: string;
@@ -26,6 +27,7 @@ export interface LineItem {
   discount_amount?: string;
   /** The product this line sells or buys, when it came from (or was saved to) your products. */
   product_id?: number;
+  variant_id?: number;
   /** True when that product counts stock. */
   tracks_stock?: boolean;
 }
@@ -85,6 +87,7 @@ function ItemForm({
   context,
   initial,
   product,
+  variant,
   isEditing,
   onSave,
   onCancel,
@@ -94,6 +97,7 @@ function ItemForm({
   context: LineItemsContext;
   initial: LineItem;
   product?: Product;
+  variant?: ProductVariant;
   isEditing: boolean;
   onSave: (line: LineItem) => void;
   onCancel: () => void;
@@ -108,7 +112,8 @@ function ItemForm({
   const show = (minor: bigint) => formatMinorAmount(minor.toString(), currency, EXPONENT);
   const quantity = Number(/^\d+$/.test(line.quantity) ? line.quantity : "0");
   const canSaveToProducts = !line.product_id && !isEditing;
-  const inStock = product?.kind === "stock_tracked" ? Number(product.quantity_on_hand) : null;
+  const stockQuantity = variant?.quantity_on_hand ?? product?.quantity_on_hand;
+  const inStock = product?.kind === "stock_tracked" ? Number(stockQuantity) : null;
   const short = context !== "purchase" && inStock !== null && quantity > inStock;
 
   const step = (delta: number) => setLine({ ...line, quantity: String(Math.max(1, quantity + delta)) });
@@ -188,10 +193,10 @@ function ItemForm({
         <p className={`flex items-center gap-1.5 text-[12px] ${short ? "font-medium text-danger" : "text-muted"}`}>
           {short ? <WarningCircle size={14} weight="fill" aria-hidden="true" /> : null}
           {context === "purchase"
-            ? `${stockNumber(product?.quantity_on_hand)} ${unitWord(product?.unit_name ?? "")} in stock now. This purchase adds ${quantity || 0}.`
+            ? `${stockNumber(stockQuantity)} ${unitWord(product?.unit_name ?? "")} in stock now. This purchase adds ${quantity || 0}.`
             : short
-              ? `Only ${stockNumber(product?.quantity_on_hand)} ${unitWord(product?.unit_name ?? "")} in stock. Add stock first, or lower the quantity.`
-              : `${stockNumber(product?.quantity_on_hand)} ${unitWord(product?.unit_name ?? "")} in stock. Saving takes ${quantity || 0} out.`}
+              ? `Only ${stockNumber(stockQuantity)} ${variant?.name ?? product?.name} left in stock. Add stock first, or lower the quantity.`
+              : `${stockNumber(stockQuantity)} ${unitWord(product?.unit_name ?? "")} in stock. Saving takes ${quantity || 0} out.`}
         </p>
       ) : null}
 
@@ -269,6 +274,37 @@ function ItemForm({
       </div>
     </div>
   );
+}
+
+function VariantLineForm(props: ComponentProps<typeof ItemForm> & { product: Product }) {
+  const variants = useQuery({
+    queryKey: ["product-variants", props.workspaceId, props.product.id],
+    queryFn: () => financeApi.listProductVariants(props.workspaceId, props.product.id),
+  });
+  const [chosen, setChosen] = useState<number | undefined>(props.initial.variant_id);
+  if (variants.isPending) return <p className="p-4 text-[13px] text-muted">Loading variants…</p>;
+  if (variants.isError) return <p className="p-4 text-[13px] text-danger">Variants could not be loaded. Try again.</p>;
+  const choices = variants.data.filter((variant) => variant.is_active && !variant.is_default);
+  if (!choices.length) return <ItemForm {...props} />;
+  const selected = choices.find((variant) => variant.id === chosen);
+  if (!selected) {
+    return <div className="space-y-3">
+      <p className="text-[14px] font-semibold">Which one?</p>
+      <div className="space-y-2">
+        {choices.map((variant) => <button key={variant.id} type="button" onClick={() => setChosen(variant.id)}
+          className="flex w-full cursor-pointer items-center justify-between rounded-xl border border-border p-3 text-left hover:bg-surface-secondary">
+          <span><span className="block text-[14px] font-semibold">{variant.name}</span><span className="text-[12px] text-muted">{stockNumber(variant.quantity_on_hand)} in stock</span></span>
+          <span className="text-[13px] font-semibold tabular">{formatMinorAmount(props.context === "purchase" ? variant.cost_price_minor : variant.selling_price_minor, variant.currency, variant.currency_exponent)}</span>
+        </button>)}
+      </div>
+      <AppButton variant="ghost" label="Back" onPress={props.onCancel} />
+    </div>;
+  }
+  const price = props.context === "purchase" ? selected.cost_price_minor : selected.selling_price_minor;
+  return <ItemForm key={selected.id} {...props} variant={selected}
+    initial={{ ...props.initial, variant_id: selected.id, description: `${props.product.name} · ${selected.name}`,
+      unit_price: minorToMajor(price, selected.currency_exponent) }}
+    onCancel={() => setChosen(undefined)} />;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -410,7 +446,7 @@ export function LineItemsEditor({
                   }
                 : { description: initialName, quantity: "1", unit_price: "", discount_amount: "" };
             return (
-              <ItemForm
+              product ? <VariantLineForm
                 workspaceId={workspaceId}
                 currency={currency}
                 context={context}
@@ -424,7 +460,15 @@ export function LineItemsEditor({
                   if (!picked && !editing) void catalogue.refetch();
                   done({ id: "done", label: line.description });
                 }}
-              />
+              /> : <ItemForm
+                workspaceId={workspaceId} currency={currency} context={context} initial={initial}
+                isEditing={Boolean(editing)} onCancel={editing ? () => setDrawer(null) : cancel}
+                onSave={(line) => {
+                  if (editing && drawer.editIndex !== undefined) onUpdate(drawer.editIndex, line);
+                  else onAdd(line);
+                  if (!editing) void catalogue.refetch();
+                  done({ id: "done", label: line.description });
+                }} />
             );
           }}
         />

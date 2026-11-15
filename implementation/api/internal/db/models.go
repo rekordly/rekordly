@@ -1324,7 +1324,7 @@ type InventoryBalance struct {
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 	ReservedQuantity  decimal.Decimal    `json:"reserved_quantity"`
 	InTransitQuantity decimal.Decimal    `json:"in_transit_quantity"`
-	VariantID         pgtype.Int8        `json:"variant_id"`
+	VariantID         int64              `json:"variant_id"`
 }
 
 type InventoryCostingSetting struct {
@@ -1362,7 +1362,7 @@ type InventoryMovement struct {
 	LocationID         pgtype.Int8        `json:"location_id"`
 	SourceType         string             `json:"source_type"`
 	SourceID           pgtype.Int8        `json:"source_id"`
-	VariantID          pgtype.Int8        `json:"variant_id"`
+	VariantID          int64              `json:"variant_id"`
 }
 
 type InventoryOpeningEntry struct {
@@ -2442,6 +2442,8 @@ type ProductVariant struct {
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 	CostPriceMinor      int64              `json:"cost_price_minor"`
 	CompareAtPriceMinor pgtype.Int8        `json:"compare_at_price_minor"`
+	Position            int32              `json:"position"`
+	ArchivedAt          pgtype.Timestamptz `json:"archived_at"`
 }
 
 type ProjectionRebuildRun struct {

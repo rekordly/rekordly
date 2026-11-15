@@ -457,10 +457,13 @@ func (q *Queries) ListProductPriceHistory(ctx context.Context, arg ListProductPr
 }
 
 const listProductStockByOutlet = `-- name: ListProductStockByOutlet :many
-SELECT b.location_id, l.name AS location_name, b.quantity_on_hand, b.value_on_hand_minor
+SELECT b.location_id, l.name AS location_name,
+       SUM(b.quantity_on_hand)::numeric AS quantity_on_hand,
+       SUM(b.value_on_hand_minor)::bigint AS value_on_hand_minor
 FROM inventory_balances b
 JOIN inventory_locations l ON l.id = b.location_id AND l.workspace_id = b.workspace_id
 WHERE b.workspace_id = $1 AND b.product_id = $2
+GROUP BY b.location_id, l.name
 ORDER BY l.name
 `
 
@@ -511,8 +514,8 @@ SELECT
     v.compare_at_price_minor, v.currency, v.currency_exponent,
     COALESCE((SELECT SUM(b.quantity_on_hand) FROM inventory_balances b
               WHERE b.workspace_id = p.workspace_id AND b.product_id = p.id), 0)::numeric AS quantity_on_hand,
-    (SELECT COUNT(*) FROM product_variants pv
-      WHERE pv.workspace_id = p.workspace_id AND pv.product_id = p.id AND pv.is_active)::bigint AS variant_count
+    GREATEST((SELECT COUNT(*) FROM product_variants pv
+      WHERE pv.workspace_id = p.workspace_id AND pv.product_id = p.id AND pv.is_active AND pv.archived_at IS NULL AND pv.is_default = false), 1)::bigint AS variant_count
 FROM products p
 JOIN product_variants v ON v.product_id = p.id AND v.workspace_id = p.workspace_id AND v.is_default = true
 WHERE p.workspace_id = $1
@@ -646,7 +649,7 @@ SET sku = $1,
     compare_at_price_minor = $5,
     updated_at = now()
 WHERE workspace_id = $6 AND id = $7
-RETURNING id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor, compare_at_price_minor
+RETURNING id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor, compare_at_price_minor, position, archived_at
 `
 
 type UpdateDefaultVariantV2Params struct {
@@ -686,6 +689,8 @@ func (q *Queries) UpdateDefaultVariantV2(ctx context.Context, arg UpdateDefaultV
 		&i.UpdatedAt,
 		&i.CostPriceMinor,
 		&i.CompareAtPriceMinor,
+		&i.Position,
+		&i.ArchivedAt,
 	)
 	return i, err
 }

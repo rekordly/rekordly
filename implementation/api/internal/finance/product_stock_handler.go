@@ -16,6 +16,7 @@ import (
 
 // ProductStockChangeInput adds or removes stock for one product, by hand.
 type ProductStockChangeInput struct {
+	VariantID      *int64 `json:"variant_id"`
 	Direction      string `json:"direction" binding:"required"` // add | remove
 	Quantity       string `json:"quantity" binding:"required"`
 	Reason         string `json:"reason" binding:"required"`
@@ -42,6 +43,9 @@ func (s *Service) ChangeProductStock(ctx context.Context, workspaceID, userID, p
 	}
 	direction := strings.ToLower(strings.TrimSpace(in.Direction))
 	reason := strings.ToLower(strings.TrimSpace(in.Reason))
+	if reason == "opening_stock" {
+		reason = "restock"
+	}
 	switch direction {
 	case "add":
 		if !stockAddReasons[reason] {
@@ -79,7 +83,7 @@ func (s *Service) ChangeProductStock(ctx context.Context, workspaceID, userID, p
 	return s.CreateStockAdjustment(ctx, workspaceID, userID, CreateStockAdjustmentInput{
 		LocationID: location.ID, ReasonCode: reason, Notes: strings.TrimSpace(in.Note), OccurredOn: occurred,
 		IdempotencyKey: in.IdempotencyKey,
-		Lines:          []CreateAdjustmentLineInput{{ProductID: product.ID, QuantityDelta: delta.String(), UnitCost: unitCost}},
+		Lines:          []CreateAdjustmentLineInput{{ProductID: product.ID, VariantID: in.VariantID, QuantityDelta: delta.String(), UnitCost: unitCost}},
 	})
 }
 

@@ -12,7 +12,6 @@ import {
   Cube,
   ImageSquare,
   PencilSimple,
-  Plus,
   Stack,
   Tag,
 } from "@phosphor-icons/react";
@@ -22,19 +21,18 @@ import { useState } from "react";
 
 import { Alert } from "@/components/ui/alert";
 import { AppButton } from "@/components/ui/app-button";
-import { AppInput } from "@/components/ui/app-input";
 import { KpiCard } from "@/components/ui/cards";
+import { DataView } from "@/components/ui/data-view";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { FormDrawer } from "@/components/ui/form-drawer";
 import { EmptyState, Page, Segmented, StatusPill, type StatusTone } from "@/components/ui/page";
-import { MoneyInput } from "@/components/ui/money-input";
 import { RichText } from "@/components/ui/rich-text-editor";
+import { ChangePriceDrawer } from "./product-price-drawer";
 import { ProductStockPanel } from "./product-stock";
-import { productTypeLabel, toMinor, unitLabel, useOutlets, useProductCollections } from "@/components/pickers";
+import { productTypeLabel, unitLabel, useOutlets, useProductCollections } from "@/components/pickers";
 import { KpiRow } from "@/components/features/finance/dashboard-parts";
-import { useFinanceAction, WorkspaceGate, type WorkspaceInfo } from "@/components/features/finance/shared";
+import { WorkspaceGate, type WorkspaceInfo } from "@/components/features/finance/shared";
 import { formatDate } from "@/lib/format";
-import { financeApi, formatMinorAmount, moneyKeys } from "@/lib/money";
+import { formatMinorAmount } from "@/lib/money";
 import { productKeys, productsApi } from "@/lib/products";
 import type { ProductDetail, ProductStatus } from "@/types/products";
 
@@ -45,7 +43,6 @@ const TABS = [
   { key: "overview", label: "Overview" },
   { key: "variants", label: "Variants" },
   { key: "stock", label: "Stock" },
-  { key: "prices", label: "Price history" },
   { key: "history", label: "History" },
 ] as const;
 
@@ -72,122 +69,89 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-function VariantsPanel({ workspaceId, detail }: { workspaceId: number; detail: ProductDetail }) {
+function VariantsPanel({ detail }: { detail: ProductDetail }) {
   const product = detail.product;
-  const options = useQuery({
-    queryKey: [...moneyKeys.workspace(workspaceId), "product-options", product.id],
-    queryFn: () => financeApi.listProductOptions(workspaceId, product.id),
-  });
-  const variants = useQuery({
-    queryKey: [...moneyKeys.workspace(workspaceId), "product-variants", product.id],
-    queryFn: () => financeApi.listProductVariants(workspaceId, product.id),
-  });
-  const [optionOpen, setOptionOpen] = useState(false);
-  const [variantOpen, setVariantOpen] = useState(false);
-  const [option, setOption] = useState({ name: "", values: "" });
-  const [variant, setVariant] = useState({ name: "", price: "", cost: "", sku: "", barcode: "" });
-  const [error, setError] = useState("");
-
-  const createOption = useFinanceAction(
-    workspaceId,
-    () => financeApi.createProductOption(workspaceId, product.id, { name: option.name.trim(), values: option.values.split(",").map((value) => value.trim()).filter(Boolean) }),
-    { success: "Option added", onDone: () => { setOptionOpen(false); setOption({ name: "", values: "" }); } },
-  );
-  const createVariant = useFinanceAction(
-    workspaceId,
-    () =>
-      financeApi.createProductVariant(workspaceId, product.id, {
-        name: variant.name.trim(),
-        selling_price: variant.price,
-        cost_price: variant.cost || undefined,
-        sku: variant.sku.trim() || undefined,
-        barcode: variant.barcode.trim() || undefined,
-      }),
-    { success: "Variant added", onDone: () => { setVariantOpen(false); setVariant({ name: "", price: "", cost: "", sku: "", barcode: "" }); } },
-  );
-
+  const options = detail.options ?? [];
+  const variants = (detail.variants ?? []).filter((variant) => !variant.is_default && !variant.archived_at);
+  const qty = (value: string) => String(Math.round(Number(value || 0) * 10000) / 10000);
   return (
-    <div className="space-y-4">
-      <Panel title="Options" action={<AppButton size="sm" variant="secondary" startContent={<Plus weight="bold" />} label="New option" onPress={() => setOptionOpen(true)} />}>
-        {(options.data ?? []).length === 0 ? (
-          <p className="text-[13px] text-muted">No options yet. Add one like Size (S, M, L) or Colour (Red, Blue).</p>
-        ) : (
-          <ul className="space-y-2">
-            {(options.data ?? []).map((item) => (
-              <li key={item.id} className="flex flex-wrap items-center gap-2">
-                <span className="text-[13px] font-semibold">{item.name}</span>
-                {item.values.map((value) => (
-                  <span key={value} className="rounded-full bg-surface-secondary px-2.5 py-1 text-[12px]">
-                    {value}
-                  </span>
-                ))}
+    <div className="grid items-start gap-4 lg:grid-cols-12">
+      <div className="lg:col-span-4">
+      <Panel
+        title="Options"
+        action={
+          <Link href={`/products/${product.id}/edit?section=options`} className="text-[13px] font-semibold text-primary hover:underline">
+            Edit options
+          </Link>
+        }
+      >
+        {options.length ? (
+          <ul className="divide-y divide-separator">
+            {options.map((option) => (
+              <li key={option.id} className="py-3 first:pt-0 last:pb-0">
+                <span className="block text-[13px] font-semibold">{option.name}</span>
+                <span className="mt-1.5 flex flex-wrap gap-1.5">
+                  {option.values.map((value) => (
+                    <span key={value} className="rounded-full bg-surface-secondary px-2.5 py-1 text-[12px] font-medium">
+                      {value}
+                    </span>
+                  ))}
+                </span>
               </li>
             ))}
           </ul>
+        ) : (
+          <p className="text-[13px] text-muted">This product has one version.</p>
         )}
       </Panel>
-
-      <Panel title="Sellable variants" action={<AppButton size="sm" startContent={<Plus weight="bold" />} label="New variant" onPress={() => setVariantOpen(true)} />}>
-        <ul className="divide-y divide-separator">
-          {(variants.data ?? []).map((item) => (
-            <li key={item.id} className="flex items-center justify-between gap-3 py-3">
-              <span className="min-w-0">
-                <span className="flex items-center gap-2 text-[14px] font-semibold">
-                  {item.name}
-                  {item.is_default && item.name.toLowerCase() !== "default" ? <span className="rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-semibold text-primary-soft-foreground">Default</span> : null}
-                  {!item.is_active ? <span className="rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] text-muted">Inactive</span> : null}
+      </div>
+      <div className="lg:col-span-8">
+      {variants.length ? (
+        <DataView
+          title="Variants"
+          heading="Variants"
+          rows={variants}
+          rowKey={(variant) => variant.id}
+          embedded
+          selectable={false}
+          columns={[
+            {
+              key: "name",
+              label: "Variant",
+              render: (variant) => (
+                <span>
+                  <span className="block font-semibold">{variant.name}</span>
+                  <span className="block font-mono text-[11px] text-muted">{variant.sku || "No SKU"}</span>
                 </span>
-                <span className="block text-[12px] text-muted">{item.sku ? `SKU ${item.sku}` : "No SKU"}</span>
-              </span>
-              <span className="shrink-0 text-right text-[13px] tabular">
-                <span className="block font-semibold">{formatMinorAmount(item.selling_price_minor, item.currency, item.currency_exponent)}</span>
-                <span className="block text-[12px] text-muted">Cost {formatMinorAmount(item.cost_price_minor, item.currency, item.currency_exponent)}</span>
-              </span>
-            </li>
-          ))}
-        </ul>
-      </Panel>
-
-      <FormDrawer
-        isOpen={optionOpen}
-        onOpenChange={setOptionOpen}
-        title="New option"
-        description="Something the product comes in different kinds of."
-        submitLabel="Add option"
-        isSubmitting={createOption.isPending}
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (!option.name.trim() || !option.values.trim()) return setError("Give the option a name and at least one value");
-          setError("");
-          createOption.mutate(undefined);
-        }}
-      >
-        <AppInput label="Option name" isRequired placeholder="e.g. Size" value={option.name} onChange={(event) => setOption({ ...option, name: event.target.value })} errorMessage={error || undefined} />
-        <AppInput label="Values" isRequired placeholder="S, M, L, XL" description="Separate values with commas." value={option.values} onChange={(event) => setOption({ ...option, values: event.target.value })} />
-      </FormDrawer>
-
-      <FormDrawer
-        isOpen={variantOpen}
-        onOpenChange={setVariantOpen}
-        title="New variant"
-        description="A version you sell separately, with its own price."
-        submitLabel="Add variant"
-        isSubmitting={createVariant.isPending}
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (!variant.name.trim() || toMinor(variant.price) <= BigInt(0)) return setError("Name the variant and give it a price");
-          setError("");
-          createVariant.mutate(undefined);
-        }}
-      >
-        <AppInput label="Name" isRequired placeholder="e.g. Red / Large" value={variant.name} onChange={(event) => setVariant({ ...variant, name: event.target.value })} errorMessage={error || undefined} />
-        <div className="grid gap-4 sm:grid-cols-2">
-          <MoneyInput label="Selling price" isRequired currency={product.currency} value={variant.price} onValueChange={(value) => setVariant({ ...variant, price: value })} />
-          <MoneyInput label="Cost price" currency={product.currency} value={variant.cost} onValueChange={(value) => setVariant({ ...variant, cost: value })} />
-          <AppInput label="SKU" placeholder="Optional" value={variant.sku} onChange={(event) => setVariant({ ...variant, sku: event.target.value.toUpperCase() })} />
-          <AppInput label="Barcode" placeholder="Optional" value={variant.barcode} onChange={(event) => setVariant({ ...variant, barcode: event.target.value })} />
-        </div>
-      </FormDrawer>
+              ),
+            },
+            { key: "price", label: "Price", align: "right", render: (variant) => <span className="font-semibold tabular">{formatMinorAmount(variant.selling_price_minor, product.currency, product.currency_exponent)}</span> },
+            { key: "cost", label: "Cost", align: "right", render: (variant) => <span className="tabular text-muted">{formatMinorAmount(variant.cost_price_minor, product.currency, product.currency_exponent)}</span> },
+            { key: "stock", label: "Stock", align: "right", render: (variant) => <span className={`tabular ${Number(variant.quantity_on_hand) > 0 ? "font-semibold" : "text-muted"}`}>{qty(variant.quantity_on_hand)}</span> },
+            { key: "status", label: "Status", align: "right", render: (variant) => <StatusPill tone={variant.is_active ? "success" : "neutral"}>{variant.is_active ? "On sale" : "Off"}</StatusPill> },
+          ]}
+          renderCard={(variant) => (
+            <div className="space-y-1 rounded-xl border border-border bg-surface p-3 text-[13px]">
+              <div className="flex justify-between">
+                <strong>{variant.name}</strong>
+                <span>{variant.is_active ? "On" : "Off"}</span>
+              </div>
+              <p>
+                {formatMinorAmount(variant.selling_price_minor, product.currency, product.currency_exponent)} · {qty(variant.quantity_on_hand)} in stock
+              </p>
+              <p className="text-muted">
+                Cost {formatMinorAmount(variant.cost_price_minor, product.currency, product.currency_exponent)} · SKU {variant.sku || "—"}
+              </p>
+            </div>
+          )}
+          empty={<p>No variants yet.</p>}
+        />
+      ) : (
+        <Panel title="Variants">
+          <p className="text-[13px] text-muted">No variants. Add options like Size or Colour to sell this product in different versions.</p>
+        </Panel>
+      )}
+      </div>
     </div>
   );
 }
@@ -196,9 +160,10 @@ function ProductDetailContent({ workspaceId, productId }: WorkspaceInfo & { prod
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<Tab>("overview");
   const [confirmArchive, setConfirmArchive] = useState(false);
+  const [priceOpen, setPriceOpen] = useState(false);
   const [activeImage, setActiveImage] = useState(0);
   const detail = useQuery({ queryKey: productKeys.detail(workspaceId, productId), queryFn: () => productsApi.get(workspaceId, productId) });
-  const prices = useQuery({ queryKey: productKeys.priceHistory(workspaceId, productId), queryFn: () => productsApi.priceHistory(workspaceId, productId), enabled: tab === "prices" });
+  const prices = useQuery({ queryKey: productKeys.priceHistory(workspaceId, productId), queryFn: () => productsApi.priceHistory(workspaceId, productId), enabled: tab === "history" });
   const events = useQuery({ queryKey: productKeys.events(workspaceId, productId), queryFn: () => productsApi.events(workspaceId, productId), enabled: tab === "history" });
   const collections = useProductCollections(workspaceId);
   const outlets = useOutlets(workspaceId);
@@ -235,6 +200,7 @@ function ProductDetailContent({ workspaceId, productId }: WorkspaceInfo & { prod
   }
 
   const { product } = detail.data;
+  const activeVariants = (detail.data.variants ?? []).filter((variant) => !variant.is_default && !variant.archived_at && variant.is_active !== false);
   const show = (minor?: string | null) => (minor ? formatMinorAmount(minor, product.currency, product.currency_exponent) : "—");
   const priceMinor = BigInt(product.selling_price_minor);
   const costMinor = BigInt(product.cost_price_minor);
@@ -242,9 +208,20 @@ function ProductDetailContent({ workspaceId, productId }: WorkspaceInfo & { prod
   const margin = priceMinor > BigInt(0) && costMinor > BigInt(0) ? Number((profit * BigInt(1000)) / priceMinor) / 10 : null;
   const unit = unitLabel(product.unit_name).replace(/ \(.*\)/, "").toLowerCase();
   const isArchived = product.status === "archived";
-  const productCollections = (collections.data ?? []).filter((collection) => detail.data.collection_ids.includes(collection.id));
-  const productOutlets = (outlets.data ?? []).filter((outlet) => detail.data.outlet_ids.includes(outlet.id));
+  const productCollections = (collections.data ?? []).filter((collection) => (detail.data.collection_ids ?? []).includes(collection.id));
+  const productOutlets = (outlets.data ?? []).filter((outlet) => (detail.data.outlet_ids ?? []).includes(outlet.id));
   const image = product.image_urls[Math.min(activeImage, product.image_urls.length - 1)];
+
+  const variantPrices = activeVariants.map((variant) => BigInt(variant.selling_price_minor || "0")).filter((v) => v > BigInt(0));
+  const minVariantPrice = variantPrices.length ? variantPrices.reduce((a, b) => (a < b ? a : b)) : priceMinor;
+  const maxVariantPrice = variantPrices.length ? variantPrices.reduce((a, b) => (a > b ? a : b)) : priceMinor;
+  const hasPriceRange = activeVariants.length > 1 && minVariantPrice !== maxVariantPrice;
+  const sellingPriceValue = hasPriceRange ? `From ${show(minVariantPrice.toString())}` : show(product.selling_price_minor);
+  const sellingPriceHint = hasPriceRange
+    ? `Up to ${show(maxVariantPrice.toString())} across ${activeVariants.length} variants`
+    : product.compare_at_price_minor
+      ? `Was ${show(product.compare_at_price_minor)}`
+      : `Per ${unit}`;
 
   return (
     <Page>
@@ -277,7 +254,10 @@ function ProductDetailContent({ workspaceId, productId }: WorkspaceInfo & { prod
             {isArchived ? (
               <AppButton variant="secondary" startContent={<ArrowCounterClockwise />} label="Restore" isLoading={archive.isPending} onPress={() => archive.mutate(false)} />
             ) : (
-              <AppButton variant="ghost" startContent={<Archive />} label="Archive" onPress={() => setConfirmArchive(true)} />
+              <>
+                <AppButton variant="ghost" startContent={<Archive />} label="Archive" onPress={() => setConfirmArchive(true)} />
+                <AppButton variant="secondary" startContent={<Tag />} label="Change price" onPress={() => setPriceOpen(true)} />
+              </>
             )}
             <Link href={`/products/${product.id}/edit`} className="inline-flex h-10 items-center gap-2 rounded-full bg-accent px-5 text-[14px] font-medium text-accent-foreground transition-opacity hover:opacity-90">
               <PencilSimple size={16} aria-hidden="true" />
@@ -290,9 +270,14 @@ function ProductDetailContent({ workspaceId, productId }: WorkspaceInfo & { prod
       {isArchived ? <Alert status="warning" description="This product is archived. It is hidden from new sales and invoices until you restore it." /> : null}
 
       <KpiRow className="xl:grid-cols-4">
-        <KpiCard tone="accent" icon={Tag} label="Selling price" value={show(product.selling_price_minor)} hint={product.compare_at_price_minor ? `Was ${show(product.compare_at_price_minor)}` : `Per ${unit}`} />
+        <KpiCard tone="accent" icon={Tag} label="Selling price" value={sellingPriceValue} hint={sellingPriceHint} />
         <KpiCard icon={Coins} label="Profit per sale" value={costMinor > BigInt(0) ? formatMinorAmount(profit.toString(), product.currency, product.currency_exponent) : "—"} hint={margin !== null ? `${margin.toFixed(1)}% margin` : "Add a cost price to see this"} />
-        <KpiCard icon={Cube} label="In stock" value={product.kind === "stock_tracked" ? `${Number(product.quantity_on_hand)}` : "Not tracked"} hint={product.kind === "stock_tracked" ? `${unit} across outlets` : productTypeLabel(product.kind)} />
+        <KpiCard
+          icon={Cube}
+          label="In stock"
+          value={product.kind === "stock_tracked" ? `${Number(product.quantity_on_hand)}` : "Not tracked"}
+          hint={product.kind === "stock_tracked" ? (activeVariants.length > 1 ? `${unit} across ${activeVariants.length} variants` : `${unit} across outlets`) : productTypeLabel(product.kind)}
+        />
         <KpiCard icon={Stack} label="Variants" value={String(product.variant_count)} hint={product.variant_count > 1 ? "Sold in different versions" : "One version"} />
       </KpiRow>
 
@@ -364,76 +349,79 @@ function ProductDetailContent({ workspaceId, productId }: WorkspaceInfo & { prod
         </div>
       ) : null}
 
-      {tab === "variants" ? <VariantsPanel workspaceId={workspaceId} detail={detail.data} /> : null}
+      {tab === "variants" ? <VariantsPanel detail={detail.data} /> : null}
 
       {tab === "stock" ? (
         <ProductStockPanel workspaceId={workspaceId} detail={detail.data} />
       ) : null}
 
-      {tab === "prices" ? (
-        <Panel title="Price history">
-          {prices.isPending ? (
-            <div className="h-24 animate-pulse rounded-xl bg-default" />
-          ) : (prices.data ?? []).length === 0 ? (
-            <p className="text-[13px] text-muted">No price changes yet.</p>
-          ) : (
-            <div className="scroll-thin overflow-x-auto">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th className="text-right">Selling price</th>
-                    <th className="text-right">Cost price</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(prices.data ?? []).map((change) => {
-                    const money = (minor?: string | null) => (minor ? formatMinorAmount(minor, change.currency, change.currency_exponent) : "—");
-                    return (
-                      <tr key={change.id}>
-                        <td>{formatDate(change.changed_at)}</td>
-                        <td className="text-right tabular">
-                          {change.old_selling_price_minor && change.old_selling_price_minor !== change.new_selling_price_minor ? (
-                            <span className="mr-2 text-muted line-through">{money(change.old_selling_price_minor)}</span>
-                          ) : null}
-                          <span className="font-semibold">{money(change.new_selling_price_minor)}</span>
-                        </td>
-                        <td className="text-right tabular">
-                          {change.old_cost_price_minor && change.old_cost_price_minor !== change.new_cost_price_minor ? (
-                            <span className="mr-2 text-muted line-through">{money(change.old_cost_price_minor)}</span>
-                          ) : null}
-                          {money(change.new_cost_price_minor)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Panel>
-      ) : null}
-
       {tab === "history" ? (
-        <Panel title="History">
-          {events.isPending ? (
-            <div className="h-24 animate-pulse rounded-xl bg-default" />
-          ) : (events.data ?? []).length === 0 ? (
-            <EmptyState icon={ClockCounterClockwise} title="No history yet" description="Changes to this product will show here." />
-          ) : (
-            <ol className="relative ml-2 space-y-4 border-l border-separator pl-5">
-              {(events.data ?? []).map((event) => (
-                <li key={event.id} className="relative">
-                  <span className={`absolute top-1.5 -left-[25px] size-2.5 rounded-full ring-4 ring-surface ${event.event_type === "price_changed" ? "bg-secondary" : event.event_type === "archived" ? "bg-muted" : "bg-primary"}`} />
-                  <p className="text-[14px] font-medium">{event.summary}</p>
-                  <p className="text-[12px] text-muted">{formatDate(event.created_at)}</p>
-                </li>
-              ))}
-            </ol>
-          )}
-        </Panel>
+        <div className="space-y-4">
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Panel title="Price history">
+              {prices.isPending ? (
+                <div className="h-24 animate-pulse rounded-xl bg-default" />
+              ) : (prices.data ?? []).length === 0 ? (
+                <p className="text-[13px] text-muted">No price changes yet.</p>
+              ) : (
+                <div className="scroll-thin overflow-x-auto">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th className="text-right">Selling price</th>
+                        <th className="text-right">Cost price</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(prices.data ?? []).map((change) => {
+                        const money = (minor?: string | null) => (minor ? formatMinorAmount(minor, change.currency, change.currency_exponent) : "—");
+                        return (
+                          <tr key={change.id}>
+                            <td>{formatDate(change.changed_at)}</td>
+                            <td className="text-right tabular">
+                              {change.old_selling_price_minor && change.old_selling_price_minor !== change.new_selling_price_minor ? (
+                                <span className="mr-2 text-muted line-through">{money(change.old_selling_price_minor)}</span>
+                              ) : null}
+                              <span className="font-semibold">{money(change.new_selling_price_minor)}</span>
+                            </td>
+                            <td className="text-right tabular">
+                              {change.old_cost_price_minor && change.old_cost_price_minor !== change.new_cost_price_minor ? (
+                                <span className="mr-2 text-muted line-through">{money(change.old_cost_price_minor)}</span>
+                              ) : null}
+                              {money(change.new_cost_price_minor)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Panel>
+
+            <Panel title="Product changes">
+              {events.isPending ? (
+                <div className="h-24 animate-pulse rounded-xl bg-default" />
+              ) : (events.data ?? []).length === 0 ? (
+                <EmptyState icon={ClockCounterClockwise} title="No history yet" description="Changes to this product will show here." />
+              ) : (
+                <ol className="relative ml-2 space-y-4 border-l border-separator pl-5">
+                  {(events.data ?? []).map((event) => (
+                    <li key={event.id} className="relative">
+                      <span className={`absolute top-1.5 -left-[25px] size-2.5 rounded-full ring-4 ring-surface ${event.event_type === "price_changed" ? "bg-secondary" : event.event_type === "archived" ? "bg-muted" : "bg-primary"}`} />
+                      <p className="text-[14px] font-medium">{event.summary}</p>
+                      <p className="text-[12px] text-muted">{formatDate(event.created_at)}</p>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </Panel>
+          </div>
+        </div>
       ) : null}
 
+      {priceOpen ? <ChangePriceDrawer workspaceId={workspaceId} detail={detail.data} onClose={() => setPriceOpen(false)} /> : null}
       <ConfirmDialog
         isOpen={confirmArchive}
         onOpenChange={setConfirmArchive}

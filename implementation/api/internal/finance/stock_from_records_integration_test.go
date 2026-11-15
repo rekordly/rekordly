@@ -119,3 +119,195 @@ func TestStockFollowsSalesPurchasesAndInvoices(t *testing.T) {
 		) x`, ws).Scan(&unbalanced))
 	require.Equal(t, 0, unbalanced)
 }
+
+func TestVariantOptionsAndStock(t *testing.T) {
+	pool := testPool(t)
+	ws, user := createTestWorkspace(t, pool, "variant-stock")
+	svc := finance.NewService(pool)
+	ctx := context.Background()
+
+	created, err := svc.CreateProductV2(ctx, ws, user, finance.SaveProductInput{
+		Name:           "Ankara dress",
+		Kind:           "stock_tracked",
+		Status:         "active",
+		UnitName:       "pc",
+		SellingPrice:   "150.00",
+		CostPrice:      "80.00",
+		Currency:       "NGN",
+		IdempotencyKey: "ankara-create-1",
+	})
+	require.NoError(t, err)
+	pid := created.Product.ID
+	require.Equal(t, int64(1), created.Product.VariantCount)
+
+	// Configure Colour (Red, Blue) x Size (S, M) = 4 sellable variants.
+	configured, err := svc.SaveProductOptions(ctx, ws, user, pid, finance.SaveProductOptionsInput{
+		Options: []finance.SaveOptionInput{
+			{Name: "Colour", Values: []finance.SaveOptionValueInput{{Value: "Red"}, {Value: "Blue"}}},
+			{Name: "Size", Values: []finance.SaveOptionValueInput{{Value: "S"}, {Value: "M"}}},
+		},
+		Variants: []finance.SaveOptionVariantInput{
+			{OptionValues: []string{"Red", "S"}, SellingPrice: "150.00", CostPrice: "80.00", IsActive: true},
+			{OptionValues: []string{"Red", "M"}, SellingPrice: "160.00", CostPrice: "85.00", IsActive: true},
+			{OptionValues: []string{"Blue", "S"}, SellingPrice: "150.00", CostPrice: "80.00", IsActive: true},
+			{OptionValues: []string{"Blue", "M"}, SellingPrice: "160.00", CostPrice: "85.00", IsActive: true},
+		},
+		IdempotencyKey: "ankara-opts-1",
+	})
+	require.NoError(t, err)
+	require.Len(t, configured.Options, 2)
+	require.Equal(t, int64(4), configured.Product.VariantCount)
+
+	variantByName := map[string]finance.VariantView{}
+	for _, v := range configured.Variants {
+		if !v.IsDefault && v.ArchivedAt == nil {
+			variantByName[v.Name] = v
+		}
+	}
+	require.Len(t, variantByName, 4)
+	redS := variantByName["Red / S"].ID
+	redM := variantByName["Red / M"].ID
+	blueS := variantByName["Blue / S"].ID
+	blueM := variantByName["Blue / M"].ID
+
+	// Add stock to Red / S (5), Red / M (3), Blue / S (2).
+	_, err = svc.ChangeProductStock(ctx, ws, user, pid, finance.ProductStockChangeInput{
+		VariantID: &redS, Direction: "add", Quantity: "5", Reason: "restock", UnitCost: "80.00", IdempotencyKey: "v-open-1",
+	})
+	require.NoError(t, err)
+	_, err = svc.ChangeProductStock(ctx, ws, user, pid, finance.ProductStockChangeInput{
+		VariantID: &redM, Direction: "add", Quantity: "3", Reason: "restock", UnitCost: "85.00", IdempotencyKey: "v-open-2",
+	})
+	require.NoError(t, err)
+	_, err = svc.ChangeProductStock(ctx, ws, user, pid, finance.ProductStockChangeInput{
+		VariantID: &blueS, Direction: "add", Quantity: "2", Reason: "restock", UnitCost: "80.00", IdempotencyKey: "v-open-3",
+	})
+	require.NoError(t, err)
+
+	detail, err := svc.GetProduct(ctx, ws, pid)
+	require.NoError(t, err)
+	require.Equal(t, "10", detail.Product.QuantityOnHand)
+
+	// Selling without choosing a variant is refused.
+	_, err = svc.CreateSale(ctx, ws, user, finance.CreateSaleInput{
+		SaleDate:       "2026-11-05",
+		Currency:       "NGN",
+		Items:          []finance.StockLineInput{{ProductID: &pid, Quantity: "1", UnitPrice: "150.00"}},
+		IdempotencyKey: "v-sale-no-variant",
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "choose a variant for Ankara dress")
+
+	// Selling 2 of Red / M reduces only Red / M (from 3 to 1).
+	_, err = svc.CreateSale(ctx, ws, user, finance.CreateSaleInput{
+		SaleDate:       "2026-11-05",
+		Currency:       "NGN",
+		Items:          []finance.StockLineInput{{ProductID: &pid, VariantID: &redM, Quantity: "2", UnitPrice: "160.00"}},
+		IdempotencyKey: "v-sale-redm",
+	})
+	require.NoError(t, err)
+
+	// Selling 3 more of Red / M fails naming Red / M even though Red / S has 5 left.
+	_, err = svc.CreateSale(ctx, ws, user, finance.CreateSaleInput{
+		SaleDate:       "2026-11-05",
+		Currency:       "NGN",
+		Items:          []finance.StockLineInput{{ProductID: &pid, VariantID: &redM, Quantity: "3", UnitPrice: "160.00"}},
+		IdempotencyKey: "v-sale-redm-too-many",
+	})
+	require.Error(t, err)
+	require.True(t, errors.Is(err, finance.ErrInsufficientStock))
+	require.Contains(t, err.Error(), "Only 1 pc of Ankara dress (Red / M) left")
+
+	// Buying 4 of Blue / M adds stock only to Blue / M.
+	_, err = svc.CreatePurchase(ctx, ws, user, finance.CreatePurchaseInput{
+		PurchaseDate:   "2026-11-06",
+		Currency:       "NGN",
+		Items:          []finance.StockLineInput{{ProductID: &pid, VariantID: &blueM, Quantity: "4", UnitPrice: "90.00"}},
+		IdempotencyKey: "v-buy-bluem",
+	})
+	require.NoError(t, err)
+
+	detail, err = svc.GetProduct(ctx, ws, pid)
+	require.NoError(t, err)
+	require.Equal(t, "12", detail.Product.QuantityOnHand) // 5 + 1 + 2 + 4
+
+	// Edit options: keep M, add L, remove S. Red / M and Blue / M keep their IDs and stock; S variants are archived.
+	var colourOptID, sizeOptID, redValID, blueValID, mValID int64
+	for _, opt := range detail.Options {
+		if opt.Name == "Colour" {
+			colourOptID = opt.ID
+			for _, v := range opt.ValueDetails {
+				if v.Value == "Red" {
+					redValID = v.ID
+				}
+				if v.Value == "Blue" {
+					blueValID = v.ID
+				}
+			}
+		}
+		if opt.Name == "Size" {
+			sizeOptID = opt.ID
+			for _, v := range opt.ValueDetails {
+				if v.Value == "M" {
+					mValID = v.ID
+				}
+			}
+		}
+	}
+
+	updated, err := svc.SaveProductOptions(ctx, ws, user, pid, finance.SaveProductOptionsInput{
+		Options: []finance.SaveOptionInput{
+			{ID: colourOptID, Name: "Colour", Values: []finance.SaveOptionValueInput{{ID: redValID, Value: "Red"}, {ID: blueValID, Value: "Blue"}}},
+			{ID: sizeOptID, Name: "Size", Values: []finance.SaveOptionValueInput{{ID: mValID, Value: "M"}, {Value: "L"}}},
+		},
+		Variants: []finance.SaveOptionVariantInput{
+			{ID: redM, OptionValues: []string{"Red", "M"}, SellingPrice: "160.00", CostPrice: "85.00", IsActive: true},
+			{OptionValues: []string{"Red", "L"}, SellingPrice: "170.00", CostPrice: "90.00", IsActive: true},
+			{ID: blueM, OptionValues: []string{"Blue", "M"}, SellingPrice: "160.00", CostPrice: "85.00", IsActive: true},
+			{OptionValues: []string{"Blue", "L"}, SellingPrice: "170.00", CostPrice: "90.00", IsActive: true},
+		},
+		IdempotencyKey: "ankara-opts-2",
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(4), updated.Product.VariantCount)
+
+	var archivedCount int
+	for _, v := range updated.Variants {
+		if v.ArchivedAt != nil {
+			archivedCount++
+		}
+		if v.ID == redM {
+			require.Nil(t, v.ArchivedAt)
+			require.Equal(t, "1", v.QuantityOnHand)
+		}
+		if v.ID == blueM {
+			require.Nil(t, v.ArchivedAt)
+			require.Equal(t, "4", v.QuantityOnHand)
+		}
+	}
+	require.Equal(t, 2, archivedCount, "removed S variants with stock are archived, not deleted")
+
+	movements, err := svc.ListProductStockMovements(ctx, ws, pid, 0, 50)
+	require.NoError(t, err)
+	require.NotEmpty(t, movements)
+	var sawRedMSale, sawBlueMPurchase bool
+	for _, m := range movements {
+		if m.Summary == "Sold" && m.VariantName == "Red / M" {
+			sawRedMSale = true
+		}
+		if m.Summary == "Bought" && m.VariantName == "Blue / M" {
+			sawBlueMPurchase = true
+		}
+	}
+	require.True(t, sawRedMSale)
+	require.True(t, sawBlueMPurchase)
+
+	// Every ledger entry balances.
+	var unbalanced int
+	require.NoError(t, pool.QueryRow(ctx, `
+		SELECT count(*) FROM (
+			SELECT le.id FROM ledger_entries le JOIN ledger_lines ll ON ll.ledger_entry_id = le.id
+			WHERE le.workspace_id = $1 GROUP BY le.id HAVING SUM(ll.debit_minor) <> SUM(ll.credit_minor)
+		) x`, ws).Scan(&unbalanced))
+	require.Equal(t, 0, unbalanced)
+}

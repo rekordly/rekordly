@@ -9,8 +9,8 @@ SELECT
     v.compare_at_price_minor, v.currency, v.currency_exponent,
     COALESCE((SELECT SUM(b.quantity_on_hand) FROM inventory_balances b
               WHERE b.workspace_id = p.workspace_id AND b.product_id = p.id), 0)::numeric AS quantity_on_hand,
-    (SELECT COUNT(*) FROM product_variants pv
-      WHERE pv.workspace_id = p.workspace_id AND pv.product_id = p.id AND pv.is_active)::bigint AS variant_count
+    GREATEST((SELECT COUNT(*) FROM product_variants pv
+      WHERE pv.workspace_id = p.workspace_id AND pv.product_id = p.id AND pv.is_active AND pv.archived_at IS NULL AND pv.is_default = false), 1)::bigint AS variant_count
 FROM products p
 JOIN product_variants v ON v.product_id = p.id AND v.workspace_id = p.workspace_id AND v.is_default = true
 WHERE p.workspace_id = @workspace_id
@@ -58,10 +58,13 @@ SELECT EXISTS (
 )::boolean;
 
 -- name: ListProductStockByOutlet :many
-SELECT b.location_id, l.name AS location_name, b.quantity_on_hand, b.value_on_hand_minor
+SELECT b.location_id, l.name AS location_name,
+       SUM(b.quantity_on_hand)::numeric AS quantity_on_hand,
+       SUM(b.value_on_hand_minor)::bigint AS value_on_hand_minor
 FROM inventory_balances b
 JOIN inventory_locations l ON l.id = b.location_id AND l.workspace_id = b.workspace_id
 WHERE b.workspace_id = @workspace_id AND b.product_id = @product_id
+GROUP BY b.location_id, l.name
 ORDER BY l.name;
 
 -- name: ListProductOutletIDs :many

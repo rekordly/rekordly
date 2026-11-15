@@ -101,11 +101,16 @@ func (s *Service) ReserveStock(ctx context.Context, workspaceID, userID int64, i
 	if err != nil {
 		return StockReservationView{}, err
 	}
+	var requested pgtype.Int8
+	if in.VariantID != nil && *in.VariantID > 0 { requested = pgtype.Int8{Int64: *in.VariantID, Valid: true} }
+	variantID, err := stockVariant(ctx, q, workspaceID, product, requested)
+	if err != nil { return StockReservationView{}, err }
 
 	bal, err := q.GetInventoryBalanceForUpdate(ctx, db.GetInventoryBalanceForUpdateParams{
 		WorkspaceID: workspaceID,
 		LocationID:  location.ID,
 		ProductID:   product.ID,
+		VariantID:   variantID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return StockReservationView{}, ErrInsufficientStock
@@ -124,6 +129,7 @@ func (s *Service) ReserveStock(ctx context.Context, workspaceID, userID int64, i
 		WorkspaceID:       workspaceID,
 		LocationID:        location.ID,
 		ProductID:         product.ID,
+		VariantID:         variantID,
 		QuantityOnHand:    bal.QuantityOnHand,
 		ReservedQuantity:  newReserved,
 		InTransitQuantity: bal.InTransitQuantity,
@@ -138,11 +144,6 @@ func (s *Service) ReserveStock(ctx context.Context, workspaceID, userID int64, i
 		if err == nil {
 			expiresAt = pgtype.Timestamptz{Time: t, Valid: true}
 		}
-	}
-
-	var variantID pgtype.Int8
-	if in.VariantID != nil && *in.VariantID > 0 {
-		variantID = pgtype.Int8{Int64: *in.VariantID, Valid: true}
 	}
 
 	var orderID pgtype.Int8
@@ -203,6 +204,7 @@ func (s *Service) ReleaseStockReservation(ctx context.Context, workspaceID, user
 		WorkspaceID: workspaceID,
 		LocationID:  res.LocationID,
 		ProductID:   res.ProductID,
+		VariantID:   res.VariantID,
 	})
 	if err != nil {
 		return StockReservationView{}, err
@@ -217,6 +219,7 @@ func (s *Service) ReleaseStockReservation(ctx context.Context, workspaceID, user
 		WorkspaceID:       workspaceID,
 		LocationID:        res.LocationID,
 		ProductID:         res.ProductID,
+		VariantID:         res.VariantID,
 		QuantityOnHand:    bal.QuantityOnHand,
 		ReservedQuantity:  newReserved,
 		InTransitQuantity: bal.InTransitQuantity,

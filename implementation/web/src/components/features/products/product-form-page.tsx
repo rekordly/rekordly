@@ -31,6 +31,7 @@ import { useFinanceAction, WorkspaceGate, type WorkspaceInfo } from "@/component
 import { formatMinorAmount } from "@/lib/money";
 import { productKeys, productsApi } from "@/lib/products";
 import type { ProductDetail, ProductKind, SaveProductPayload } from "@/types/products";
+import { initialOptions, optionMatrix, optionsPayload, ProductOptionsEditor, type OptionDraft, type VariantDraft } from "./product-options-editor";
 
 const STEPS = [
   { label: "Basics", description: "Type, name and price" },
@@ -89,13 +90,38 @@ function fromDetail(detail?: ProductDetail): FormState {
   };
 }
 
-function ProductPreview({ form, currency }: { form: FormState; currency: string }) {
+function ProductPreview({
+  form,
+  currency,
+  hasOptions,
+  options,
+  variantRows,
+}: {
+  form: FormState;
+  currency: string;
+  hasOptions: boolean;
+  options: OptionDraft[];
+  variantRows: Record<string, VariantDraft>;
+}) {
   const show = (minor: bigint) => formatMinorAmount(minor.toString(), currency, EXPONENT);
   const price = toMinor(form.price);
   const cost = toMinor(form.cost);
   const compare = toMinor(form.compareAt);
   const profit = price - cost;
   const margin = price > BigInt(0) ? Number((profit * BigInt(1000)) / price) / 10 : 0;
+
+  const combinations = hasOptions ? optionMatrix(options) : [];
+  const variantPrices = combinations
+    .map((combo) => {
+      const rowKey = combo.map((v) => v.key).sort().join("|");
+      const draft = variantRows[rowKey];
+      if (draft && !draft.is_active) return null;
+      return toMinor(draft?.selling_price || form.price);
+    })
+    .filter((v): v is bigint => v !== null && v > BigInt(0));
+  const minVariantPrice = variantPrices.length ? variantPrices.reduce((a, b) => (a < b ? a : b)) : price;
+  const maxVariantPrice = variantPrices.length ? variantPrices.reduce((a, b) => (a > b ? a : b)) : price;
+  const hasPriceRange = variantPrices.length > 1 && minVariantPrice !== maxVariantPrice;
 
   return (
     <section className="overflow-hidden rounded-2xl border border-border bg-surface">
@@ -117,8 +143,10 @@ function ProductPreview({ form, currency }: { form: FormState; currency: string 
           {form.shortDescription ? <p className="mt-0.5 line-clamp-2 text-[12px] text-muted">{form.shortDescription}</p> : null}
         </div>
         <p className="flex items-baseline gap-2">
-          <span key={form.price} className="animate-fade-up text-[22px] font-bold tabular">{show(price)}</span>
-          {compare > price ? <span className="text-[13px] text-muted line-through tabular">{show(compare)}</span> : null}
+          <span key={hasPriceRange ? `from-${minVariantPrice}` : form.price} className="animate-fade-up text-[22px] font-bold tabular">
+            {hasPriceRange ? `From ${show(minVariantPrice)}` : show(price)}
+          </span>
+          {!hasPriceRange && compare > price ? <span className="text-[13px] text-muted line-through tabular">{show(compare)}</span> : null}
           <span className="text-[12px] text-muted">/ {unitLabel(form.unit).replace(/ \(.*\)/, "").toLowerCase()}</span>
         </p>
         <div className="rounded-xl bg-surface-secondary px-3 py-2.5 text-[12px]">
@@ -147,6 +175,10 @@ function ProductForm({ workspaceId, currency, detail }: WorkspaceInfo & { detail
   const isEdit = Boolean(detail);
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<FormState>(() => fromDetail(detail));
+  const [optionsInitial] = useState(() => initialOptions(detail));
+  const [options, setOptions] = useState<OptionDraft[]>(optionsInitial.options);
+  const [variantRows, setVariantRows] = useState<Record<string, VariantDraft>>(optionsInitial.rows);
+  const hasOptions = options.length > 0;
   const [errors, setErrors] = useState<Errors>({});
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -163,6 +195,8 @@ function ProductForm({ workspaceId, currency, detail }: WorkspaceInfo & { detail
       if (!form.name.trim()) next.name = "Name this product";
       if (price <= BigInt(0)) next.price = "Enter a selling price";
       if (form.compareAt && toMinor(form.compareAt) <= price) next.compareAt = "Make it higher than the selling price, or leave it empty";
+      if (hasOptions && (!options.length || options.some((option) => !option.name.trim() || !option.values.length || option.values.some((value) => !value.value.trim())) || optionMatrix(options).length > 500)) next.name = "Add 1 to 3 named options, each with values, and keep combinations under 500";
+      if (hasOptions && form.kind === "stock_tracked" && !isEdit && Object.values(variantRows).some((row) => row.opening_stock && !/^\d+(\.\d{1,4})?$/.test(row.opening_stock))) next.openingStock = "Enter a valid opening quantity for each variant";
     }
     if (which === 3 && !isEdit && form.kind === "stock_tracked" && form.openingStock) {
       if (!/^\d+(\.\d{1,4})?$/.test(form.openingStock)) next.openingStock = "Enter a number";
@@ -185,7 +219,7 @@ function ProductForm({ workspaceId, currency, detail }: WorkspaceInfo & { detail
     currency,
     outlet_ids: form.outletIds,
     collection_ids: form.collectionIds,
-    opening_stock: !isEdit && form.kind === "stock_tracked" ? form.openingStock || undefined : undefined,
+    opening_stock: !isEdit && !hasOptions && form.kind === "stock_tracked" ? form.openingStock || undefined : undefined,
     image_urls: form.images,
     short_description: form.shortDescription.trim() || undefined,
     long_description: form.longDescription.trim() || undefined,
@@ -193,8 +227,31 @@ function ProductForm({ workspaceId, currency, detail }: WorkspaceInfo & { detail
 
   const save = useFinanceAction(
     workspaceId,
-    (status: "active" | "draft", key: string) =>
-      detail ? productsApi.update(workspaceId, detail.product.id, payload(status)) : productsApi.create(workspaceId, payload(status), key),
+    async (status: "active" | "draft", key: string) => {
+      const saved = detail ? await productsApi.update(workspaceId, detail.product.id, payload(status)) : await productsApi.create(workspaceId, payload(status), key);
+      if (hasOptions) {
+        const defaults: VariantDraft = { selling_price: form.price, cost_price: form.cost, compare_at_price: form.compareAt, opening_stock: "", sku: "", barcode: "", is_active: true };
+        const matrixPayload = optionsPayload(options, variantRows, defaults);
+        const configured = await productsApi.saveOptions(workspaceId, saved.product.id, matrixPayload, `${key}:options`);
+        if (!isEdit && form.kind === "stock_tracked") {
+          for (const [index, row] of matrixPayload.variants.entries()) {
+            const combination = optionMatrix(options)[index];
+            const rowKey = combination.map((value) => value.key).sort().join("|");
+            const opening = variantRows[rowKey]?.opening_stock;
+            if (!opening || toMinor(opening) === BigInt(0)) continue;
+            const variant = configured.variants.find((candidate) => candidate.name === row.option_values.join(" / "));
+            if (!variant) throw new Error(`Could not find ${row.option_values.join(" / ")} for opening stock`);
+            if (!row.cost_price || toMinor(row.cost_price) <= BigInt(0)) throw new Error(`Add a cost price for ${variant.name} before opening stock`);
+            await productsApi.changeStock(workspaceId, saved.product.id, { direction: "add", quantity: opening, reason: "restock", unit_cost: row.cost_price, variant_id: variant.id, outlet_id: form.outletIds[0] }, `${key}:opening:${variant.id}`);
+          }
+        }
+        return configured;
+      }
+      if (optionsInitial.enabled) {
+        return productsApi.saveOptions(workspaceId, saved.product.id, { options: [], variants: [] }, `${key}:options`);
+      }
+      return saved;
+    },
     {
       success: isEdit ? "Product updated" : "Product added",
       onDone: (data) => router.push(`/products/${(data as ProductDetail).product.id}`),
@@ -239,7 +296,7 @@ function ProductForm({ workspaceId, currency, detail }: WorkspaceInfo & { detail
       title={isEdit ? `Edit ${detail?.product.name}` : "Add a product"}
       description={isEdit ? "Changes to the price are kept in its price history." : "Only the basics are required. You can add the rest later."}
       back={isEdit && detail ? { href: `/products/${detail.product.id}`, label: detail.product.name } : { href: "/products", label: "Products" }}
-      aside={<ProductPreview form={form} currency={currency} />}
+      aside={<ProductPreview form={form} currency={currency} hasOptions={hasOptions} options={options} variantRows={variantRows} />}
       actions={
         <>
           {step > 1 ? (
@@ -287,7 +344,7 @@ function ProductForm({ workspaceId, currency, detail }: WorkspaceInfo & { detail
               />
             </FormGrid>
             <FormGrid>
-              <MoneyInput label="Selling price" isRequired currency={currency} exponent={EXPONENT} placeholder="0.00" value={form.price} onValueChange={(value) => set("price", value)} errorMessage={errors.price} />
+              <MoneyInput label="Selling price" isRequired currency={currency} exponent={EXPONENT} placeholder="0.00" value={form.price} onValueChange={(value) => set("price", value)} errorMessage={errors.price} description={hasOptions ? "Every variant sells at this price unless you give it its own." : undefined} />
               <MoneyInput label="Cost price" currency={currency} exponent={EXPONENT} placeholder="0.00" value={form.cost} onValueChange={(value) => set("cost", value)} description={profitHint} />
             </FormGrid>
             <MoneyInput
@@ -301,6 +358,17 @@ function ProductForm({ workspaceId, currency, detail }: WorkspaceInfo & { detail
               description="Shown crossed out next to your price, to show a saving."
             />
           </FormSection>
+
+          <ProductOptionsEditor
+            currency={currency}
+            options={options}
+            onOptions={setOptions}
+            rows={variantRows}
+            onRows={setVariantRows}
+            defaults={{ selling_price: form.price, cost_price: form.cost, compare_at_price: form.compareAt, opening_stock: "", sku: "", barcode: "", is_active: true }}
+            isEdit={isEdit}
+            stockTracked={form.kind === "stock_tracked"}
+          />
 
           <FormSection title="Codes" description="Used to find the product quickly and to scan it at the till." collapsible defaultOpen={isEdit}>
             <FormGrid>
@@ -340,7 +408,7 @@ function ProductForm({ workspaceId, currency, detail }: WorkspaceInfo & { detail
             <OutletPicker workspaceId={workspaceId} value={form.outletIds} onChange={(ids) => set("outletIds", ids)} label="" />
           </FormSection>
 
-          {form.kind === "stock_tracked" ? (
+          {form.kind === "stock_tracked" && !hasOptions ? (
             <FormSection title="Stock" description="How many you have right now.">
               {isEdit ? (
                 <div className="flex items-start gap-3 rounded-xl bg-surface-secondary p-3.5 text-[13px]">

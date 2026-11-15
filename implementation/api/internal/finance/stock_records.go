@@ -36,7 +36,7 @@ func recordSaleItems(ctx context.Context, q *db.Queries, workspaceID, saleID, ou
 				return nil, err
 			}
 		}
-		if err := issueStockTx(ctx, q, workspaceID, *item.product, *location, item.quantity, date, "sale", saleID, currency); err != nil {
+		if err := issueStockTx(ctx, q, workspaceID, *item.product, item.variantID, *location, item.quantity, date, "sale", saleID, currency); err != nil {
 			return nil, err
 		}
 	}
@@ -69,7 +69,7 @@ func recordPurchaseItems(ctx context.Context, q *db.Queries, workspaceID, purcha
 				return nil, err
 			}
 		}
-		if err := receiveStockTx(ctx, q, workspaceID, *item.product, *location, item.quantity, item.amountMinor, date, "purchase", purchaseID, currency); err != nil {
+		if err := receiveStockTx(ctx, q, workspaceID, *item.product, item.variantID, *location, item.quantity, item.amountMinor, date, "purchase", purchaseID, currency); err != nil {
 			return nil, err
 		}
 	}
@@ -87,13 +87,15 @@ func invoiceItemProduct(ctx context.Context, q *db.Queries, workspaceID int64, i
 	}
 	productID := pgtype.Int8{Int64: product.ID, Valid: true}
 	if item.VariantID == nil || *item.VariantID <= 0 {
-		return productID, pgtype.Int8{}, nil
+		variantID, err := stockVariant(ctx, q, workspaceID, product, pgtype.Int8{})
+		return productID, variantID, err
 	}
 	variant, err := q.GetVariantByID(ctx, db.GetVariantByIDParams{WorkspaceID: workspaceID, ID: *item.VariantID})
-	if err != nil || variant.ProductID != product.ID {
+	if err != nil || variant.ProductID != product.ID || !variant.IsActive {
 		return pgtype.Int8{}, pgtype.Int8{}, fmt.Errorf("item %q: this variant does not belong to %s", item.Description, product.Name)
 	}
-	return productID, pgtype.Int8{Int64: variant.ID, Valid: true}, nil
+	selected, err := stockVariant(ctx, q, workspaceID, product, pgtype.Int8{Int64: variant.ID, Valid: true})
+	return productID, selected, err
 }
 
 // issueInvoiceStock takes an invoice's stock products out of stock when it is finalized.
@@ -125,7 +127,7 @@ func issueInvoiceStock(ctx context.Context, q *db.Queries, workspaceID int64, in
 		if inv.IssueDate.Valid {
 			date = inv.IssueDate.Time
 		}
-		if err := issueStockTx(ctx, q, workspaceID, product, *location, decimal.NewFromInt32(item.Quantity), date, "invoice", inv.ID, inv.Currency); err != nil {
+		if err := issueStockTx(ctx, q, workspaceID, product, item.VariantID, *location, decimal.NewFromInt32(item.Quantity), date, "invoice", inv.ID, inv.Currency); err != nil {
 			return err
 		}
 	}

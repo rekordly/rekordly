@@ -9,7 +9,24 @@ import (
 	"context"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/shopspring/decimal"
 )
+
+const archiveOptionVariant = `-- name: ArchiveOptionVariant :exec
+UPDATE product_variants SET is_active = false, archived_at = now(), updated_at = now()
+WHERE workspace_id = $1 AND product_id = $2 AND id = $3 AND NOT is_default
+`
+
+type ArchiveOptionVariantParams struct {
+	WorkspaceID int64 `json:"workspace_id"`
+	ProductID   int64 `json:"product_id"`
+	ID          int64 `json:"id"`
+}
+
+func (q *Queries) ArchiveOptionVariant(ctx context.Context, arg ArchiveOptionVariantParams) error {
+	_, err := q.db.Exec(ctx, archiveOptionVariant, arg.WorkspaceID, arg.ProductID, arg.ID)
+	return err
+}
 
 const bindVariantOptionValue = `-- name: BindVariantOptionValue :exec
 INSERT INTO variant_option_values (
@@ -28,6 +45,37 @@ type BindVariantOptionValueParams struct {
 func (q *Queries) BindVariantOptionValue(ctx context.Context, arg BindVariantOptionValueParams) error {
 	_, err := q.db.Exec(ctx, bindVariantOptionValue, arg.WorkspaceID, arg.VariantID, arg.OptionValueID)
 	return err
+}
+
+const clearVariantOptionValues = `-- name: ClearVariantOptionValues :exec
+DELETE FROM variant_option_values WHERE workspace_id = $1 AND variant_id = $2
+`
+
+type ClearVariantOptionValuesParams struct {
+	WorkspaceID int64 `json:"workspace_id"`
+	VariantID   int64 `json:"variant_id"`
+}
+
+func (q *Queries) ClearVariantOptionValues(ctx context.Context, arg ClearVariantOptionValuesParams) error {
+	_, err := q.db.Exec(ctx, clearVariantOptionValues, arg.WorkspaceID, arg.VariantID)
+	return err
+}
+
+const countVariantStock = `-- name: CountVariantStock :one
+SELECT COALESCE(SUM(quantity_on_hand), 0)::numeric FROM inventory_balances
+WHERE workspace_id = $1 AND variant_id = $2
+`
+
+type CountVariantStockParams struct {
+	WorkspaceID int64 `json:"workspace_id"`
+	VariantID   int64 `json:"variant_id"`
+}
+
+func (q *Queries) CountVariantStock(ctx context.Context, arg CountVariantStockParams) (decimal.Decimal, error) {
+	row := q.db.QueryRow(ctx, countVariantStock, arg.WorkspaceID, arg.VariantID)
+	var column_1 decimal.Decimal
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const createProductOption = `-- name: CreateProductOption :one
@@ -108,7 +156,7 @@ INSERT INTO product_variants (
     is_default, is_active
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
-) RETURNING id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor, compare_at_price_minor
+) RETURNING id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor, compare_at_price_minor, position, archived_at
 `
 
 type CreateVariantParams struct {
@@ -156,12 +204,39 @@ func (q *Queries) CreateVariant(ctx context.Context, arg CreateVariantParams) (P
 		&i.UpdatedAt,
 		&i.CostPriceMinor,
 		&i.CompareAtPriceMinor,
+		&i.Position,
+		&i.ArchivedAt,
 	)
 	return i, err
 }
 
+const deleteUnusedOptionVariant = `-- name: DeleteUnusedOptionVariant :execrows
+DELETE FROM product_variants v WHERE v.workspace_id = $1 AND v.product_id = $2
+  AND v.id = $3 AND NOT v.is_default
+  AND NOT EXISTS (SELECT 1 FROM inventory_balances b WHERE b.workspace_id = v.workspace_id AND b.variant_id = v.id)
+  AND NOT EXISTS (SELECT 1 FROM inventory_movements m WHERE m.workspace_id = v.workspace_id AND m.variant_id = v.id)
+  AND NOT EXISTS (SELECT 1 FROM sale_items si WHERE si.workspace_id = v.workspace_id AND si.variant_id = v.id)
+  AND NOT EXISTS (SELECT 1 FROM purchase_items pi WHERE pi.workspace_id = v.workspace_id AND pi.variant_id = v.id)
+  AND NOT EXISTS (SELECT 1 FROM invoice_items ii WHERE ii.workspace_id = v.workspace_id AND ii.variant_id = v.id)
+  AND NOT EXISTS (SELECT 1 FROM product_price_history ph WHERE ph.workspace_id = v.workspace_id AND ph.variant_id = v.id)
+`
+
+type DeleteUnusedOptionVariantParams struct {
+	WorkspaceID int64 `json:"workspace_id"`
+	ProductID   int64 `json:"product_id"`
+	ID          int64 `json:"id"`
+}
+
+func (q *Queries) DeleteUnusedOptionVariant(ctx context.Context, arg DeleteUnusedOptionVariantParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteUnusedOptionVariant, arg.WorkspaceID, arg.ProductID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getVariantByID = `-- name: GetVariantByID :one
-SELECT id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor, compare_at_price_minor FROM product_variants
+SELECT id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor, compare_at_price_minor, position, archived_at FROM product_variants
 WHERE workspace_id = $1 AND id = $2
 `
 
@@ -189,6 +264,8 @@ func (q *Queries) GetVariantByID(ctx context.Context, arg GetVariantByIDParams) 
 		&i.UpdatedAt,
 		&i.CostPriceMinor,
 		&i.CompareAtPriceMinor,
+		&i.Position,
+		&i.ArchivedAt,
 	)
 	return i, err
 }
@@ -318,8 +395,52 @@ func (q *Queries) ListVariantOptionValuesForProduct(ctx context.Context, arg Lis
 	return items, nil
 }
 
+const listVariantStockByProduct = `-- name: ListVariantStockByProduct :many
+SELECT b.variant_id, b.location_id, l.name AS location_name, b.quantity_on_hand
+FROM inventory_balances b JOIN inventory_locations l ON l.id = b.location_id AND l.workspace_id = b.workspace_id
+WHERE b.workspace_id = $1 AND b.product_id = $2
+ORDER BY b.variant_id, l.name
+`
+
+type ListVariantStockByProductParams struct {
+	WorkspaceID int64 `json:"workspace_id"`
+	ProductID   int64 `json:"product_id"`
+}
+
+type ListVariantStockByProductRow struct {
+	VariantID      int64           `json:"variant_id"`
+	LocationID     int64           `json:"location_id"`
+	LocationName   string          `json:"location_name"`
+	QuantityOnHand decimal.Decimal `json:"quantity_on_hand"`
+}
+
+func (q *Queries) ListVariantStockByProduct(ctx context.Context, arg ListVariantStockByProductParams) ([]ListVariantStockByProductRow, error) {
+	rows, err := q.db.Query(ctx, listVariantStockByProduct, arg.WorkspaceID, arg.ProductID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListVariantStockByProductRow{}
+	for rows.Next() {
+		var i ListVariantStockByProductRow
+		if err := rows.Scan(
+			&i.VariantID,
+			&i.LocationID,
+			&i.LocationName,
+			&i.QuantityOnHand,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listVariantsByProductID = `-- name: ListVariantsByProductID :many
-SELECT id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor, compare_at_price_minor FROM product_variants
+SELECT id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor, compare_at_price_minor, position, archived_at FROM product_variants
 WHERE workspace_id = $1 AND product_id = $2
 ORDER BY is_default DESC, id ASC
 `
@@ -354,6 +475,8 @@ func (q *Queries) ListVariantsByProductID(ctx context.Context, arg ListVariantsB
 			&i.UpdatedAt,
 			&i.CostPriceMinor,
 			&i.CompareAtPriceMinor,
+			&i.Position,
+			&i.ArchivedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -363,6 +486,116 @@ func (q *Queries) ListVariantsByProductID(ctx context.Context, arg ListVariantsB
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateOptionVariant = `-- name: UpdateOptionVariant :one
+UPDATE product_variants SET name = $1, sku = $2, barcode = $3,
+  selling_price_minor = $4, cost_price_minor = $5,
+  compare_at_price_minor = $6, is_active = $7,
+  archived_at = NULL, position = $8, updated_at = now()
+WHERE workspace_id = $9 AND product_id = $10 AND id = $11 AND NOT is_default
+RETURNING id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor, compare_at_price_minor, position, archived_at
+`
+
+type UpdateOptionVariantParams struct {
+	Name                string      `json:"name"`
+	Sku                 pgtype.Text `json:"sku"`
+	Barcode             pgtype.Text `json:"barcode"`
+	SellingPriceMinor   int64       `json:"selling_price_minor"`
+	CostPriceMinor      int64       `json:"cost_price_minor"`
+	CompareAtPriceMinor pgtype.Int8 `json:"compare_at_price_minor"`
+	IsActive            bool        `json:"is_active"`
+	Position            int32       `json:"position"`
+	WorkspaceID         int64       `json:"workspace_id"`
+	ProductID           int64       `json:"product_id"`
+	ID                  int64       `json:"id"`
+}
+
+func (q *Queries) UpdateOptionVariant(ctx context.Context, arg UpdateOptionVariantParams) (ProductVariant, error) {
+	row := q.db.QueryRow(ctx, updateOptionVariant,
+		arg.Name,
+		arg.Sku,
+		arg.Barcode,
+		arg.SellingPriceMinor,
+		arg.CostPriceMinor,
+		arg.CompareAtPriceMinor,
+		arg.IsActive,
+		arg.Position,
+		arg.WorkspaceID,
+		arg.ProductID,
+		arg.ID,
+	)
+	var i ProductVariant
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.ProductID,
+		&i.Name,
+		&i.Sku,
+		&i.Barcode,
+		&i.SellingPriceMinor,
+		&i.Currency,
+		&i.CurrencyExponent,
+		&i.IsDefault,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CostPriceMinor,
+		&i.CompareAtPriceMinor,
+		&i.Position,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
+const updateProductOption = `-- name: UpdateProductOption :exec
+UPDATE product_options SET name = $1, position = $2
+WHERE workspace_id = $3 AND product_id = $4 AND id = $5
+`
+
+type UpdateProductOptionParams struct {
+	Name        string `json:"name"`
+	Position    int32  `json:"position"`
+	WorkspaceID int64  `json:"workspace_id"`
+	ProductID   int64  `json:"product_id"`
+	ID          int64  `json:"id"`
+}
+
+func (q *Queries) UpdateProductOption(ctx context.Context, arg UpdateProductOptionParams) error {
+	_, err := q.db.Exec(ctx, updateProductOption,
+		arg.Name,
+		arg.Position,
+		arg.WorkspaceID,
+		arg.ProductID,
+		arg.ID,
+	)
+	return err
+}
+
+const updateProductOptionValue = `-- name: UpdateProductOptionValue :exec
+UPDATE product_option_values SET value = $1, position = $2
+WHERE workspace_id = $3 AND product_id = $4 AND option_id = $5 AND id = $6
+`
+
+type UpdateProductOptionValueParams struct {
+	Value       string `json:"value"`
+	Position    int32  `json:"position"`
+	WorkspaceID int64  `json:"workspace_id"`
+	ProductID   int64  `json:"product_id"`
+	OptionID    int64  `json:"option_id"`
+	ID          int64  `json:"id"`
+}
+
+func (q *Queries) UpdateProductOptionValue(ctx context.Context, arg UpdateProductOptionValueParams) error {
+	_, err := q.db.Exec(ctx, updateProductOptionValue,
+		arg.Value,
+		arg.Position,
+		arg.WorkspaceID,
+		arg.ProductID,
+		arg.OptionID,
+		arg.ID,
+	)
+	return err
 }
 
 const updateVariant = `-- name: UpdateVariant :one
@@ -375,7 +608,7 @@ SET name = $3,
     is_active = $8,
     updated_at = now()
 WHERE workspace_id = $1 AND id = $2
-RETURNING id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor, compare_at_price_minor
+RETURNING id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor, compare_at_price_minor, position, archived_at
 `
 
 type UpdateVariantParams struct {
@@ -417,6 +650,8 @@ func (q *Queries) UpdateVariant(ctx context.Context, arg UpdateVariantParams) (P
 		&i.UpdatedAt,
 		&i.CostPriceMinor,
 		&i.CompareAtPriceMinor,
+		&i.Position,
+		&i.ArchivedAt,
 	)
 	return i, err
 }

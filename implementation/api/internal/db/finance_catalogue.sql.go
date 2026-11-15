@@ -68,7 +68,7 @@ INSERT INTO product_variants (
     currency, currency_exponent, is_default, is_active
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
-) RETURNING id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor, compare_at_price_minor
+) RETURNING id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor, compare_at_price_minor, position, archived_at
 `
 
 type CreateProductVariantParams struct {
@@ -114,12 +114,14 @@ func (q *Queries) CreateProductVariant(ctx context.Context, arg CreateProductVar
 		&i.UpdatedAt,
 		&i.CostPriceMinor,
 		&i.CompareAtPriceMinor,
+		&i.Position,
+		&i.ArchivedAt,
 	)
 	return i, err
 }
 
 const getDefaultProductVariant = `-- name: GetDefaultProductVariant :one
-SELECT id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor, compare_at_price_minor FROM product_variants
+SELECT id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor, compare_at_price_minor, position, archived_at FROM product_variants
 WHERE workspace_id = $1 AND product_id = $2 AND is_default = true
 `
 
@@ -147,6 +149,8 @@ func (q *Queries) GetDefaultProductVariant(ctx context.Context, arg GetDefaultPr
 		&i.UpdatedAt,
 		&i.CostPriceMinor,
 		&i.CompareAtPriceMinor,
+		&i.Position,
+		&i.ArchivedAt,
 	)
 	return i, err
 }
