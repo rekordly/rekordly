@@ -34,10 +34,10 @@ export function toMajorUnits(minor: bigint | string | null | undefined, exponent
   return fraction ? `${amount / base}.${fraction}` : `${amount / base}`;
 }
 
-/** Whether the rule has a usable value. */
+/** Whether the rule has a usable value. A percentage is 0 to 100. */
 export function ruleReady(rule: PriceRule, exponent: number) {
   const parsed = rule.by === "percent" ? toMinorUnits(rule.value, 2) : toMinorUnits(rule.value, exponent);
-  return parsed !== null && parsed > BigInt(0) && !(rule.by === "percent" && rule.direction === "decrease" && parsed >= BigInt(10000));
+  return parsed !== null && parsed > BigInt(0) && !(rule.by === "percent" && parsed > BigInt(10000));
 }
 
 /** The new price after the rule. Never below zero. */
