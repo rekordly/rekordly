@@ -145,7 +145,7 @@ const NAVIGATION: Readonly<Record<ShellMode, NavGroup[]>> = {
             { label: "Overview", href: "/store" },
             { label: "Orders", href: "/store/orders" },
             { label: "Products", href: "/store/products" },
-            { label: "Design", href: "/store/design" },
+            { label: "Templates", href: "/store/design" },
             { label: "Settings", href: "/store/settings" },
           ],
         },

@@ -58,7 +58,6 @@ export function AppSelect({
 
   return (
     <div className={`flex flex-col gap-1.5 ${className}`}>
-      {label && <Label className="text-[13px] font-medium text-foreground">{label}</Label>}
       <Select
         selectedKey={selectedKey !== undefined ? selectedKey : undefined}
         defaultSelectedKey={defaultSelectedKey !== undefined ? defaultSelectedKey : undefined}
@@ -75,6 +74,7 @@ export function AppSelect({
         id={id}
         className="w-full"
       >
+        {label && <Label className="text-[13px] font-medium text-foreground">{label}</Label>}
         <Select.Trigger
           data-invalid={error ? true : undefined}
           className={`field-shell flex w-full cursor-pointer items-center justify-between gap-2 shadow-none ${heightClass} ${triggerClassName}`}

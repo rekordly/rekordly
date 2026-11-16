@@ -1,8 +1,9 @@
 "use client";
 
-import { ArrowDown, ArrowLeft, ArrowUp, Desktop, DeviceMobile, ImageSquare, Plus, UploadSimple } from "@phosphor-icons/react";
+import { ArrowLeft, Desktop, DeviceMobile, ImageSquare, UploadSimple } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -10,12 +11,13 @@ import { AppButton } from "@/components/ui/app-button";
 import { AppInput } from "@/components/ui/app-input";
 import { AppSwitch } from "@/components/ui/app-switch";
 import { AppTextarea } from "@/components/ui/app-textarea";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Page, PageHeader, Segmented, StatusPill } from "@/components/ui/page";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { SideSheet } from "@/components/ui/side-sheet";
 import { useFinanceAction, WorkspaceGate } from "@/components/features/finance/shared";
-import { financeApi, moneyKeys } from "@/lib/money";
-import { FONT_STYLES, PALETTES, STORE_THEMES, resolvePalette, type BrandSettings, type StoreSection, type ThemeKey, type ThemeStoreData } from "@/lib/store-themes";
+import { financeApi, formatMinorAmount, moneyKeys } from "@/lib/money";
+import { createDefaultSections, FONT_STYLES, PALETTES, STORE_THEMES, resolvePalette, type BrandSettings, type StoreSection, type ThemeKey, type ThemeStoreData } from "@/lib/store-themes";
 import { createIdempotencyKey } from "@/lib/utils";
 import { uploadProductImage } from "@/lib/products";
 import type { PublicStorefrontProduct, StorefrontDesign } from "@/types/finance";
@@ -78,21 +80,33 @@ function makeDraft(design: StorefrontDesign): Draft {
   };
 }
 
+function sectionsForThemeChoice(theme: ThemeKey, name: string, current: StoreSection[]): StoreSection[] {
+  const defaults = createDefaultSections(theme, name);
+  const used = new Map<string, number>();
+  return defaults.map((section) => {
+    const index = used.get(section.type) ?? 0;
+    used.set(section.type, index + 1);
+    const existing = current.filter((item) => item.type === section.type)[index];
+    return existing
+      ? { ...section, id: existing.id, enabled: existing.enabled, content: { ...section.content, ...existing.content } }
+      : section;
+  });
+}
+
 function ThemeThumbnail({ theme }: { theme: ThemeKey }) {
+  const name = STORE_THEMES[theme].name;
+  const background = theme === "boutique" ? "bg-[#fbf3ec]" : theme === "bold" ? "bg-[#12161c]" : theme === "market" ? "bg-[#f5f1e5]" : theme === "studio" ? "bg-white" : "bg-[#f7faf7]";
   return (
-    <div className={`h-36 overflow-hidden rounded-xl border border-default ${theme === "boutique" ? "bg-[#fbf3ec]" : "bg-[#f7faf7]"}`}>
-      <div className={`border-b border-black/10 px-3 py-2 text-center text-[9px] font-bold ${theme === "boutique" ? "bg-white" : "bg-white/80"}`}>{theme === "boutique" ? "ADE  •  COLLECTION" : "Ade Stores"}</div>
-      {theme === "boutique" ? (
-        <div className="p-2"><div className="h-14 rounded-lg bg-gradient-to-r from-[#b66b4c] to-[#e5b795]" /><div className="mt-2 grid grid-cols-3 gap-1"><i className="h-8 rounded bg-[#e0c4b2]" /><i className="h-8 rounded bg-[#d7b6a1]" /><i className="h-8 rounded bg-[#c89578]" /></div></div>
-      ) : (
-        <div className="p-2"><div className="h-8 rounded bg-[#d8e8db]" /><div className="mt-2 grid grid-cols-4 gap-1">{[1, 2, 3, 4].map((n) => <i key={n} className="aspect-square rounded bg-white shadow-sm"><span className="block h-3/4 rounded-t bg-[#d7dfd8]" /></i>)}</div></div>
-      )}
+    <div className={`h-36 overflow-hidden rounded-xl border border-default ${background}`}>
+      <div className={`border-b border-black/10 px-3 py-2 text-center text-[9px] font-bold ${theme === "bold" ? "bg-[#1d242d] text-white" : "bg-white/80"}`}>{theme === "boutique" ? "ADE  •  COLLECTION" : name.toUpperCase()}</div>
+      {theme === "boutique" || theme === "studio" ? <div className="p-2"><div className={`h-14 rounded-lg ${theme === "studio" ? "bg-gradient-to-r from-[#c5b4a6] to-[#ede5dd]" : "bg-gradient-to-r from-[#b66b4c] to-[#e5b795]"}`} /><div className="mt-2 grid grid-cols-3 gap-1"><i className="h-8 rounded bg-[#e0c4b2]" /><i className="h-8 rounded bg-[#d7b6a1]" /><i className="h-8 rounded bg-[#c89578]" /></div></div> : theme === "bold" ? <div className="p-2"><div className="h-8 rounded bg-[#303b49]" /><div className="mt-2 grid grid-cols-4 gap-1">{[1, 2, 3, 4].map((n) => <i key={n} className="aspect-square rounded bg-[#252d37] shadow-sm"><span className="block h-3/4 rounded-t bg-[#56677b]" /></i>)}</div></div> : <div className="p-2"><div className="h-5 rounded bg-[#dce9d4]" /><div className="mt-2 grid grid-cols-4 gap-1">{[1, 2, 3, 4].map((n) => <i key={n} className="aspect-square rounded bg-white shadow-sm"><span className="block h-3/4 rounded-t bg-[#d7dfd8]" /></i>)}</div></div>}
     </div>
   );
 }
 
 function StorefrontDesignContent({ workspaceId }: { workspaceId: number }) {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const designQuery = useQuery({ queryKey: [...moneyKeys.workspace(workspaceId), "storefront-design"], queryFn: () => financeApi.getStorefrontDesign(workspaceId), retry: false });
   const [draftState, setDraft] = useState<Draft | null>(null);
   const [customizing, setCustomizing] = useState(false);
@@ -102,6 +116,9 @@ function StorefrontDesignContent({ workspaceId }: { workspaceId: number }) {
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [imageBusy, setImageBusy] = useState(false);
   const [imageError, setImageError] = useState("");
+  const [checkoutError, setCheckoutError] = useState("");
+  const [previewThemeKey, setPreviewThemeKey] = useState<ThemeKey | null>(null);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
   const design = designQuery.data;
   const versionRef = useRef(0);
   const draftRef = useRef<Draft | null>(null);
@@ -121,7 +138,7 @@ function StorefrontDesignContent({ workspaceId }: { workspaceId: number }) {
   const previewQuery = useQuery({
     queryKey: [...moneyKeys.workspace(workspaceId), "storefront-design-preview"],
     queryFn: () => financeApi.getStorefrontDesignPreview(workspaceId),
-    enabled: customizing,
+    enabled: Boolean(design),
     staleTime: 20_000,
   });
 
@@ -168,17 +185,17 @@ function StorefrontDesignContent({ workspaceId }: { workspaceId: number }) {
   }, []);
 
   const publishAction = useFinanceAction(workspaceId, async () => {
-    if (!design) throw new Error("Store design has not loaded yet");
+    if (!design) throw new Error("Store template has not loaded yet");
     if (activeSaveRef.current || saveState !== "saved" || saveFingerprint !== savedFingerprintRef.current) throw new Error("Wait for your changes to save first");
     const result = await financeApi.publishStorefrontDesign(workspaceId, { expected_version: versionRef.current, idempotency_key: createIdempotencyKey("store-design-publish") });
     versionRef.current = result.version;
     queryClient.setQueryData([...moneyKeys.workspace(workspaceId), "storefront-design"], result);
     await queryClient.invalidateQueries({ queryKey: [...moneyKeys.workspace(workspaceId), "storefront-design-preview"] });
     return result;
-  }, { success: "Your store design is live" });
+  }, { success: "Your storefront template is live" });
 
   const discardAction = useFinanceAction(workspaceId, async () => {
-    if (!design) throw new Error("Store design has not loaded yet");
+    if (!design) throw new Error("Store template has not loaded yet");
     const result = await financeApi.discardStorefrontDesign(workspaceId, { expected_version: versionRef.current, idempotency_key: createIdempotencyKey("store-design-discard") });
     versionRef.current = result.version;
     const reset = makeDraft(result);
@@ -186,9 +203,35 @@ function StorefrontDesignContent({ workspaceId }: { workspaceId: number }) {
     savedFingerprintRef.current = JSON.stringify(reset);
     setDraft(reset);
     setSaveState("saved");
+    setConfirmDiscard(false);
+    setCustomizing(false);
     queryClient.setQueryData([...moneyKeys.workspace(workspaceId), "storefront-design"], result);
     return result;
   }, { success: "Draft changes discarded" });
+
+  const themeCheckout = useMutation({
+    mutationFn: (themeKey: ThemeKey) => financeApi.createStorefrontThemeCheckout(workspaceId, themeKey, createIdempotencyKey("store-theme-checkout")),
+    onSuccess: (intent) => {
+      if (intent.authorization_url) window.location.assign(intent.authorization_url);
+      else router.push(`/billing/checkout?intentId=${intent.id}`);
+    },
+    onError: (error) => setCheckoutError(error instanceof Error ? error.message : "Theme checkout is unavailable."),
+  });
+
+  const publishOrPurchaseTheme = () => {
+    if (!design || !draft) return;
+    const option = design.available_themes.find((theme) => theme.key === draft.theme_key);
+    if (option?.owned) {
+      publishAction.mutate(undefined);
+      return;
+    }
+    if (option?.purchasable) {
+      setCheckoutError("");
+      themeCheckout.mutate(draft.theme_key);
+      return;
+    }
+    setCheckoutError("This theme is ready to preview. Its Billing price has not been configured yet.");
+  };
 
   const currentSection = draft?.sections.find((section) => section.id === selectedSection) ?? null;
 
@@ -211,9 +254,9 @@ function StorefrontDesignContent({ workspaceId }: { workspaceId: number }) {
     }
   };
 
-  if (designQuery.isPending) return <Page><PageHeader title="Store design" description="Loading your store design…" /></Page>;
+  if (designQuery.isPending) return <Page><PageHeader title="Store templates" description="Loading your storefront template…" /></Page>;
   if (designQuery.isError || !design || !draft) {
-    return <Page><PageHeader title="Store design" description="Choose a theme and make your store yours." />
+    return <Page><PageHeader title="Store templates" description="Choose a template and make your store yours." />
       <div className="rounded-2xl border border-default bg-surface p-6 text-sm text-muted">Create your store first to start choosing a theme.</div>
     </Page>;
   }
@@ -233,14 +276,20 @@ function StorefrontDesignContent({ workspaceId }: { workspaceId: number }) {
   const visibleSections = draft.sections.filter((section) => Boolean(STORE_THEMES[draft.theme_key].sections[section.type]));
   const dirty = saveFingerprint !== JSON.stringify(makeDraft(design)) || design.has_unpublished_changes;
   const statusLabel = design.status === "published" ? (dirty ? "Unpublished changes" : "Live") : "Draft";
+  const selectedTheme = design.available_themes.find((theme) => theme.key === draft.theme_key);
+  const selectedThemePrice = selectedTheme?.price_minor && selectedTheme.currency
+    ? formatMinorAmount(selectedTheme.price_minor, selectedTheme.currency, 2)
+    : "";
+  const publishLabel = selectedTheme?.owned
+    ? (design.has_unpublished_changes ? "Publish changes" : "Publish")
+    : selectedTheme?.purchasable
+      ? `Buy ${STORE_THEMES[draft.theme_key].name} & publish${selectedThemePrice ? ` · ${selectedThemePrice}` : ""}`
+      : "Billing price not configured";
 
-  const sectionRows = (sections: StoreSection[]) => sections.map((section, index) => (
+  const sectionRows = (sections: StoreSection[]) => sections.map((section) => (
     <div key={section.id} className="flex items-center gap-2 rounded-xl border border-default bg-surface p-3">
-      <span aria-hidden="true" className="px-1 text-muted">⠿</span>
       <button type="button" onClick={() => setSelectedSection(section.id)} className="min-w-0 flex-1 truncate text-left text-sm font-medium">{SECTION_LABEL[section.type]}</button>
       <div className="flex items-center gap-1">
-        <button type="button" aria-label={`Move ${SECTION_LABEL[section.type]} up`} disabled={index === 0} onClick={() => updateDraft((current) => { const list = [...current.sections]; const at = list.findIndex((row) => row.id === section.id); if (at > 0) [list[at - 1], list[at]] = [list[at], list[at - 1]]; return { ...current, sections: list }; })} className="grid size-8 place-items-center rounded-lg text-muted hover:bg-default disabled:opacity-30"><ArrowUp size={15} /></button>
-        <button type="button" aria-label={`Move ${SECTION_LABEL[section.type]} down`} disabled={index === sections.length - 1} onClick={() => updateDraft((current) => { const list = [...current.sections]; const at = list.findIndex((row) => row.id === section.id); if (at < list.length - 1) [list[at + 1], list[at]] = [list[at], list[at + 1]]; return { ...current, sections: list }; })} className="grid size-8 place-items-center rounded-lg text-muted hover:bg-default disabled:opacity-30"><ArrowDown size={15} /></button>
         <AppSwitch isSelected={section.enabled} onChange={(enabled) => updateDraft((current) => ({ ...current, sections: current.sections.map((row) => row.id === section.id ? { ...row, enabled } : row) }))} aria-label={`Show ${SECTION_LABEL[section.type]}`} />
         <button type="button" aria-label={`Edit ${SECTION_LABEL[section.type]}`} onClick={() => setSelectedSection(section.id)} className="grid size-8 place-items-center rounded-lg text-lg text-muted hover:bg-default">›</button>
       </div>
@@ -282,22 +331,42 @@ function StorefrontDesignContent({ workspaceId }: { workspaceId: number }) {
     </SideSheet>
   ) : null;
 
+  const discardButton = <AppButton variant="secondary" label="Delete draft" isDisabled={!design.has_unpublished_changes} isLoading={discardAction.isPending} onPress={() => setConfirmDiscard(true)} />;
+
   if (!customizing) {
+    const publishedTheme = STORE_THEMES[design.published_theme_key];
+    const draftTheme = STORE_THEMES[draft.theme_key];
     return <Page>
-      <PageHeader title="Store design" description="Choose a look for your online store." back={<Link href="/store" className="inline-flex items-center gap-1"><ArrowLeft size={14} />Store overview</Link>} actions={<div className="flex items-center gap-2"><StatusPill tone={design.status === "published" ? "success" : "neutral"}>{statusLabel}</StatusPill><AppButton label="Customise" onPress={() => setCustomizing(true)} /></div>} />
-      <div className="grid gap-4 md:grid-cols-2">
-        {(Object.keys(STORE_THEMES) as ThemeKey[]).map((key) => {
+      <PageHeader title="Store templates" description="Preview a template with your products, then use it as your store’s draft." back={<Link href="/store" className="inline-flex items-center gap-1"><ArrowLeft size={14} />Store overview</Link>} actions={<StatusPill tone={design.status === "published" ? "success" : "neutral"}>{statusLabel}</StatusPill>} />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <section className="rounded-2xl border border-default bg-surface p-5">
+          <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wide text-muted">Published store</p><h2 className="mt-1 text-lg font-semibold">{publishedTheme.name}</h2><p className="mt-1 text-sm text-muted">This is the template shoppers see on your public store.</p></div><StatusPill tone={design.status === "published" ? "success" : "neutral"}>{design.status === "published" ? "Live" : "Not published"}</StatusPill></div>
+          <div className="mt-4"><ThemeThumbnail theme={design.published_theme_key} /></div>
+        </section>
+        <section className="rounded-2xl border border-default bg-surface p-5">
+          <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wide text-muted">Active draft</p><h2 className="mt-1 text-lg font-semibold">{draftTheme.name}</h2><p className="mt-1 text-sm text-muted">Changes stay private until you publish them.</p></div><StatusPill tone={design.has_unpublished_changes ? "warning" : "neutral"}>{design.has_unpublished_changes ? "Unpublished changes" : "No changes"}</StatusPill></div>
+          <div className="mt-4"><ThemeThumbnail theme={draft.theme_key} /></div>
+          <div className="mt-4 flex flex-wrap gap-2"><AppButton label="Continue editing" onPress={() => setCustomizing(true)} />{discardButton}</div>
+        </section>
+      </div>
+      <div className="mt-2"><h2 className="text-lg font-semibold">Theme library</h2><p className="mt-1 text-sm text-muted">Each template has a fixed layout. Add your store details, then preview before publishing.</p></div>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {(["simple"] as ThemeKey[]).map((key) => {
           const theme = STORE_THEMES[key];
           const active = draft.theme_key === key;
+          const option = design.available_themes.find((item) => item.key === key);
+          const price = option?.price_minor && option.currency ? formatMinorAmount(option.price_minor, option.currency, 2) : option?.owned ? "Free" : "Preview available · price not set";
           return <article key={key} className="rounded-2xl border border-default bg-surface p-4">
             <ThemeThumbnail theme={key} />
-            <div className="mt-4 flex items-start justify-between gap-3"><div><div className="flex items-center gap-2"><h2 className="font-semibold">{theme.name}</h2>{active ? <StatusPill tone="success">Current</StatusPill> : null}</div><p className="mt-1 text-sm text-muted">{theme.description}</p><p className="mt-2 text-xs text-muted">Best for {theme.bestFor.join(", ")}</p></div>
-              <AppButton size="sm" variant={active ? "secondary" : "primary"} label={active ? "Selected" : "Use this theme"} isDisabled={active} onPress={() => updateDraft((current) => ({ ...current, theme_key: key }))} />
+            <div className="mt-4 flex items-start justify-between gap-3"><div><div className="flex items-center gap-2"><h2 className="font-semibold">{theme.name}</h2>{active ? <StatusPill tone="success">Draft</StatusPill> : null}{option?.owned ? <StatusPill tone="neutral">Owned</StatusPill> : null}</div><p className="mt-1 text-sm text-muted">{theme.description}</p><p className="mt-2 text-xs text-muted">Best for {theme.bestFor.join(", ")}</p><p className="mt-2 text-sm font-semibold">{price}</p></div>
+              <AppButton size="sm" variant={active ? "secondary" : "primary"} label="Preview template" onPress={() => setPreviewThemeKey(key)} />
             </div>
           </article>;
         })}
       </div>
-      <div className="flex flex-wrap gap-2"><AppButton label="Publish" isDisabled={!dirty || saveState !== "saved" || !design.has_unpublished_changes} isLoading={publishAction.isPending} onPress={() => publishAction.mutate(undefined)} /><AppButton variant="secondary" label="Discard changes" isDisabled={!design.has_unpublished_changes} isLoading={discardAction.isPending} onPress={() => discardAction.mutate(undefined)} /></div>
+      {checkoutError ? <p role="alert" className="text-sm text-danger">{checkoutError}</p> : null}
+      <ConfirmDialog isOpen={confirmDiscard} onOpenChange={setConfirmDiscard} title="Delete this draft?" description="This discards all unpublished theme and content changes. Your published storefront stays live as it is." confirmLabel="Delete draft" isDanger onConfirm={() => discardAction.mutate(undefined)} isLoading={discardAction.isPending} />
+      {previewThemeKey ? <ThemePreviewSheet themeKey={previewThemeKey} name={draft.name} brand={draft.brand} sections={sectionsForThemeChoice(previewThemeKey, draft.name, draft.sections)} store={previewStore} previewDataReady={Boolean(previewData)} loading={previewQuery.isPending} onClose={() => setPreviewThemeKey(null)} onUse={() => { const key = previewThemeKey; updateDraft((current) => ({ ...current, theme_key: key, sections: sectionsForThemeChoice(key, current.name, current.sections) })); setPreviewThemeKey(null); setCustomizing(true); }} /> : null}
     </Page>;
   }
 
@@ -310,7 +379,7 @@ function StorefrontDesignContent({ workspaceId }: { workspaceId: number }) {
   />;
 
   return <Page className="max-w-none space-y-0">
-    <PageHeader title="Customise your store" description="Your edits save to a draft as you go." back={<button type="button" onClick={() => setCustomizing(false)} className="inline-flex items-center gap-1"><ArrowLeft size={14} />Design</button>} actions={<div className="flex items-center gap-2"><button type="button" onClick={() => setPhoneView(false)} aria-label="Desktop preview" aria-pressed={!phoneView} className={`grid size-9 place-items-center rounded-lg ${!phoneView ? "bg-default" : ""}`}><Desktop size={17} /></button><button type="button" onClick={() => setPhoneView(true)} aria-label="Phone preview" aria-pressed={phoneView} className={`grid size-9 place-items-center rounded-lg ${phoneView ? "bg-default" : ""}`}><DeviceMobile size={17} /></button></div>} />
+    <PageHeader title="Customise your template" description="Your edits save to a draft as you go." back={<button type="button" onClick={() => setCustomizing(false)} className="inline-flex items-center gap-1"><ArrowLeft size={14} />Templates</button>} actions={<div className="flex items-center gap-2"><button type="button" onClick={() => setPhoneView(false)} aria-label="Desktop preview" aria-pressed={!phoneView} className={`grid size-9 place-items-center rounded-lg ${!phoneView ? "bg-default" : ""}`}><Desktop size={17} /></button><button type="button" onClick={() => setPhoneView(true)} aria-label="Phone preview" aria-pressed={phoneView} className={`grid size-9 place-items-center rounded-lg ${phoneView ? "bg-default" : ""}`}><DeviceMobile size={17} /></button></div>} />
     <div className="grid min-h-[calc(100dvh-180px)] grid-cols-1 gap-5 lg:grid-cols-[380px_minmax(0,1fr)]">
       <div className="flex min-w-0 flex-col gap-5 lg:max-h-[calc(100dvh-190px)] lg:overflow-y-auto lg:pr-1">
         <section className="space-y-3 rounded-2xl border border-default bg-surface p-4">
@@ -322,13 +391,12 @@ function StorefrontDesignContent({ workspaceId }: { workspaceId: number }) {
           {imageError ? <p role="alert" className="text-xs text-danger">{imageError}</p> : null}
         </section>
         <section className="space-y-3 rounded-2xl border border-default bg-surface p-4">
-          <div className="flex items-center justify-between"><h2 className="font-semibold">Sections</h2><span className="text-xs text-muted">Drag with the arrows</span></div>
+          <div><h2 className="font-semibold">Template content</h2><p className="mt-1 text-xs text-muted">Edit the content in this template’s built-in sections.</p></div>
           {sectionRows(visibleSections)}
-          <div className="flex flex-wrap gap-2"><AppButton size="sm" variant="secondary" startContent={<Plus size={15} />} label="Add products" onPress={() => updateDraft((current) => ({ ...current, sections: [...current.sections, { id: createIdempotencyKey("products"), type: "product_grid", enabled: true, content: { title: "More to explore", source: "new", limit: 8 } }] }))} /><AppButton size="sm" variant="secondary" startContent={<Plus size={15} />} label="Add collections" onPress={() => updateDraft((current) => ({ ...current, sections: [...current.sections, { id: createIdempotencyKey("collections"), type: "collections", enabled: true, content: { collection_ids: [] } }] }))} /></div>
         </section>
         <div className="sticky bottom-0 space-y-3 rounded-2xl border border-default bg-surface/95 p-3 backdrop-blur">
           <p className="text-xs text-muted" role="status">{saveState === "saving" ? "Saving changes…" : saveState === "error" ? "Could not save. Edit a field to try again." : saveState === "pending" ? "Saving soon…" : "All changes saved"}</p>
-          <div className="flex flex-wrap gap-2"><AppButton variant="secondary" label="Discard changes" isDisabled={!design.has_unpublished_changes} isLoading={discardAction.isPending} onPress={() => discardAction.mutate(undefined)} /><AppButton label={design.has_unpublished_changes ? "Publish changes" : "Publish"} isDisabled={!design.has_unpublished_changes || saveState !== "saved"} isLoading={publishAction.isPending} onPress={() => publishAction.mutate(undefined)} /></div>
+          <div className="flex flex-wrap gap-2"><AppButton variant="secondary" label="Delete draft" isDisabled={!design.has_unpublished_changes} isLoading={discardAction.isPending} onPress={() => setConfirmDiscard(true)} /><AppButton label={publishLabel} isDisabled={!design.has_unpublished_changes || saveState !== "saved" || (!selectedTheme?.owned && !selectedTheme?.purchasable)} isLoading={publishAction.isPending || themeCheckout.isPending} onPress={publishOrPurchaseTheme} /></div>
         </div>
       </div>
       <div className={`hidden min-w-0 rounded-2xl border border-default bg-surface p-3 lg:block ${phoneView ? "mx-auto w-[390px] max-w-full" : ""}`}>
@@ -341,7 +409,15 @@ function StorefrontDesignContent({ workspaceId }: { workspaceId: number }) {
       <div className="-mx-3 overflow-hidden rounded-xl border border-default bg-white">{previewData ? previewRenderer : <p className="p-6 text-sm text-muted">Loading preview…</p>}</div>
     </SideSheet>
     {sectionDrawer}
+    <ConfirmDialog isOpen={confirmDiscard} onOpenChange={setConfirmDiscard} title="Delete this draft?" description="This discards all unpublished theme and content changes. Your published storefront stays live as it is." confirmLabel="Delete draft" isDanger onConfirm={() => discardAction.mutate(undefined)} isLoading={discardAction.isPending} />
   </Page>;
+}
+
+function ThemePreviewSheet({ themeKey, name, brand, sections, store, previewDataReady, loading, onClose, onUse }: { themeKey: ThemeKey; name: string; brand: BrandSettings; sections: StoreSection[]; store: ThemeStoreData; previewDataReady: boolean; loading: boolean; onClose: () => void; onUse: () => void }) {
+  const Renderer = STORE_THEMES[themeKey].Renderer;
+  return <SideSheet isOpen onClose={onClose} title={`${STORE_THEMES[themeKey].name} preview`} description="Preview this coded template with your store catalogue." footer={<><AppButton variant="ghost" label="Close" onPress={onClose} /><AppButton label="Use this theme" onPress={onUse} /></>}>
+    <div className="overflow-hidden rounded-xl border border-default bg-white">{loading ? <p className="p-6 text-sm text-muted">Loading your catalogue…</p> : previewDataReady ? <Renderer store={{ ...store, name, logo_url: brand.logo_url }} brand={{ ...brand, resolved_palette: resolvePalette(brand.palette, brand.custom_color) }} sections={sections} preview /> : <p className="p-6 text-sm text-muted">Store preview data is not available yet.</p>}</div>
+  </SideSheet>;
 }
 
 function FaqEditor({ section, update }: { section: StoreSection; update: (content: Record<string, unknown>) => void }) {

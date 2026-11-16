@@ -48,7 +48,7 @@ export function FormPage({
         {description ? <p className="mt-1 text-[14px] text-muted">{description}</p> : null}
       </div>
 
-      <div className="mt-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start">
+      <div className={`mt-6 ${aside ? "grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start" : "space-y-4"}`}>
         <div className="space-y-4">{children}</div>
         {aside ? <aside className="space-y-4 xl:sticky xl:top-6">{aside}</aside> : null}
       </div>

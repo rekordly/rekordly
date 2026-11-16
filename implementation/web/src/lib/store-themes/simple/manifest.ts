@@ -4,8 +4,8 @@ import SimpleStoreRenderer from "./renderer";
 
 export const simpleTheme: ThemeManifest = {
   key: "simple",
-  name: "Simple",
-  description: "A clear storefront with a compact header and easy to browse products.",
+  name: "Essential",
+  description: "A complete, adaptable storefront for a growing online business.",
   bestFor: ["Any shop", "Everyday products"],
   price: "free",
   palettes: ["green", "ink", "ocean", "sunset", "rose", "earth", "custom"],
