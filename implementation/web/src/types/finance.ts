@@ -1279,6 +1279,8 @@ export interface StorefrontSettings {
   delivery_methods: string[];
   delivery_guidance?: string | null;
   default_delivery_fee_minor: string;
+  free_delivery_threshold_minor?: string | null;
+  delivery_areas: { id: number; name: string; fee_minor: string; description: string; position: number; is_active: boolean }[];
   checkout_require_email: boolean;
   checkout_require_phone: boolean;
   auto_show_new_products: boolean;
@@ -1404,6 +1406,25 @@ export interface StorefrontAnalytics {
   orders_fulfilled: number;
 }
 
+export interface StorefrontOverview {
+  storefront: Storefront;
+  period: "7d" | "30d" | "90d";
+  since_date: string;
+  currency: string;
+  currency_exponent: number;
+  sales_minor: string;
+  paid_orders: number;
+  visitors: number;
+  page_views: number;
+  conversion_rate: string;
+  average_order_value_minor: string;
+  daily: { date: string; page_views: number; visitors: number; product_views: number; add_to_carts: number; checkouts_started: number; checkouts_submitted: number; paid_orders: number; sales_minor: string }[];
+  funnel: Record<string, number>;
+  referrers: { referrer_class: string; visits: number }[];
+  top_products: { product_id: number; name: string; product_views: number; orders: number; sales_minor: string }[];
+  needs_action: { to_confirm: number; to_pack: number; to_deliver: number };
+}
+
 export interface PublicStorefrontProduct {
   id: number;
   product_id: number;
@@ -1457,6 +1478,8 @@ export interface PublicStorefrontProjection {
   delivery_methods: string[];
   delivery_guidance?: string | null;
   default_delivery_fee_minor: string;
+  free_delivery_threshold_minor?: string | null;
+  delivery_areas: { id: number; name: string; fee_minor: string; description: string; position: number; is_active: boolean }[];
   checkout_require_email: boolean;
   checkout_require_phone: boolean;
   return_policy?: string | null;
@@ -1491,6 +1514,8 @@ export interface ValidatedCart {
   subtotal_minor: string;
   estimated_tax_minor: string;
   delivery_fee_minor: string;
+  delivery_area_id?: number;
+  delivery_area_name?: string;
   estimated_total_minor: string;
   has_changes: boolean;
   lines: ValidatedCartLine[];

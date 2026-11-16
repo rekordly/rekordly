@@ -215,6 +215,8 @@ type StorefrontSettingsView struct {
 	DeliveryMethods         []string          `json:"delivery_methods"`
 	DeliveryGuidance        *string           `json:"delivery_guidance,omitempty"`
 	DefaultDeliveryFeeMinor string            `json:"default_delivery_fee_minor"`
+	FreeDeliveryThresholdMinor *string        `json:"free_delivery_threshold_minor,omitempty"`
+	DeliveryAreas           []StorefrontDeliveryAreaView `json:"delivery_areas"`
 	CheckoutRequireEmail    bool              `json:"checkout_require_email"`
 	CheckoutRequirePhone    bool              `json:"checkout_require_phone"`
 	AutoShowNewProducts     bool              `json:"auto_show_new_products"`
@@ -230,6 +232,22 @@ type StorefrontSettingsView struct {
 	SeoImageURL             *string           `json:"seo_image_url,omitempty"`
 	SeoIndexable            bool              `json:"seo_indexable"`
 	Version                 int32             `json:"version"`
+}
+
+type StorefrontDeliveryAreaView struct {
+	ID          int64  `json:"id"`
+	Name        string `json:"name"`
+	FeeMinor    string `json:"fee_minor"`
+	Description string `json:"description"`
+	Position    int32  `json:"position"`
+	IsActive    bool   `json:"is_active"`
+}
+
+type StorefrontDeliveryAreaInput struct {
+	ID          int64  `json:"id"`
+	Name        string `json:"name"`
+	Fee         string `json:"fee"`
+	Description string `json:"description"`
 }
 
 type StorefrontView struct {
@@ -284,6 +302,8 @@ type UpdateStorefrontSettingsInput struct {
 	DeliveryMethods      []string          `json:"delivery_methods"`
 	DeliveryGuidance     string            `json:"delivery_guidance"`
 	DefaultDeliveryFee   string            `json:"default_delivery_fee"`
+	FreeDeliveryThreshold *string          `json:"free_delivery_threshold"`
+	DeliveryAreas        []StorefrontDeliveryAreaInput `json:"delivery_areas"`
 	CheckoutRequireEmail *bool             `json:"checkout_require_email"`
 	CheckoutRequirePhone *bool             `json:"checkout_require_phone"`
 	ReturnPolicy         string            `json:"return_policy"`
@@ -335,6 +355,8 @@ func settingsToView(st db.StorefrontSetting) StorefrontSettingsView {
 		DeliveryMethods:         delivery,
 		DeliveryGuidance:        nullableText(st.DeliveryGuidance),
 		DefaultDeliveryFeeMinor: fmt.Sprint(st.DefaultDeliveryFeeMinor),
+		FreeDeliveryThresholdMinor: nullableMinor(st.FreeDeliveryThresholdMinor),
+		DeliveryAreas:           []StorefrontDeliveryAreaView{},
 		CheckoutRequireEmail:    st.CheckoutRequireEmail,
 		CheckoutRequirePhone:    st.CheckoutRequirePhone,
 		AutoShowNewProducts:     st.AutoShowNewProducts,
@@ -358,6 +380,14 @@ func (s *Service) buildStorefrontView(ctx context.Context, sf db.Storefront) (St
 	if err != nil {
 		return StorefrontView{}, err
 	}
+	areas, err := s.queries.GetStorefrontDeliveryAreas(ctx, db.GetStorefrontDeliveryAreasParams{WorkspaceID: sf.WorkspaceID, StorefrontID: sf.ID})
+	if err != nil {
+		return StorefrontView{}, err
+	}
+	settings := settingsToView(st)
+	for _, area := range areas {
+		settings.DeliveryAreas = append(settings.DeliveryAreas, StorefrontDeliveryAreaView{ID: area.ID, Name: area.Name, FeeMinor: fmt.Sprint(area.FeeMinor), Description: area.Description, Position: area.Position, IsActive: area.IsActive})
+	}
 	pubCount, err := s.queries.CountPublishedStorefrontProducts(ctx, sf.ID)
 	if err != nil {
 		pubCount = 0
@@ -377,7 +407,7 @@ func (s *Service) buildStorefrontView(ctx context.Context, sf db.Storefront) (St
 		EntitlementStatus:   sf.EntitlementStatus,
 		SubdomainHost:       fmt.Sprintf("%s.rekordly.com", sf.Slug),
 		PublishedCount:      pubCount,
-		Settings:            settingsToView(st),
+		Settings:            settings,
 	}, nil
 }
 
@@ -661,6 +691,55 @@ func (s *Service) UpdateStorefrontSettings(ctx context.Context, ws int64, in Upd
 	}); err != nil {
 		return StorefrontView{}, err
 	}
+	if in.FreeDeliveryThreshold != nil {
+		var threshold pgtype.Int8
+		if strings.TrimSpace(*in.FreeDeliveryThreshold) != "" {
+			value, parseErr := parseOptionalNonNegativeMajor(*in.FreeDeliveryThreshold, int(sf.CurrencyExponent))
+			if parseErr != nil || value < 0 {
+				return StorefrontView{}, errors.New("free-delivery minimum must be a valid non-negative amount")
+			}
+			threshold = pgtype.Int8{Int64: value, Valid: true}
+		}
+		if err := q.UpdateStorefrontFreeDeliveryThreshold(ctx, db.UpdateStorefrontFreeDeliveryThresholdParams{WorkspaceID: ws, StorefrontID: sf.ID, FreeDeliveryThresholdMinor: threshold}); err != nil {
+			return StorefrontView{}, err
+		}
+	}
+	if in.DeliveryAreas != nil {
+		if len(in.DeliveryAreas) > 20 {
+			return StorefrontView{}, errors.New("add no more than 20 delivery areas")
+		}
+		seenNames := map[string]bool{}
+		activeIDs := make([]int64, 0, len(in.DeliveryAreas))
+		for index, area := range in.DeliveryAreas {
+			name := sanitizePublicText(area.Name, 100)
+			nameKey := strings.ToLower(strings.TrimSpace(name))
+			if nameKey == "" || seenNames[nameKey] {
+				return StorefrontView{}, errors.New("delivery area names must be unique")
+			}
+			seenNames[nameKey] = true
+			fee, parseErr := parseOptionalNonNegativeMajor(area.Fee, int(sf.CurrencyExponent))
+			if parseErr != nil || fee < 0 {
+				return StorefrontView{}, errors.New("each delivery area needs a valid non-negative fee")
+			}
+			description := sanitizePublicText(area.Description, 400)
+			var saved db.StorefrontDeliveryArea
+			if area.ID > 0 {
+				saved, err = q.UpdateStorefrontDeliveryArea(ctx, db.UpdateStorefrontDeliveryAreaParams{WorkspaceID: ws, StorefrontID: sf.ID, ID: area.ID, Name: name, FeeMinor: fee, Description: description, Position: int32(index)})
+			} else {
+				saved, err = q.CreateStorefrontDeliveryArea(ctx, db.CreateStorefrontDeliveryAreaParams{WorkspaceID: ws, StorefrontID: sf.ID, Name: name, FeeMinor: fee, Description: description, Position: int32(index)})
+			}
+			if errors.Is(err, pgx.ErrNoRows) {
+				return StorefrontView{}, ErrNotFound
+			}
+			if err != nil {
+				return StorefrontView{}, err
+			}
+			activeIDs = append(activeIDs, saved.ID)
+		}
+		if err := q.DisableMissingStorefrontDeliveryAreas(ctx, db.DisableMissingStorefrontDeliveryAreasParams{WorkspaceID: ws, StorefrontID: sf.ID, Column3: activeIDs}); err != nil {
+			return StorefrontView{}, err
+		}
+	}
 	if nextSlug.Valid {
 		// Keep default subdomain mapping synchronized
 		_, _ = tx.Exec(ctx, `UPDATE storefront_domains SET hostname=$2, updated_at=now() WHERE storefront_id=$1 AND domain_type='subdomain'`, sf.ID, fmt.Sprintf("%s.rekordly.com", nextSlug.String))
@@ -702,6 +781,12 @@ func nullablePgInt4(value *int32) pgtype.Int4 {
 		return pgtype.Int4{}
 	}
 	return pgtype.Int4{Int32: *value, Valid: true}
+}
+
+func nullableMinor(value pgtype.Int8) *string {
+	if !value.Valid { return nil }
+	text := fmt.Sprint(value.Int64)
+	return &text
 }
 
 func (s *Service) PublishStorefront(ctx context.Context, ws int64, publish bool) (StorefrontView, error) {

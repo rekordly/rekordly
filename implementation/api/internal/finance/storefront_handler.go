@@ -35,6 +35,7 @@ func (h *Handler) RegisterStorefrontRoutes(g *gin.RouterGroup) {
 	g.POST("/storefront/domains/:domainId/commands/recheck", h.recheckCustomDomain)
 	g.POST("/storefront/domains/:domainId/commands/disconnect", h.disconnectCustomDomain)
 	g.GET("/storefront/analytics", h.getStorefrontAnalytics)
+	g.GET("/storefront/overview", h.getStorefrontOverview)
 }
 
 func (h *Handler) storefrontError(c *gin.Context, err error) {
@@ -128,7 +129,7 @@ func (h *Handler) updateStorefrontSettings(c *gin.Context) {
 	}
 	cardFields := map[string]map[string]bool{
 		"details":  {"name": true, "slug": true, "contact_phone": true, "contact_email": true, "whatsapp_number": true, "address": true, "business_hours": true},
-		"delivery": {"delivery_methods": true, "delivery_guidance": true, "default_delivery_fee": true},
+		"delivery": {"delivery_methods": true, "delivery_guidance": true, "default_delivery_fee": true, "delivery_areas": true, "free_delivery_threshold": true},
 		"payments": {"checkout_require_email": true, "checkout_require_phone": true, "reservation_ttl_hours": true},
 		"shoppers": {"tagline": true, "description": true, "logo_url": true, "banner_url": true, "auto_show_new_products": true, "show_sold_out": true, "show_stock_count": true, "low_stock_threshold": true},
 		"policies": {"return_policy": true, "privacy_policy": true, "terms_policy": true, "custom_policy": true},
@@ -169,6 +170,8 @@ func (h *Handler) updateStorefrontSettings(c *gin.Context) {
 		"business_hours": current.Settings.BusinessHours, "social_links": current.Settings.SocialLinks,
 		"delivery_methods": current.Settings.DeliveryMethods, "delivery_guidance": current.Settings.DeliveryGuidance,
 		"default_delivery_fee":   minorToMajorString(parseMinor(current.Settings.DefaultDeliveryFeeMinor), int(current.CurrencyExponent)),
+		"free_delivery_threshold": "",
+		"delivery_areas":         []StorefrontDeliveryAreaInput{},
 		"checkout_require_email": current.Settings.CheckoutRequireEmail, "checkout_require_phone": current.Settings.CheckoutRequirePhone,
 		"return_policy": current.Settings.ReturnPolicy, "privacy_policy": current.Settings.PrivacyPolicy,
 		"terms_policy": current.Settings.TermsPolicy, "custom_policy": current.Settings.CustomPolicy,
@@ -177,6 +180,15 @@ func (h *Handler) updateStorefrontSettings(c *gin.Context) {
 		"auto_show_new_products": current.Settings.AutoShowNewProducts, "show_sold_out": current.Settings.ShowSoldOut,
 		"show_stock_count": current.Settings.ShowStockCount, "low_stock_threshold": current.Settings.LowStockThreshold,
 	}
+	if current.Settings.FreeDeliveryThresholdMinor != nil {
+		base["free_delivery_threshold"] = minorToMajorString(parseMinor(*current.Settings.FreeDeliveryThresholdMinor), int(current.CurrencyExponent))
+	}
+	areas := make([]StorefrontDeliveryAreaInput, 0, len(current.Settings.DeliveryAreas))
+	for _, area := range current.Settings.DeliveryAreas {
+		if !area.IsActive { continue }
+		areas = append(areas, StorefrontDeliveryAreaInput{ID: area.ID, Name: area.Name, Fee: minorToMajorString(parseMinor(area.FeeMinor), int(current.CurrencyExponent)), Description: area.Description})
+	}
+	base["delivery_areas"] = areas
 	for key, value := range patch {
 		base[key] = value
 	}
@@ -395,4 +407,22 @@ func (h *Handler) getStorefrontAnalytics(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"analytics": analytics}})
+}
+
+func (h *Handler) getStorefrontOverview(c *gin.Context) {
+	ws, ok := businessPermission(c, "storefront.view", "reports.view_basic")
+	if !ok {
+		return
+	}
+	period := c.DefaultQuery("period", "30d")
+	overview, err := h.service.GetStorefrontOverview(c.Request.Context(), ws.WorkspaceID, period)
+	if errors.Is(err, ErrNotFound) {
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{"overview": nil}})
+		return
+	}
+	if err != nil {
+		h.storefrontError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"overview": overview}})
 }

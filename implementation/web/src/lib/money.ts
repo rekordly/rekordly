@@ -51,6 +51,7 @@ import type {
   StorefrontProductCard,
   StorefrontDomain,
   StorefrontAnalytics,
+  StorefrontOverview,
   PublicStorefrontProjection,
   PublicStorefrontProduct,
   ValidatedCart,
@@ -862,6 +863,8 @@ export const financeApi = {
     scopedGet<{ storefront: Storefront | null }>(workspaceId, "/api/v1/storefront").then((r) => r.storefront),
   getStorefrontSettings: (workspaceId: number) =>
     scopedGet<{ storefront: Storefront | null }>(workspaceId, "/api/v1/storefront/settings").then((r) => r.storefront),
+  getStorefrontOverview: (workspaceId: number, period: "7d" | "30d" | "90d") =>
+    scopedGet<{ overview: StorefrontOverview | null }>(workspaceId, "/api/v1/storefront/overview", { period }).then((r) => r.overview),
   createStorefront: (workspaceId: number, body: { name: string; slug: string; theme_key?: string; default_outlet_id?: number; currency?: string }) =>
     scopedPost<{ storefront: Storefront }>(workspaceId, "/api/v1/storefront", body).then((r) => r.storefront),
   updateStorefrontSettings: (workspaceId: number, body: unknown) =>
@@ -946,12 +949,14 @@ export const financeApi = {
     apiClient.get<{ storefront: PublicStorefrontProjection }>(`/api/v1/public/storefronts/${encodeURIComponent(slug)}${buildQueryString(params)}`).then((r) => r.storefront),
   getPublicStorefrontProduct: (slug: string, productId: number) =>
     apiClient.get<{ product: PublicStorefrontProduct; variants: PublicStorefrontProduct[]; storefront: PublicStorefrontProjection }>(`/api/v1/public/storefronts/${encodeURIComponent(slug)}/products/${productId}`),
-  getPublicCart: (slug: string, token: string, deliveryMethod?: string) =>
-    apiClient.get<{ cart: ValidatedCart }>(`/api/v1/public/storefronts/${encodeURIComponent(slug)}/carts/${encodeURIComponent(token)}${buildQueryString({ delivery_method: deliveryMethod })}`).then((r) => r.cart),
-  validatePublicCart: (slug: string, body: { lines: { storefront_product_id: number; quantity: string; expected_price_minor?: string }[]; delivery_method?: string }) =>
+  getPublicCart: (slug: string, token: string, deliveryMethod?: string, deliveryAreaId?: number) =>
+    apiClient.get<{ cart: ValidatedCart }>(`/api/v1/public/storefronts/${encodeURIComponent(slug)}/carts/${encodeURIComponent(token)}${buildQueryString({ delivery_method: deliveryMethod, delivery_area_id: deliveryAreaId })}`).then((r) => r.cart),
+  validatePublicCart: (slug: string, body: { lines: { storefront_product_id: number; quantity: string; expected_price_minor?: string }[]; delivery_method?: string; delivery_area_id?: number }) =>
     apiClient.post<typeof body, { cart: ValidatedCart }>(`/api/v1/public/storefronts/${encodeURIComponent(slug)}/carts/validate`, body).then((r) => r.cart),
-  upsertPublicCart: (slug: string, body: { cart_token?: string; lines: { storefront_product_id: number; quantity: string; expected_price_minor?: string }[]; delivery_method?: string }) =>
+  upsertPublicCart: (slug: string, body: { cart_token?: string; lines: { storefront_product_id: number; quantity: string; expected_price_minor?: string }[]; delivery_method?: string; delivery_area_id?: number }) =>
     apiClient.post<typeof body, { cart: ValidatedCart }>(`/api/v1/public/storefronts/${encodeURIComponent(slug)}/carts`, body).then((r) => r.cart),
+  trackPublicCheckoutStarted: (slug: string) =>
+    apiClient.post<undefined, void>(`/api/v1/public/storefronts/${encodeURIComponent(slug)}/analytics/checkout-started`, undefined),
   submitGuestCheckout: (slug: string, body: unknown, idempotencyKey: string) =>
     apiClient.post<unknown, { order: GuestCheckoutConfirmation }>(`/api/v1/public/storefronts/${encodeURIComponent(slug)}/checkout`, body, { headers: { "Idempotency-Key": idempotencyKey } }).then((r) => r.order),
   getPublicOrderStatus: (token: string) =>

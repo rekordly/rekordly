@@ -3120,6 +3120,7 @@ type StorefrontAnalyticsEvent struct {
 	SearchQueryHash     pgtype.Text        `json:"search_query_hash"`
 	OccurredOn          pgtype.Date        `json:"occurred_on"`
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	VisitorKeyHash      pgtype.Text        `json:"visitor_key_hash"`
 }
 
 type StorefrontCart struct {
@@ -3162,6 +3163,19 @@ type StorefrontCollection struct {
 	ImageUrl     pgtype.Text        `json:"image_url"`
 	Position     int32              `json:"position"`
 	IsVisible    bool               `json:"is_visible"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
+type StorefrontDeliveryArea struct {
+	ID           int64              `json:"id"`
+	WorkspaceID  int64              `json:"workspace_id"`
+	StorefrontID int64              `json:"storefront_id"`
+	Name         string             `json:"name"`
+	FeeMinor     int64              `json:"fee_minor"`
+	Description  string             `json:"description"`
+	Position     int32              `json:"position"`
+	IsActive     bool               `json:"is_active"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
@@ -3249,6 +3263,7 @@ type StorefrontOrder struct {
 	IdempotencyKey          string             `json:"idempotency_key"`
 	CreatedAt               pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
+	DeliveryAreaID          pgtype.Int8        `json:"delivery_area_id"`
 }
 
 type StorefrontOrderEvent struct {
@@ -3329,51 +3344,52 @@ type StorefrontProduct struct {
 }
 
 type StorefrontSetting struct {
-	StorefrontID            int64              `json:"storefront_id"`
-	WorkspaceID             int64              `json:"workspace_id"`
-	Tagline                 pgtype.Text        `json:"tagline"`
-	Description             pgtype.Text        `json:"description"`
-	LogoUrl                 pgtype.Text        `json:"logo_url"`
-	BannerUrl               pgtype.Text        `json:"banner_url"`
-	PrimaryColor            string             `json:"primary_color"`
-	AccentColor             string             `json:"accent_color"`
-	BackgroundColor         string             `json:"background_color"`
-	TextColor               string             `json:"text_color"`
-	FontFamily              string             `json:"font_family"`
-	SectionOrder            []byte             `json:"section_order"`
-	ContactPhone            pgtype.Text        `json:"contact_phone"`
-	ContactEmail            pgtype.Text        `json:"contact_email"`
-	WhatsappNumber          pgtype.Text        `json:"whatsapp_number"`
-	Address                 pgtype.Text        `json:"address"`
-	BusinessHours           []byte             `json:"business_hours"`
-	SocialLinks             []byte             `json:"social_links"`
-	DeliveryMethods         []byte             `json:"delivery_methods"`
-	DeliveryGuidance        pgtype.Text        `json:"delivery_guidance"`
-	DefaultDeliveryFeeMinor int64              `json:"default_delivery_fee_minor"`
-	CheckoutRequireEmail    bool               `json:"checkout_require_email"`
-	CheckoutRequirePhone    bool               `json:"checkout_require_phone"`
-	ReturnPolicy            pgtype.Text        `json:"return_policy"`
-	PrivacyPolicy           pgtype.Text        `json:"privacy_policy"`
-	TermsPolicy             pgtype.Text        `json:"terms_policy"`
-	CustomPolicy            pgtype.Text        `json:"custom_policy"`
-	SeoTitle                pgtype.Text        `json:"seo_title"`
-	SeoDescription          pgtype.Text        `json:"seo_description"`
-	SeoImageUrl             pgtype.Text        `json:"seo_image_url"`
-	SeoIndexable            bool               `json:"seo_indexable"`
-	CanonicalDomainID       pgtype.Int8        `json:"canonical_domain_id"`
-	Version                 int32              `json:"version"`
-	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
-	Brand                   []byte             `json:"brand"`
-	Sections                []byte             `json:"sections"`
-	DraftName               pgtype.Text        `json:"draft_name"`
-	DraftThemeKey           string             `json:"draft_theme_key"`
-	DraftBrand              []byte             `json:"draft_brand"`
-	DraftSections           []byte             `json:"draft_sections"`
-	PublishedAt             pgtype.Timestamptz `json:"published_at"`
-	AutoShowNewProducts     bool               `json:"auto_show_new_products"`
-	ShowSoldOut             bool               `json:"show_sold_out"`
-	ShowStockCount          bool               `json:"show_stock_count"`
-	LowStockThreshold       int32              `json:"low_stock_threshold"`
+	StorefrontID               int64              `json:"storefront_id"`
+	WorkspaceID                int64              `json:"workspace_id"`
+	Tagline                    pgtype.Text        `json:"tagline"`
+	Description                pgtype.Text        `json:"description"`
+	LogoUrl                    pgtype.Text        `json:"logo_url"`
+	BannerUrl                  pgtype.Text        `json:"banner_url"`
+	PrimaryColor               string             `json:"primary_color"`
+	AccentColor                string             `json:"accent_color"`
+	BackgroundColor            string             `json:"background_color"`
+	TextColor                  string             `json:"text_color"`
+	FontFamily                 string             `json:"font_family"`
+	SectionOrder               []byte             `json:"section_order"`
+	ContactPhone               pgtype.Text        `json:"contact_phone"`
+	ContactEmail               pgtype.Text        `json:"contact_email"`
+	WhatsappNumber             pgtype.Text        `json:"whatsapp_number"`
+	Address                    pgtype.Text        `json:"address"`
+	BusinessHours              []byte             `json:"business_hours"`
+	SocialLinks                []byte             `json:"social_links"`
+	DeliveryMethods            []byte             `json:"delivery_methods"`
+	DeliveryGuidance           pgtype.Text        `json:"delivery_guidance"`
+	DefaultDeliveryFeeMinor    int64              `json:"default_delivery_fee_minor"`
+	CheckoutRequireEmail       bool               `json:"checkout_require_email"`
+	CheckoutRequirePhone       bool               `json:"checkout_require_phone"`
+	ReturnPolicy               pgtype.Text        `json:"return_policy"`
+	PrivacyPolicy              pgtype.Text        `json:"privacy_policy"`
+	TermsPolicy                pgtype.Text        `json:"terms_policy"`
+	CustomPolicy               pgtype.Text        `json:"custom_policy"`
+	SeoTitle                   pgtype.Text        `json:"seo_title"`
+	SeoDescription             pgtype.Text        `json:"seo_description"`
+	SeoImageUrl                pgtype.Text        `json:"seo_image_url"`
+	SeoIndexable               bool               `json:"seo_indexable"`
+	CanonicalDomainID          pgtype.Int8        `json:"canonical_domain_id"`
+	Version                    int32              `json:"version"`
+	UpdatedAt                  pgtype.Timestamptz `json:"updated_at"`
+	Brand                      []byte             `json:"brand"`
+	Sections                   []byte             `json:"sections"`
+	DraftName                  pgtype.Text        `json:"draft_name"`
+	DraftThemeKey              string             `json:"draft_theme_key"`
+	DraftBrand                 []byte             `json:"draft_brand"`
+	DraftSections              []byte             `json:"draft_sections"`
+	PublishedAt                pgtype.Timestamptz `json:"published_at"`
+	AutoShowNewProducts        bool               `json:"auto_show_new_products"`
+	ShowSoldOut                bool               `json:"show_sold_out"`
+	ShowStockCount             bool               `json:"show_stock_count"`
+	LowStockThreshold          int32              `json:"low_stock_threshold"`
+	FreeDeliveryThresholdMinor pgtype.Int8        `json:"free_delivery_threshold_minor"`
 }
 
 type Subscription struct {

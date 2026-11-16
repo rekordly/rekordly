@@ -76,7 +76,7 @@ VALUES ($1, $2,
     '[{"id":"hero-1","type":"hero","enabled":true,"content":{"heading":"Welcome to your store","subheading":"Quality products, delivered to you","button_label":"Shop now"}},{"id":"product_grid-1","type":"product_grid","enabled":true,"content":{"title":"Shop our products","source":"new","limit":12}},{"id":"about-1","type":"about","enabled":true,"content":{"heading":"About us","body":"Tell shoppers a little about your business."}},{"id":"contact-1","type":"contact","enabled":true,"content":{}}]'::jsonb,
     '[{"id":"hero-1","type":"hero","enabled":true,"content":{"heading":"Welcome to your store","subheading":"Quality products, delivered to you","button_label":"Shop now"}},{"id":"product_grid-1","type":"product_grid","enabled":true,"content":{"title":"Shop our products","source":"new","limit":12}},{"id":"about-1","type":"about","enabled":true,"content":{"heading":"About us","body":"Tell shoppers a little about your business."}},{"id":"contact-1","type":"contact","enabled":true,"content":{}}]'::jsonb,
     'your store')
-RETURNING storefront_id, workspace_id, tagline, description, logo_url, banner_url, primary_color, accent_color, background_color, text_color, font_family, section_order, contact_phone, contact_email, whatsapp_number, address, business_hours, social_links, delivery_methods, delivery_guidance, default_delivery_fee_minor, checkout_require_email, checkout_require_phone, return_policy, privacy_policy, terms_policy, custom_policy, seo_title, seo_description, seo_image_url, seo_indexable, canonical_domain_id, version, updated_at, brand, sections, draft_name, draft_theme_key, draft_brand, draft_sections, published_at, auto_show_new_products, show_sold_out, show_stock_count, low_stock_threshold
+RETURNING storefront_id, workspace_id, tagline, description, logo_url, banner_url, primary_color, accent_color, background_color, text_color, font_family, section_order, contact_phone, contact_email, whatsapp_number, address, business_hours, social_links, delivery_methods, delivery_guidance, default_delivery_fee_minor, checkout_require_email, checkout_require_phone, return_policy, privacy_policy, terms_policy, custom_policy, seo_title, seo_description, seo_image_url, seo_indexable, canonical_domain_id, version, updated_at, brand, sections, draft_name, draft_theme_key, draft_brand, draft_sections, published_at, auto_show_new_products, show_sold_out, show_stock_count, low_stock_threshold, free_delivery_threshold_minor
 `
 
 type CreateDefaultStorefrontSettingsParams struct {
@@ -133,6 +133,7 @@ func (q *Queries) CreateDefaultStorefrontSettings(ctx context.Context, arg Creat
 		&i.ShowSoldOut,
 		&i.ShowStockCount,
 		&i.LowStockThreshold,
+		&i.FreeDeliveryThresholdMinor,
 	)
 	return i, err
 }
@@ -275,6 +276,46 @@ func (q *Queries) CreateStorefrontCollection(ctx context.Context, arg CreateStor
 	return i, err
 }
 
+const createStorefrontDeliveryArea = `-- name: CreateStorefrontDeliveryArea :one
+INSERT INTO storefront_delivery_areas (workspace_id, storefront_id, name, fee_minor, description, position)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, workspace_id, storefront_id, name, fee_minor, description, position, is_active, created_at, updated_at
+`
+
+type CreateStorefrontDeliveryAreaParams struct {
+	WorkspaceID  int64  `json:"workspace_id"`
+	StorefrontID int64  `json:"storefront_id"`
+	Name         string `json:"name"`
+	FeeMinor     int64  `json:"fee_minor"`
+	Description  string `json:"description"`
+	Position     int32  `json:"position"`
+}
+
+func (q *Queries) CreateStorefrontDeliveryArea(ctx context.Context, arg CreateStorefrontDeliveryAreaParams) (StorefrontDeliveryArea, error) {
+	row := q.db.QueryRow(ctx, createStorefrontDeliveryArea,
+		arg.WorkspaceID,
+		arg.StorefrontID,
+		arg.Name,
+		arg.FeeMinor,
+		arg.Description,
+		arg.Position,
+	)
+	var i StorefrontDeliveryArea
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.StorefrontID,
+		&i.Name,
+		&i.FeeMinor,
+		&i.Description,
+		&i.Position,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createStorefrontDomain = `-- name: CreateStorefrontDomain :one
 INSERT INTO storefront_domains (
     workspace_id, storefront_id, hostname, domain_type, status, verification_token, tls_status, is_primary
@@ -378,11 +419,11 @@ const createStorefrontOrder = `-- name: CreateStorefrontOrder :one
 INSERT INTO storefront_orders (
     workspace_id, storefront_id, order_reference, public_token_hash, outlet_id,
     currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor,
-    delivery_method, customer_name, customer_phone, customer_email, organization_name,
+    delivery_method, delivery_area_id, customer_name, customer_phone, customer_email, organization_name,
     preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time,
     customer_note, policy_acknowledged, policy_version, idempotency_key
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
-RETURNING id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
+RETURNING id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id
 `
 
 type CreateStorefrontOrderParams struct {
@@ -398,6 +439,7 @@ type CreateStorefrontOrderParams struct {
 	DeliveryFeeMinor       int64       `json:"delivery_fee_minor"`
 	TotalMinor             int64       `json:"total_minor"`
 	DeliveryMethod         string      `json:"delivery_method"`
+	DeliveryAreaID         pgtype.Int8 `json:"delivery_area_id"`
 	CustomerName           string      `json:"customer_name"`
 	CustomerPhone          pgtype.Text `json:"customer_phone"`
 	CustomerEmail          pgtype.Text `json:"customer_email"`
@@ -426,6 +468,7 @@ func (q *Queries) CreateStorefrontOrder(ctx context.Context, arg CreateStorefron
 		arg.DeliveryFeeMinor,
 		arg.TotalMinor,
 		arg.DeliveryMethod,
+		arg.DeliveryAreaID,
 		arg.CustomerName,
 		arg.CustomerPhone,
 		arg.CustomerEmail,
@@ -479,6 +522,7 @@ func (q *Queries) CreateStorefrontOrder(ctx context.Context, arg CreateStorefron
 		&i.IdempotencyKey,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeliveryAreaID,
 	)
 	return i, err
 }
@@ -667,6 +711,65 @@ func (q *Queries) DeleteStorefrontCollection(ctx context.Context, arg DeleteStor
 	return err
 }
 
+const disableMissingStorefrontDeliveryAreas = `-- name: DisableMissingStorefrontDeliveryAreas :exec
+UPDATE storefront_delivery_areas SET is_active = false, updated_at = now()
+WHERE workspace_id = $1 AND storefront_id = $2
+  AND NOT (id = ANY($3::bigint[]))
+`
+
+type DisableMissingStorefrontDeliveryAreasParams struct {
+	WorkspaceID  int64   `json:"workspace_id"`
+	StorefrontID int64   `json:"storefront_id"`
+	Column3      []int64 `json:"column_3"`
+}
+
+func (q *Queries) DisableMissingStorefrontDeliveryAreas(ctx context.Context, arg DisableMissingStorefrontDeliveryAreasParams) error {
+	_, err := q.db.Exec(ctx, disableMissingStorefrontDeliveryAreas, arg.WorkspaceID, arg.StorefrontID, arg.Column3)
+	return err
+}
+
+const getActiveStorefrontDeliveryAreas = `-- name: GetActiveStorefrontDeliveryAreas :many
+SELECT id, workspace_id, storefront_id, name, fee_minor, description, position, is_active, created_at, updated_at FROM storefront_delivery_areas
+WHERE workspace_id = $1 AND storefront_id = $2 AND is_active
+ORDER BY position, id
+`
+
+type GetActiveStorefrontDeliveryAreasParams struct {
+	WorkspaceID  int64 `json:"workspace_id"`
+	StorefrontID int64 `json:"storefront_id"`
+}
+
+func (q *Queries) GetActiveStorefrontDeliveryAreas(ctx context.Context, arg GetActiveStorefrontDeliveryAreasParams) ([]StorefrontDeliveryArea, error) {
+	rows, err := q.db.Query(ctx, getActiveStorefrontDeliveryAreas, arg.WorkspaceID, arg.StorefrontID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []StorefrontDeliveryArea{}
+	for rows.Next() {
+		var i StorefrontDeliveryArea
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.StorefrontID,
+			&i.Name,
+			&i.FeeMinor,
+			&i.Description,
+			&i.Position,
+			&i.IsActive,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getStorefrontAnalyticsSummary = `-- name: GetStorefrontAnalyticsSummary :one
 SELECT
     count(*) FILTER (WHERE event_type = 'page_view')::bigint AS page_views,
@@ -846,6 +949,48 @@ func (q *Queries) GetStorefrontCartByHash(ctx context.Context, arg GetStorefront
 	return i, err
 }
 
+const getStorefrontDeliveryAreas = `-- name: GetStorefrontDeliveryAreas :many
+SELECT id, workspace_id, storefront_id, name, fee_minor, description, position, is_active, created_at, updated_at FROM storefront_delivery_areas
+WHERE workspace_id = $1 AND storefront_id = $2
+ORDER BY position, id
+`
+
+type GetStorefrontDeliveryAreasParams struct {
+	WorkspaceID  int64 `json:"workspace_id"`
+	StorefrontID int64 `json:"storefront_id"`
+}
+
+func (q *Queries) GetStorefrontDeliveryAreas(ctx context.Context, arg GetStorefrontDeliveryAreasParams) ([]StorefrontDeliveryArea, error) {
+	rows, err := q.db.Query(ctx, getStorefrontDeliveryAreas, arg.WorkspaceID, arg.StorefrontID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []StorefrontDeliveryArea{}
+	for rows.Next() {
+		var i StorefrontDeliveryArea
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.StorefrontID,
+			&i.Name,
+			&i.FeeMinor,
+			&i.Description,
+			&i.Position,
+			&i.IsActive,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getStorefrontDomainByHost = `-- name: GetStorefrontDomainByHost :one
 SELECT sd.id, sd.workspace_id, sd.storefront_id, sd.hostname, sd.domain_type, sd.status, sd.verification_token, sd.tls_status, sd.last_checked_at, sd.check_attempts, sd.last_error, sd.is_primary, sd.verified_at, sd.created_at, sd.updated_at, sf.status AS storefront_status, sf.entitlement_status, sf.slug AS storefront_slug
 FROM storefront_domains sd
@@ -937,7 +1082,7 @@ func (q *Queries) GetStorefrontDomainForUpdate(ctx context.Context, arg GetStore
 }
 
 const getStorefrontOrderByID = `-- name: GetStorefrontOrderByID :one
-SELECT id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at FROM storefront_orders
+SELECT id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id FROM storefront_orders
 WHERE workspace_id = $1 AND id = $2
 `
 
@@ -988,12 +1133,13 @@ func (q *Queries) GetStorefrontOrderByID(ctx context.Context, arg GetStorefrontO
 		&i.IdempotencyKey,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeliveryAreaID,
 	)
 	return i, err
 }
 
 const getStorefrontOrderByIdempotency = `-- name: GetStorefrontOrderByIdempotency :one
-SELECT id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at FROM storefront_orders
+SELECT id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id FROM storefront_orders
 WHERE workspace_id = $1 AND idempotency_key = $2
 `
 
@@ -1044,12 +1190,13 @@ func (q *Queries) GetStorefrontOrderByIdempotency(ctx context.Context, arg GetSt
 		&i.IdempotencyKey,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeliveryAreaID,
 	)
 	return i, err
 }
 
 const getStorefrontOrderByPublicTokenHash = `-- name: GetStorefrontOrderByPublicTokenHash :one
-SELECT id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at FROM storefront_orders
+SELECT id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id FROM storefront_orders
 WHERE public_token_hash = $1
 `
 
@@ -1095,12 +1242,13 @@ func (q *Queries) GetStorefrontOrderByPublicTokenHash(ctx context.Context, publi
 		&i.IdempotencyKey,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeliveryAreaID,
 	)
 	return i, err
 }
 
 const getStorefrontOrderForUpdate = `-- name: GetStorefrontOrderForUpdate :one
-SELECT id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at FROM storefront_orders
+SELECT id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id FROM storefront_orders
 WHERE workspace_id = $1 AND id = $2
 FOR UPDATE
 `
@@ -1152,12 +1300,13 @@ func (q *Queries) GetStorefrontOrderForUpdate(ctx context.Context, arg GetStoref
 		&i.IdempotencyKey,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeliveryAreaID,
 	)
 	return i, err
 }
 
 const getStorefrontOrderForUpdateByPublicHash = `-- name: GetStorefrontOrderForUpdateByPublicHash :one
-SELECT id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at FROM storefront_orders
+SELECT id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id FROM storefront_orders
 WHERE public_token_hash = $1
 FOR UPDATE
 `
@@ -1204,12 +1353,284 @@ func (q *Queries) GetStorefrontOrderForUpdateByPublicHash(ctx context.Context, p
 		&i.IdempotencyKey,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeliveryAreaID,
+	)
+	return i, err
+}
+
+const getStorefrontOverviewActionCounts = `-- name: GetStorefrontOverviewActionCounts :one
+SELECT
+    count(*) FILTER (WHERE commercial_status IN ('request_received', 'needs_review'))::bigint AS to_confirm,
+    count(*) FILTER (WHERE commercial_status = 'confirmed' AND fulfilment_status = 'reserved')::bigint AS to_pack,
+    count(*) FILTER (WHERE commercial_status = 'confirmed' AND fulfilment_status IN ('packed', 'partially_fulfilled'))::bigint AS to_deliver
+FROM storefront_orders
+WHERE workspace_id = $1 AND storefront_id = $2
+`
+
+type GetStorefrontOverviewActionCountsParams struct {
+	WorkspaceID  int64 `json:"workspace_id"`
+	StorefrontID int64 `json:"storefront_id"`
+}
+
+type GetStorefrontOverviewActionCountsRow struct {
+	ToConfirm int64 `json:"to_confirm"`
+	ToPack    int64 `json:"to_pack"`
+	ToDeliver int64 `json:"to_deliver"`
+}
+
+func (q *Queries) GetStorefrontOverviewActionCounts(ctx context.Context, arg GetStorefrontOverviewActionCountsParams) (GetStorefrontOverviewActionCountsRow, error) {
+	row := q.db.QueryRow(ctx, getStorefrontOverviewActionCounts, arg.WorkspaceID, arg.StorefrontID)
+	var i GetStorefrontOverviewActionCountsRow
+	err := row.Scan(&i.ToConfirm, &i.ToPack, &i.ToDeliver)
+	return i, err
+}
+
+const getStorefrontOverviewDaily = `-- name: GetStorefrontOverviewDaily :many
+WITH days AS (
+    SELECT generate_series($3::date, CURRENT_DATE, interval '1 day')::date AS day
+), events AS (
+    SELECT occurred_on,
+        count(*) FILTER (WHERE event_type = 'page_view')::bigint AS page_views,
+        count(*) FILTER (WHERE event_type = 'product_view')::bigint AS product_views,
+        count(*) FILTER (WHERE event_type = 'add_to_cart')::bigint AS add_to_carts,
+        count(*) FILTER (WHERE event_type = 'checkout_started')::bigint AS checkouts_started,
+        count(*) FILTER (WHERE event_type = 'checkout_submitted')::bigint AS checkouts_submitted,
+        count(DISTINCT visitor_key_hash) FILTER (WHERE event_type = 'page_view' AND visitor_key_hash IS NOT NULL)::bigint AS visitors
+    FROM storefront_analytics_events ae
+    WHERE ae.workspace_id = $1 AND ae.storefront_id = $2 AND ae.occurred_on >= $3
+    GROUP BY ae.occurred_on
+), online_sales AS (
+    SELECT sale_date, count(*)::bigint AS paid_orders,
+        COALESCE(sum(total_amount_minor), 0)::bigint AS sales_minor
+    FROM sales
+    WHERE workspace_id = $1 AND source = 'online_store' AND status = 'paid'
+      AND sale_date >= $3 AND sale_date <= CURRENT_DATE
+    GROUP BY sale_date
+)
+SELECT days.day,
+    COALESCE(events.page_views, 0)::bigint AS page_views,
+    COALESCE(events.product_views, 0)::bigint AS product_views,
+    COALESCE(events.add_to_carts, 0)::bigint AS add_to_carts,
+    COALESCE(events.checkouts_started, 0)::bigint AS checkouts_started,
+    COALESCE(events.checkouts_submitted, 0)::bigint AS checkouts_submitted,
+    COALESCE(events.visitors, 0)::bigint AS visitors,
+    COALESCE(online_sales.paid_orders, 0)::bigint AS paid_orders,
+    COALESCE(online_sales.sales_minor, 0)::bigint AS sales_minor
+FROM days
+LEFT JOIN events ON events.occurred_on = days.day
+LEFT JOIN online_sales ON online_sales.sale_date = days.day
+ORDER BY days.day
+`
+
+type GetStorefrontOverviewDailyParams struct {
+	WorkspaceID  int64       `json:"workspace_id"`
+	StorefrontID int64       `json:"storefront_id"`
+	Column3      pgtype.Date `json:"column_3"`
+}
+
+type GetStorefrontOverviewDailyRow struct {
+	Day                pgtype.Date `json:"day"`
+	PageViews          int64       `json:"page_views"`
+	ProductViews       int64       `json:"product_views"`
+	AddToCarts         int64       `json:"add_to_carts"`
+	CheckoutsStarted   int64       `json:"checkouts_started"`
+	CheckoutsSubmitted int64       `json:"checkouts_submitted"`
+	Visitors           int64       `json:"visitors"`
+	PaidOrders         int64       `json:"paid_orders"`
+	SalesMinor         int64       `json:"sales_minor"`
+}
+
+func (q *Queries) GetStorefrontOverviewDaily(ctx context.Context, arg GetStorefrontOverviewDailyParams) ([]GetStorefrontOverviewDailyRow, error) {
+	rows, err := q.db.Query(ctx, getStorefrontOverviewDaily, arg.WorkspaceID, arg.StorefrontID, arg.Column3)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetStorefrontOverviewDailyRow{}
+	for rows.Next() {
+		var i GetStorefrontOverviewDailyRow
+		if err := rows.Scan(
+			&i.Day,
+			&i.PageViews,
+			&i.ProductViews,
+			&i.AddToCarts,
+			&i.CheckoutsStarted,
+			&i.CheckoutsSubmitted,
+			&i.Visitors,
+			&i.PaidOrders,
+			&i.SalesMinor,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getStorefrontOverviewReferrers = `-- name: GetStorefrontOverviewReferrers :many
+SELECT COALESCE(referrer_class, 'direct') AS referrer_class, count(*)::bigint AS visits
+FROM storefront_analytics_events
+WHERE workspace_id = $1 AND storefront_id = $2 AND occurred_on >= $3
+  AND event_type = 'page_view'
+GROUP BY COALESCE(referrer_class, 'direct')
+ORDER BY visits DESC, referrer_class ASC
+LIMIT 8
+`
+
+type GetStorefrontOverviewReferrersParams struct {
+	WorkspaceID  int64       `json:"workspace_id"`
+	StorefrontID int64       `json:"storefront_id"`
+	OccurredOn   pgtype.Date `json:"occurred_on"`
+}
+
+type GetStorefrontOverviewReferrersRow struct {
+	ReferrerClass string `json:"referrer_class"`
+	Visits        int64  `json:"visits"`
+}
+
+func (q *Queries) GetStorefrontOverviewReferrers(ctx context.Context, arg GetStorefrontOverviewReferrersParams) ([]GetStorefrontOverviewReferrersRow, error) {
+	rows, err := q.db.Query(ctx, getStorefrontOverviewReferrers, arg.WorkspaceID, arg.StorefrontID, arg.OccurredOn)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetStorefrontOverviewReferrersRow{}
+	for rows.Next() {
+		var i GetStorefrontOverviewReferrersRow
+		if err := rows.Scan(&i.ReferrerClass, &i.Visits); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getStorefrontOverviewTopProducts = `-- name: GetStorefrontOverviewTopProducts :many
+WITH views AS (
+    SELECT sp.product_id, count(*)::bigint AS product_views
+    FROM storefront_analytics_events ae
+    JOIN storefront_products sp ON sp.workspace_id = ae.workspace_id
+      AND sp.storefront_id = ae.storefront_id AND sp.id = ae.storefront_product_id
+    WHERE ae.workspace_id = $1 AND ae.storefront_id = $2 AND ae.occurred_on >= $3
+      AND ae.event_type = 'product_view'
+    GROUP BY sp.product_id
+), sales_by_product AS (
+    SELECT si.product_id, count(DISTINCT s.id)::bigint AS orders,
+      COALESCE(sum(si.amount_minor), 0)::bigint AS sales_minor
+    FROM sales s
+    JOIN sale_items si ON si.workspace_id = s.workspace_id AND si.sale_id = s.id
+    WHERE s.workspace_id = $1 AND s.source = 'online_store' AND s.status = 'paid'
+      AND s.sale_date >= $3
+    GROUP BY si.product_id
+)
+SELECT p.id AS product_id, p.name,
+  COALESCE(views.product_views, 0)::bigint AS product_views,
+  COALESCE(sales_by_product.orders, 0)::bigint AS orders,
+  COALESCE(sales_by_product.sales_minor, 0)::bigint AS sales_minor
+FROM products p
+JOIN storefront_products sp ON sp.workspace_id = p.workspace_id AND sp.product_id = p.id
+  AND sp.storefront_id = $2 AND sp.is_published
+LEFT JOIN views ON views.product_id = p.id
+LEFT JOIN sales_by_product ON sales_by_product.product_id = p.id
+WHERE p.workspace_id = $1 AND p.archived_at IS NULL
+GROUP BY p.id, p.name, views.product_views, sales_by_product.orders, sales_by_product.sales_minor
+ORDER BY sales_minor DESC, product_views DESC, p.id DESC
+LIMIT 10
+`
+
+type GetStorefrontOverviewTopProductsParams struct {
+	WorkspaceID  int64       `json:"workspace_id"`
+	StorefrontID int64       `json:"storefront_id"`
+	OccurredOn   pgtype.Date `json:"occurred_on"`
+}
+
+type GetStorefrontOverviewTopProductsRow struct {
+	ProductID    int64  `json:"product_id"`
+	Name         string `json:"name"`
+	ProductViews int64  `json:"product_views"`
+	Orders       int64  `json:"orders"`
+	SalesMinor   int64  `json:"sales_minor"`
+}
+
+func (q *Queries) GetStorefrontOverviewTopProducts(ctx context.Context, arg GetStorefrontOverviewTopProductsParams) ([]GetStorefrontOverviewTopProductsRow, error) {
+	rows, err := q.db.Query(ctx, getStorefrontOverviewTopProducts, arg.WorkspaceID, arg.StorefrontID, arg.OccurredOn)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetStorefrontOverviewTopProductsRow{}
+	for rows.Next() {
+		var i GetStorefrontOverviewTopProductsRow
+		if err := rows.Scan(
+			&i.ProductID,
+			&i.Name,
+			&i.ProductViews,
+			&i.Orders,
+			&i.SalesMinor,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getStorefrontOverviewTotals = `-- name: GetStorefrontOverviewTotals :one
+SELECT
+  (SELECT count(*)::bigint FROM storefront_analytics_events ae WHERE ae.workspace_id = $1 AND ae.storefront_id = $2 AND ae.occurred_on >= $3 AND ae.event_type = 'page_view') AS page_views,
+  (SELECT count(DISTINCT ae.visitor_key_hash)::bigint FROM storefront_analytics_events ae WHERE ae.workspace_id = $1 AND ae.storefront_id = $2 AND ae.occurred_on >= $3 AND ae.event_type = 'page_view' AND ae.visitor_key_hash IS NOT NULL) AS visitors,
+  (SELECT count(*)::bigint FROM storefront_analytics_events ae WHERE ae.workspace_id = $1 AND ae.storefront_id = $2 AND ae.occurred_on >= $3 AND ae.event_type = 'product_view') AS product_views,
+  (SELECT count(*)::bigint FROM storefront_analytics_events ae WHERE ae.workspace_id = $1 AND ae.storefront_id = $2 AND ae.occurred_on >= $3 AND ae.event_type = 'add_to_cart') AS add_to_carts,
+  (SELECT count(*)::bigint FROM storefront_analytics_events ae WHERE ae.workspace_id = $1 AND ae.storefront_id = $2 AND ae.occurred_on >= $3 AND ae.event_type = 'checkout_started') AS checkouts_started,
+  (SELECT count(*)::bigint FROM storefront_analytics_events ae WHERE ae.workspace_id = $1 AND ae.storefront_id = $2 AND ae.occurred_on >= $3 AND ae.event_type = 'checkout_submitted') AS checkouts_submitted,
+  (SELECT count(*)::bigint FROM sales s WHERE s.workspace_id = $1 AND s.source = 'online_store' AND s.status = 'paid' AND s.sale_date >= $3) AS paid_orders,
+  (SELECT COALESCE(sum(s.total_amount_minor), 0)::bigint FROM sales s WHERE s.workspace_id = $1 AND s.source = 'online_store' AND s.status = 'paid' AND s.sale_date >= $3) AS sales_minor
+`
+
+type GetStorefrontOverviewTotalsParams struct {
+	WorkspaceID  int64       `json:"workspace_id"`
+	StorefrontID int64       `json:"storefront_id"`
+	OccurredOn   pgtype.Date `json:"occurred_on"`
+}
+
+type GetStorefrontOverviewTotalsRow struct {
+	PageViews          int64 `json:"page_views"`
+	Visitors           int64 `json:"visitors"`
+	ProductViews       int64 `json:"product_views"`
+	AddToCarts         int64 `json:"add_to_carts"`
+	CheckoutsStarted   int64 `json:"checkouts_started"`
+	CheckoutsSubmitted int64 `json:"checkouts_submitted"`
+	PaidOrders         int64 `json:"paid_orders"`
+	SalesMinor         int64 `json:"sales_minor"`
+}
+
+func (q *Queries) GetStorefrontOverviewTotals(ctx context.Context, arg GetStorefrontOverviewTotalsParams) (GetStorefrontOverviewTotalsRow, error) {
+	row := q.db.QueryRow(ctx, getStorefrontOverviewTotals, arg.WorkspaceID, arg.StorefrontID, arg.OccurredOn)
+	var i GetStorefrontOverviewTotalsRow
+	err := row.Scan(
+		&i.PageViews,
+		&i.Visitors,
+		&i.ProductViews,
+		&i.AddToCarts,
+		&i.CheckoutsStarted,
+		&i.CheckoutsSubmitted,
+		&i.PaidOrders,
+		&i.SalesMinor,
 	)
 	return i, err
 }
 
 const getStorefrontSettings = `-- name: GetStorefrontSettings :one
-SELECT storefront_id, workspace_id, tagline, description, logo_url, banner_url, primary_color, accent_color, background_color, text_color, font_family, section_order, contact_phone, contact_email, whatsapp_number, address, business_hours, social_links, delivery_methods, delivery_guidance, default_delivery_fee_minor, checkout_require_email, checkout_require_phone, return_policy, privacy_policy, terms_policy, custom_policy, seo_title, seo_description, seo_image_url, seo_indexable, canonical_domain_id, version, updated_at, brand, sections, draft_name, draft_theme_key, draft_brand, draft_sections, published_at, auto_show_new_products, show_sold_out, show_stock_count, low_stock_threshold FROM storefront_settings
+SELECT storefront_id, workspace_id, tagline, description, logo_url, banner_url, primary_color, accent_color, background_color, text_color, font_family, section_order, contact_phone, contact_email, whatsapp_number, address, business_hours, social_links, delivery_methods, delivery_guidance, default_delivery_fee_minor, checkout_require_email, checkout_require_phone, return_policy, privacy_policy, terms_policy, custom_policy, seo_title, seo_description, seo_image_url, seo_indexable, canonical_domain_id, version, updated_at, brand, sections, draft_name, draft_theme_key, draft_brand, draft_sections, published_at, auto_show_new_products, show_sold_out, show_stock_count, low_stock_threshold, free_delivery_threshold_minor FROM storefront_settings
 WHERE storefront_id = $1 AND workspace_id = $2
 `
 
@@ -1267,6 +1688,7 @@ func (q *Queries) GetStorefrontSettings(ctx context.Context, arg GetStorefrontSe
 		&i.ShowSoldOut,
 		&i.ShowStockCount,
 		&i.LowStockThreshold,
+		&i.FreeDeliveryThresholdMinor,
 	)
 	return i, err
 }
@@ -1297,6 +1719,30 @@ func (q *Queries) InsertStorefrontAnalyticsEvent(ctx context.Context, arg Insert
 		arg.CollectionID,
 		arg.ReferrerClass,
 		arg.SearchQueryHash,
+	)
+	return err
+}
+
+const insertStorefrontPageView = `-- name: InsertStorefrontPageView :exec
+INSERT INTO storefront_analytics_events (workspace_id, storefront_id, event_type, referrer_class, search_query_hash, visitor_key_hash)
+VALUES ($1, $2, 'page_view', $3, $4, $5)
+`
+
+type InsertStorefrontPageViewParams struct {
+	WorkspaceID     int64       `json:"workspace_id"`
+	StorefrontID    int64       `json:"storefront_id"`
+	ReferrerClass   pgtype.Text `json:"referrer_class"`
+	SearchQueryHash pgtype.Text `json:"search_query_hash"`
+	VisitorKeyHash  pgtype.Text `json:"visitor_key_hash"`
+}
+
+func (q *Queries) InsertStorefrontPageView(ctx context.Context, arg InsertStorefrontPageViewParams) error {
+	_, err := q.db.Exec(ctx, insertStorefrontPageView,
+		arg.WorkspaceID,
+		arg.StorefrontID,
+		arg.ReferrerClass,
+		arg.SearchQueryHash,
+		arg.VisitorKeyHash,
 	)
 	return err
 }
@@ -1853,7 +2299,7 @@ func (q *Queries) ListStorefrontOrderVersions(ctx context.Context, orderID int64
 }
 
 const listStorefrontOrders = `-- name: ListStorefrontOrders :many
-SELECT id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at FROM storefront_orders
+SELECT id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id FROM storefront_orders
 WHERE workspace_id = $1
   AND ($3::text IS NULL OR commercial_status = $3)
   AND ($4::bigint IS NULL OR outlet_id = $4)
@@ -1921,6 +2367,7 @@ func (q *Queries) ListStorefrontOrders(ctx context.Context, arg ListStorefrontOr
 			&i.IdempotencyKey,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DeliveryAreaID,
 		); err != nil {
 			return nil, err
 		}
@@ -1937,7 +2384,7 @@ UPDATE storefront_orders
 SET fulfilment_status = 'packed', version = version + 1, updated_at = now()
 WHERE workspace_id = $1 AND id = $2 AND version = $3
   AND commercial_status = 'confirmed' AND fulfilment_status = 'reserved'
-RETURNING id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at
+RETURNING id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id
 `
 
 type MarkStorefrontOrderPackedParams struct {
@@ -1988,6 +2435,7 @@ func (q *Queries) MarkStorefrontOrderPacked(ctx context.Context, arg MarkStorefr
 		&i.IdempotencyKey,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeliveryAreaID,
 	)
 	return i, err
 }
@@ -2053,6 +2501,49 @@ func (q *Queries) UpdateStorefrontCollection(ctx context.Context, arg UpdateStor
 		&i.ImageUrl,
 		&i.Position,
 		&i.IsVisible,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateStorefrontDeliveryArea = `-- name: UpdateStorefrontDeliveryArea :one
+UPDATE storefront_delivery_areas
+SET name = $4, fee_minor = $5, description = $6, position = $7, is_active = true, updated_at = now()
+WHERE workspace_id = $1 AND storefront_id = $2 AND id = $3
+RETURNING id, workspace_id, storefront_id, name, fee_minor, description, position, is_active, created_at, updated_at
+`
+
+type UpdateStorefrontDeliveryAreaParams struct {
+	WorkspaceID  int64  `json:"workspace_id"`
+	StorefrontID int64  `json:"storefront_id"`
+	ID           int64  `json:"id"`
+	Name         string `json:"name"`
+	FeeMinor     int64  `json:"fee_minor"`
+	Description  string `json:"description"`
+	Position     int32  `json:"position"`
+}
+
+func (q *Queries) UpdateStorefrontDeliveryArea(ctx context.Context, arg UpdateStorefrontDeliveryAreaParams) (StorefrontDeliveryArea, error) {
+	row := q.db.QueryRow(ctx, updateStorefrontDeliveryArea,
+		arg.WorkspaceID,
+		arg.StorefrontID,
+		arg.ID,
+		arg.Name,
+		arg.FeeMinor,
+		arg.Description,
+		arg.Position,
+	)
+	var i StorefrontDeliveryArea
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.StorefrontID,
+		&i.Name,
+		&i.FeeMinor,
+		&i.Description,
+		&i.Position,
+		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -2131,6 +2622,22 @@ type UpdateStorefrontDomainsEntitlementParams struct {
 
 func (q *Queries) UpdateStorefrontDomainsEntitlement(ctx context.Context, arg UpdateStorefrontDomainsEntitlementParams) error {
 	_, err := q.db.Exec(ctx, updateStorefrontDomainsEntitlement, arg.StorefrontID, arg.Column2)
+	return err
+}
+
+const updateStorefrontFreeDeliveryThreshold = `-- name: UpdateStorefrontFreeDeliveryThreshold :exec
+UPDATE storefront_settings SET free_delivery_threshold_minor = $3, updated_at = now()
+WHERE workspace_id = $1 AND storefront_id = $2
+`
+
+type UpdateStorefrontFreeDeliveryThresholdParams struct {
+	WorkspaceID                int64       `json:"workspace_id"`
+	StorefrontID               int64       `json:"storefront_id"`
+	FreeDeliveryThresholdMinor pgtype.Int8 `json:"free_delivery_threshold_minor"`
+}
+
+func (q *Queries) UpdateStorefrontFreeDeliveryThreshold(ctx context.Context, arg UpdateStorefrontFreeDeliveryThresholdParams) error {
+	_, err := q.db.Exec(ctx, updateStorefrontFreeDeliveryThreshold, arg.WorkspaceID, arg.StorefrontID, arg.FreeDeliveryThresholdMinor)
 	return err
 }
 
@@ -2365,7 +2872,7 @@ SET tagline = $3,
     version = version + 1,
     updated_at = now()
 WHERE storefront_id = $1 AND workspace_id = $2
-RETURNING storefront_id, workspace_id, tagline, description, logo_url, banner_url, primary_color, accent_color, background_color, text_color, font_family, section_order, contact_phone, contact_email, whatsapp_number, address, business_hours, social_links, delivery_methods, delivery_guidance, default_delivery_fee_minor, checkout_require_email, checkout_require_phone, return_policy, privacy_policy, terms_policy, custom_policy, seo_title, seo_description, seo_image_url, seo_indexable, canonical_domain_id, version, updated_at, brand, sections, draft_name, draft_theme_key, draft_brand, draft_sections, published_at, auto_show_new_products, show_sold_out, show_stock_count, low_stock_threshold
+RETURNING storefront_id, workspace_id, tagline, description, logo_url, banner_url, primary_color, accent_color, background_color, text_color, font_family, section_order, contact_phone, contact_email, whatsapp_number, address, business_hours, social_links, delivery_methods, delivery_guidance, default_delivery_fee_minor, checkout_require_email, checkout_require_phone, return_policy, privacy_policy, terms_policy, custom_policy, seo_title, seo_description, seo_image_url, seo_indexable, canonical_domain_id, version, updated_at, brand, sections, draft_name, draft_theme_key, draft_brand, draft_sections, published_at, auto_show_new_products, show_sold_out, show_stock_count, low_stock_threshold, free_delivery_threshold_minor
 `
 
 type UpdateStorefrontSettingsParams struct {
@@ -2491,6 +2998,7 @@ func (q *Queries) UpdateStorefrontSettings(ctx context.Context, arg UpdateStoref
 		&i.ShowSoldOut,
 		&i.ShowStockCount,
 		&i.LowStockThreshold,
+		&i.FreeDeliveryThresholdMinor,
 	)
 	return i, err
 }

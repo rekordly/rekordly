@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"strconv"
 	"sync"
 	"time"
 
@@ -99,6 +100,8 @@ type PublicStorefrontProjection struct {
 	DeliveryMethods         []string                   `json:"delivery_methods"`
 	DeliveryGuidance        *string                    `json:"delivery_guidance,omitempty"`
 	DefaultDeliveryFeeMinor string                     `json:"default_delivery_fee_minor"`
+	FreeDeliveryThresholdMinor *string                 `json:"free_delivery_threshold_minor,omitempty"`
+	DeliveryAreas           []StorefrontDeliveryAreaView `json:"delivery_areas"`
 	CheckoutRequireEmail    bool                       `json:"checkout_require_email"`
 	CheckoutRequirePhone    bool                       `json:"checkout_require_phone"`
 	ShowSoldOut             bool                       `json:"show_sold_out"`
@@ -120,6 +123,30 @@ type PublicStorefrontProjection struct {
 	internalWS        int64
 	internalOutletID  pgtype.Int8
 	internalSettingsV int32
+}
+
+type storefrontReferrerContextKey struct{}
+type storefrontVisitorContextKey struct{}
+
+func storefrontReferrerClass(ctx context.Context) string {
+	if class, ok := ctx.Value(storefrontReferrerContextKey{}).(string); ok && class != "" { return class }
+	return "direct"
+}
+
+func storefrontVisitorHash(ctx context.Context) string {
+	hash, _ := ctx.Value(storefrontVisitorContextKey{}).(string)
+	return hash
+}
+
+func (s *Service) TrackStorefrontCheckoutStarted(ctx context.Context, slug string) error {
+	sf, err := s.resolveActiveStorefrontRow(ctx, slug, false)
+	if err != nil { return err }
+	return s.queries.InsertStorefrontAnalyticsEvent(ctx, db.InsertStorefrontAnalyticsEventParams{WorkspaceID: sf.WorkspaceID, StorefrontID: sf.ID, EventType: "checkout_started", ReferrerClass: pgtype.Text{String: storefrontReferrerClass(ctx), Valid: true}})
+}
+
+func (s *Service) TrackStorefrontProductView(ctx context.Context, projection PublicStorefrontProjection, storefrontProductID int64) {
+	if storefrontProductID <= 0 || projection.internalID <= 0 { return }
+	_ = s.queries.InsertStorefrontAnalyticsEvent(ctx, db.InsertStorefrontAnalyticsEventParams{WorkspaceID: projection.internalWS, StorefrontID: projection.internalID, EventType: "product_view", StorefrontProductID: pgtype.Int8{Int64: storefrontProductID, Valid: true}, ReferrerClass: pgtype.Text{String: storefrontReferrerClass(ctx), Valid: true}})
 }
 
 func (s *Service) resolveActiveStorefrontRow(ctx context.Context, slugOrHost string, isHost bool) (db.Storefront, error) {
@@ -286,6 +313,10 @@ func (s *Service) GetPublicStorefrontProjection(ctx context.Context, slugOrHost 
 			})
 		}
 		stView := settingsToView(st)
+		areas, areaErr := s.queries.GetActiveStorefrontDeliveryAreas(ctx, db.GetActiveStorefrontDeliveryAreasParams{WorkspaceID: sf.WorkspaceID, StorefrontID: sf.ID})
+		if areaErr != nil { return PublicStorefrontProjection{}, areaErr }
+		publicAreas := make([]StorefrontDeliveryAreaView, 0, len(areas))
+		for _, area := range areas { publicAreas = append(publicAreas, StorefrontDeliveryAreaView{ID: area.ID, Name: area.Name, FeeMinor: fmt.Sprint(area.FeeMinor), Description: area.Description, Position: area.Position, IsActive: true}) }
 		var brand StorefrontBrand
 		_ = json.Unmarshal(st.Brand, &brand)
 		brand.ResolvedPalette = resolveStorefrontPalette(brand)
@@ -322,6 +353,8 @@ func (s *Service) GetPublicStorefrontProjection(ctx context.Context, slugOrHost 
 			DeliveryMethods:         stView.DeliveryMethods,
 			DeliveryGuidance:        stView.DeliveryGuidance,
 			DefaultDeliveryFeeMinor: stView.DefaultDeliveryFeeMinor,
+			FreeDeliveryThresholdMinor: stView.FreeDeliveryThresholdMinor,
+			DeliveryAreas:           publicAreas,
 			CheckoutRequireEmail:    stView.CheckoutRequireEmail,
 			CheckoutRequirePhone:    stView.CheckoutRequirePhone,
 			ShowSoldOut:             stView.ShowSoldOut,
@@ -356,17 +389,19 @@ func (s *Service) GetPublicStorefrontProjection(ctx context.Context, slugOrHost 
 	evType := "page_view"
 	var searchHash pgtype.Text
 	if qClean != "" {
-		evType = "search"
 		sum := sha256.Sum256([]byte(qClean))
 		searchHash = pgtype.Text{String: hex.EncodeToString(sum[:8]), Valid: true}
 	}
-	_ = s.queries.InsertStorefrontAnalyticsEvent(ctx, db.InsertStorefrontAnalyticsEventParams{
-		WorkspaceID:     proj.internalWS,
-		StorefrontID:    proj.internalID,
-		EventType:       evType,
-		ReferrerClass:   pgtype.Text{String: "direct", Valid: true},
-		SearchQueryHash: searchHash,
-	})
+	referrer := storefrontReferrerClass(ctx)
+	_ = s.queries.InsertStorefrontPageView(ctx, db.InsertStorefrontPageViewParams{WorkspaceID: proj.internalWS, StorefrontID: proj.internalID, ReferrerClass: pgtype.Text{String: referrer, Valid: true}, SearchQueryHash: searchHash, VisitorKeyHash: pgtype.Text{String: storefrontVisitorHash(ctx), Valid: storefrontVisitorHash(ctx) != ""}})
+	if collection := strings.TrimSpace(collectionSlug); collection != "" {
+		var collectionID int64
+		for _, item := range proj.Collections { if strings.EqualFold(item.Slug, collection) { collectionID = item.ID; break } }
+		_ = s.queries.InsertStorefrontAnalyticsEvent(ctx, db.InsertStorefrontAnalyticsEventParams{WorkspaceID: proj.internalWS, StorefrontID: proj.internalID, EventType: "collection_view", CollectionID: pgtype.Int8{Int64: collectionID, Valid: collectionID > 0}, ReferrerClass: pgtype.Text{String: referrer, Valid: true}})
+	}
+	if qClean != "" {
+		_ = s.queries.InsertStorefrontAnalyticsEvent(ctx, db.InsertStorefrontAnalyticsEventParams{WorkspaceID: proj.internalWS, StorefrontID: proj.internalID, EventType: "search", SearchQueryHash: searchHash, ReferrerClass: pgtype.Text{String: referrer, Valid: true}})
+	}
 
 	// Apply safe filtering over allowlisted fields only
 	if qClean != "" || strings.TrimSpace(collectionSlug) != "" {
@@ -430,12 +465,18 @@ type ValidatedCartView struct {
 	SubtotalMinor     string                  `json:"subtotal_minor"`
 	EstimatedTaxMinor string                  `json:"estimated_tax_minor"`
 	DeliveryFeeMinor  string                  `json:"delivery_fee_minor"`
+	DeliveryAreaID    int64                   `json:"delivery_area_id,omitempty"`
+	DeliveryAreaName  string                  `json:"delivery_area_name,omitempty"`
 	EstimatedTotal    string                  `json:"estimated_total_minor"`
 	HasChanges        bool                    `json:"has_changes"`
 	Lines             []ValidatedCartLineView `json:"lines"`
 }
 
 func (s *Service) ValidateAndRecalculateCart(ctx context.Context, slugOrHost string, isHost bool, rawLines []CartLineInput, deliveryMethod string) (ValidatedCartView, PublicStorefrontProjection, error) {
+	return s.ValidateAndRecalculateCartWithArea(ctx, slugOrHost, isHost, rawLines, deliveryMethod, 0)
+}
+
+func (s *Service) ValidateAndRecalculateCartWithArea(ctx context.Context, slugOrHost string, isHost bool, rawLines []CartLineInput, deliveryMethod string, deliveryAreaID int64) (ValidatedCartView, PublicStorefrontProjection, error) {
 	invalidateStorefrontCache(slugOrHost)
 	proj, err := s.GetPublicStorefrontProjection(ctx, slugOrHost, isHost, "", "")
 	if err != nil {
@@ -497,9 +538,23 @@ func (s *Service) ValidateAndRecalculateCart(ctx context.Context, slugOrHost str
 		})
 	}
 	var delivFee int64
+	var selectedAreaName string
 	if deliveryMethod == "merchant_delivery" {
-		d, _ := decimal.NewFromString(proj.DefaultDeliveryFeeMinor)
-		delivFee = d.IntPart()
+		if len(proj.DeliveryAreas) > 0 {
+			for _, area := range proj.DeliveryAreas {
+				if area.ID == deliveryAreaID { delivFee, _ = strconv.ParseInt(area.FeeMinor, 10, 64); selectedAreaName = area.Name; break }
+			}
+			if deliveryAreaID <= 0 { return ValidatedCartView{}, proj, errors.New("choose a delivery area") }
+			if selectedAreaName == "" { return ValidatedCartView{}, proj, errors.New("that delivery area is no longer available") }
+		} else {
+			if deliveryAreaID > 0 { return ValidatedCartView{}, proj, errors.New("that delivery area is no longer available") }
+			d, _ := decimal.NewFromString(proj.DefaultDeliveryFeeMinor)
+			delivFee = d.IntPart()
+		}
+		if proj.FreeDeliveryThresholdMinor != nil {
+			threshold, _ := strconv.ParseInt(*proj.FreeDeliveryThresholdMinor, 10, 64)
+			if threshold > 0 && subtotal >= threshold { delivFee = 0 }
+		}
 	}
 	return ValidatedCartView{
 		Currency:          proj.Currency,
@@ -507,6 +562,8 @@ func (s *Service) ValidateAndRecalculateCart(ctx context.Context, slugOrHost str
 		SubtotalMinor:     fmt.Sprint(subtotal),
 		EstimatedTaxMinor: "0",
 		DeliveryFeeMinor:  fmt.Sprint(delivFee),
+		DeliveryAreaID:    deliveryAreaID,
+		DeliveryAreaName:  selectedAreaName,
 		EstimatedTotal:    fmt.Sprint(subtotal + delivFee),
 		HasChanges:        hasChanges,
 		Lines:             outLines,
@@ -514,10 +571,14 @@ func (s *Service) ValidateAndRecalculateCart(ctx context.Context, slugOrHost str
 }
 
 func (s *Service) UpsertVisitorCart(ctx context.Context, slug string, existingToken string, rawLines []CartLineInput, deliveryMethod string) (ValidatedCartView, error) {
+	return s.UpsertVisitorCartWithArea(ctx, slug, existingToken, rawLines, deliveryMethod, 0)
+}
+
+func (s *Service) UpsertVisitorCartWithArea(ctx context.Context, slug string, existingToken string, rawLines []CartLineInput, deliveryMethod string, deliveryAreaID int64) (ValidatedCartView, error) {
 	if len(rawLines) == 0 {
 		return ValidatedCartView{}, errors.New("at least one item is required")
 	}
-	calc, proj, err := s.ValidateAndRecalculateCart(ctx, slug, false, rawLines, deliveryMethod)
+	calc, proj, err := s.ValidateAndRecalculateCartWithArea(ctx, slug, false, rawLines, deliveryMethod, deliveryAreaID)
 	if err != nil {
 		return ValidatedCartView{}, err
 	}
@@ -573,6 +634,10 @@ func (s *Service) UpsertVisitorCart(ctx context.Context, slug string, existingTo
 }
 
 func (s *Service) GetVisitorCart(ctx context.Context, slug, rawToken, deliveryMethod string) (ValidatedCartView, error) {
+	return s.GetVisitorCartWithArea(ctx, slug, rawToken, deliveryMethod, 0)
+}
+
+func (s *Service) GetVisitorCartWithArea(ctx context.Context, slug, rawToken, deliveryMethod string, deliveryAreaID int64) (ValidatedCartView, error) {
 	token := strings.TrimSpace(rawToken)
 	if token == "" {
 		return ValidatedCartView{}, ErrNotFound
@@ -605,7 +670,7 @@ func (s *Service) GetVisitorCart(ctx context.Context, slug, rawToken, deliveryMe
 			Quantity:            l.Quantity.String(),
 		})
 	}
-	calc, _, err := s.ValidateAndRecalculateCart(ctx, slug, false, rawLines, deliveryMethod)
+	calc, _, err := s.ValidateAndRecalculateCartWithArea(ctx, slug, false, rawLines, deliveryMethod, deliveryAreaID)
 	if err != nil {
 		return ValidatedCartView{}, err
 	}
@@ -625,6 +690,7 @@ type GuestCheckoutInput struct {
 	OrganizationName      string          `json:"organization_name"`
 	PreferredContact      string          `json:"preferred_contact_method"`
 	DeliveryMethod        string          `json:"delivery_method"`
+	DeliveryAreaID        int64           `json:"delivery_area_id"`
 	DeliveryAddress       string          `json:"delivery_address"`
 	DeliveryLandmark      string          `json:"delivery_landmark"`
 	PreferredDeliveryTime string          `json:"preferred_delivery_time"`
@@ -673,7 +739,7 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 	}
 
 	// Recompute authoritative server totals & visibility
-	calc, proj, err := s.ValidateAndRecalculateCart(ctx, slugOrHost, isHost, in.Lines, delivMethod)
+	calc, proj, err := s.ValidateAndRecalculateCartWithArea(ctx, slugOrHost, isHost, in.Lines, delivMethod, in.DeliveryAreaID)
 	if err != nil {
 		return GuestCheckoutConfirmation{}, err
 	}
@@ -753,6 +819,7 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 		DeliveryFeeMinor:       delivVal.IntPart(),
 		TotalMinor:             totVal.IntPart(),
 		DeliveryMethod:         delivMethod,
+		DeliveryAreaID:         pgtype.Int8{Int64: calc.DeliveryAreaID, Valid: calc.DeliveryAreaID > 0},
 		CustomerName:           custName,
 		CustomerPhone:          optionalPgText(custPhone),
 		CustomerEmail:          optionalPgText(custEmail),

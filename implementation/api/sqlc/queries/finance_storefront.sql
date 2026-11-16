@@ -299,10 +299,10 @@ WHERE workspace_id = $1 AND idempotency_key = $2;
 INSERT INTO storefront_orders (
     workspace_id, storefront_id, order_reference, public_token_hash, outlet_id,
     currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor,
-    delivery_method, customer_name, customer_phone, customer_email, organization_name,
+    delivery_method, delivery_area_id, customer_name, customer_phone, customer_email, organization_name,
     preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time,
     customer_note, policy_acknowledged, policy_version, idempotency_key
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
 RETURNING *;
 
 -- name: CreateStorefrontOrderLine :one
@@ -412,6 +412,10 @@ INSERT INTO storefront_analytics_events (
     workspace_id, storefront_id, event_type, storefront_product_id, collection_id, referrer_class, search_query_hash
 ) VALUES ($1, $2, $3, $4, $5, $6, $7);
 
+-- name: InsertStorefrontPageView :exec
+INSERT INTO storefront_analytics_events (workspace_id, storefront_id, event_type, referrer_class, search_query_hash, visitor_key_hash)
+VALUES ($1, $2, 'page_view', $3, $4, $5);
+
 -- name: GetStorefrontAnalyticsSummary :one
 SELECT
     count(*) FILTER (WHERE event_type = 'page_view')::bigint AS page_views,
@@ -428,3 +432,129 @@ SELECT
 FROM storefront_analytics_events
 WHERE storefront_id = $1 AND workspace_id = $2
   AND occurred_on >= $3;
+
+-- name: GetStorefrontOverviewDaily :many
+WITH days AS (
+    SELECT generate_series($3::date, CURRENT_DATE, interval '1 day')::date AS day
+), events AS (
+    SELECT occurred_on,
+        count(*) FILTER (WHERE event_type = 'page_view')::bigint AS page_views,
+        count(*) FILTER (WHERE event_type = 'product_view')::bigint AS product_views,
+        count(*) FILTER (WHERE event_type = 'add_to_cart')::bigint AS add_to_carts,
+        count(*) FILTER (WHERE event_type = 'checkout_started')::bigint AS checkouts_started,
+        count(*) FILTER (WHERE event_type = 'checkout_submitted')::bigint AS checkouts_submitted,
+        count(DISTINCT visitor_key_hash) FILTER (WHERE event_type = 'page_view' AND visitor_key_hash IS NOT NULL)::bigint AS visitors
+    FROM storefront_analytics_events ae
+    WHERE ae.workspace_id = $1 AND ae.storefront_id = $2 AND ae.occurred_on >= $3
+    GROUP BY ae.occurred_on
+), online_sales AS (
+    SELECT sale_date, count(*)::bigint AS paid_orders,
+        COALESCE(sum(total_amount_minor), 0)::bigint AS sales_minor
+    FROM sales
+    WHERE workspace_id = $1 AND source = 'online_store' AND status = 'paid'
+      AND sale_date >= $3 AND sale_date <= CURRENT_DATE
+    GROUP BY sale_date
+)
+SELECT days.day,
+    COALESCE(events.page_views, 0)::bigint AS page_views,
+    COALESCE(events.product_views, 0)::bigint AS product_views,
+    COALESCE(events.add_to_carts, 0)::bigint AS add_to_carts,
+    COALESCE(events.checkouts_started, 0)::bigint AS checkouts_started,
+    COALESCE(events.checkouts_submitted, 0)::bigint AS checkouts_submitted,
+    COALESCE(events.visitors, 0)::bigint AS visitors,
+    COALESCE(online_sales.paid_orders, 0)::bigint AS paid_orders,
+    COALESCE(online_sales.sales_minor, 0)::bigint AS sales_minor
+FROM days
+LEFT JOIN events ON events.occurred_on = days.day
+LEFT JOIN online_sales ON online_sales.sale_date = days.day
+ORDER BY days.day;
+
+-- name: GetStorefrontOverviewTotals :one
+SELECT
+  (SELECT count(*)::bigint FROM storefront_analytics_events ae WHERE ae.workspace_id = $1 AND ae.storefront_id = $2 AND ae.occurred_on >= $3 AND ae.event_type = 'page_view') AS page_views,
+  (SELECT count(DISTINCT ae.visitor_key_hash)::bigint FROM storefront_analytics_events ae WHERE ae.workspace_id = $1 AND ae.storefront_id = $2 AND ae.occurred_on >= $3 AND ae.event_type = 'page_view' AND ae.visitor_key_hash IS NOT NULL) AS visitors,
+  (SELECT count(*)::bigint FROM storefront_analytics_events ae WHERE ae.workspace_id = $1 AND ae.storefront_id = $2 AND ae.occurred_on >= $3 AND ae.event_type = 'product_view') AS product_views,
+  (SELECT count(*)::bigint FROM storefront_analytics_events ae WHERE ae.workspace_id = $1 AND ae.storefront_id = $2 AND ae.occurred_on >= $3 AND ae.event_type = 'add_to_cart') AS add_to_carts,
+  (SELECT count(*)::bigint FROM storefront_analytics_events ae WHERE ae.workspace_id = $1 AND ae.storefront_id = $2 AND ae.occurred_on >= $3 AND ae.event_type = 'checkout_started') AS checkouts_started,
+  (SELECT count(*)::bigint FROM storefront_analytics_events ae WHERE ae.workspace_id = $1 AND ae.storefront_id = $2 AND ae.occurred_on >= $3 AND ae.event_type = 'checkout_submitted') AS checkouts_submitted,
+  (SELECT count(*)::bigint FROM sales s WHERE s.workspace_id = $1 AND s.source = 'online_store' AND s.status = 'paid' AND s.sale_date >= $3) AS paid_orders,
+  (SELECT COALESCE(sum(s.total_amount_minor), 0)::bigint FROM sales s WHERE s.workspace_id = $1 AND s.source = 'online_store' AND s.status = 'paid' AND s.sale_date >= $3) AS sales_minor;
+
+-- name: GetStorefrontOverviewReferrers :many
+SELECT COALESCE(referrer_class, 'direct') AS referrer_class, count(*)::bigint AS visits
+FROM storefront_analytics_events
+WHERE workspace_id = $1 AND storefront_id = $2 AND occurred_on >= $3
+  AND event_type = 'page_view'
+GROUP BY COALESCE(referrer_class, 'direct')
+ORDER BY visits DESC, referrer_class ASC
+LIMIT 8;
+
+-- name: GetStorefrontOverviewTopProducts :many
+WITH views AS (
+    SELECT sp.product_id, count(*)::bigint AS product_views
+    FROM storefront_analytics_events ae
+    JOIN storefront_products sp ON sp.workspace_id = ae.workspace_id
+      AND sp.storefront_id = ae.storefront_id AND sp.id = ae.storefront_product_id
+    WHERE ae.workspace_id = $1 AND ae.storefront_id = $2 AND ae.occurred_on >= $3
+      AND ae.event_type = 'product_view'
+    GROUP BY sp.product_id
+), sales_by_product AS (
+    SELECT si.product_id, count(DISTINCT s.id)::bigint AS orders,
+      COALESCE(sum(si.amount_minor), 0)::bigint AS sales_minor
+    FROM sales s
+    JOIN sale_items si ON si.workspace_id = s.workspace_id AND si.sale_id = s.id
+    WHERE s.workspace_id = $1 AND s.source = 'online_store' AND s.status = 'paid'
+      AND s.sale_date >= $3
+    GROUP BY si.product_id
+)
+SELECT p.id AS product_id, p.name,
+  COALESCE(views.product_views, 0)::bigint AS product_views,
+  COALESCE(sales_by_product.orders, 0)::bigint AS orders,
+  COALESCE(sales_by_product.sales_minor, 0)::bigint AS sales_minor
+FROM products p
+JOIN storefront_products sp ON sp.workspace_id = p.workspace_id AND sp.product_id = p.id
+  AND sp.storefront_id = $2 AND sp.is_published
+LEFT JOIN views ON views.product_id = p.id
+LEFT JOIN sales_by_product ON sales_by_product.product_id = p.id
+WHERE p.workspace_id = $1 AND p.archived_at IS NULL
+GROUP BY p.id, p.name, views.product_views, sales_by_product.orders, sales_by_product.sales_minor
+ORDER BY sales_minor DESC, product_views DESC, p.id DESC
+LIMIT 10;
+
+-- name: GetStorefrontOverviewActionCounts :one
+SELECT
+    count(*) FILTER (WHERE commercial_status IN ('request_received', 'needs_review'))::bigint AS to_confirm,
+    count(*) FILTER (WHERE commercial_status = 'confirmed' AND fulfilment_status = 'reserved')::bigint AS to_pack,
+    count(*) FILTER (WHERE commercial_status = 'confirmed' AND fulfilment_status IN ('packed', 'partially_fulfilled'))::bigint AS to_deliver
+FROM storefront_orders
+WHERE workspace_id = $1 AND storefront_id = $2;
+
+-- name: GetStorefrontDeliveryAreas :many
+SELECT * FROM storefront_delivery_areas
+WHERE workspace_id = $1 AND storefront_id = $2
+ORDER BY position, id;
+
+-- name: GetActiveStorefrontDeliveryAreas :many
+SELECT * FROM storefront_delivery_areas
+WHERE workspace_id = $1 AND storefront_id = $2 AND is_active
+ORDER BY position, id;
+
+-- name: CreateStorefrontDeliveryArea :one
+INSERT INTO storefront_delivery_areas (workspace_id, storefront_id, name, fee_minor, description, position)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING *;
+
+-- name: UpdateStorefrontDeliveryArea :one
+UPDATE storefront_delivery_areas
+SET name = $4, fee_minor = $5, description = $6, position = $7, is_active = true, updated_at = now()
+WHERE workspace_id = $1 AND storefront_id = $2 AND id = $3
+RETURNING *;
+
+-- name: DisableMissingStorefrontDeliveryAreas :exec
+UPDATE storefront_delivery_areas SET is_active = false, updated_at = now()
+WHERE workspace_id = $1 AND storefront_id = $2
+  AND NOT (id = ANY($3::bigint[]));
+
+-- name: UpdateStorefrontFreeDeliveryThreshold :exec
+UPDATE storefront_settings SET free_delivery_threshold_minor = $3, updated_at = now()
+WHERE workspace_id = $1 AND storefront_id = $2;

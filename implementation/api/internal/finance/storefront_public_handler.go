@@ -1,7 +1,9 @@
 package finance
 
 import (
+	"context"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -16,6 +18,7 @@ func (h *Handler) RegisterPublicStorefrontRoutes(g *gin.RouterGroup) {
 	g.GET("/public/storefronts/:slug/carts/:token", h.getPublicCart)
 	g.POST("/public/storefronts/:slug/carts", h.upsertPublicCart)
 	g.POST("/public/storefronts/:slug/checkout", h.submitGuestCheckout)
+	g.POST("/public/storefronts/:slug/analytics/checkout-started", h.trackPublicCheckoutStarted)
 
 	g.GET("/public/orders/:token", h.getPublicOrderStatus)
 	g.POST("/public/orders/:token/messages", h.postPublicOrderMessage)
@@ -29,7 +32,7 @@ func (h *Handler) getPublicStorefrontByHost(c *gin.Context) {
 	if strings.TrimSpace(host) == "" {
 		host = c.Request.Host
 	}
-	proj, err := h.service.GetPublicStorefrontProjection(c.Request.Context(), host, true, c.Query("q"), c.Query("collection"))
+ proj, err := h.service.GetPublicStorefrontProjection(storefrontRequestContext(c), host, true, c.Query("q"), c.Query("collection"))
 	if err != nil {
 		h.storefrontError(c, err)
 		return
@@ -38,7 +41,7 @@ func (h *Handler) getPublicStorefrontByHost(c *gin.Context) {
 }
 
 func (h *Handler) getPublicStorefront(c *gin.Context) {
-	proj, err := h.service.GetPublicStorefrontProjection(c.Request.Context(), c.Param("slug"), false, c.Query("q"), c.Query("collection"))
+	proj, err := h.service.GetPublicStorefrontProjection(storefrontRequestContext(c), c.Param("slug"), false, c.Query("q"), c.Query("collection"))
 	if err != nil {
 		h.storefrontError(c, err)
 		return
@@ -47,7 +50,8 @@ func (h *Handler) getPublicStorefront(c *gin.Context) {
 }
 
 func (h *Handler) getPublicStorefrontProduct(c *gin.Context) {
-	proj, err := h.service.GetPublicStorefrontProjection(c.Request.Context(), c.Param("slug"), false, "", "")
+	ctx := storefrontRequestContext(c)
+	proj, err := h.service.GetPublicStorefrontProjection(ctx, c.Param("slug"), false, "", "")
 	if err != nil {
 		h.storefrontError(c, err)
 		return
@@ -63,19 +67,61 @@ func (h *Handler) getPublicStorefrontProduct(c *gin.Context) {
 		h.storefrontError(c, ErrProductNotPublished)
 		return
 	}
+	h.service.TrackStorefrontProductView(ctx, proj, matches[0].ID)
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"product": matches[0], "variants": matches, "storefront": proj}})
+}
+
+func storefrontRequestContext(c *gin.Context) context.Context {
+	class := "direct"
+	if referer := c.Request.Referer(); referer != "" {
+		if parsed, err := url.Parse(referer); err == nil {
+			host := strings.ToLower(parsed.Hostname())
+			switch {
+			case strings.Contains(host, "whatsapp"):
+				class = "whatsapp"
+			case strings.Contains(host, "instagram"):
+				class = "instagram"
+			case strings.Contains(host, "facebook"):
+				class = "facebook"
+			case strings.Contains(host, "tiktok"):
+				class = "tiktok"
+			case strings.Contains(host, "google"):
+				class = "google"
+			case strings.Contains(host, "bing"):
+				class = "bing"
+			case strings.Contains(host, "youtube"):
+				class = "youtube"
+			case host != "":
+				class = "other"
+			}
+		}
+	}
+	visitor, cookieErr := c.Cookie("rekordly_store_visitor")
+	if cookieErr != nil || strings.TrimSpace(visitor) == "" {
+		visitor, _ = randomHexToken(24)
+		c.SetSameSite(http.SameSiteLaxMode)
+		c.SetCookie("rekordly_store_visitor", visitor, 365*24*60*60, "/api/v1/public/storefronts", "", c.Request.TLS != nil, true)
+	}
+	ctx := context.WithValue(c.Request.Context(), storefrontReferrerContextKey{}, class)
+	return context.WithValue(ctx, storefrontVisitorContextKey{}, hashOpaqueToken(visitor))
+}
+
+func (h *Handler) trackPublicCheckoutStarted(c *gin.Context) {
+	if err := h.service.TrackStorefrontCheckoutStarted(storefrontRequestContext(c), c.Param("slug")); err != nil { h.storefrontError(c, err); return }
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"tracked": true}})
 }
 
 func (h *Handler) validatePublicCart(c *gin.Context) {
 	var in struct {
 		Lines          []CartLineInput `json:"lines"`
 		DeliveryMethod string          `json:"delivery_method"`
+		DeliveryAreaID int64           `json:"delivery_area_id"`
 	}
 	if err := c.ShouldBindJSON(&in); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": err.Error()}})
 		return
 	}
-	cart, _, err := h.service.ValidateAndRecalculateCart(c.Request.Context(), c.Param("slug"), false, in.Lines, in.DeliveryMethod)
+	cart, _, err := h.service.ValidateAndRecalculateCartWithArea(c.Request.Context(), c.Param("slug"), false, in.Lines, in.DeliveryMethod, in.DeliveryAreaID)
 	if err != nil {
 		h.storefrontError(c, err)
 		return
@@ -88,12 +134,13 @@ func (h *Handler) upsertPublicCart(c *gin.Context) {
 		CartToken      string          `json:"cart_token"`
 		Lines          []CartLineInput `json:"lines"`
 		DeliveryMethod string          `json:"delivery_method"`
+		DeliveryAreaID int64           `json:"delivery_area_id"`
 	}
 	if err := c.ShouldBindJSON(&in); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": err.Error()}})
 		return
 	}
-	cart, err := h.service.UpsertVisitorCart(c.Request.Context(), c.Param("slug"), in.CartToken, in.Lines, in.DeliveryMethod)
+	cart, err := h.service.UpsertVisitorCartWithArea(c.Request.Context(), c.Param("slug"), in.CartToken, in.Lines, in.DeliveryMethod, in.DeliveryAreaID)
 	if err != nil {
 		if len(cart.Lines) > 0 {
 			c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "CART_ITEM_CHANGED", "message": err.Error()}, "data": gin.H{"cart": cart}})
@@ -178,7 +225,8 @@ func (h *Handler) cancelPublicOrderBeforeConfirm(c *gin.Context) {
 }
 
 func (h *Handler) getPublicCart(c *gin.Context) {
-	cart, err := h.service.GetVisitorCart(c.Request.Context(), c.Param("slug"), c.Param("token"), c.Query("delivery_method"))
+	areaID, _ := strconv.ParseInt(c.Query("delivery_area_id"), 10, 64)
+	cart, err := h.service.GetVisitorCartWithArea(c.Request.Context(), c.Param("slug"), c.Param("token"), c.Query("delivery_method"), areaID)
 	if err != nil {
 		h.storefrontError(c, err)
 		return

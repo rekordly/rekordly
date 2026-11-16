@@ -50,6 +50,7 @@ export function PublicStorefrontClient({ slug }: { slug: string }) {
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [deliveryMethod, setDeliveryMethod] = useState("pickup");
+  const [deliveryAreaId, setDeliveryAreaId] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [customerNote, setCustomerNote] = useState("");
   const [policyAccepted, setPolicyAccepted] = useState(true);
@@ -60,6 +61,10 @@ export function PublicStorefrontClient({ slug }: { slug: string }) {
     queryKey: ["public-storefront", slug, searchText, selectedCol],
     queryFn: () => financeApi.getPublicStorefront(slug, { q: searchText || undefined, collection: selectedCol || undefined }),
   });
+  useEffect(() => {
+    const firstArea = storeQuery.data?.delivery_areas?.[0];
+    if (firstArea && !deliveryAreaId) setDeliveryAreaId(String(firstArea.id));
+  }, [storeQuery.data, deliveryAreaId]);
 
   // Restore persistent visitor cart from localStorage + backend
   useEffect(() => {
@@ -68,7 +73,7 @@ export function PublicStorefrontClient({ slug }: { slug: string }) {
     if (!saved) return;
     let cancelled = false;
     financeApi
-      .getPublicCart(slug, saved, deliveryMethod)
+      .getPublicCart(slug, saved, deliveryMethod, deliveryAreaId ? Number(deliveryAreaId) : undefined)
       .then((c) => {
         if (cancelled || !c?.lines?.length) return;
         setCartToken(c.cart_token || saved);
@@ -90,7 +95,7 @@ export function PublicStorefrontClient({ slug }: { slug: string }) {
     return () => {
       cancelled = true;
     };
-  }, [slug, deliveryMethod]);
+  }, [slug, deliveryMethod, deliveryAreaId]);
 
   const syncCartMutation = useMutation({
     mutationFn: (lines: CartDraftLine[]) =>
@@ -102,6 +107,7 @@ export function PublicStorefrontClient({ slug }: { slug: string }) {
           expected_price_minor: l.price_minor,
         })),
         delivery_method: deliveryMethod,
+        delivery_area_id: deliveryAreaId ? Number(deliveryAreaId) : undefined,
       }),
     onSuccess: (data) => {
       setValidatedCart(data);
@@ -123,6 +129,7 @@ export function PublicStorefrontClient({ slug }: { slug: string }) {
           expected_price_minor: l.price_minor,
         })),
         delivery_method: deliveryMethod,
+        delivery_area_id: deliveryAreaId ? Number(deliveryAreaId) : undefined,
       }),
     onSuccess: (data) => setValidatedCart(data),
   });
@@ -134,7 +141,7 @@ export function PublicStorefrontClient({ slug }: { slug: string }) {
     }, 350);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cart, deliveryMethod]);
+  }, [cart, deliveryMethod, deliveryAreaId]);
 
   const submitCheckout = useMutation({
     mutationFn: async () => {
@@ -152,6 +159,7 @@ export function PublicStorefrontClient({ slug }: { slug: string }) {
           customer_phone: customerPhone,
           customer_email: customerEmail,
           delivery_method: deliveryMethod,
+          delivery_area_id: deliveryAreaId ? Number(deliveryAreaId) : undefined,
           delivery_address: deliveryAddress,
           customer_note: customerNote,
           policy_acknowledged: policyAccepted,
@@ -237,6 +245,7 @@ export function PublicStorefrontClient({ slug }: { slug: string }) {
   };
 
   const openCart = () => {
+    void financeApi.trackPublicCheckoutStarted(slug).catch(() => {});
     if (cart.length > 0) validateCartMutation.mutate(cart);
     setIsCartOpen(true);
   };
@@ -428,9 +437,11 @@ export function PublicStorefrontClient({ slug }: { slug: string }) {
                   <AppButton key={m} size="sm" variant={deliveryMethod === m ? "primary" : "secondary"} label={m.replace("_", " ")} onPress={() => setDeliveryMethod(m)} />
                 ))}
               </div>
+              {deliveryMethod === "merchant_delivery" && (sf.delivery_areas ?? []).length > 0 ? <label className="block space-y-1 text-sm font-medium">Delivery area<select className="h-10 w-full rounded-xl border border-border bg-surface px-3 text-sm" value={deliveryAreaId} onChange={(event)=>setDeliveryAreaId(event.target.value)}><option value="">Choose an area</option>{sf.delivery_areas.map((area)=><option key={area.id} value={area.id}>{area.name} · {formatMinorAmount(area.fee_minor,sf.currency,sf.currency_exponent)}</option>)}</select></label> : null}
               {deliveryMethod === "merchant_delivery" ? (
                 <AppInput label="Delivery address" isRequired value={deliveryAddress} onChange={(e) => setDeliveryAddress(e.target.value)} placeholder="Street address & landmark" />
               ) : null}
+              {sf.free_delivery_threshold_minor && deliveryMethod === "merchant_delivery" ? <p className="text-xs text-muted">Free delivery on orders over {formatMinorAmount(sf.free_delivery_threshold_minor,sf.currency,sf.currency_exponent)}.</p> : null}
               <AppInput label="Note for merchant (optional)" value={customerNote} onChange={(e) => setCustomerNote(e.target.value)} placeholder="Preferred pickup/delivery time" />
               <label className="flex items-center gap-2 text-xs cursor-pointer">
                 <input type="checkbox" checked={policyAccepted} onChange={(e) => setPolicyAccepted(e.target.checked)} />
