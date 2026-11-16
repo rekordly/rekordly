@@ -173,6 +173,10 @@ WHERE workspace_id = $1 AND id = $2 AND status = 'verified';
 SELECT * FROM evidence_assets
 WHERE workspace_id = $1 AND id = $2 AND status <> 'deleted';
 
+-- name: GetEvidenceAssetByStorageAndAssetID :one
+SELECT * FROM evidence_assets
+WHERE storage_provider = @storage_provider AND asset_id = @asset_id AND status <> 'deleted';
+
 -- name: AttachEvidenceAssetsToMoneyRecord :execrows
 UPDATE evidence_assets
 SET money_record_id = $3, updated_at = now()

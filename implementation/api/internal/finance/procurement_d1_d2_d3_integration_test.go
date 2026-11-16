@@ -1,11 +1,16 @@
 package finance_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/rekordly/rekordly-api/internal/db"
 	"github.com/rekordly/rekordly-api/internal/finance"
 	"github.com/stretchr/testify/require"
@@ -234,6 +239,36 @@ func TestProcurementD1D2D3Integration(t *testing.T) {
 		SizeBytes: 2048,
 	})
 	require.ErrorIs(t, err, finance.ErrNotFound)
+
+	// Validation: Request with only an idempotency key and no asset_id gets 400 ("Upload the file first")
+	_, err = svc.AttachDocumentFile(ctx, wsA, userA, "purchase_order", po.ID, finance.AttachDocumentFileInput{
+		IdempotencyKey: fmt.Sprintf("only-key-%d", suffix),
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "Upload the file first")
+
+	// Verify HTTP endpoint returns 400 for request with only idempotency_key and no asset_id
+	h := finance.NewHandler(svc, nil)
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Set(finance.ContextWorkspaceKey, finance.WorkspaceContext{
+			WorkspaceID: wsA,
+			UserID:      userA,
+			IsOwner:     true,
+		})
+		c.Next()
+	})
+	h.RegisterBlueprintsCompletionRoutes(r.Group(""))
+
+	reqBody, _ := json.Marshal(map[string]any{
+		"idempotency_key": fmt.Sprintf("http-only-key-%d", suffix),
+	})
+	httpReq := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/documents/purchase_order/%d/files", po.ID), bytes.NewReader(reqBody))
+	httpReq.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httpReq)
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	require.Contains(t, w.Body.String(), "Upload the file first")
 
 	// Same workspace can attach existing evidence_id to another document (e.g. supplier bill)
 	billFile, err := svc.AttachDocumentFile(ctx, wsA, userA, "supplier_bill", billID, finance.AttachDocumentFileInput{
