@@ -24,6 +24,7 @@ export interface Product {
   /** Decimal text, e.g. "12.0000". */
   quantity_on_hand: string;
   variant_count: number;
+  collection_ids?: number[];
   archived_at?: string | null;
   created_at: string;
   updated_at: string;
@@ -43,6 +44,8 @@ export interface ProductDetail {
   variant_stock: { variant_id: number; location_id: number; location_name: string; quantity_on_hand: string }[];
   outlet_ids: number[];
   collection_ids: number[];
+  collections?: Array<{ id: number; name: string }>;
+  outlets?: Array<{ id: number; name: string }>;
   stock: ProductStockLine[];
 }
 
@@ -80,6 +83,14 @@ export interface SaveProductPayload {
   outlet_ids?: number[];
   collection_ids?: number[];
   opening_stock?: string;
+  opening_unit_cost?: string;
+  opening_outlet_id?: number;
+  options?: SaveOptionsPayload["options"];
+  variants?: Array<SaveOptionsPayload["variants"][number] & {
+    opening_stock?: string;
+    opening_unit_cost?: string;
+    outlet_id?: number;
+  }>;
 }
 
 export interface ProductCollection {

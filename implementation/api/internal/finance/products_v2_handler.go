@@ -22,8 +22,10 @@ func (h *Handler) RegisterProductV2Routes(protected *gin.RouterGroup) {
 	protected.POST("/catalogue/products/:id/restore", h.restoreProduct)
 	protected.GET("/catalogue/products/:id/price-history", h.productPriceHistory)
 	protected.GET("/catalogue/products/:id/events", h.productEvents)
+	protected.GET("/catalogue/products/:id/history", h.productCombinedHistory)
 	protected.GET("/catalogue/products/:id/stock-movements", h.productStockMovements)
 	protected.POST("/catalogue/products/:id/stock", h.changeProductStock)
+	protected.POST("/catalogue/products/:id/stock/move", h.moveProductStock)
 	protected.POST("/catalogue/product-images/authorize", h.authorizeProductImage)
 	protected.POST("/catalogue/products/prices/bulk", h.bulkChangeProductPrices)
 	protected.POST("/catalogue/products/:id/prices", h.changeProductPrices)
@@ -380,4 +382,46 @@ func (h *Handler) authorizeProductImage(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"authorization": auth}})
+}
+
+func (h *Handler) productCombinedHistory(c *gin.Context) {
+	wsCtx, ok := businessWorkspace(c)
+	if !ok {
+		return
+	}
+	id, ok := productID(c)
+	if !ok {
+		return
+	}
+	items, err := h.service.GetProductCombinedHistory(c.Request.Context(), wsCtx.WorkspaceID, id)
+	if err != nil {
+		productError(c, err, "PRODUCT_HISTORY_FAILED")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": items})
+}
+
+func (h *Handler) moveProductStock(c *gin.Context) {
+	wsCtx, ok := businessWorkspace(c)
+	if !ok {
+		return
+	}
+	id, ok := productID(c)
+	if !ok {
+		return
+	}
+	var in MoveProductStockInput
+	if err := c.ShouldBindJSON(&in); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": err.Error()}})
+		return
+	}
+	if in.IdempotencyKey == "" {
+		in.IdempotencyKey = c.GetHeader("Idempotency-Key")
+	}
+	transfer, err := h.service.MoveProductStock(c.Request.Context(), wsCtx.WorkspaceID, wsCtx.UserID, id, in)
+	if err != nil {
+		productError(c, err, "MOVE_STOCK_FAILED")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": transfer})
 }

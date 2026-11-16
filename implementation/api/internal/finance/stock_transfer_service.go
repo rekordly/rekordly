@@ -645,3 +645,238 @@ func (s *Service) ListStockTransfers(ctx context.Context, workspaceID int64, fil
 	}
 	return out, nil
 }
+
+type MoveProductStockInput struct {
+	VariantID      *int64 `json:"variant_id"`
+	FromOutletID   int64  `json:"from_outlet_id" binding:"required"`
+	ToOutletID     int64  `json:"to_outlet_id" binding:"required"`
+	Quantity       string `json:"quantity" binding:"required"`
+	Note           string `json:"note"`
+	IdempotencyKey string `json:"idempotency_key"`
+}
+
+func (s *Service) MoveProductStock(ctx context.Context, workspaceID, userID, productID int64, in MoveProductStockInput) (TransferView, error) {
+	if in.FromOutletID <= 0 || in.ToOutletID <= 0 {
+		return TransferView{}, errors.New("source and destination outlets are required")
+	}
+	if in.FromOutletID == in.ToOutletID {
+		return TransferView{}, ErrSameLocationTransfer
+	}
+	qty, _, err := parseRequestQuantity(in.Quantity)
+	if err != nil || !qty.GreaterThan(decimal.Zero) {
+		return TransferView{}, errors.New("quantity must be greater than zero")
+	}
+
+	key := strings.TrimSpace(in.IdempotencyKey)
+	if key != "" {
+		if existing, err := s.queries.GetStockTransferByIdempotency(ctx, db.GetStockTransferByIdempotencyParams{
+			WorkspaceID:    workspaceID,
+			IdempotencyKey: optionalPgText(key),
+		}); err == nil {
+			return s.GetStockTransfer(ctx, workspaceID, existing.ID)
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			return TransferView{}, err
+		}
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return TransferView{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := s.queries.WithTx(tx)
+
+	srcLoc, err := q.GetInventoryLocation(ctx, db.GetInventoryLocationParams{WorkspaceID: workspaceID, ID: in.FromOutletID})
+	if err != nil {
+		return TransferView{}, fmt.Errorf("source location: %w", err)
+	}
+	dstLoc, err := q.GetInventoryLocation(ctx, db.GetInventoryLocationParams{WorkspaceID: workspaceID, ID: in.ToOutletID})
+	if err != nil {
+		return TransferView{}, fmt.Errorf("destination location: %w", err)
+	}
+
+	prod, err := q.GetProductByID(ctx, db.GetProductByIDParams{WorkspaceID: workspaceID, ID: productID})
+	if err != nil {
+		return TransferView{}, fmt.Errorf("product: %w", err)
+	}
+
+	var vID pgtype.Int8
+	if in.VariantID != nil && *in.VariantID > 0 {
+		vID = pgtype.Int8{Int64: *in.VariantID, Valid: true}
+	}
+	vID, err = stockVariant(ctx, q, workspaceID, prod, vID)
+	if err != nil {
+		return TransferView{}, err
+	}
+
+	srcBal, err := q.GetInventoryBalanceForUpdate(ctx, db.GetInventoryBalanceForUpdateParams{
+		WorkspaceID: workspaceID,
+		LocationID:  srcLoc.ID,
+		ProductID:   prod.ID,
+		VariantID:   vID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return TransferView{}, ErrInsufficientStock
+	}
+	if err != nil {
+		return TransferView{}, err
+	}
+
+	available := srcBal.QuantityOnHand.Sub(srcBal.ReservedQuantity)
+	if available.LessThan(qty) {
+		return TransferView{}, ErrInsufficientStock
+	}
+
+	lineCostMinor := int64(0)
+	if srcBal.QuantityOnHand.GreaterThan(decimal.Zero) {
+		fraction := qty.Div(srcBal.QuantityOnHand)
+		lineCostMinor = fraction.Mul(decimal.NewFromInt(srcBal.ValueOnHandMinor)).Round(0).IntPart()
+	}
+	if lineCostMinor > srcBal.ValueOnHandMinor {
+		lineCostMinor = srcBal.ValueOnHandMinor
+	}
+	unitCost := int64(0)
+	if qty.GreaterThan(decimal.Zero) {
+		unitCost = lineCostMinor / qty.IntPart()
+		if unitCost <= 0 {
+			unitCost = lineCostMinor
+		}
+	}
+
+	trfNumber := fmt.Sprintf("TRF-%d-%04d", time.Now().Unix(), rand.Intn(10000))
+	now := time.Now()
+	trf, err := q.CreateStockTransfer(ctx, db.CreateStockTransferParams{
+		WorkspaceID:           workspaceID,
+		TransferNumber:        trfNumber,
+		SourceLocationID:      srcLoc.ID,
+		DestinationLocationID: dstLoc.ID,
+		Status:                "received",
+		Notes:                 optionalPgText(in.Note),
+		IdempotencyKey:        optionalPgText(key),
+		CreatedByUserID:       userID,
+	})
+	if err != nil {
+		return TransferView{}, err
+	}
+
+	if _, err := q.UpdateStockTransferStatus(ctx, db.UpdateStockTransferStatusParams{
+		WorkspaceID:  workspaceID,
+		ID:           trf.ID,
+		Status:       "received",
+		DispatchedAt: pgtype.Timestamptz{Time: now, Valid: true},
+		ReceivedAt:   pgtype.Timestamptz{Time: now, Valid: true},
+	}); err != nil {
+		return TransferView{}, err
+	}
+
+	if _, err := q.CreateStockTransferLine(ctx, db.CreateStockTransferLineParams{
+		WorkspaceID:        workspaceID,
+		TransferID:         trf.ID,
+		ProductID:          prod.ID,
+		VariantID:          vID,
+		QuantityRequested:  qty,
+		QuantityDispatched: qty,
+		QuantityReceived:   qty,
+		UnitCostMinor:      unitCost,
+	}); err != nil {
+		return TransferView{}, err
+	}
+
+	newSrcQty := srcBal.QuantityOnHand.Sub(qty)
+	var newSrcValue int64
+	if newSrcQty.IsZero() {
+		newSrcValue = 0
+	} else {
+		newSrcValue = srcBal.ValueOnHandMinor - lineCostMinor
+		if newSrcValue < 0 {
+			newSrcValue = 0
+		}
+	}
+	if _, err := q.UpdateInventoryBalanceQuantities(ctx, db.UpdateInventoryBalanceQuantitiesParams{
+		WorkspaceID:       workspaceID,
+		LocationID:        srcLoc.ID,
+		ProductID:         prod.ID,
+		VariantID:         vID,
+		QuantityOnHand:    newSrcQty,
+		ReservedQuantity:  srcBal.ReservedQuantity,
+		InTransitQuantity: srcBal.InTransitQuantity,
+		ValueOnHandMinor:  newSrcValue,
+	}); err != nil {
+		return TransferView{}, err
+	}
+
+	if _, err := q.CreateInventoryMovement(ctx, db.CreateInventoryMovementParams{
+		WorkspaceID:        workspaceID,
+		ProductID:          prod.ID,
+		VariantID:          vID,
+		GoodsReceiptLineID: pgtype.Int8{},
+		LocationID:         pgtype.Int8{Int64: srcLoc.ID, Valid: true},
+		MovementType:       "transfer_out",
+		SourceType:         "inventory_transfer",
+		SourceID:           pgtype.Int8{Int64: trf.ID, Valid: true},
+		QuantityDelta:      qty.Neg(),
+		ValueDeltaMinor:    -lineCostMinor,
+		OccurredOn:         pgtype.Date{Time: now, Valid: true},
+	}); err != nil {
+		return TransferView{}, err
+	}
+
+	dstBal, err := q.GetInventoryBalanceForUpdate(ctx, db.GetInventoryBalanceForUpdateParams{
+		WorkspaceID: workspaceID,
+		LocationID:  dstLoc.ID,
+		ProductID:   prod.ID,
+		VariantID:   vID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		dstBal, err = q.UpsertInventoryBalance(ctx, db.UpsertInventoryBalanceParams{
+			WorkspaceID:      workspaceID,
+			LocationID:       dstLoc.ID,
+			ProductID:        prod.ID,
+			VariantID:        vID,
+			QuantityOnHand:   decimal.Zero,
+			ValueOnHandMinor: 0,
+		})
+		if err != nil {
+			return TransferView{}, err
+		}
+	} else if err != nil {
+		return TransferView{}, err
+	}
+
+	newDstQty := dstBal.QuantityOnHand.Add(qty)
+	newDstVal := dstBal.ValueOnHandMinor + lineCostMinor
+	if _, err := q.UpdateInventoryBalanceQuantities(ctx, db.UpdateInventoryBalanceQuantitiesParams{
+		WorkspaceID:       workspaceID,
+		LocationID:        dstLoc.ID,
+		ProductID:         prod.ID,
+		VariantID:         vID,
+		QuantityOnHand:    newDstQty,
+		ReservedQuantity:  dstBal.ReservedQuantity,
+		InTransitQuantity: dstBal.InTransitQuantity,
+		ValueOnHandMinor:  newDstVal,
+	}); err != nil {
+		return TransferView{}, err
+	}
+
+	if _, err := q.CreateInventoryMovement(ctx, db.CreateInventoryMovementParams{
+		WorkspaceID:        workspaceID,
+		ProductID:          prod.ID,
+		VariantID:          vID,
+		GoodsReceiptLineID: pgtype.Int8{},
+		LocationID:         pgtype.Int8{Int64: dstLoc.ID, Valid: true},
+		MovementType:       "transfer_in",
+		SourceType:         "inventory_transfer",
+		SourceID:           pgtype.Int8{Int64: trf.ID, Valid: true},
+		QuantityDelta:      qty,
+		ValueDeltaMinor:    lineCostMinor,
+		OccurredOn:         pgtype.Date{Time: now, Valid: true},
+	}); err != nil {
+		return TransferView{}, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return TransferView{}, err
+	}
+
+	return s.GetStockTransfer(ctx, workspaceID, trf.ID)
+}

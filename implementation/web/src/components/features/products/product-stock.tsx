@@ -178,23 +178,19 @@ export function ProductStockPanel({ workspaceId, detail }: { workspaceId: number
 
   const move = useFinanceAction(
     workspaceId,
-    async (_: void, key: string) => {
-      const created = await financeApi.createStockTransfer(
+    (_: void, key: string) =>
+      productsApi.moveStock(
         workspaceId,
+        product.id,
         {
-          source_location_id: Number(outletId),
-          destination_location_id: Number(toOutletId),
-          notes: note || undefined,
-          lines: [{ product_id: product.id, variant_id: chosenVariantId, quantity_requested: quantity }],
+          variant_id: chosenVariantId,
+          from_outlet_id: Number(outletId),
+          to_outlet_id: Number(toOutletId),
+          quantity,
+          note: note || undefined,
         },
         key,
-      );
-      const transfer = (created as { transfer: StockTransfer }).transfer;
-      const today = new Date().toISOString().slice(0, 10);
-      await financeApi.dispatchStockTransfer(workspaceId, transfer.id, { occurred_on: today });
-      const line = transfer.lines?.[0];
-      if (line) await financeApi.receiveStockTransfer(workspaceId, transfer.id, { occurred_on: today, lines: [{ line_id: line.id, quantity_received: quantity }] });
-    },
+      ),
     { success: "Stock moved", onDone: () => setAction(null) },
   );
 

@@ -12,6 +12,21 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+const archiveAllOptionVariantsByProductID = `-- name: ArchiveAllOptionVariantsByProductID :exec
+UPDATE product_variants SET is_active = false, archived_at = now(), updated_at = now()
+WHERE workspace_id = $1 AND product_id = $2 AND NOT is_default
+`
+
+type ArchiveAllOptionVariantsByProductIDParams struct {
+	WorkspaceID int64 `json:"workspace_id"`
+	ProductID   int64 `json:"product_id"`
+}
+
+func (q *Queries) ArchiveAllOptionVariantsByProductID(ctx context.Context, arg ArchiveAllOptionVariantsByProductIDParams) error {
+	_, err := q.db.Exec(ctx, archiveAllOptionVariantsByProductID, arg.WorkspaceID, arg.ProductID)
+	return err
+}
+
 const archiveOptionVariant = `-- name: ArchiveOptionVariant :exec
 UPDATE product_variants SET is_active = false, archived_at = now(), updated_at = now()
 WHERE workspace_id = $1 AND product_id = $2 AND id = $3 AND NOT is_default
@@ -208,6 +223,20 @@ func (q *Queries) CreateVariant(ctx context.Context, arg CreateVariantParams) (P
 		&i.ArchivedAt,
 	)
 	return i, err
+}
+
+const deleteProductOptionsByProductID = `-- name: DeleteProductOptionsByProductID :exec
+DELETE FROM product_options WHERE workspace_id = $1 AND product_id = $2
+`
+
+type DeleteProductOptionsByProductIDParams struct {
+	WorkspaceID int64 `json:"workspace_id"`
+	ProductID   int64 `json:"product_id"`
+}
+
+func (q *Queries) DeleteProductOptionsByProductID(ctx context.Context, arg DeleteProductOptionsByProductIDParams) error {
+	_, err := q.db.Exec(ctx, deleteProductOptionsByProductID, arg.WorkspaceID, arg.ProductID)
+	return err
 }
 
 const deleteUnusedOptionVariant = `-- name: DeleteUnusedOptionVariant :execrows

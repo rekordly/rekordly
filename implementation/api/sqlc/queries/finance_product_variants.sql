@@ -109,3 +109,10 @@ SELECT b.variant_id, b.location_id, l.name AS location_name, b.quantity_on_hand
 FROM inventory_balances b JOIN inventory_locations l ON l.id = b.location_id AND l.workspace_id = b.workspace_id
 WHERE b.workspace_id = @workspace_id AND b.product_id = @product_id
 ORDER BY b.variant_id, l.name;
+
+-- name: DeleteProductOptionsByProductID :exec
+DELETE FROM product_options WHERE workspace_id = @workspace_id AND product_id = @product_id;
+
+-- name: ArchiveAllOptionVariantsByProductID :exec
+UPDATE product_variants SET is_active = false, archived_at = now(), updated_at = now()
+WHERE workspace_id = @workspace_id AND product_id = @product_id AND NOT is_default;

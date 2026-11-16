@@ -10,7 +10,12 @@ SELECT
     COALESCE((SELECT SUM(b.quantity_on_hand) FROM inventory_balances b
               WHERE b.workspace_id = p.workspace_id AND b.product_id = p.id), 0)::numeric AS quantity_on_hand,
     GREATEST((SELECT COUNT(*) FROM product_variants pv
-      WHERE pv.workspace_id = p.workspace_id AND pv.product_id = p.id AND pv.is_active AND pv.archived_at IS NULL AND pv.is_default = false), 1)::bigint AS variant_count
+      WHERE pv.workspace_id = p.workspace_id AND pv.product_id = p.id AND pv.is_active AND pv.archived_at IS NULL AND pv.is_default = false), 1)::bigint AS variant_count,
+    COALESCE((
+        SELECT array_agg(ci.collection_id ORDER BY ci.collection_id)
+        FROM product_collection_items ci
+        WHERE ci.workspace_id = p.workspace_id AND ci.product_id = p.id
+    ), '{}')::bigint[] AS collection_ids
 FROM products p
 JOIN product_variants v ON v.product_id = p.id AND v.workspace_id = p.workspace_id AND v.is_default = true
 WHERE p.workspace_id = @workspace_id
@@ -72,6 +77,12 @@ SELECT location_id FROM product_outlets
 WHERE workspace_id = @workspace_id AND product_id = @product_id
 ORDER BY location_id;
 
+-- name: ListProductOutletsForProduct :many
+SELECT l.id, l.name FROM product_outlets o
+JOIN inventory_locations l ON l.id = o.location_id AND l.workspace_id = o.workspace_id
+WHERE o.workspace_id = @workspace_id AND o.product_id = @product_id
+ORDER BY l.name ASC;
+
 -- name: DeleteProductOutlets :exec
 DELETE FROM product_outlets WHERE workspace_id = @workspace_id AND product_id = @product_id;
 
@@ -87,6 +98,12 @@ SELECT c.*,
 FROM product_collections c
 WHERE c.workspace_id = @workspace_id
 ORDER BY c.position, lower(c.name);
+
+-- name: ListProductCollectionsForProduct :many
+SELECT c.id, c.name FROM product_collection_items i
+JOIN product_collections c ON c.id = i.collection_id AND c.workspace_id = i.workspace_id
+WHERE i.workspace_id = @workspace_id AND i.product_id = @product_id
+ORDER BY c.position ASC, c.name ASC;
 
 -- name: CreateProductCollection :one
 INSERT INTO product_collections (workspace_id, name, description)

@@ -309,6 +309,43 @@ func (q *Queries) ListProductCollectionIDs(ctx context.Context, arg ListProductC
 	return items, nil
 }
 
+const listProductCollectionsForProduct = `-- name: ListProductCollectionsForProduct :many
+SELECT c.id, c.name FROM product_collection_items i
+JOIN product_collections c ON c.id = i.collection_id AND c.workspace_id = i.workspace_id
+WHERE i.workspace_id = $1 AND i.product_id = $2
+ORDER BY c.position ASC, c.name ASC
+`
+
+type ListProductCollectionsForProductParams struct {
+	WorkspaceID int64 `json:"workspace_id"`
+	ProductID   int64 `json:"product_id"`
+}
+
+type ListProductCollectionsForProductRow struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+}
+
+func (q *Queries) ListProductCollectionsForProduct(ctx context.Context, arg ListProductCollectionsForProductParams) ([]ListProductCollectionsForProductRow, error) {
+	rows, err := q.db.Query(ctx, listProductCollectionsForProduct, arg.WorkspaceID, arg.ProductID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListProductCollectionsForProductRow{}
+	for rows.Next() {
+		var i ListProductCollectionsForProductRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listProductCollectionsV2 = `-- name: ListProductCollectionsV2 :many
 SELECT c.id, c.workspace_id, c.name, c.description, c.position, c.created_at, c.updated_at,
     (SELECT COUNT(*) FROM product_collection_items ci WHERE ci.collection_id = c.id)::bigint AS product_count
@@ -465,6 +502,43 @@ func (q *Queries) ListProductOutletIDs(ctx context.Context, arg ListProductOutle
 	return items, nil
 }
 
+const listProductOutletsForProduct = `-- name: ListProductOutletsForProduct :many
+SELECT l.id, l.name FROM product_outlets o
+JOIN inventory_locations l ON l.id = o.location_id AND l.workspace_id = o.workspace_id
+WHERE o.workspace_id = $1 AND o.product_id = $2
+ORDER BY l.name ASC
+`
+
+type ListProductOutletsForProductParams struct {
+	WorkspaceID int64 `json:"workspace_id"`
+	ProductID   int64 `json:"product_id"`
+}
+
+type ListProductOutletsForProductRow struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+}
+
+func (q *Queries) ListProductOutletsForProduct(ctx context.Context, arg ListProductOutletsForProductParams) ([]ListProductOutletsForProductRow, error) {
+	rows, err := q.db.Query(ctx, listProductOutletsForProduct, arg.WorkspaceID, arg.ProductID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListProductOutletsForProductRow{}
+	for rows.Next() {
+		var i ListProductOutletsForProductRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listProductPriceHistory = `-- name: ListProductPriceHistory :many
 SELECT id, workspace_id, product_id, variant_id, old_selling_price_minor, new_selling_price_minor, old_cost_price_minor, new_cost_price_minor, currency, currency_exponent, changed_by_user_id, changed_at, old_compare_at_price_minor, new_compare_at_price_minor, source FROM product_price_history
 WHERE workspace_id = $1 AND product_id = $2
@@ -572,7 +646,12 @@ SELECT
     COALESCE((SELECT SUM(b.quantity_on_hand) FROM inventory_balances b
               WHERE b.workspace_id = p.workspace_id AND b.product_id = p.id), 0)::numeric AS quantity_on_hand,
     GREATEST((SELECT COUNT(*) FROM product_variants pv
-      WHERE pv.workspace_id = p.workspace_id AND pv.product_id = p.id AND pv.is_active AND pv.archived_at IS NULL AND pv.is_default = false), 1)::bigint AS variant_count
+      WHERE pv.workspace_id = p.workspace_id AND pv.product_id = p.id AND pv.is_active AND pv.archived_at IS NULL AND pv.is_default = false), 1)::bigint AS variant_count,
+    COALESCE((
+        SELECT array_agg(ci.collection_id ORDER BY ci.collection_id)
+        FROM product_collection_items ci
+        WHERE ci.workspace_id = p.workspace_id AND ci.product_id = p.id
+    ), '{}')::bigint[] AS collection_ids
 FROM products p
 JOIN product_variants v ON v.product_id = p.id AND v.workspace_id = p.workspace_id AND v.is_default = true
 WHERE p.workspace_id = $1
@@ -621,6 +700,7 @@ type ListProductsV2Row struct {
 	CurrencyExponent    int32              `json:"currency_exponent"`
 	QuantityOnHand      decimal.Decimal    `json:"quantity_on_hand"`
 	VariantCount        int64              `json:"variant_count"`
+	CollectionIds       []int64            `json:"collection_ids"`
 }
 
 // Products v2: product detail, edits, outlets, collections, history and imports.
@@ -665,6 +745,7 @@ func (q *Queries) ListProductsV2(ctx context.Context, arg ListProductsV2Params) 
 			&i.CurrencyExponent,
 			&i.QuantityOnHand,
 			&i.VariantCount,
+			&i.CollectionIds,
 		); err != nil {
 			return nil, err
 		}

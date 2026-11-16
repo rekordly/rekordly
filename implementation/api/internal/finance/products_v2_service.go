@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 	"unicode"
@@ -46,6 +47,7 @@ type ProductSummary struct {
 	CurrencyExponent    int32      `json:"currency_exponent"`
 	QuantityOnHand      string     `json:"quantity_on_hand"`
 	VariantCount        int64      `json:"variant_count"`
+	CollectionIDs       []int64    `json:"collection_ids"`
 	ArchivedAt          *time.Time `json:"archived_at,omitempty"`
 	CreatedAt           time.Time  `json:"created_at"`
 	UpdatedAt           time.Time  `json:"updated_at"`
@@ -58,6 +60,11 @@ type ProductStockLine struct {
 	ValueOnHandMinor int64  `json:"value_on_hand_minor,string"`
 }
 
+type ProductNamedItem struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+}
+
 type ProductDetail struct {
 	Product       ProductSummary      `json:"product"`
 	Options       []ProductOptionView `json:"options"`
@@ -65,6 +72,8 @@ type ProductDetail struct {
 	VariantStock  []VariantStockLine  `json:"variant_stock"`
 	OutletIDs     []int64             `json:"outlet_ids"`
 	CollectionIDs []int64             `json:"collection_ids"`
+	Collections   []ProductNamedItem  `json:"collections"`
+	Outlets       []ProductNamedItem  `json:"outlets"`
 	Stock         []ProductStockLine  `json:"stock"`
 }
 
@@ -77,25 +86,28 @@ type VariantStockLine struct {
 
 // SaveProductInput is shared by create, edit and import.
 type SaveProductInput struct {
-	Name             string   `json:"name"`
-	Description      string   `json:"description"`
-	Kind             string   `json:"kind"`
-	Status           string   `json:"status"`
-	UnitName         string   `json:"unit_name"`
-	ShortDescription string   `json:"short_description"`
-	LongDescription  string   `json:"long_description"`
-	ImageURLs        []string `json:"image_urls"`
-	SKU              string   `json:"sku"`
-	Barcode          string   `json:"barcode"`
-	SellingPrice     string   `json:"selling_price"`
-	CostPrice        string   `json:"cost_price"`
-	CompareAtPrice   string   `json:"compare_at_price"`
-	Currency         string   `json:"currency"`
-	OutletIDs        []int64  `json:"outlet_ids"`
-	CollectionIDs    []int64  `json:"collection_ids"`
-	// OpeningStock is only used when creating a stock-tracked product.
-	OpeningStock   string `json:"opening_stock"`
-	IdempotencyKey string `json:"idempotency_key"`
+	Name             string                   `json:"name"`
+	Description      string                   `json:"description"`
+	Kind             string                   `json:"kind"`
+	Status           string                   `json:"status"`
+	UnitName         string                   `json:"unit_name"`
+	ShortDescription string                   `json:"short_description"`
+	LongDescription  string                   `json:"long_description"`
+	ImageURLs        []string                 `json:"image_urls"`
+	SKU              string                   `json:"sku"`
+	Barcode          string                   `json:"barcode"`
+	SellingPrice     string                   `json:"selling_price"`
+	CostPrice        string                   `json:"cost_price"`
+	CompareAtPrice   string                   `json:"compare_at_price"`
+	Currency         string                   `json:"currency"`
+	OutletIDs        []int64                  `json:"outlet_ids"`
+	CollectionIDs    []int64                  `json:"collection_ids"`
+	OpeningStock     string                   `json:"opening_stock"`
+	OpeningUnitCost  string                   `json:"opening_unit_cost"`
+	OpeningOutletID  int64                    `json:"opening_outlet_id"`
+	Options          []SaveOptionInput        `json:"options"`
+	Variants         []SaveOptionVariantInput `json:"variants"`
+	IdempotencyKey   string                   `json:"idempotency_key"`
 }
 
 type ListProductsFilter struct {
@@ -373,13 +385,17 @@ func decodeImages(raw []byte) []string {
 }
 
 func productSummaryFromRow(row db.ListProductsV2Row) ProductSummary {
+	colls := row.CollectionIds
+	if colls == nil {
+		colls = []int64{}
+	}
 	return ProductSummary{
 		ID: row.ID, Name: row.Name, Description: nullableText(row.Description), Kind: row.Kind, Status: row.Status,
 		UnitName: row.UnitName, ShortDescription: nullableText(row.ShortDescription), LongDescription: nullableText(row.LongDescription),
 		ImageURLs: decodeImages(row.ImageUrls), DefaultVariantID: row.DefaultVariantID, SKU: nullableText(row.Sku),
 		Barcode: nullableText(row.Barcode), SellingPriceMinor: row.SellingPriceMinor, CostPriceMinor: row.CostPriceMinor,
 		CompareAtPriceMinor: int64Ptr(row.CompareAtPriceMinor), Currency: row.Currency, CurrencyExponent: row.CurrencyExponent,
-		QuantityOnHand: row.QuantityOnHand.String(), VariantCount: row.VariantCount, ArchivedAt: timePtr(row.ArchivedAt),
+		QuantityOnHand: row.QuantityOnHand.String(), VariantCount: row.VariantCount, CollectionIDs: colls, ArchivedAt: timePtr(row.ArchivedAt),
 		CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time,
 	}
 }
@@ -531,7 +547,21 @@ func (s *Service) GetProduct(ctx context.Context, workspaceID, productID int64) 
 		}
 		options = filtered
 	}
-	return ProductDetail{Product: summary, Options: options, Variants: variants, VariantStock: variantStock, OutletIDs: outlets, CollectionIDs: collections, Stock: stock}, nil
+	collectionsNamed := make([]ProductNamedItem, 0)
+	colls, err := s.queries.ListProductCollectionsForProduct(ctx, db.ListProductCollectionsForProductParams{WorkspaceID: workspaceID, ProductID: productID})
+	if err == nil {
+		for _, c := range colls {
+			collectionsNamed = append(collectionsNamed, ProductNamedItem{ID: c.ID, Name: c.Name})
+		}
+	}
+	outletsNamed := make([]ProductNamedItem, 0)
+	outlts, err := s.queries.ListProductOutletsForProduct(ctx, db.ListProductOutletsForProductParams{WorkspaceID: workspaceID, ProductID: productID})
+	if err == nil {
+		for _, o := range outlts {
+			outletsNamed = append(outletsNamed, ProductNamedItem{ID: o.ID, Name: o.Name})
+		}
+	}
+	return ProductDetail{Product: summary, Options: options, Variants: variants, VariantStock: variantStock, OutletIDs: outlets, CollectionIDs: collections, Collections: collectionsNamed, Outlets: outletsNamed, Stock: stock}, nil
 }
 
 // ---------------- create ----------------
@@ -627,24 +657,40 @@ func (s *Service) CreateProductV2(ctx context.Context, workspaceID, userID int64
 	if err := s.productEvent(ctx, qtx, workspaceID, product.ID, userID, "created", fmt.Sprintf("Created %s", v.name)); err != nil {
 		return ProductDetail{}, err
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return ProductDetail{}, fmt.Errorf("commit product: %w", err)
-	}
 
-	if opening != "" && opening != "0" {
+	if len(in.Options) > 0 {
+		optInput := SaveProductOptionsInput{
+			IdempotencyKey: key + ":options",
+			Options:        in.Options,
+			Variants:       in.Variants,
+		}
+		if _, err := s.saveProductOptionsTx(ctx, qtx, workspaceID, product.ID, userID, optInput, variant); err != nil {
+			return ProductDetail{}, err
+		}
+	} else if opening != "" && opening != "0" {
 		var location int64
-		if len(in.OutletIDs) > 0 {
+		if in.OpeningOutletID > 0 {
+			location = in.OpeningOutletID
+		} else if len(in.OutletIDs) > 0 {
 			location = in.OutletIDs[0]
 		}
-		if _, err := s.CreateOpeningStock(ctx, workspaceID, userID, CreateOpeningStockInput{
+		unitCost := in.OpeningUnitCost
+		if unitCost == "" {
+			unitCost = minorToMajorString(v.cost, v.exponent)
+		}
+		if _, err := createOpeningStockTx(ctx, qtx, workspaceID, userID, CreateOpeningStockInput{
 			ProductID: product.ID, LocationID: location, Quantity: opening,
-			UnitCost: minorToMajorString(v.cost, v.exponent), Currency: v.currency,
+			UnitCost: unitCost, Currency: v.currency,
 			EffectiveOn: time.Now().UTC().Format("2006-01-02"), Reason: "Opening stock when the product was added",
 			IdempotencyKey: key + ":opening",
-		}); err != nil {
-			return ProductDetail{}, fmt.Errorf("product saved, but opening stock failed: %w", err)
+		}, pgtype.Int8{}); err != nil {
+			return ProductDetail{}, fmt.Errorf("opening stock failed: %w", err)
 		}
-		_ = s.productEvent(ctx, s.queries, workspaceID, product.ID, userID, "stock_opened", fmt.Sprintf("Opening stock of %s %s", opening, v.unit))
+		_ = s.productEvent(ctx, qtx, workspaceID, product.ID, userID, "stock_opened", fmt.Sprintf("Opening stock of %s %s", opening, v.unit))
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return ProductDetail{}, fmt.Errorf("commit product: %w", err)
 	}
 	return s.GetProduct(ctx, workspaceID, product.ID)
 }
@@ -779,6 +825,26 @@ func (s *Service) UpdateProductV2(ctx context.Context, workspaceID, userID, prod
 	if changes := describeProductChanges(current, v); changes != "" {
 		if err := s.productEvent(ctx, qtx, workspaceID, productID, userID, "updated", changes); err != nil {
 			return ProductDetail{}, err
+		}
+	}
+	if in.Options != nil {
+		baseVariant, err := qtx.GetDefaultProductVariant(ctx, db.GetDefaultProductVariantParams{WorkspaceID: workspaceID, ProductID: productID})
+		if err != nil {
+			return ProductDetail{}, err
+		}
+		if len(in.Options) == 0 {
+			if err := s.removeProductOptionsTx(ctx, qtx, workspaceID, productID, userID); err != nil {
+				return ProductDetail{}, err
+			}
+		} else {
+			optInput := SaveProductOptionsInput{
+				IdempotencyKey: fmt.Sprintf("update:%d:%d:options", productID, time.Now().UnixNano()),
+				Options:        in.Options,
+				Variants:       in.Variants,
+			}
+			if _, err := s.saveProductOptionsTx(ctx, qtx, workspaceID, productID, userID, optInput, baseVariant); err != nil {
+				return ProductDetail{}, err
+			}
 		}
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -1633,4 +1699,72 @@ func (a *cloudinaryEvidenceAuthorizer) AuthorizePublicImage(workspaceID int64, m
 		Folder: folder, PublicID: publicID, DeliveryType: "upload", ResourceType: "image",
 		MaxBytes: fmt.Sprintf("%d", maxProductImageBytes), ExpiresAt: time.Now().UTC().Add(10 * time.Minute).Format(time.RFC3339),
 	}, nil
+}
+
+type ProductHistoryItem struct {
+	Kind                   string    `json:"kind"`
+	ID                     int64     `json:"id"`
+	VariantID              *int64    `json:"variant_id,omitempty"`
+	OldSellingPriceMinor   *int64    `json:"old_selling_price_minor,string,omitempty"`
+	NewSellingPriceMinor   *int64    `json:"new_selling_price_minor,string,omitempty"`
+	OldCostPriceMinor      *int64    `json:"old_cost_price_minor,string,omitempty"`
+	NewCostPriceMinor      *int64    `json:"new_cost_price_minor,string,omitempty"`
+	OldCompareAtPriceMinor *int64    `json:"old_compare_at_price_minor,string,omitempty"`
+	NewCompareAtPriceMinor *int64    `json:"new_compare_at_price_minor,string,omitempty"`
+	Currency               string    `json:"currency,omitempty"`
+	CurrencyExponent       int32     `json:"currency_exponent,omitempty"`
+	Source                 string    `json:"source,omitempty"`
+	EventType              string    `json:"event_type,omitempty"`
+	Summary                string    `json:"summary,omitempty"`
+	CreatedAt              time.Time `json:"created_at"`
+}
+
+func (s *Service) GetProductCombinedHistory(ctx context.Context, workspaceID, productID int64) ([]ProductHistoryItem, error) {
+	_, err := s.queries.GetProductByID(ctx, db.GetProductByIDParams{WorkspaceID: workspaceID, ID: productID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrProductNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	priceRows, err := s.queries.ListProductPriceHistory(ctx, db.ListProductPriceHistoryParams{WorkspaceID: workspaceID, ProductID: productID})
+	if err != nil {
+		return nil, err
+	}
+	eventRows, err := s.queries.ListProductEvents(ctx, db.ListProductEventsParams{WorkspaceID: workspaceID, ProductID: productID})
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]ProductHistoryItem, 0, len(priceRows)+len(eventRows))
+	for _, p := range priceRows {
+		items = append(items, ProductHistoryItem{
+			Kind:                   "price",
+			ID:                     p.ID,
+			VariantID:              &p.VariantID,
+			OldSellingPriceMinor:   int64Ptr(p.OldSellingPriceMinor),
+			NewSellingPriceMinor:   &p.NewSellingPriceMinor,
+			OldCostPriceMinor:      int64Ptr(p.OldCostPriceMinor),
+			NewCostPriceMinor:      &p.NewCostPriceMinor,
+			OldCompareAtPriceMinor: int64Ptr(p.OldCompareAtPriceMinor),
+			NewCompareAtPriceMinor: int64Ptr(p.NewCompareAtPriceMinor),
+			Currency:               p.Currency,
+			CurrencyExponent:       p.CurrencyExponent,
+			Source:                 p.Source,
+			CreatedAt:              p.ChangedAt.Time,
+		})
+	}
+	for _, e := range eventRows {
+		items = append(items, ProductHistoryItem{
+			Kind:      "event",
+			ID:        e.ID,
+			EventType: e.EventType,
+			Summary:   e.Summary,
+			CreatedAt: e.CreatedAt.Time,
+		})
+	}
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].CreatedAt.After(items[j].CreatedAt)
+	})
+	return items, nil
 }

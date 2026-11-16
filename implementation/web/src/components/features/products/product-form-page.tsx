@@ -228,29 +228,40 @@ function ProductForm({ workspaceId, currency, detail }: WorkspaceInfo & { detail
   const save = useFinanceAction(
     workspaceId,
     async (status: "active" | "draft", key: string) => {
-      const saved = detail ? await productsApi.update(workspaceId, detail.product.id, payload(status)) : await productsApi.create(workspaceId, payload(status), key);
+      let optionsList: SaveProductPayload["options"];
+      let variantsList: SaveProductPayload["variants"];
+
       if (hasOptions) {
         const defaults: VariantDraft = { selling_price: form.price, cost_price: form.cost, compare_at_price: form.compareAt, opening_stock: "", sku: "", barcode: "", is_active: true };
         const matrixPayload = optionsPayload(options, variantRows, defaults);
-        const configured = await productsApi.saveOptions(workspaceId, saved.product.id, matrixPayload, `${key}:options`);
-        if (!isEdit && form.kind === "stock_tracked") {
-          for (const [index, row] of matrixPayload.variants.entries()) {
-            const combination = optionMatrix(options)[index];
-            const rowKey = combination.map((value) => value.key).sort().join("|");
-            const opening = variantRows[rowKey]?.opening_stock;
-            if (!opening || toMinor(opening) === BigInt(0)) continue;
-            const variant = configured.variants.find((candidate) => candidate.name === row.option_values.join(" / "));
-            if (!variant) throw new Error(`Could not find ${row.option_values.join(" / ")} for opening stock`);
-            if (!row.cost_price || toMinor(row.cost_price) <= BigInt(0)) throw new Error(`Add a cost price for ${variant.name} before opening stock`);
-            await productsApi.changeStock(workspaceId, saved.product.id, { direction: "add", quantity: opening, reason: "restock", unit_cost: row.cost_price, variant_id: variant.id, outlet_id: form.outletIds[0] }, `${key}:opening:${variant.id}`);
-          }
-        }
-        return configured;
+        optionsList = matrixPayload.options;
+        variantsList = matrixPayload.variants.map((v, index) => {
+          const combination = optionMatrix(options)[index];
+          const rowKey = combination?.map((value) => value.key).sort().join("|") ?? "";
+          const opening = variantRows[rowKey]?.opening_stock;
+          return {
+            ...v,
+            opening_stock: !isEdit && form.kind === "stock_tracked" && opening && toMinor(opening) > BigInt(0) ? opening : undefined,
+            opening_unit_cost: v.cost_price || form.cost || undefined,
+            outlet_id: form.outletIds[0],
+          };
+        });
+      } else if (optionsInitial.enabled) {
+        optionsList = [];
+        variantsList = [];
       }
-      if (optionsInitial.enabled) {
-        return productsApi.saveOptions(workspaceId, saved.product.id, { options: [], variants: [] }, `${key}:options`);
-      }
-      return saved;
+
+      const fullPayload: SaveProductPayload = {
+        ...payload(status),
+        options: optionsList,
+        variants: variantsList,
+        opening_unit_cost: !isEdit && !hasOptions && form.kind === "stock_tracked" && form.openingStock ? form.cost || undefined : undefined,
+        opening_outlet_id: form.outletIds[0],
+      };
+
+      return detail
+        ? productsApi.update(workspaceId, detail.product.id, fullPayload)
+        : productsApi.create(workspaceId, fullPayload, key);
     },
     {
       success: isEdit ? "Product updated" : "Product added",

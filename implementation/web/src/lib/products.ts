@@ -92,6 +92,30 @@ export const productsApi = {
     const result = await apiClient.get<{ movements: ProductStockMovement[] }>(`/api/v1/catalogue/products/${id}/stock-movements?limit=100`, headers(workspaceId));
     return result.movements ?? [];
   },
+  moveStock: (
+    workspaceId: number,
+    id: number,
+    body: {
+      variant_id?: number;
+      from_outlet_id: number;
+      to_outlet_id: number;
+      quantity: string;
+      note?: string;
+      idempotency_key?: string;
+    },
+    key?: string,
+  ) => {
+    const k = key || body.idempotency_key;
+    return apiClient.post<unknown, { transfer_id: number; status: string }>(
+      `/api/v1/catalogue/products/${id}/stock/move`,
+      { ...body, idempotency_key: k },
+      headers(workspaceId, k),
+    );
+  },
+  async combinedHistory(workspaceId: number, id: number) {
+    const result = await apiClient.get<{ history: any[] }>(`/api/v1/catalogue/products/${id}/history`, headers(workspaceId));
+    return result.history ?? [];
+  },
   changeStock: (workspaceId: number, id: number, body: ProductStockChange, key: string) =>
     apiClient.post<unknown, unknown>(`/api/v1/catalogue/products/${id}/stock`, { ...body, idempotency_key: key }, headers(workspaceId, key)),
   async collections(workspaceId: number) {
