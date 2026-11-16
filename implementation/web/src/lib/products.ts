@@ -42,6 +42,40 @@ export const productsApi = {
     apiClient.post<unknown, ProductDetail>("/api/v1/catalogue/products", { ...body, idempotency_key: key }, headers(workspaceId, key)),
   update: (workspaceId: number, id: number, body: SaveProductPayload) =>
     apiClient.patch<unknown, ProductDetail>(`/api/v1/catalogue/products/${id}`, body, headers(workspaceId)),
+  changePrices: (
+    workspaceId: number,
+    id: number,
+    body: {
+      idempotency_key?: string;
+      product?: { selling_price: string; compare_at_price?: string };
+      variants?: Array<{ id: number; selling_price: string; compare_at_price?: string }>;
+    },
+    key?: string,
+  ) => {
+    const k = key || body.idempotency_key;
+    return apiClient.post<unknown, ProductDetail>(
+      `/api/v1/catalogue/products/${id}/prices`,
+      { ...body, idempotency_key: k },
+      headers(workspaceId, k),
+    );
+  },
+  bulkChangePrices: (
+    workspaceId: number,
+    body: {
+      idempotency_key?: string;
+      product_ids: number[];
+      rule: { direction: "increase" | "decrease"; by: "percent" | "amount"; value: string; round: "" | "10" | "50" | "100" | "500" };
+      include_variants: boolean;
+    },
+    key?: string,
+  ) => {
+    const k = key || body.idempotency_key;
+    return apiClient.post<unknown, { updated_products: number; updated_variants: number }>(
+      "/api/v1/catalogue/products/prices/bulk",
+      { ...body, idempotency_key: k },
+      headers(workspaceId, k),
+    );
+  },
   saveOptions: (workspaceId: number, id: number, body: SaveOptionsPayload, key: string) =>
     apiClient.put<unknown, ProductDetail>(`/api/v1/catalogue/products/${id}/options`, { ...body, idempotency_key: key }, headers(workspaceId, key)),
   archive: (workspaceId: number, id: number) => apiClient.post<unknown, ProductDetail>(`/api/v1/catalogue/products/${id}/archive`, {}, headers(workspaceId)),

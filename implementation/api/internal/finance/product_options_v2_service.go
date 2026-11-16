@@ -113,6 +113,11 @@ func (s *Service) SaveProductOptions(ctx context.Context, workspaceID, userID, p
 	resolved := make([][]db.ProductOptionValue, len(in.Options))
 	seenNames := make(map[string]bool)
 	combinations := 1
+	var structureChanged bool
+	var priceChangedCount int
+	if len(oldOptions) != len(in.Options) {
+		structureChanged = true
+	}
 	for i, input := range in.Options {
 		name := strings.TrimSpace(input.Name)
 		if name == "" || len([]rune(name)) > 100 || seenNames[strings.ToLower(name)] {
@@ -133,9 +138,13 @@ func (s *Service) SaveProductOptions(ctx context.Context, workspaceID, userID, p
 			if !ok {
 				return ProductDetail{}, errors.New("an option does not belong to this product")
 			}
+			if opt.Name != name {
+				structureChanged = true
+			}
 		} else if existing, ok := optionByName[strings.ToLower(name)]; ok {
 			opt = existing
 		} else {
+			structureChanged = true
 			opt, err = q.CreateProductOption(ctx, db.CreateProductOptionParams{WorkspaceID: workspaceID, ProductID: productID, Name: name, Position: int32(i)})
 			if err != nil {
 				return ProductDetail{}, err
@@ -271,12 +280,34 @@ func (s *Service) SaveProductOptions(ctx context.Context, workspaceID, userID, p
 		if exists {
 			kept[variant.ID] = true
 			oldPrice, oldCost := variant.SellingPriceMinor, variant.CostPriceMinor
+			oldCompare := variant.CompareAtPriceMinor
+			priceDifferent := oldPrice != price || oldCost != cost || (oldCompare.Valid != compareParam.Valid) || (oldCompare.Valid && compareParam.Valid && oldCompare.Int64 != compareParam.Int64)
+			if priceDifferent {
+				priceChangedCount++
+			}
+			if variant.Sku.String != sku || variant.Barcode.String != input.Barcode || variant.IsActive != input.IsActive {
+				structureChanged = true
+			}
 			variant, err = q.UpdateOptionVariant(ctx, db.UpdateOptionVariantParams{WorkspaceID: workspaceID, ProductID: productID, ID: variant.ID, Name: strings.Join(labels, " / "), Sku: optionalPgText(sku), Barcode: optionalPgText(input.Barcode), SellingPriceMinor: price, CostPriceMinor: cost, CompareAtPriceMinor: compareParam, IsActive: input.IsActive, Position: int32(position)})
 			if err != nil {
 				return ProductDetail{}, err
 			}
-			if oldPrice != price || oldCost != cost {
-				if err := q.InsertProductPriceHistory(ctx, db.InsertProductPriceHistoryParams{WorkspaceID: workspaceID, ProductID: productID, VariantID: variant.ID, OldSellingPriceMinor: pgtype.Int8{Int64: oldPrice, Valid: true}, NewSellingPriceMinor: price, OldCostPriceMinor: pgtype.Int8{Int64: oldCost, Valid: true}, NewCostPriceMinor: cost, Currency: base.Currency, CurrencyExponent: base.CurrencyExponent, ChangedByUserID: pgtype.Int8{Int64: userID, Valid: true}}); err != nil {
+			if priceDifferent {
+				if err := q.InsertProductPriceHistory(ctx, db.InsertProductPriceHistoryParams{
+					WorkspaceID:            workspaceID,
+					ProductID:              productID,
+					VariantID:              variant.ID,
+					OldSellingPriceMinor:   pgtype.Int8{Int64: oldPrice, Valid: true},
+					NewSellingPriceMinor:   price,
+					OldCostPriceMinor:      pgtype.Int8{Int64: oldCost, Valid: true},
+					NewCostPriceMinor:      cost,
+					Currency:               base.Currency,
+					CurrencyExponent:       base.CurrencyExponent,
+					ChangedByUserID:        pgtype.Int8{Int64: userID, Valid: true},
+					OldCompareAtPriceMinor: oldCompare,
+					NewCompareAtPriceMinor: compareParam,
+					Source:                 "options",
+				}); err != nil {
 					return ProductDetail{}, err
 				}
 			}
@@ -284,6 +315,7 @@ func (s *Service) SaveProductOptions(ctx context.Context, workspaceID, userID, p
 				return ProductDetail{}, err
 			}
 		} else {
+			structureChanged = true
 			variant, err = q.CreateVariant(ctx, db.CreateVariantParams{WorkspaceID: workspaceID, ProductID: productID, Name: strings.Join(labels, " / "), Sku: optionalPgText(sku), Barcode: optionalPgText(input.Barcode), SellingPriceMinor: price, CostPriceMinor: cost, Currency: base.Currency, CurrencyExponent: base.CurrencyExponent, IsDefault: false, IsActive: input.IsActive})
 			if err != nil {
 				return ProductDetail{}, err
@@ -302,13 +334,20 @@ func (s *Service) SaveProductOptions(ctx context.Context, workspaceID, userID, p
 	}
 	for _, variant := range oldVariants {
 		if !variant.IsDefault && !kept[variant.ID] {
+			structureChanged = true
 			if err := q.ArchiveOptionVariant(ctx, db.ArchiveOptionVariantParams{WorkspaceID: workspaceID, ProductID: productID, ID: variant.ID}); err != nil {
 				return ProductDetail{}, err
 			}
 		}
 	}
-	if err := s.productEvent(ctx, q, workspaceID, productID, userID, "updated", "Options changed"); err != nil {
-		return ProductDetail{}, err
+	if !structureChanged && priceChangedCount > 0 {
+		if err := s.productEvent(ctx, q, workspaceID, productID, userID, "price_changed", "Price changed"); err != nil {
+			return ProductDetail{}, err
+		}
+	} else {
+		if err := s.productEvent(ctx, q, workspaceID, productID, userID, "updated", "Options changed"); err != nil {
+			return ProductDetail{}, err
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return ProductDetail{}, err

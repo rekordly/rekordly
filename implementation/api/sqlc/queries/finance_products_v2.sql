@@ -119,10 +119,12 @@ ON CONFLICT DO NOTHING;
 -- name: InsertProductPriceHistory :exec
 INSERT INTO product_price_history (
     workspace_id, product_id, variant_id, old_selling_price_minor, new_selling_price_minor,
-    old_cost_price_minor, new_cost_price_minor, currency, currency_exponent, changed_by_user_id
+    old_cost_price_minor, new_cost_price_minor, currency, currency_exponent, changed_by_user_id,
+    old_compare_at_price_minor, new_compare_at_price_minor, source
 ) VALUES (
     @workspace_id, @product_id, @variant_id, sqlc.narg('old_selling_price_minor'), @new_selling_price_minor,
-    sqlc.narg('old_cost_price_minor'), @new_cost_price_minor, @currency, @currency_exponent, sqlc.narg('changed_by_user_id')
+    sqlc.narg('old_cost_price_minor'), @new_cost_price_minor, @currency, @currency_exponent, sqlc.narg('changed_by_user_id'),
+    sqlc.narg('old_compare_at_price_minor'), sqlc.narg('new_compare_at_price_minor'), @source
 );
 
 -- name: ListProductPriceHistory :many
@@ -151,3 +153,12 @@ SELECT * FROM product_import_batches
 WHERE workspace_id = @workspace_id
 ORDER BY created_at DESC, id DESC
 LIMIT 50;
+
+-- name: GetProductPriceCommand :one
+SELECT * FROM product_price_commands
+WHERE workspace_id = @workspace_id AND idempotency_key = @idempotency_key;
+
+-- name: InsertProductPriceCommand :exec
+INSERT INTO product_price_commands (workspace_id, idempotency_key, product_id, response_payload)
+VALUES (@workspace_id, @idempotency_key, sqlc.narg('product_id'), @response_payload);
+

@@ -123,3 +123,41 @@ func TestSanitizeRichText(t *testing.T) {
 		}
 	}
 }
+
+func TestApplyPriceRule(t *testing.T) {
+	// 15,000 +10% gives 16,500 (with exponent 0)
+	got, err := applyPriceRule(15000, BulkPriceRuleInput{Direction: "increase", By: "percent", Value: "10"}, 0)
+	if err != nil || got != 16500 {
+		t.Fatalf("15,000 +10%% = %d, err: %v; want 16500", got, err)
+	}
+
+	// 15,000.00 +10% gives 16,500.00 (with exponent 2)
+	got, err = applyPriceRule(1500000, BulkPriceRuleInput{Direction: "increase", By: "percent", Value: "10"}, 2)
+	if err != nil || got != 1650000 {
+		t.Fatalf("15,000.00 +10%% = %d, err: %v; want 1650000", got, err)
+	}
+
+	// 16,537 rounded to 50 gives 16,550 (with exponent 0)
+	got, err = applyPriceRule(16537, BulkPriceRuleInput{Direction: "increase", By: "amount", Value: "0", Round: "50"}, 0)
+	if err != nil || got != 16550 {
+		t.Fatalf("16,537 rounded to 50 = %d, err: %v; want 16550", got, err)
+	}
+
+	// percentage over 100 is rejected
+	_, err = applyPriceRule(1000, BulkPriceRuleInput{Direction: "increase", By: "percent", Value: "101"}, 2)
+	if err == nil {
+		t.Fatal("percentage over 100 should be rejected")
+	}
+
+	// a decrease clamps at 0
+	got, err = applyPriceRule(500, BulkPriceRuleInput{Direction: "decrease", By: "amount", Value: "10"}, 2)
+	if err != nil || got != 0 {
+		t.Fatalf("decrease clamp at 0: got %d, err: %v; want 0", got, err)
+	}
+
+	// percentage decrease clamp at 0
+	got, err = applyPriceRule(500, BulkPriceRuleInput{Direction: "decrease", By: "percent", Value: "100"}, 2)
+	if err != nil || got != 0 {
+		t.Fatalf("100%% decrease: got %d, err: %v; want 0", got, err)
+	}
+}

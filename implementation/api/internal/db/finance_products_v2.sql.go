@@ -120,6 +120,30 @@ func (q *Queries) DeleteProductOutlets(ctx context.Context, arg DeleteProductOut
 	return err
 }
 
+const getProductPriceCommand = `-- name: GetProductPriceCommand :one
+SELECT id, workspace_id, idempotency_key, product_id, response_payload, created_at FROM product_price_commands
+WHERE workspace_id = $1 AND idempotency_key = $2
+`
+
+type GetProductPriceCommandParams struct {
+	WorkspaceID    int64  `json:"workspace_id"`
+	IdempotencyKey string `json:"idempotency_key"`
+}
+
+func (q *Queries) GetProductPriceCommand(ctx context.Context, arg GetProductPriceCommandParams) (ProductPriceCommand, error) {
+	row := q.db.QueryRow(ctx, getProductPriceCommand, arg.WorkspaceID, arg.IdempotencyKey)
+	var i ProductPriceCommand
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.IdempotencyKey,
+		&i.ProductID,
+		&i.ResponsePayload,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const insertProductEvent = `-- name: InsertProductEvent :exec
 INSERT INTO product_events (workspace_id, product_id, event_type, summary, actor_user_id)
 VALUES ($1, $2, $3, $4, $5)
@@ -185,27 +209,54 @@ func (q *Queries) InsertProductImportBatch(ctx context.Context, arg InsertProduc
 	return i, err
 }
 
+const insertProductPriceCommand = `-- name: InsertProductPriceCommand :exec
+INSERT INTO product_price_commands (workspace_id, idempotency_key, product_id, response_payload)
+VALUES ($1, $2, $3, $4)
+`
+
+type InsertProductPriceCommandParams struct {
+	WorkspaceID     int64       `json:"workspace_id"`
+	IdempotencyKey  string      `json:"idempotency_key"`
+	ProductID       pgtype.Int8 `json:"product_id"`
+	ResponsePayload []byte      `json:"response_payload"`
+}
+
+func (q *Queries) InsertProductPriceCommand(ctx context.Context, arg InsertProductPriceCommandParams) error {
+	_, err := q.db.Exec(ctx, insertProductPriceCommand,
+		arg.WorkspaceID,
+		arg.IdempotencyKey,
+		arg.ProductID,
+		arg.ResponsePayload,
+	)
+	return err
+}
+
 const insertProductPriceHistory = `-- name: InsertProductPriceHistory :exec
 INSERT INTO product_price_history (
     workspace_id, product_id, variant_id, old_selling_price_minor, new_selling_price_minor,
-    old_cost_price_minor, new_cost_price_minor, currency, currency_exponent, changed_by_user_id
+    old_cost_price_minor, new_cost_price_minor, currency, currency_exponent, changed_by_user_id,
+    old_compare_at_price_minor, new_compare_at_price_minor, source
 ) VALUES (
     $1, $2, $3, $4, $5,
-    $6, $7, $8, $9, $10
+    $6, $7, $8, $9, $10,
+    $11, $12, $13
 )
 `
 
 type InsertProductPriceHistoryParams struct {
-	WorkspaceID          int64       `json:"workspace_id"`
-	ProductID            int64       `json:"product_id"`
-	VariantID            int64       `json:"variant_id"`
-	OldSellingPriceMinor pgtype.Int8 `json:"old_selling_price_minor"`
-	NewSellingPriceMinor int64       `json:"new_selling_price_minor"`
-	OldCostPriceMinor    pgtype.Int8 `json:"old_cost_price_minor"`
-	NewCostPriceMinor    int64       `json:"new_cost_price_minor"`
-	Currency             string      `json:"currency"`
-	CurrencyExponent     int32       `json:"currency_exponent"`
-	ChangedByUserID      pgtype.Int8 `json:"changed_by_user_id"`
+	WorkspaceID            int64       `json:"workspace_id"`
+	ProductID              int64       `json:"product_id"`
+	VariantID              int64       `json:"variant_id"`
+	OldSellingPriceMinor   pgtype.Int8 `json:"old_selling_price_minor"`
+	NewSellingPriceMinor   int64       `json:"new_selling_price_minor"`
+	OldCostPriceMinor      pgtype.Int8 `json:"old_cost_price_minor"`
+	NewCostPriceMinor      int64       `json:"new_cost_price_minor"`
+	Currency               string      `json:"currency"`
+	CurrencyExponent       int32       `json:"currency_exponent"`
+	ChangedByUserID        pgtype.Int8 `json:"changed_by_user_id"`
+	OldCompareAtPriceMinor pgtype.Int8 `json:"old_compare_at_price_minor"`
+	NewCompareAtPriceMinor pgtype.Int8 `json:"new_compare_at_price_minor"`
+	Source                 string      `json:"source"`
 }
 
 func (q *Queries) InsertProductPriceHistory(ctx context.Context, arg InsertProductPriceHistoryParams) error {
@@ -220,6 +271,9 @@ func (q *Queries) InsertProductPriceHistory(ctx context.Context, arg InsertProdu
 		arg.Currency,
 		arg.CurrencyExponent,
 		arg.ChangedByUserID,
+		arg.OldCompareAtPriceMinor,
+		arg.NewCompareAtPriceMinor,
+		arg.Source,
 	)
 	return err
 }

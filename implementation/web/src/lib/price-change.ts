@@ -2,7 +2,7 @@
 // and the payloads that save new prices through the existing product endpoints.
 // All maths is BigInt minor units; prices typed by people stay decimal strings.
 
-import type { ProductDetail, SaveOptionsPayload, SaveProductPayload } from "@/types/products";
+import type { ProductDetail } from "@/types/products";
 
 export interface PriceRule {
   direction: "increase" | "decrease";
@@ -70,58 +70,4 @@ export interface NewPrice {
 /** Keeps a compare-at price only while it stays above the new selling price. */
 export function keptCompareAt(compareMinor: string | null | undefined, newSellingMinor: bigint) {
   return compareMinor && BigInt(compareMinor) > newSellingMinor ? compareMinor : null;
-}
-
-/** The full product payload with only the price fields changed (the edit endpoint expects every field). */
-export function productPricePayload(detail: ProductDetail, price: NewPrice): SaveProductPayload {
-  const { product } = detail;
-  const exponent = product.currency_exponent;
-  return {
-    name: product.name,
-    kind: product.kind,
-    unit_name: product.unit_name,
-    selling_price: price.selling,
-    cost_price: product.cost_price_minor && product.cost_price_minor !== "0" ? toMajorUnits(product.cost_price_minor, exponent) : undefined,
-    compare_at_price: price.compareAt || undefined,
-    sku: product.sku ?? undefined,
-    barcode: product.barcode ?? undefined,
-    currency: product.currency,
-    outlet_ids: detail.outlet_ids ?? [],
-    collection_ids: detail.collection_ids ?? [],
-    image_urls: product.image_urls ?? [],
-    short_description: product.short_description ?? undefined,
-    long_description: product.long_description ?? undefined,
-  };
-}
-
-/**
- * The full options payload with only variant prices changed. The options endpoint
- * replaces the whole grid, so every variant goes back exactly as it is.
- */
-export function variantPricesPayload(detail: ProductDetail, prices: Record<number, NewPrice>): SaveOptionsPayload {
-  const exponent = detail.product.currency_exponent;
-  const options = [...(detail.options ?? [])].sort((a, b) => a.position - b.position);
-  const variants = gridVariants(detail);
-  const expected = options.reduce((total, option) => total * (option.value_details ?? []).length, 1);
-  if (!options.length || variants.length !== expected) {
-    throw new Error("This product's variants are incomplete. Open Edit product and save the variants first.");
-  }
-  return {
-    options: options.map((option) => ({ id: option.id, name: option.name, values: (option.value_details ?? []).map((value) => ({ id: value.id, value: value.value })) })),
-    variants: variants.map((variant) => {
-      const optionValues = options.map((option) => variant.option_values?.[option.name] ?? "");
-      if (optionValues.some((value) => !value)) throw new Error(`${variant.name} is missing an option value. Open Edit product to fix it.`);
-      const next = prices[variant.id];
-      return {
-        id: variant.id,
-        option_values: optionValues,
-        selling_price: next ? next.selling : toMajorUnits(variant.selling_price_minor, exponent),
-        cost_price: variant.cost_price_minor && variant.cost_price_minor !== "0" ? toMajorUnits(variant.cost_price_minor, exponent) : undefined,
-        compare_at_price: next ? next.compareAt || undefined : variant.compare_at_price_minor ? toMajorUnits(variant.compare_at_price_minor, exponent) : undefined,
-        sku: variant.sku ?? undefined,
-        barcode: variant.barcode ?? undefined,
-        is_active: variant.is_active,
-      };
-    }),
-  };
 }

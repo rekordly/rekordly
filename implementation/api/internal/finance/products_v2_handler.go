@@ -25,10 +25,65 @@ func (h *Handler) RegisterProductV2Routes(protected *gin.RouterGroup) {
 	protected.GET("/catalogue/products/:id/stock-movements", h.productStockMovements)
 	protected.POST("/catalogue/products/:id/stock", h.changeProductStock)
 	protected.POST("/catalogue/product-images/authorize", h.authorizeProductImage)
+	protected.POST("/catalogue/products/prices/bulk", h.bulkChangeProductPrices)
+	protected.POST("/catalogue/products/:id/prices", h.changeProductPrices)
 	protected.GET("/catalogue/collections", h.listProductCollections)
 	protected.POST("/catalogue/collections", h.createProductCollection)
 	protected.PATCH("/catalogue/collections/:id", h.updateProductCollection)
 	protected.DELETE("/catalogue/collections/:id", h.deleteProductCollection)
+}
+
+func (h *Handler) changeProductPrices(c *gin.Context) {
+	wsCtx, ok := businessWorkspace(c)
+	if !ok {
+		return
+	}
+	id, ok := productID(c)
+	if !ok {
+		return
+	}
+	var in ChangeProductPricesInput
+	if err := c.ShouldBindJSON(&in); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": err.Error()}})
+		return
+	}
+	if in.IdempotencyKey == "" {
+		in.IdempotencyKey = c.GetHeader("Idempotency-Key")
+	}
+	detail, err := h.service.ChangeProductPrices(c.Request.Context(), wsCtx.WorkspaceID, wsCtx.UserID, id, in)
+	if err != nil {
+		productError(c, err, "CHANGE_PRICES_FAILED")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": detail})
+}
+
+func (h *Handler) bulkChangeProductPrices(c *gin.Context) {
+	wsCtx, ok := businessWorkspace(c)
+	if !ok {
+		return
+	}
+	var in BulkChangeProductPricesInput
+	if err := c.ShouldBindJSON(&in); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": err.Error()}})
+		return
+	}
+	if in.IdempotencyKey == "" {
+		in.IdempotencyKey = c.GetHeader("Idempotency-Key")
+	}
+	result, failed, err := h.service.BulkChangeProductPrices(c.Request.Context(), wsCtx.WorkspaceID, wsCtx.UserID, in)
+	if len(failed) > 0 {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{
+			"error":  gin.H{"code": "BULK_PRICE_FAILED", "message": "Could not update prices for all selected products"},
+			"failed": failed,
+		})
+		return
+	}
+	if err != nil {
+		productError(c, err, "BULK_PRICE_FAILED")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": result})
 }
 
 func (h *Handler) saveProductOptionsV2(c *gin.Context) {

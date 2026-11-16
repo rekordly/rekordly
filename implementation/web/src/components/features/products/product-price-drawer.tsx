@@ -26,11 +26,9 @@ import {
   EMPTY_RULE,
   gridVariants,
   keptCompareAt,
-  productPricePayload,
   ruleReady,
   toMajorUnits,
   toMinorUnits,
-  variantPricesPayload,
   type NewPrice,
   type PriceRule,
 } from "@/lib/price-change";
@@ -224,21 +222,36 @@ export function ChangePriceDrawer({ workspaceId, detail, onClose }: { workspaceI
   const save = useFinanceAction(
     workspaceId,
     async (_: null, key: string) => {
+      let productPart: { selling_price: string; compare_at_price?: string } | undefined;
+      const base = minorOf("base");
+      const baseChanged = base !== null && base !== originals.base;
+      if (baseChanged || compareChanged) {
+        productPart = {
+          selling_price: prices.base,
+          compare_at_price: !hasVariants ? compareAt : toMajorUnits(keptCompareAt(product.compare_at_price_minor, base ?? originals.base), exponent),
+        };
+      }
+      const variantChanges: Array<{ id: number; selling_price: string; compare_at_price?: string }> = [];
       if (hasVariants) {
-        const changes: Record<number, NewPrice> = {};
         for (const variant of variants) {
           const next = minorOf(String(variant.id));
           if (next === null || next === originals[String(variant.id)]) continue;
-          changes[variant.id] = { selling: toMajorUnits(next, exponent), compareAt: toMajorUnits(keptCompareAt(variant.compare_at_price_minor, next), exponent) };
+          variantChanges.push({
+            id: variant.id,
+            selling_price: toMajorUnits(next, exponent),
+            compare_at_price: toMajorUnits(keptCompareAt(variant.compare_at_price_minor, next), exponent),
+          });
         }
-        if (Object.keys(changes).length) await productsApi.saveOptions(workspaceId, product.id, variantPricesPayload(detail, changes), `${key}:variants`);
-        const base = minorOf("base");
-        if (base !== null && base !== originals.base) {
-          await productsApi.update(workspaceId, product.id, productPricePayload(detail, { selling: toMajorUnits(base, exponent), compareAt: toMajorUnits(keptCompareAt(product.compare_at_price_minor, base), exponent) }));
-        }
-        return;
       }
-      await productsApi.update(workspaceId, product.id, productPricePayload(detail, { selling: prices.base, compareAt }));
+      return productsApi.changePrices(
+        workspaceId,
+        product.id,
+        {
+          product: productPart,
+          variants: variantChanges.length ? variantChanges : undefined,
+        },
+        key,
+      );
     },
     { success: count === 1 ? "Price updated" : "Prices updated", onDone: onClose },
   );
@@ -342,7 +355,6 @@ export function BulkPriceDrawer({ workspaceId, products, onClose }: { workspaceI
   const queryClient = useQueryClient();
   const [rule, setRule] = useState<PriceRule>(EMPTY_RULE);
   const [withVariants, setWithVariants] = useState(true);
-  const [progress, setProgress] = useState(0);
   const [failures, setFailures] = useState<Failure[]>([]);
   const currency = products[0]?.currency ?? "NGN";
   const exponent = products[0]?.currency_exponent ?? 2;
@@ -351,29 +363,26 @@ export function BulkPriceDrawer({ workspaceId, products, onClose }: { workspaceI
 
   const run = useMutation({
     mutationFn: async () => {
-      const batch = createIdempotencyKey("prices");
-      const failed: Failure[] = [];
-      for (const [index, item] of products.entries()) {
-        setProgress(index + 1);
-        try {
-          const detail = await productsApi.get(workspaceId, item.id);
-          const exp = detail.product.currency_exponent;
-          const variants = gridVariants(detail);
-          if (withVariants && variants.length) {
-            const changes: Record<number, NewPrice> = {};
-            for (const variant of variants) {
-              const next = applyRule(BigInt(variant.selling_price_minor || "0"), rule, exp);
-              changes[variant.id] = { selling: toMajorUnits(next, exp), compareAt: toMajorUnits(keptCompareAt(variant.compare_at_price_minor, next), exp) };
-            }
-            await productsApi.saveOptions(workspaceId, item.id, variantPricesPayload(detail, changes), `${batch}:${item.id}:variants`);
-          }
-          const base = applyRule(BigInt(detail.product.selling_price_minor || "0"), rule, exp);
-          await productsApi.update(workspaceId, item.id, productPricePayload(detail, { selling: toMajorUnits(base, exp), compareAt: toMajorUnits(keptCompareAt(detail.product.compare_at_price_minor, base), exp) }));
-        } catch (error) {
-          failed.push({ name: item.name, message: error instanceof Error ? error.message : "Could not be saved" });
+      const key = createIdempotencyKey("bulk-prices");
+      try {
+        await productsApi.bulkChangePrices(
+          workspaceId,
+          {
+            product_ids: products.map((p) => p.id),
+            rule,
+            include_variants: withVariants,
+          },
+          key,
+        );
+        return [];
+      } catch (err: unknown) {
+        const anyErr = err as { response?: { data?: { failed?: Failure[] } }; failed?: Failure[] };
+        const failedItems = anyErr?.response?.data?.failed || anyErr?.failed;
+        if (Array.isArray(failedItems) && failedItems.length > 0) {
+          return failedItems;
         }
+        return [{ name: "All products", message: err instanceof Error ? err.message : "Could not be saved" }];
       }
-      return failed;
     },
     onSuccess: (failed) => {
       void queryClient.invalidateQueries({ queryKey: moneyKeys.workspace(workspaceId) });
@@ -381,7 +390,6 @@ export function BulkPriceDrawer({ workspaceId, products, onClose }: { workspaceI
       if (done) toast.success(`Prices updated on ${done} ${done === 1 ? "product" : "products"}`);
       if (!failed.length) return onClose();
       setFailures(failed);
-      setProgress(0);
       toast.danger(`${failed.length} could not be changed`);
     },
   });
@@ -394,7 +402,7 @@ export function BulkPriceDrawer({ workspaceId, products, onClose }: { workspaceI
       description={`${products.length} ${products.length === 1 ? "product" : "products"}`}
       footer={
         <>
-          <span className="mr-auto text-[13px] text-muted">{run.isPending ? `${progress} of ${products.length}…` : null}</span>
+          <span className="mr-auto text-[13px] text-muted">{run.isPending ? "Updating prices…" : null}</span>
           <AppButton variant="ghost" label={failures.length ? "Close" : "Cancel"} isDisabled={run.isPending} onPress={onClose} />
           <AppButton label="Save" isDisabled={!ready} isLoading={run.isPending} onPress={() => run.mutate()} />
         </>

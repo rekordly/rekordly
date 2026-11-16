@@ -107,6 +107,48 @@ type ListProductsFilter struct {
 	Limit        int32  `form:"limit"`
 }
 
+type ChangeProductPricesInput struct {
+	IdempotencyKey string                    `json:"idempotency_key"`
+	Product        *ProductPriceChangeInput  `json:"product"`
+	Variants       []VariantPriceChangeInput `json:"variants"`
+}
+
+type ProductPriceChangeInput struct {
+	SellingPrice   string `json:"selling_price"`
+	CompareAtPrice string `json:"compare_at_price"`
+}
+
+type VariantPriceChangeInput struct {
+	ID             int64  `json:"id"`
+	SellingPrice   string `json:"selling_price"`
+	CompareAtPrice string `json:"compare_at_price"`
+}
+
+type BulkPriceRuleInput struct {
+	Direction string `json:"direction"`
+	By        string `json:"by"`
+	Value     string `json:"value"`
+	Round     string `json:"round"`
+}
+
+type BulkChangeProductPricesInput struct {
+	IdempotencyKey  string             `json:"idempotency_key"`
+	ProductIDs      []int64            `json:"product_ids"`
+	Rule            BulkPriceRuleInput `json:"rule"`
+	IncludeVariants bool               `json:"include_variants"`
+}
+
+type BulkChangeResult struct {
+	UpdatedProducts int `json:"updated_products"`
+	UpdatedVariants int `json:"updated_variants"`
+}
+
+type BulkPriceFailItem struct {
+	ProductID int64  `json:"product_id"`
+	Name      string `json:"name"`
+	Message   string `json:"message"`
+}
+
 type ProductCollection struct {
 	ID           int64   `json:"id"`
 	Name         string  `json:"name"`
@@ -115,15 +157,18 @@ type ProductCollection struct {
 }
 
 type ProductPriceChange struct {
-	ID                   int64     `json:"id"`
-	VariantID            int64     `json:"variant_id"`
-	OldSellingPriceMinor *int64    `json:"old_selling_price_minor,string,omitempty"`
-	NewSellingPriceMinor int64     `json:"new_selling_price_minor,string"`
-	OldCostPriceMinor    *int64    `json:"old_cost_price_minor,string,omitempty"`
-	NewCostPriceMinor    int64     `json:"new_cost_price_minor,string"`
-	Currency             string    `json:"currency"`
-	CurrencyExponent     int32     `json:"currency_exponent"`
-	ChangedAt            time.Time `json:"changed_at"`
+	ID                     int64     `json:"id"`
+	VariantID              int64     `json:"variant_id"`
+	OldSellingPriceMinor   *int64    `json:"old_selling_price_minor,string,omitempty"`
+	NewSellingPriceMinor   int64     `json:"new_selling_price_minor,string"`
+	OldCostPriceMinor      *int64    `json:"old_cost_price_minor,string,omitempty"`
+	NewCostPriceMinor      int64     `json:"new_cost_price_minor,string"`
+	Currency               string    `json:"currency"`
+	CurrencyExponent       int32     `json:"currency_exponent"`
+	ChangedAt              time.Time `json:"changed_at"`
+	OldCompareAtPriceMinor *int64    `json:"old_compare_at_price_minor,string,omitempty"`
+	NewCompareAtPriceMinor *int64    `json:"new_compare_at_price_minor,string,omitempty"`
+	Source                 string    `json:"source,omitempty"`
 }
 
 type ProductEvent struct {
@@ -573,7 +618,9 @@ func (s *Service) CreateProductV2(ctx context.Context, workspaceID, userID int64
 	if err := qtx.InsertProductPriceHistory(ctx, db.InsertProductPriceHistoryParams{
 		WorkspaceID: workspaceID, ProductID: product.ID, VariantID: variant.ID, NewSellingPriceMinor: v.price,
 		NewCostPriceMinor: v.cost, Currency: v.currency, CurrencyExponent: int32(v.exponent),
-		ChangedByUserID: pgtype.Int8{Int64: userID, Valid: true},
+		ChangedByUserID:        pgtype.Int8{Int64: userID, Valid: true},
+		NewCompareAtPriceMinor: v.compareAt,
+		Source:                 "edit",
 	}); err != nil {
 		return ProductDetail{}, err
 	}
@@ -703,14 +750,22 @@ func (s *Service) UpdateProductV2(ctx context.Context, workspaceID, userID, prod
 		}
 	}
 
-	if v.price != current.SellingPriceMinor || v.cost != current.CostPriceMinor {
+	var oldCompare pgtype.Int8
+	if current.CompareAtPriceMinor != nil {
+		oldCompare = pgtype.Int8{Int64: *current.CompareAtPriceMinor, Valid: true}
+	}
+	compareChanged := (oldCompare.Valid != v.compareAt.Valid) || (oldCompare.Valid && v.compareAt.Valid && oldCompare.Int64 != v.compareAt.Int64)
+	if v.price != current.SellingPriceMinor || v.cost != current.CostPriceMinor || compareChanged {
 		oldPrice, oldCost := current.SellingPriceMinor, current.CostPriceMinor
 		if err := qtx.InsertProductPriceHistory(ctx, db.InsertProductPriceHistoryParams{
 			WorkspaceID: workspaceID, ProductID: productID, VariantID: current.DefaultVariantID,
 			OldSellingPriceMinor: pgtype.Int8{Int64: oldPrice, Valid: true}, NewSellingPriceMinor: v.price,
 			OldCostPriceMinor: pgtype.Int8{Int64: oldCost, Valid: true}, NewCostPriceMinor: v.cost,
 			Currency: current.Currency, CurrencyExponent: current.CurrencyExponent,
-			ChangedByUserID: pgtype.Int8{Int64: userID, Valid: true},
+			ChangedByUserID:        pgtype.Int8{Int64: userID, Valid: true},
+			OldCompareAtPriceMinor: oldCompare,
+			NewCompareAtPriceMinor: v.compareAt,
+			Source:                 "edit",
 		}); err != nil {
 			return ProductDetail{}, err
 		}
@@ -807,6 +862,536 @@ func (s *Service) SetProductArchived(ctx context.Context, workspaceID, userID, p
 	return s.GetProduct(ctx, workspaceID, productID)
 }
 
+func parseNonNegativeMajorToMinor(input string, exponent int) (int64, error) {
+	s := strings.TrimSpace(input)
+	if s == "" {
+		return 0, errors.New("amount is required")
+	}
+	parts := strings.Split(s, ".")
+	if len(parts) > 2 {
+		return 0, ErrInvalidAmount
+	}
+	whole := strings.TrimLeft(parts[0], "0")
+	var frac string
+	if len(parts) == 2 {
+		frac = strings.TrimRight(parts[1], "0")
+	}
+	if whole == "" && frac == "" {
+		return 0, nil
+	}
+	return ParseMajorToMinor(input, exponent)
+}
+
+func applyPriceRule(currentSellingMinor int64, rule BulkPriceRuleInput, exponent int32) (int64, error) {
+	ruleDir := strings.ToLower(strings.TrimSpace(rule.Direction))
+	if ruleDir != "increase" && ruleDir != "decrease" {
+		return 0, errors.New("direction must be increase or decrease")
+	}
+	ruleBy := strings.ToLower(strings.TrimSpace(rule.By))
+	if ruleBy != "percent" && ruleBy != "amount" {
+		return 0, errors.New("by must be percent or amount")
+	}
+
+	var next int64 = currentSellingMinor
+	if ruleBy == "percent" {
+		hundredths, err := parseNonNegativeMajorToMinor(rule.Value, 2)
+		if err != nil || hundredths < 0 || hundredths > 10000 {
+			return 0, errors.New("percent must be between 0 and 100")
+		}
+		var factor int64
+		if ruleDir == "increase" {
+			factor = 10000 + hundredths
+		} else {
+			factor = 10000 - hundredths
+		}
+		next = (currentSellingMinor*factor + 5000) / 10000
+	} else {
+		amountMinor, err := parseNonNegativeMajorToMinor(rule.Value, int(exponent))
+		if err != nil || amountMinor < 0 {
+			return 0, errors.New("enter a valid amount")
+		}
+		if ruleDir == "increase" {
+			next = currentSellingMinor + amountMinor
+		} else {
+			next = currentSellingMinor - amountMinor
+		}
+	}
+
+	roundStr := strings.TrimSpace(rule.Round)
+	if roundStr != "" {
+		stepMinor, err := ParseMajorToMinor(roundStr, int(exponent))
+		if err != nil || stepMinor <= 0 {
+			return 0, errors.New("invalid round step")
+		}
+		next = ((next + stepMinor/2) / stepMinor) * stepMinor
+	}
+
+	if next < 0 {
+		next = 0
+	}
+	return next, nil
+}
+
+func (s *Service) ChangeProductPrices(ctx context.Context, workspaceID, userID, productID int64, in ChangeProductPricesInput) (ProductDetail, error) {
+	key := strings.TrimSpace(in.IdempotencyKey)
+	if key == "" || len(key) > 200 {
+		return ProductDetail{}, errors.New("an idempotency key is required")
+	}
+
+	// Idempotency replay check
+	if oldCmd, err := s.queries.GetProductPriceCommand(ctx, db.GetProductPriceCommandParams{
+		WorkspaceID:    workspaceID,
+		IdempotencyKey: key,
+	}); err == nil {
+		var detail ProductDetail
+		if err := json.Unmarshal(oldCmd.ResponsePayload, &detail); err == nil && detail.Product.ID > 0 {
+			return detail, nil
+		}
+		return s.GetProduct(ctx, workspaceID, productID)
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return ProductDetail{}, err
+	}
+
+	if in.Product == nil && len(in.Variants) == 0 {
+		return ProductDetail{}, errors.New("at least one price must be provided")
+	}
+
+	summary, err := s.productSummary(ctx, s.queries, workspaceID, productID)
+	if err != nil {
+		return ProductDetail{}, err
+	}
+
+	variants, err := s.queries.ListVariantsByProductID(ctx, db.ListVariantsByProductIDParams{
+		WorkspaceID: workspaceID,
+		ProductID:   productID,
+	})
+	if err != nil {
+		return ProductDetail{}, err
+	}
+
+	variantByID := make(map[int64]db.ProductVariant)
+	for _, v := range variants {
+		variantByID[v.ID] = v
+	}
+
+	type parsedVarChange struct {
+		variant    db.ProductVariant
+		newSelling int64
+		newCompare pgtype.Int8
+	}
+	var parsedVariants []parsedVarChange
+
+	for _, v := range in.Variants {
+		vObj, ok := variantByID[v.ID]
+		if !ok || vObj.ArchivedAt.Valid {
+			return ProductDetail{}, fmt.Errorf("variant %d does not belong to this product", v.ID)
+		}
+		if vObj.IsDefault {
+			return ProductDetail{}, errors.New("the product's own price goes through product, not variants")
+		}
+		selling, err := parseNonNegativeMajorToMinor(v.SellingPrice, int(summary.CurrencyExponent))
+		if err != nil || selling < 0 {
+			return ProductDetail{}, fmt.Errorf("enter a valid selling price for %s", vObj.Name)
+		}
+		var comp pgtype.Int8
+		if strings.TrimSpace(v.CompareAtPrice) != "" {
+			compMinor, err := ParseMajorToMinor(v.CompareAtPrice, int(summary.CurrencyExponent))
+			if err != nil {
+				return ProductDetail{}, fmt.Errorf("enter a valid compare-at price for %s", vObj.Name)
+			}
+			if compMinor <= selling {
+				return ProductDetail{}, fmt.Errorf("compare-at price for %s must be higher than selling price", vObj.Name)
+			}
+			comp = pgtype.Int8{Int64: compMinor, Valid: true}
+		}
+		parsedVariants = append(parsedVariants, parsedVarChange{
+			variant:    vObj,
+			newSelling: selling,
+			newCompare: comp,
+		})
+	}
+
+	var parsedProductSelling *int64
+	var parsedProductCompare pgtype.Int8
+	if in.Product != nil {
+		selling, err := parseNonNegativeMajorToMinor(in.Product.SellingPrice, int(summary.CurrencyExponent))
+		if err != nil || selling < 0 {
+			return ProductDetail{}, errors.New("enter a valid selling price")
+		}
+		parsedProductSelling = &selling
+		if strings.TrimSpace(in.Product.CompareAtPrice) != "" {
+			compMinor, err := ParseMajorToMinor(in.Product.CompareAtPrice, int(summary.CurrencyExponent))
+			if err != nil {
+				return ProductDetail{}, errors.New("enter a valid compare-at price")
+			}
+			if compMinor <= selling {
+				return ProductDetail{}, fmt.Errorf("compare-at price for %s must be higher than selling price", summary.Name)
+			}
+			parsedProductCompare = pgtype.Int8{Int64: compMinor, Valid: true}
+		}
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return ProductDetail{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	qtx := s.queries.WithTx(tx)
+
+	if parsedProductSelling != nil {
+		oldSelling := summary.SellingPriceMinor
+		var oldCompare pgtype.Int8
+		if summary.CompareAtPriceMinor != nil {
+			oldCompare = pgtype.Int8{Int64: *summary.CompareAtPriceMinor, Valid: true}
+		}
+		newSelling := *parsedProductSelling
+		newCompare := parsedProductCompare
+
+		changed := oldSelling != newSelling || (oldCompare.Valid != newCompare.Valid) || (oldCompare.Valid && newCompare.Valid && oldCompare.Int64 != newCompare.Int64)
+		if changed {
+			if _, err := qtx.UpdateDefaultVariantV2(ctx, db.UpdateDefaultVariantV2Params{
+				Sku:                 optionalPgText(derefString(summary.SKU)),
+				Barcode:             optionalPgText(derefString(summary.Barcode)),
+				SellingPriceMinor:   newSelling,
+				CostPriceMinor:      summary.CostPriceMinor,
+				CompareAtPriceMinor: newCompare,
+				WorkspaceID:         workspaceID,
+				ID:                  summary.DefaultVariantID,
+			}); err != nil {
+				return ProductDetail{}, err
+			}
+			if err := qtx.InsertProductPriceHistory(ctx, db.InsertProductPriceHistoryParams{
+				WorkspaceID:            workspaceID,
+				ProductID:              productID,
+				VariantID:              summary.DefaultVariantID,
+				OldSellingPriceMinor:   pgtype.Int8{Int64: oldSelling, Valid: true},
+				NewSellingPriceMinor:   newSelling,
+				OldCostPriceMinor:      pgtype.Int8{Int64: summary.CostPriceMinor, Valid: true},
+				NewCostPriceMinor:      summary.CostPriceMinor,
+				Currency:               summary.Currency,
+				CurrencyExponent:       summary.CurrencyExponent,
+				ChangedByUserID:        pgtype.Int8{Int64: userID, Valid: true},
+				OldCompareAtPriceMinor: oldCompare,
+				NewCompareAtPriceMinor: newCompare,
+				Source:                 "quick_change",
+			}); err != nil {
+				return ProductDetail{}, err
+			}
+			summaryText := fmt.Sprintf("Price changed from %s to %s",
+				moneyLabel(summary.Currency, oldSelling, int(summary.CurrencyExponent)),
+				moneyLabel(summary.Currency, newSelling, int(summary.CurrencyExponent)))
+			if err := s.productEvent(ctx, qtx, workspaceID, productID, userID, "price_changed", summaryText); err != nil {
+				return ProductDetail{}, err
+			}
+		}
+	}
+
+	for _, pv := range parsedVariants {
+		vObj := pv.variant
+		oldSelling := vObj.SellingPriceMinor
+		oldCompare := vObj.CompareAtPriceMinor
+		newSelling := pv.newSelling
+		newCompare := pv.newCompare
+
+		changed := oldSelling != newSelling || (oldCompare.Valid != newCompare.Valid) || (oldCompare.Valid && newCompare.Valid && oldCompare.Int64 != newCompare.Int64)
+		if changed {
+			if _, err := qtx.UpdateOptionVariant(ctx, db.UpdateOptionVariantParams{
+				WorkspaceID:         workspaceID,
+				ProductID:           productID,
+				ID:                  vObj.ID,
+				Name:                vObj.Name,
+				Sku:                 vObj.Sku,
+				Barcode:             vObj.Barcode,
+				SellingPriceMinor:   newSelling,
+				CostPriceMinor:      vObj.CostPriceMinor,
+				CompareAtPriceMinor: newCompare,
+				IsActive:            vObj.IsActive,
+				Position:            vObj.Position,
+			}); err != nil {
+				return ProductDetail{}, err
+			}
+			if err := qtx.InsertProductPriceHistory(ctx, db.InsertProductPriceHistoryParams{
+				WorkspaceID:            workspaceID,
+				ProductID:              productID,
+				VariantID:              vObj.ID,
+				OldSellingPriceMinor:   pgtype.Int8{Int64: oldSelling, Valid: true},
+				NewSellingPriceMinor:   newSelling,
+				OldCostPriceMinor:      pgtype.Int8{Int64: vObj.CostPriceMinor, Valid: true},
+				NewCostPriceMinor:      vObj.CostPriceMinor,
+				Currency:               summary.Currency,
+				CurrencyExponent:       summary.CurrencyExponent,
+				ChangedByUserID:        pgtype.Int8{Int64: userID, Valid: true},
+				OldCompareAtPriceMinor: oldCompare,
+				NewCompareAtPriceMinor: newCompare,
+				Source:                 "quick_change",
+			}); err != nil {
+				return ProductDetail{}, err
+			}
+			summaryText := fmt.Sprintf("Price for %s changed from %s to %s",
+				vObj.Name,
+				moneyLabel(summary.Currency, oldSelling, int(summary.CurrencyExponent)),
+				moneyLabel(summary.Currency, newSelling, int(summary.CurrencyExponent)))
+			if err := s.productEvent(ctx, qtx, workspaceID, productID, userID, "price_changed", summaryText); err != nil {
+				return ProductDetail{}, err
+			}
+		}
+	}
+
+	if err := qtx.InsertProductPriceCommand(ctx, db.InsertProductPriceCommandParams{
+		WorkspaceID:     workspaceID,
+		IdempotencyKey:  key,
+		ProductID:       pgtype.Int8{Int64: productID, Valid: true},
+		ResponsePayload: []byte("{}"),
+	}); err != nil {
+		return ProductDetail{}, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return ProductDetail{}, err
+	}
+
+	detail, err := s.GetProduct(ctx, workspaceID, productID)
+	if err != nil {
+		return ProductDetail{}, err
+	}
+	payloadBytes, _ := json.Marshal(detail)
+	_, _ = s.pool.Exec(ctx, "UPDATE product_price_commands SET response_payload = $1 WHERE workspace_id = $2 AND idempotency_key = $3", payloadBytes, workspaceID, key)
+
+	return detail, nil
+}
+
+func (s *Service) BulkChangeProductPrices(ctx context.Context, workspaceID, userID int64, in BulkChangeProductPricesInput) (BulkChangeResult, []BulkPriceFailItem, error) {
+	key := strings.TrimSpace(in.IdempotencyKey)
+	if key == "" || len(key) > 200 {
+		return BulkChangeResult{}, nil, errors.New("an idempotency key is required")
+	}
+
+	// Idempotency replay check
+	if oldCmd, err := s.queries.GetProductPriceCommand(ctx, db.GetProductPriceCommandParams{
+		WorkspaceID:    workspaceID,
+		IdempotencyKey: key,
+	}); err == nil {
+		var result BulkChangeResult
+		if err := json.Unmarshal(oldCmd.ResponsePayload, &result); err == nil {
+			return result, nil, nil
+		}
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return BulkChangeResult{}, nil, err
+	}
+
+	if len(in.ProductIDs) == 0 {
+		return BulkChangeResult{}, nil, errors.New("select at least one product")
+	}
+	if len(in.ProductIDs) > 500 {
+		return BulkChangeResult{}, nil, errors.New("limit is at most 500 products")
+	}
+
+	// Validate rule first
+	if _, err := applyPriceRule(10000, in.Rule, 2); err != nil {
+		return BulkChangeResult{}, nil, err
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return BulkChangeResult{}, nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	qtx := s.queries.WithTx(tx)
+
+	var updatedProducts int
+	var updatedVariants int
+
+	for _, prodID := range in.ProductIDs {
+		summary, err := s.productSummary(ctx, qtx, workspaceID, prodID)
+		if err != nil {
+			return BulkChangeResult{}, []BulkPriceFailItem{{
+				ProductID: prodID,
+				Name:      "",
+				Message:   "product not found",
+			}}, errors.New("one or more products failed")
+		}
+
+		newSelling, err := applyPriceRule(summary.SellingPriceMinor, in.Rule, summary.CurrencyExponent)
+		if err != nil {
+			return BulkChangeResult{}, []BulkPriceFailItem{{
+				ProductID: prodID,
+				Name:      summary.Name,
+				Message:   err.Error(),
+			}}, errors.New("one or more products failed")
+		}
+
+		var newCompare pgtype.Int8
+		if summary.CompareAtPriceMinor != nil && *summary.CompareAtPriceMinor > newSelling {
+			newCompare = pgtype.Int8{Int64: *summary.CompareAtPriceMinor, Valid: true}
+		}
+
+		oldSelling := summary.SellingPriceMinor
+		var oldCompare pgtype.Int8
+		if summary.CompareAtPriceMinor != nil {
+			oldCompare = pgtype.Int8{Int64: *summary.CompareAtPriceMinor, Valid: true}
+		}
+
+		if _, err := qtx.UpdateDefaultVariantV2(ctx, db.UpdateDefaultVariantV2Params{
+			Sku:                 optionalPgText(derefString(summary.SKU)),
+			Barcode:             optionalPgText(derefString(summary.Barcode)),
+			SellingPriceMinor:   newSelling,
+			CostPriceMinor:      summary.CostPriceMinor,
+			CompareAtPriceMinor: newCompare,
+			WorkspaceID:         workspaceID,
+			ID:                  summary.DefaultVariantID,
+		}); err != nil {
+			return BulkChangeResult{}, []BulkPriceFailItem{{
+				ProductID: prodID,
+				Name:      summary.Name,
+				Message:   err.Error(),
+			}}, errors.New("one or more products failed")
+		}
+
+		if err := qtx.InsertProductPriceHistory(ctx, db.InsertProductPriceHistoryParams{
+			WorkspaceID:            workspaceID,
+			ProductID:              prodID,
+			VariantID:              summary.DefaultVariantID,
+			OldSellingPriceMinor:   pgtype.Int8{Int64: oldSelling, Valid: true},
+			NewSellingPriceMinor:   newSelling,
+			OldCostPriceMinor:      pgtype.Int8{Int64: summary.CostPriceMinor, Valid: true},
+			NewCostPriceMinor:      summary.CostPriceMinor,
+			Currency:               summary.Currency,
+			CurrencyExponent:       summary.CurrencyExponent,
+			ChangedByUserID:        pgtype.Int8{Int64: userID, Valid: true},
+			OldCompareAtPriceMinor: oldCompare,
+			NewCompareAtPriceMinor: newCompare,
+			Source:                 "bulk_change",
+		}); err != nil {
+			return BulkChangeResult{}, []BulkPriceFailItem{{
+				ProductID: prodID,
+				Name:      summary.Name,
+				Message:   err.Error(),
+			}}, errors.New("one or more products failed")
+		}
+
+		summaryText := fmt.Sprintf("Price changed from %s to %s",
+			moneyLabel(summary.Currency, oldSelling, int(summary.CurrencyExponent)),
+			moneyLabel(summary.Currency, newSelling, int(summary.CurrencyExponent)))
+		if err := s.productEvent(ctx, qtx, workspaceID, prodID, userID, "price_changed", summaryText); err != nil {
+			return BulkChangeResult{}, []BulkPriceFailItem{{
+				ProductID: prodID,
+				Name:      summary.Name,
+				Message:   err.Error(),
+			}}, errors.New("one or more products failed")
+		}
+		updatedProducts++
+
+		if in.IncludeVariants {
+			variants, err := qtx.ListVariantsByProductID(ctx, db.ListVariantsByProductIDParams{
+				WorkspaceID: workspaceID,
+				ProductID:   prodID,
+			})
+			if err != nil {
+				return BulkChangeResult{}, []BulkPriceFailItem{{
+					ProductID: prodID,
+					Name:      summary.Name,
+					Message:   err.Error(),
+				}}, errors.New("one or more products failed")
+			}
+			for _, v := range variants {
+				if v.IsDefault || v.ArchivedAt.Valid {
+					continue
+				}
+				newVarSelling, err := applyPriceRule(v.SellingPriceMinor, in.Rule, summary.CurrencyExponent)
+				if err != nil {
+					return BulkChangeResult{}, []BulkPriceFailItem{{
+						ProductID: prodID,
+						Name:      v.Name,
+						Message:   err.Error(),
+					}}, errors.New("one or more products failed")
+				}
+				var newVarCompare pgtype.Int8
+				if v.CompareAtPriceMinor.Valid && v.CompareAtPriceMinor.Int64 > newVarSelling {
+					newVarCompare = v.CompareAtPriceMinor
+				}
+
+				oldVarSelling := v.SellingPriceMinor
+				oldVarCompare := v.CompareAtPriceMinor
+
+				if _, err := qtx.UpdateOptionVariant(ctx, db.UpdateOptionVariantParams{
+					WorkspaceID:         workspaceID,
+					ProductID:           prodID,
+					ID:                  v.ID,
+					Name:                v.Name,
+					Sku:                 v.Sku,
+					Barcode:             v.Barcode,
+					SellingPriceMinor:   newVarSelling,
+					CostPriceMinor:      v.CostPriceMinor,
+					CompareAtPriceMinor: newVarCompare,
+					IsActive:            v.IsActive,
+					Position:            v.Position,
+				}); err != nil {
+					return BulkChangeResult{}, []BulkPriceFailItem{{
+						ProductID: prodID,
+						Name:      v.Name,
+						Message:   err.Error(),
+					}}, errors.New("one or more products failed")
+				}
+
+				if err := qtx.InsertProductPriceHistory(ctx, db.InsertProductPriceHistoryParams{
+					WorkspaceID:            workspaceID,
+					ProductID:              prodID,
+					VariantID:              v.ID,
+					OldSellingPriceMinor:   pgtype.Int8{Int64: oldVarSelling, Valid: true},
+					NewSellingPriceMinor:   newVarSelling,
+					OldCostPriceMinor:      pgtype.Int8{Int64: v.CostPriceMinor, Valid: true},
+					NewCostPriceMinor:      v.CostPriceMinor,
+					Currency:               summary.Currency,
+					CurrencyExponent:       summary.CurrencyExponent,
+					ChangedByUserID:        pgtype.Int8{Int64: userID, Valid: true},
+					OldCompareAtPriceMinor: oldVarCompare,
+					NewCompareAtPriceMinor: newVarCompare,
+					Source:                 "bulk_change",
+				}); err != nil {
+					return BulkChangeResult{}, []BulkPriceFailItem{{
+						ProductID: prodID,
+						Name:      v.Name,
+						Message:   err.Error(),
+					}}, errors.New("one or more products failed")
+				}
+
+				summaryText := fmt.Sprintf("Price for %s changed from %s to %s",
+					v.Name,
+					moneyLabel(summary.Currency, oldVarSelling, int(summary.CurrencyExponent)),
+					moneyLabel(summary.Currency, newVarSelling, int(summary.CurrencyExponent)))
+				if err := s.productEvent(ctx, qtx, workspaceID, prodID, userID, "price_changed", summaryText); err != nil {
+					return BulkChangeResult{}, []BulkPriceFailItem{{
+						ProductID: prodID,
+						Name:      v.Name,
+						Message:   err.Error(),
+					}}, errors.New("one or more products failed")
+				}
+				updatedVariants++
+			}
+		}
+	}
+
+	res := BulkChangeResult{
+		UpdatedProducts: updatedProducts,
+		UpdatedVariants: updatedVariants,
+	}
+	resBytes, _ := json.Marshal(res)
+
+	if err := qtx.InsertProductPriceCommand(ctx, db.InsertProductPriceCommandParams{
+		WorkspaceID:     workspaceID,
+		IdempotencyKey:  key,
+		ResponsePayload: resBytes,
+	}); err != nil {
+		return BulkChangeResult{}, nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return BulkChangeResult{}, nil, err
+	}
+
+	return res, nil, nil
+}
+
 func mustJSON(value any) []byte {
 	raw, err := json.Marshal(value)
 	if err != nil {
@@ -831,7 +1416,10 @@ func (s *Service) ListProductPriceHistory(ctx context.Context, workspaceID, prod
 			ID: row.ID, VariantID: row.VariantID, OldSellingPriceMinor: int64Ptr(row.OldSellingPriceMinor),
 			NewSellingPriceMinor: row.NewSellingPriceMinor, OldCostPriceMinor: int64Ptr(row.OldCostPriceMinor),
 			NewCostPriceMinor: row.NewCostPriceMinor, Currency: row.Currency, CurrencyExponent: row.CurrencyExponent,
-			ChangedAt: row.ChangedAt.Time,
+			ChangedAt:              row.ChangedAt.Time,
+			OldCompareAtPriceMinor: int64Ptr(row.OldCompareAtPriceMinor),
+			NewCompareAtPriceMinor: int64Ptr(row.NewCompareAtPriceMinor),
+			Source:                 row.Source,
 		})
 	}
 	return out, nil

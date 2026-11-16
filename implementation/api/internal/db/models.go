@@ -2430,6 +2430,15 @@ type ProductOutlet struct {
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
+type ProductPriceCommand struct {
+	ID              int64              `json:"id"`
+	WorkspaceID     int64              `json:"workspace_id"`
+	IdempotencyKey  string             `json:"idempotency_key"`
+	ProductID       pgtype.Int8        `json:"product_id"`
+	ResponsePayload []byte             `json:"response_payload"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
 type ProductPriceHistory struct {
 	ID                     int64              `json:"id"`
 	WorkspaceID            int64              `json:"workspace_id"`
