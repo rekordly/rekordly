@@ -2,6 +2,7 @@ package finance
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -447,8 +448,15 @@ func (h *Handler) attachDocumentFile(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": err.Error()}})
 		return
 	}
+	if in.IdempotencyKey == "" {
+		in.IdempotencyKey = c.GetHeader("Idempotency-Key")
+	}
 	fileView, err := h.service.AttachDocumentFile(c.Request.Context(), wsCtx.WorkspaceID, wsCtx.UserID, docType, id, in)
 	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "Document not found"}})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "ATTACH_FAILED", "message": err.Error()}})
 		return
 	}

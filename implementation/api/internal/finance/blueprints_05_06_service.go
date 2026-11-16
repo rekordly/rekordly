@@ -828,6 +828,58 @@ func (s *Service) AttachDocumentFile(ctx context.Context, workspaceID, userID in
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := s.queries.WithTx(tx)
 
+	var docExists bool
+	switch docType {
+	case "purchase_order":
+		err = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM purchase_orders WHERE workspace_id = $1 AND id = $2)", workspaceID, docID).Scan(&docExists)
+	case "goods_receipt":
+		err = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM goods_receipts WHERE workspace_id = $1 AND id = $2)", workspaceID, docID).Scan(&docExists)
+	case "supplier_bill":
+		err = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM supplier_bills WHERE workspace_id = $1 AND id = $2)", workspaceID, docID).Scan(&docExists)
+	case "purchase":
+		err = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM purchases WHERE workspace_id = $1 AND id = $2)", workspaceID, docID).Scan(&docExists)
+	case "invoice":
+		err = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM invoices WHERE workspace_id = $1 AND id = $2)", workspaceID, docID).Scan(&docExists)
+	default:
+		return DocumentFileView{}, errors.New("unsupported document type")
+	}
+	if err != nil {
+		return DocumentFileView{}, err
+	}
+	if !docExists {
+		return DocumentFileView{}, ErrNotFound
+	}
+
+	getFileViewByEvidenceID := func(evID int64) (DocumentFileView, error) {
+		var view DocumentFileView
+		var createdAt pgtype.Timestamptz
+		err := tx.QueryRow(ctx, `
+			SELECT
+				df.id, df.evidence_asset_id, ea.original_file_name, ea.mime_type, ea.byte_size, df.created_at,
+				COALESCE(NULLIF(u.display_name, ''), 'Team')::text
+			FROM document_files df
+			JOIN evidence_assets ea ON ea.id = df.evidence_asset_id AND ea.workspace_id = df.workspace_id
+			LEFT JOIN users u ON u.id = df.created_by_user_id
+			WHERE df.workspace_id = $1 AND df.document_type = $2 AND df.document_id = $3 AND df.evidence_asset_id = $4
+		`, workspaceID, docType, docID, evID).Scan(
+			&view.ID,
+			&view.EvidenceID,
+			&view.FileName,
+			&view.MimeType,
+			&view.SizeBytes,
+			&createdAt,
+			&view.UploadedByName,
+		)
+		if err != nil {
+			return DocumentFileView{}, err
+		}
+		view.CreatedAt = createdAt.Time
+		return view, nil
+	}
+
+	idempKey := strings.TrimSpace(in.IdempotencyKey)
+	assetID := strings.TrimSpace(in.AssetID)
+
 	var evidenceID int64
 	var fileName string
 	var mimeType string
@@ -840,48 +892,109 @@ func (s *Service) AttachDocumentFile(ctx context.Context, workspaceID, userID in
 			ID:          in.EvidenceID,
 		})
 		if err != nil {
-			return DocumentFileView{}, fmt.Errorf("evidence asset not found in workspace: %w", err)
+			return DocumentFileView{}, fmt.Errorf("evidence asset not found in workspace: %w", ErrNotFound)
 		}
 		evidenceID = asset.ID
 		fileName = asset.OriginalFileName
 		mimeType = asset.MimeType
 		sizeBytes = asset.ByteSize
-	} else if strings.TrimSpace(in.AssetID) != "" {
-		assetID := strings.TrimSpace(in.AssetID)
-		if err := validateEvidenceIntent(in.FileName, in.MimeType, in.SizeBytes); err != nil {
-			return DocumentFileView{}, err
+
+		// If already linked to this document, return the existing link (idempotent replay)
+		if view, err := getFileViewByEvidenceID(evidenceID); err == nil {
+			_ = tx.Commit(ctx)
+			return view, nil
 		}
-		if s.evidenceUploader != nil {
-			verified, err := s.evidenceUploader.Verify(ctx, assetID)
-			if err != nil {
-				return DocumentFileView{}, err
-			}
-			if verified.Bytes != in.SizeBytes || verified.MimeType != strings.ToLower(strings.TrimSpace(in.MimeType)) {
-				return DocumentFileView{}, ErrEvidenceAsset
+	} else if assetID != "" || idempKey != "" {
+		var existingAssetID int64
+		var existingWsID int64
+		var existingFileName string
+		var existingMimeType string
+		var existingByteSize int64
+		found := false
+
+		if idempKey != "" {
+			err = tx.QueryRow(ctx, `
+				SELECT id, workspace_id, original_file_name, mime_type, byte_size
+				FROM evidence_assets
+				WHERE workspace_id = $1 AND sha256_hash = $2 AND status <> 'deleted'
+				ORDER BY id DESC
+				LIMIT 1
+			`, workspaceID, idempKey).Scan(&existingAssetID, &existingWsID, &existingFileName, &existingMimeType, &existingByteSize)
+			if err == nil {
+				found = true
 			}
 		}
 
-		asset, err := q.CreateDocumentEvidenceAsset(ctx, db.CreateDocumentEvidenceAssetParams{
-			WorkspaceID:      workspaceID,
-			UploadedByUserID: pgtype.Int8{Int64: userID, Valid: true},
-			StorageProvider:  "cloudinary",
-			AssetID:          assetID,
-			DeliveryType:     "authenticated",
-			OriginalFileName: filepath.Base(in.FileName),
-			ByteSize:         in.SizeBytes,
-			MimeType:         strings.ToLower(strings.TrimSpace(in.MimeType)),
-			Sha256Hash:       pgtype.Text{},
-			Status:           "verified",
-		})
-		if err != nil {
-			return DocumentFileView{}, fmt.Errorf("create document evidence asset: %w", err)
+		if !found && assetID != "" {
+			err = tx.QueryRow(ctx, `
+				SELECT id, workspace_id, original_file_name, mime_type, byte_size
+				FROM evidence_assets
+				WHERE storage_provider = 'cloudinary' AND asset_id = $1 AND status <> 'deleted'
+				LIMIT 1
+			`, assetID).Scan(&existingAssetID, &existingWsID, &existingFileName, &existingMimeType, &existingByteSize)
+			if err == nil {
+				found = true
+			}
 		}
-		evidenceID = asset.ID
-		fileName = asset.OriginalFileName
-		mimeType = asset.MimeType
-		sizeBytes = asset.ByteSize
+
+		if found {
+			if existingWsID != workspaceID {
+				return DocumentFileView{}, fmt.Errorf("evidence asset belongs to another workspace: %w", ErrNotFound)
+			}
+			evidenceID = existingAssetID
+			fileName = existingFileName
+			mimeType = existingMimeType
+			sizeBytes = existingByteSize
+
+			// If already linked to this document, return existing link (idempotent replay)
+			if view, err := getFileViewByEvidenceID(evidenceID); err == nil {
+				_ = tx.Commit(ctx)
+				return view, nil
+			}
+		} else {
+			if assetID == "" {
+				assetID = idempKey
+			}
+			if err := validateEvidenceIntent(in.FileName, in.MimeType, in.SizeBytes); err != nil {
+				return DocumentFileView{}, err
+			}
+			if s.evidenceUploader != nil {
+				verified, err := s.evidenceUploader.Verify(ctx, assetID)
+				if err != nil {
+					return DocumentFileView{}, err
+				}
+				if verified.Bytes != in.SizeBytes || verified.MimeType != strings.ToLower(strings.TrimSpace(in.MimeType)) {
+					return DocumentFileView{}, ErrEvidenceAsset
+				}
+			}
+
+			var hashParam pgtype.Text
+			if idempKey != "" {
+				hashParam = pgtype.Text{String: idempKey, Valid: true}
+			}
+
+			asset, err := q.CreateDocumentEvidenceAsset(ctx, db.CreateDocumentEvidenceAssetParams{
+				WorkspaceID:      workspaceID,
+				UploadedByUserID: pgtype.Int8{Int64: userID, Valid: true},
+				StorageProvider:  "cloudinary",
+				AssetID:          assetID,
+				DeliveryType:     "authenticated",
+				OriginalFileName: filepath.Base(in.FileName),
+				ByteSize:         in.SizeBytes,
+				MimeType:         strings.ToLower(strings.TrimSpace(in.MimeType)),
+				Sha256Hash:       hashParam,
+				Status:           "verified",
+			})
+			if err != nil {
+				return DocumentFileView{}, fmt.Errorf("create document evidence asset: %w", err)
+			}
+			evidenceID = asset.ID
+			fileName = asset.OriginalFileName
+			mimeType = asset.MimeType
+			sizeBytes = asset.ByteSize
+		}
 	} else {
-		return DocumentFileView{}, errors.New("either evidence_id or asset_id is required")
+		return DocumentFileView{}, errors.New("either evidence_id, asset_id or idempotency_key is required")
 	}
 
 	row, err := q.InsertDocumentFile(ctx, db.InsertDocumentFileParams{
@@ -892,6 +1005,10 @@ func (s *Service) AttachDocumentFile(ctx context.Context, workspaceID, userID in
 		CreatedByUserID: userID,
 	})
 	if err != nil {
+		if view, vErr := getFileViewByEvidenceID(evidenceID); vErr == nil {
+			_ = tx.Commit(ctx)
+			return view, nil
+		}
 		return DocumentFileView{}, fmt.Errorf("link document file: %w", err)
 	}
 
