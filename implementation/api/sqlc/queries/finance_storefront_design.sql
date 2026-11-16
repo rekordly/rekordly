@@ -16,7 +16,7 @@ SET draft_theme_key = sqlc.arg('draft_theme_key')::text,
     draft_name = sqlc.arg('draft_name')::text,
     draft_brand = sqlc.arg('draft_brand')::jsonb,
     draft_sections = sqlc.arg('draft_sections')::jsonb,
-    version = version + 1,
+    version = st.version + 1,
     updated_at = now()
 WHERE st.workspace_id = sqlc.arg('workspace_id') AND st.storefront_id = sqlc.arg('storefront_id') AND st.version = sqlc.arg('expected_version')
 RETURNING st.version;
@@ -27,7 +27,7 @@ SET name = st.draft_name,
     theme_key = st.draft_theme_key,
     status = 'published',
     published_at = now(),
-    version = version + 1,
+    version = sf.version + 1,
     updated_at = now()
 FROM storefront_settings st
 WHERE sf.workspace_id = sqlc.arg('workspace_id') AND sf.id = sqlc.arg('storefront_id')
@@ -61,6 +61,10 @@ RETURNING st.version;
 -- name: CreateStorefrontDesignEvent :exec
 INSERT INTO storefront_design_events (workspace_id, storefront_id, actor_user_id, event_type, idempotency_key, request_hash, version)
 VALUES (sqlc.arg('workspace_id'), sqlc.arg('storefront_id'), sqlc.arg('actor_user_id'), sqlc.arg('event_type'), sqlc.arg('idempotency_key'), sqlc.arg('request_hash'), sqlc.arg('version'));
+
+-- name: CreateStorefrontSettingsEvent :exec
+INSERT INTO storefront_design_events (workspace_id, storefront_id, actor_user_id, event_type, idempotency_key, request_hash, version)
+VALUES (sqlc.arg('workspace_id'), sqlc.arg('storefront_id'), NULL, 'settings_updated', sqlc.arg('idempotency_key'), sqlc.arg('request_hash'), sqlc.arg('version'));
 
 -- name: GetStorefrontDesignEventByKey :one
 SELECT id, workspace_id, storefront_id, actor_user_id, event_type, idempotency_key, request_hash, version, created_at

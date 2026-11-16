@@ -39,6 +39,30 @@ func (q *Queries) CreateStorefrontDesignEvent(ctx context.Context, arg CreateSto
 	return err
 }
 
+const createStorefrontSettingsEvent = `-- name: CreateStorefrontSettingsEvent :exec
+INSERT INTO storefront_design_events (workspace_id, storefront_id, actor_user_id, event_type, idempotency_key, request_hash, version)
+VALUES ($1, $2, NULL, 'settings_updated', $3, $4, $5)
+`
+
+type CreateStorefrontSettingsEventParams struct {
+	WorkspaceID    int64  `json:"workspace_id"`
+	StorefrontID   int64  `json:"storefront_id"`
+	IdempotencyKey string `json:"idempotency_key"`
+	RequestHash    string `json:"request_hash"`
+	Version        int32  `json:"version"`
+}
+
+func (q *Queries) CreateStorefrontSettingsEvent(ctx context.Context, arg CreateStorefrontSettingsEventParams) error {
+	_, err := q.db.Exec(ctx, createStorefrontSettingsEvent,
+		arg.WorkspaceID,
+		arg.StorefrontID,
+		arg.IdempotencyKey,
+		arg.RequestHash,
+		arg.Version,
+	)
+	return err
+}
+
 const discardStorefrontDesignDraft = `-- name: DiscardStorefrontDesignDraft :one
 UPDATE storefront_settings st
 SET draft_theme_key = sf.theme_key,
@@ -169,7 +193,7 @@ SET name = st.draft_name,
     theme_key = st.draft_theme_key,
     status = 'published',
     published_at = now(),
-    version = version + 1,
+    version = sf.version + 1,
     updated_at = now()
 FROM storefront_settings st
 WHERE sf.workspace_id = $1 AND sf.id = $2
@@ -283,7 +307,7 @@ SET draft_theme_key = $1::text,
     draft_name = $2::text,
     draft_brand = $3::jsonb,
     draft_sections = $4::jsonb,
-    version = version + 1,
+    version = st.version + 1,
     updated_at = now()
 WHERE st.workspace_id = $5 AND st.storefront_id = $6 AND st.version = $7
 RETURNING st.version

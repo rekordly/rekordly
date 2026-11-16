@@ -1932,6 +1932,66 @@ func (q *Queries) ListStorefrontOrders(ctx context.Context, arg ListStorefrontOr
 	return items, nil
 }
 
+const markStorefrontOrderPacked = `-- name: MarkStorefrontOrderPacked :one
+UPDATE storefront_orders
+SET fulfilment_status = 'packed', version = version + 1, updated_at = now()
+WHERE workspace_id = $1 AND id = $2 AND version = $3
+  AND commercial_status = 'confirmed' AND fulfilment_status = 'reserved'
+RETURNING id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at
+`
+
+type MarkStorefrontOrderPackedParams struct {
+	WorkspaceID int64 `json:"workspace_id"`
+	ID          int64 `json:"id"`
+	Version     int32 `json:"version"`
+}
+
+func (q *Queries) MarkStorefrontOrderPacked(ctx context.Context, arg MarkStorefrontOrderPackedParams) (StorefrontOrder, error) {
+	row := q.db.QueryRow(ctx, markStorefrontOrderPacked, arg.WorkspaceID, arg.ID, arg.Version)
+	var i StorefrontOrder
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.StorefrontID,
+		&i.OrderReference,
+		&i.PublicTokenHash,
+		&i.CustomerID,
+		&i.OutletID,
+		&i.CommercialStatus,
+		&i.FulfilmentStatus,
+		&i.PaymentStatus,
+		&i.Version,
+		&i.Currency,
+		&i.CurrencyExponent,
+		&i.SubtotalMinor,
+		&i.TaxMinor,
+		&i.DeliveryFeeMinor,
+		&i.TotalMinor,
+		&i.DeliveryMethod,
+		&i.CustomerName,
+		&i.CustomerPhone,
+		&i.CustomerEmail,
+		&i.OrganizationName,
+		&i.PreferredContactMethod,
+		&i.DeliveryAddress,
+		&i.DeliveryLandmark,
+		&i.PreferredDeliveryTime,
+		&i.CustomerNote,
+		&i.PolicyAcknowledged,
+		&i.PolicyVersion,
+		&i.PaymentArrangement,
+		&i.LinkedInvoiceID,
+		&i.LinkedSaleID,
+		&i.LinkedInvoiceShareToken,
+		&i.DeclineOrCancelReason,
+		&i.ReservationExpiresAt,
+		&i.IdempotencyKey,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const nextStorefrontOrderSequence = `-- name: NextStorefrontOrderSequence :one
 INSERT INTO storefront_order_sequences (storefront_id, next_value)
 VALUES ($1, 2)

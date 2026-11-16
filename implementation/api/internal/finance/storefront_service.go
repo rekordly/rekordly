@@ -259,6 +259,7 @@ type CreateStorefrontInput struct {
 }
 
 type UpdateStorefrontSettingsInput struct {
+	IdempotencyKey       string            `json:"idempotency_key,omitempty"`
 	Name                 string            `json:"name"`
 	Slug                 string            `json:"slug"`
 	ThemeKey             string            `json:"theme_key"`
@@ -472,6 +473,17 @@ func (s *Service) GetMerchantStorefront(ctx context.Context, ws int64) (Storefro
 }
 
 func (s *Service) UpdateStorefrontSettings(ctx context.Context, ws int64, in UpdateStorefrontSettingsInput) (StorefrontView, error) {
+	requestHash, err := storefrontDesignHash(in)
+	if err != nil {
+		return StorefrontView{}, err
+	}
+	if strings.TrimSpace(in.IdempotencyKey) != "" {
+		if replay, checkErr := s.checkStorefrontDesignIdempotency(ctx, ws, in.IdempotencyKey, requestHash); checkErr != nil {
+			return StorefrontView{}, checkErr
+		} else if replay {
+			return s.GetMerchantStorefront(ctx, ws)
+		}
+	}
 	sf, err := s.queries.GetStorefrontByWorkspace(ctx, ws)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return StorefrontView{}, ErrNotFound
@@ -652,6 +664,14 @@ func (s *Service) UpdateStorefrontSettings(ctx context.Context, ws int64, in Upd
 	if nextSlug.Valid {
 		// Keep default subdomain mapping synchronized
 		_, _ = tx.Exec(ctx, `UPDATE storefront_domains SET hostname=$2, updated_at=now() WHERE storefront_id=$1 AND domain_type='subdomain'`, sf.ID, fmt.Sprintf("%s.rekordly.com", nextSlug.String))
+	}
+	if strings.TrimSpace(in.IdempotencyKey) != "" {
+		if err := q.CreateStorefrontSettingsEvent(ctx, db.CreateStorefrontSettingsEventParams{
+			WorkspaceID: ws, StorefrontID: sf.ID, IdempotencyKey: in.IdempotencyKey,
+			RequestHash: requestHash, Version: updatedSF.Version,
+		}); err != nil {
+			return StorefrontView{}, err
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return StorefrontView{}, err

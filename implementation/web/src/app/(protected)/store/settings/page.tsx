@@ -1,5 +1,5 @@
-import { StorefrontAdminPage } from "@/components/features/store/storefront-admin-page";
+import { StorefrontSettingsPage } from "@/components/features/store/storefront-settings-page";
 
 export default function StoreSettingsPage() {
-  return <StorefrontAdminPage initialTab="appearance" />;
+  return <StorefrontSettingsPage />;
 }

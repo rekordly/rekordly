@@ -220,6 +220,13 @@ func TestStorefrontSetupProjectionCartCheckoutConfirmFulfilAndLedger(t *testing.
 	require.NoError(t, pool.QueryRow(ctx, `SELECT reserved_quantity::text FROM inventory_balances WHERE workspace_id=$1 AND product_id=$2`, ws, item.ID).Scan(&reservedNow))
 	require.Equal(t, "3.0000", reservedNow)
 
+	// Packing is a workflow marker only; the reservation remains in place until fulfilment.
+	confirmed, err = svc.PackStorefrontOrder(ctx, ws, user, orderID, confirmed.Version)
+	require.NoError(t, err)
+	require.Equal(t, "packed", confirmed.FulfilmentStatus)
+	require.NoError(t, pool.QueryRow(ctx, `SELECT reserved_quantity::text FROM inventory_balances WHERE workspace_id=$1 AND product_id=$2`, ws, item.ID).Scan(&reservedNow))
+	require.Equal(t, "3.0000", reservedNow)
+
 	// Second competing order requesting 3 units (only 2 left available) must fail with ErrInsufficientStock on confirm!
 	checkout2, err := svc.SubmitGuestCheckout(ctx, "kola-footwear", false, finance.GuestCheckoutInput{
 		ClientKey:          "10.0.0.6",

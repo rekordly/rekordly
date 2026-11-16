@@ -382,6 +382,40 @@ type ConfirmOrderInput struct {
 	IdempotencyKey     string `json:"idempotency_key"`
 }
 
+func (s *Service) PackStorefrontOrder(ctx context.Context, ws, user, orderID int64, expectedVersion int32) (MerchantOrderView, error) {
+	if expectedVersion < 1 {
+		return MerchantOrderView{}, errors.New("expected_version is required")
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return MerchantOrderView{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := s.queries.WithTx(tx)
+	_, err = q.MarkStorefrontOrderPacked(ctx, db.MarkStorefrontOrderPackedParams{WorkspaceID: ws, ID: orderID, Version: expectedVersion})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return MerchantOrderView{}, ErrOrderVersionConflict
+	}
+	if err != nil {
+		return MerchantOrderView{}, err
+	}
+	if _, err = q.CreateStorefrontOrderEvent(ctx, db.CreateStorefrontOrderEventParams{
+		WorkspaceID: ws, OrderID: orderID, EventType: "order_packed", ActorType: "merchant",
+		ActorUserID: pgtype.Int8{Int64: user, Valid: user > 0}, CustomerVisible: true,
+		Message: pgtype.Text{String: "Your order has been packed and is ready for delivery.", Valid: true},
+	}); err != nil {
+		return MerchantOrderView{}, err
+	}
+	order, err := q.GetStorefrontOrderByID(ctx, db.GetStorefrontOrderByIDParams{WorkspaceID: ws, ID: orderID})
+	if err != nil {
+		return MerchantOrderView{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return MerchantOrderView{}, err
+	}
+	return s.buildMerchantOrderDetail(ctx, order)
+}
+
 func (s *Service) ConfirmStorefrontOrder(ctx context.Context, ws, user, orderID int64, in ConfirmOrderInput) (MerchantOrderView, error) {
 	if in.ExpectedVersion < 1 {
 		return MerchantOrderView{}, errors.New("expected_version is required")
@@ -598,7 +632,7 @@ func (s *Service) FulfilStorefrontOrder(ctx context.Context, ws, user, orderID i
 	if o.Version != in.ExpectedVersion {
 		return MerchantOrderView{}, ErrOrderVersionConflict
 	}
-	if o.CommercialStatus != "confirmed" || (o.FulfilmentStatus != "reserved" && o.FulfilmentStatus != "partially_fulfilled") {
+	if o.CommercialStatus != "confirmed" || (o.FulfilmentStatus != "reserved" && o.FulfilmentStatus != "packed" && o.FulfilmentStatus != "partially_fulfilled") {
 		return MerchantOrderView{}, errors.New("only confirmed reserved orders can be fulfilled")
 	}
 	if !o.OutletID.Valid {

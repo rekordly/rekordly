@@ -1,6 +1,7 @@
 package finance
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -94,7 +95,7 @@ func (h *Handler) createStorefront(c *gin.Context) {
 }
 
 func (h *Handler) getMerchantStorefront(c *gin.Context) {
-	ws, ok := businessPermission(c, "storefront.view", "storefront.manage_appearance", "storefront.manage_catalogue", "storefront.publish")
+	ws, ok := businessPermission(c, "storefront.view", "storefront.manage_appearance", "storefront.manage_checkout", "storefront.manage_catalogue", "storefront.publish")
 	if !ok {
 		return
 	}
@@ -115,17 +116,88 @@ func (h *Handler) updateStorefrontSettings(c *gin.Context) {
 	if !ok {
 		return
 	}
-	var in UpdateStorefrontSettingsInput
-	if err := c.ShouldBindJSON(&in); err != nil {
+	var patch map[string]json.RawMessage
+	if err := c.ShouldBindJSON(&patch); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": err.Error()}})
 		return
 	}
+	var card string
+	if err := json.Unmarshal(patch["card"], &card); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": "A settings card is required."}})
+		return
+	}
+	cardFields := map[string]map[string]bool{
+		"details":  {"name": true, "slug": true, "contact_phone": true, "contact_email": true, "whatsapp_number": true, "address": true, "business_hours": true},
+		"delivery": {"delivery_methods": true, "delivery_guidance": true, "default_delivery_fee": true},
+		"payments": {"checkout_require_email": true, "checkout_require_phone": true, "reservation_ttl_hours": true},
+		"shoppers": {"tagline": true, "description": true, "logo_url": true, "banner_url": true, "auto_show_new_products": true, "show_sold_out": true, "show_stock_count": true, "low_stock_threshold": true},
+		"policies": {"return_policy": true, "privacy_policy": true, "terms_policy": true, "custom_policy": true},
+		"sharing":  {"seo_title": true, "seo_description": true, "seo_image_url": true, "seo_indexable": true},
+	}
+	allowed, ok := cardFields[card]
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": "Unknown settings card."}})
+		return
+	}
+	for key := range patch {
+		if key != "card" && key != "idempotency_key" && !allowed[key] {
+			c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": "This field does not belong to the selected settings card."}})
+			return
+		}
+	}
+	var idempotencyKey string
+	if err := json.Unmarshal(patch["idempotency_key"], &idempotencyKey); err != nil || strings.TrimSpace(idempotencyKey) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": "An idempotency key is required."}})
+		return
+	}
+	// Settings cards send only their own fields. Merge the patch with the current
+	// values so the existing full-row update remains atomic without clearing other cards.
+	current, err := h.service.GetMerchantStorefront(c.Request.Context(), ws.WorkspaceID)
+	if err != nil {
+		h.storefrontError(c, err)
+		return
+	}
+	base := map[string]any{
+		"name": current.Name, "slug": current.Slug, "theme_key": current.ThemeKey,
+		"tagline": current.Settings.Tagline, "description": current.Settings.Description,
+		"logo_url": current.Settings.LogoURL, "banner_url": current.Settings.BannerURL,
+		"primary_color": current.Settings.PrimaryColor, "accent_color": current.Settings.AccentColor,
+		"background_color": current.Settings.BackgroundColor, "text_color": current.Settings.TextColor,
+		"font_family": current.Settings.FontFamily, "section_order": current.Settings.SectionOrder,
+		"contact_phone": current.Settings.ContactPhone, "contact_email": current.Settings.ContactEmail,
+		"whatsapp_number": current.Settings.WhatsappNumber, "address": current.Settings.Address,
+		"business_hours": current.Settings.BusinessHours, "social_links": current.Settings.SocialLinks,
+		"delivery_methods": current.Settings.DeliveryMethods, "delivery_guidance": current.Settings.DeliveryGuidance,
+		"default_delivery_fee":   minorToMajorString(parseMinor(current.Settings.DefaultDeliveryFeeMinor), int(current.CurrencyExponent)),
+		"checkout_require_email": current.Settings.CheckoutRequireEmail, "checkout_require_phone": current.Settings.CheckoutRequirePhone,
+		"return_policy": current.Settings.ReturnPolicy, "privacy_policy": current.Settings.PrivacyPolicy,
+		"terms_policy": current.Settings.TermsPolicy, "custom_policy": current.Settings.CustomPolicy,
+		"seo_title": current.Settings.SeoTitle, "seo_description": current.Settings.SeoDescription,
+		"seo_image_url": current.Settings.SeoImageURL, "seo_indexable": current.Settings.SeoIndexable,
+		"auto_show_new_products": current.Settings.AutoShowNewProducts, "show_sold_out": current.Settings.ShowSoldOut,
+		"show_stock_count": current.Settings.ShowStockCount, "low_stock_threshold": current.Settings.LowStockThreshold,
+	}
+	for key, value := range patch {
+		base[key] = value
+	}
+	merged, _ := json.Marshal(base)
+	var in UpdateStorefrontSettingsInput
+	if err := json.Unmarshal(merged, &in); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": err.Error()}})
+		return
+	}
+	in.IdempotencyKey = idempotencyKey
 	sf, err := h.service.UpdateStorefrontSettings(c.Request.Context(), ws.WorkspaceID, in)
 	if err != nil {
 		h.storefrontError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"storefront": sf}})
+}
+
+func parseMinor(value string) int64 {
+	minor, _ := strconv.ParseInt(value, 10, 64)
+	return minor
 }
 
 func (h *Handler) publishStorefront(c *gin.Context) {

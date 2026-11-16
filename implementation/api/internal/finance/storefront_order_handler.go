@@ -14,6 +14,7 @@ func (h *Handler) RegisterStorefrontOrderRoutes(g *gin.RouterGroup) {
 	g.GET("/orders/:id", h.getMerchantOrder)
 	g.POST("/orders/:id/commands/request-change", h.requestOrderChange)
 	g.POST("/orders/:id/commands/confirm", h.confirmStorefrontOrder)
+	g.POST("/orders/:id/commands/pack", h.packStorefrontOrder)
 	g.POST("/orders/:id/commands/fulfil", h.fulfilStorefrontOrder)
 	g.POST("/orders/:id/commands/cancel", h.cancelStorefrontOrder)
 	g.POST("/orders/:id/commands/decline", h.declineStorefrontOrder)
@@ -22,6 +23,27 @@ func (h *Handler) RegisterStorefrontOrderRoutes(g *gin.RouterGroup) {
 	g.POST("/orders/:id/commands/messages", h.postMerchantOrderMessage)
 	g.POST("/orders/:id/commands/return", h.returnStorefrontOrder)
 	g.POST("/orders/commands/expire-reservations", h.expireStaleReservations)
+}
+
+func (h *Handler) packStorefrontOrder(c *gin.Context) {
+	ws, ok := businessPermission(c, "orders.fulfil")
+	if !ok {
+		return
+	}
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	var in struct {
+		ExpectedVersion int32 `json:"expected_version"`
+	}
+	if err != nil || id <= 0 || c.ShouldBindJSON(&in) != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": "Invalid packing request"}})
+		return
+	}
+	order, err := h.service.PackStorefrontOrder(c.Request.Context(), ws.WorkspaceID, ws.UserID, id, in.ExpectedVersion)
+	if err != nil {
+		h.storefrontError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"order": order}})
 }
 
 func (h *Handler) listMerchantOrders(c *gin.Context) {

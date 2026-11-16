@@ -331,6 +331,13 @@ SELECT * FROM storefront_orders
 WHERE workspace_id = $1 AND id = $2
 FOR UPDATE;
 
+-- name: MarkStorefrontOrderPacked :one
+UPDATE storefront_orders
+SET fulfilment_status = 'packed', version = version + 1, updated_at = now()
+WHERE workspace_id = $1 AND id = $2 AND version = $3
+  AND commercial_status = 'confirmed' AND fulfilment_status = 'reserved'
+RETURNING *;
+
 -- name: ListStorefrontOrders :many
 SELECT * FROM storefront_orders
 WHERE workspace_id = $1

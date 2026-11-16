@@ -860,6 +860,8 @@ export const financeApi = {
   // Blueprint 09: Merchant Storefront, Orders & Domains
   getMerchantStorefront: (workspaceId: number) =>
     scopedGet<{ storefront: Storefront | null }>(workspaceId, "/api/v1/storefront").then((r) => r.storefront),
+  getStorefrontSettings: (workspaceId: number) =>
+    scopedGet<{ storefront: Storefront | null }>(workspaceId, "/api/v1/storefront/settings").then((r) => r.storefront),
   createStorefront: (workspaceId: number, body: { name: string; slug: string; theme_key?: string; default_outlet_id?: number; currency?: string }) =>
     scopedPost<{ storefront: Storefront }>(workspaceId, "/api/v1/storefront", body).then((r) => r.storefront),
   updateStorefrontSettings: (workspaceId: number, body: unknown) =>
@@ -913,6 +915,8 @@ export const financeApi = {
     scopedPost<{ order: MerchantOrder }>(workspaceId, `/api/v1/orders/${id}/commands/request-change`, body).then((r) => r.order),
   confirmStorefrontOrder: (workspaceId: number, id: number, body: unknown, key?: string) =>
     scopedPost<{ order: MerchantOrder }>(workspaceId, `/api/v1/orders/${id}/commands/confirm`, body, key).then((r) => r.order),
+  packStorefrontOrder: (workspaceId: number, id: number, body: { expected_version: number }) =>
+    scopedPost<{ order: MerchantOrder }>(workspaceId, `/api/v1/orders/${id}/commands/pack`, body).then((r) => r.order),
   fulfilStorefrontOrder: (workspaceId: number, id: number, body: unknown) =>
     scopedPost<{ order: MerchantOrder }>(workspaceId, `/api/v1/orders/${id}/commands/fulfil`, body).then((r) => r.order),
   cancelStorefrontOrder: (workspaceId: number, id: number, reason: string) =>
