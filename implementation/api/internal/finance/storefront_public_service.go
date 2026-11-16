@@ -386,7 +386,6 @@ func (s *Service) GetPublicStorefrontProjection(ctx context.Context, slugOrHost 
 
 	// Privacy-minimized analytics event
 	qClean := strings.ToLower(strings.TrimSpace(filterQuery))
-	evType := "page_view"
 	var searchHash pgtype.Text
 	if qClean != "" {
 		sum := sha256.Sum256([]byte(qClean))
