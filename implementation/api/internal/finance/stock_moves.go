@@ -97,9 +97,13 @@ func prepareStockLines(ctx context.Context, q *db.Queries, workspaceID int64, li
 		if prepared.product != nil {
 			var err error
 			prepared.variantID, err = stockVariant(ctx, q, workspaceID, *prepared.product, prepared.variantID)
-			if err != nil { return nil, 0, fmt.Errorf("item %d: %w", index+1, err) }
+			if err != nil {
+				return nil, 0, fmt.Errorf("item %d: %w", index+1, err)
+			}
 			variant, err := q.GetVariantByID(ctx, db.GetVariantByIDParams{WorkspaceID: workspaceID, ID: prepared.variantID.Int64})
-			if err != nil { return nil, 0, err }
+			if err != nil {
+				return nil, 0, err
+			}
 			if !variant.IsDefault {
 				prepared.description += " · " + variant.Name
 			}

@@ -148,7 +148,9 @@ func (s *Service) CreateStockTransfer(ctx context.Context, workspaceID, userID i
 			vID = pgtype.Int8{Int64: *l.VariantID, Valid: true}
 		}
 		vID, err = stockVariant(ctx, q, workspaceID, prod, vID)
-		if err != nil { return TransferView{}, err }
+		if err != nil {
+			return TransferView{}, err
+		}
 
 		line, err := q.CreateStockTransferLine(ctx, db.CreateStockTransferLineParams{
 			WorkspaceID:        workspaceID,

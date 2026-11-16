@@ -91,6 +91,14 @@ func (h *Handler) createSupplierBill(c *gin.Context) {
 		c.JSON(400, gin.H{"error": gin.H{"message": "Invalid supplier bill"}})
 		return
 	}
+	if in.Approve && !ws.HasPermission("purchases.approve_bill") {
+		c.JSON(403, gin.H{"error": gin.H{"code": "FORBIDDEN", "message": "Missing purchases.approve_bill permission"}})
+		return
+	}
+	if in.Payment != nil && !ws.HasPermission("purchases.pay_supplier") && !ws.HasPermission("purchases.create") {
+		c.JSON(403, gin.H{"error": gin.H{"code": "FORBIDDEN", "message": "Missing purchases.pay_supplier permission"}})
+		return
+	}
 	if in.OutletID != nil && !enforceProcurementOutletScope(c, ws, *in.OutletID) {
 		return
 	}
@@ -102,7 +110,11 @@ func (h *Handler) createSupplierBill(c *gin.Context) {
 		h.procurementError(c, e)
 		return
 	}
-	c.JSON(201, gin.H{"data": gin.H{"bill": bill}})
+	resp := gin.H{"bill": bill}
+	if bill.Payment != nil {
+		resp["payment"] = bill.Payment
+	}
+	c.JSON(201, gin.H{"data": resp})
 }
 
 func (h *Handler) approveSupplierBill(c *gin.Context) {

@@ -188,6 +188,102 @@ func (q *Queries) CreatePaymentReceipt(ctx context.Context, arg CreatePaymentRec
 	return i, err
 }
 
+const createPurchaseOrderShareWithRaw = `-- name: CreatePurchaseOrderShareWithRaw :one
+INSERT INTO purchase_order_shares (
+    workspace_id, purchase_order_id, token_hash, raw_token, supplier_email, expires_at, created_by_user_id
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7
+) RETURNING id, workspace_id, purchase_order_id, token_hash, supplier_email, expires_at, status, response_note, created_by_user_id, created_at, responded_at, raw_token
+`
+
+type CreatePurchaseOrderShareWithRawParams struct {
+	WorkspaceID     int64              `json:"workspace_id"`
+	PurchaseOrderID int64              `json:"purchase_order_id"`
+	TokenHash       string             `json:"token_hash"`
+	RawToken        pgtype.Text        `json:"raw_token"`
+	SupplierEmail   pgtype.Text        `json:"supplier_email"`
+	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
+	CreatedByUserID int64              `json:"created_by_user_id"`
+}
+
+func (q *Queries) CreatePurchaseOrderShareWithRaw(ctx context.Context, arg CreatePurchaseOrderShareWithRawParams) (PurchaseOrderShare, error) {
+	row := q.db.QueryRow(ctx, createPurchaseOrderShareWithRaw,
+		arg.WorkspaceID,
+		arg.PurchaseOrderID,
+		arg.TokenHash,
+		arg.RawToken,
+		arg.SupplierEmail,
+		arg.ExpiresAt,
+		arg.CreatedByUserID,
+	)
+	var i PurchaseOrderShare
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.PurchaseOrderID,
+		&i.TokenHash,
+		&i.SupplierEmail,
+		&i.ExpiresAt,
+		&i.Status,
+		&i.ResponseNote,
+		&i.CreatedByUserID,
+		&i.CreatedAt,
+		&i.RespondedAt,
+		&i.RawToken,
+	)
+	return i, err
+}
+
+const getActivePurchaseOrderShareByOrderID = `-- name: GetActivePurchaseOrderShareByOrderID :one
+SELECT id, workspace_id, purchase_order_id, raw_token, token_hash, supplier_email, expires_at, status, created_by_user_id, created_at, responded_at
+FROM purchase_order_shares
+WHERE workspace_id = $1
+  AND purchase_order_id = $2
+  AND status = 'active'
+  AND expires_at > now()
+  AND raw_token IS NOT NULL
+ORDER BY id DESC
+LIMIT 1
+`
+
+type GetActivePurchaseOrderShareByOrderIDParams struct {
+	WorkspaceID     int64 `json:"workspace_id"`
+	PurchaseOrderID int64 `json:"purchase_order_id"`
+}
+
+type GetActivePurchaseOrderShareByOrderIDRow struct {
+	ID              int64              `json:"id"`
+	WorkspaceID     int64              `json:"workspace_id"`
+	PurchaseOrderID int64              `json:"purchase_order_id"`
+	RawToken        pgtype.Text        `json:"raw_token"`
+	TokenHash       string             `json:"token_hash"`
+	SupplierEmail   pgtype.Text        `json:"supplier_email"`
+	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
+	Status          string             `json:"status"`
+	CreatedByUserID int64              `json:"created_by_user_id"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	RespondedAt     pgtype.Timestamptz `json:"responded_at"`
+}
+
+func (q *Queries) GetActivePurchaseOrderShareByOrderID(ctx context.Context, arg GetActivePurchaseOrderShareByOrderIDParams) (GetActivePurchaseOrderShareByOrderIDRow, error) {
+	row := q.db.QueryRow(ctx, getActivePurchaseOrderShareByOrderID, arg.WorkspaceID, arg.PurchaseOrderID)
+	var i GetActivePurchaseOrderShareByOrderIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.PurchaseOrderID,
+		&i.RawToken,
+		&i.TokenHash,
+		&i.SupplierEmail,
+		&i.ExpiresAt,
+		&i.Status,
+		&i.CreatedByUserID,
+		&i.CreatedAt,
+		&i.RespondedAt,
+	)
+	return i, err
+}
+
 const getCustomerStatementShareByHash = `-- name: GetCustomerStatementShareByHash :one
 SELECT id, workspace_id, customer_id, token_hash, from_date, to_date, status, expires_at, access_count, last_accessed_at, created_by_user_id, created_at FROM customer_statement_shares
 WHERE token_hash = $1 AND status = 'active' AND expires_at > now()
@@ -393,6 +489,24 @@ func (q *Queries) RecordEstimateShareResponse(ctx context.Context, arg RecordEst
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const revokeActivePurchaseOrderShares = `-- name: RevokeActivePurchaseOrderShares :exec
+UPDATE purchase_order_shares
+SET status = 'revoked'
+WHERE workspace_id = $1
+  AND purchase_order_id = $2
+  AND status = 'active'
+`
+
+type RevokeActivePurchaseOrderSharesParams struct {
+	WorkspaceID     int64 `json:"workspace_id"`
+	PurchaseOrderID int64 `json:"purchase_order_id"`
+}
+
+func (q *Queries) RevokeActivePurchaseOrderShares(ctx context.Context, arg RevokeActivePurchaseOrderSharesParams) error {
+	_, err := q.db.Exec(ctx, revokeActivePurchaseOrderShares, arg.WorkspaceID, arg.PurchaseOrderID)
+	return err
 }
 
 const revokeInvoiceShare = `-- name: RevokeInvoiceShare :exec

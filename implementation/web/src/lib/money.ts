@@ -470,6 +470,18 @@ export const financeApi = {
     const res = await scopedGet<{ versions: PurchaseOrderVersion[] }>(workspaceId, `/api/v1/purchase-orders/${id}/versions`);
     return res.versions ?? [];
   },
+  issuePurchaseOrder: (
+    workspaceId: number,
+    id: number,
+    body: { share?: boolean; force_new_link?: boolean } = {},
+    key: string,
+  ) =>
+    scopedPost<{
+      order: PurchaseOrder;
+      stopped_at?: string;
+      message?: string;
+      share?: { token: string; url: string; expires_at: string };
+    }>(workspaceId, `/api/v1/purchase-orders/${id}/commands/issue`, body, key),
   advancePurchaseOrder: (
     workspaceId: number,
     id: number,
@@ -484,12 +496,28 @@ export const financeApi = {
     const result = await scopedGet<{ lines: ReceiptOptionLine[] }>(workspaceId, `/api/v1/purchase-orders/${purchaseOrderId}/receipt-options`);
     return result.lines ?? [];
   },
-  createGoodsReceipt: (workspaceId: number, body: unknown, key: string) => scopedPost<{ receipt: GoodsReceipt }>(workspaceId, "/api/v1/goods-receipts", body, key),
+  createGoodsReceipt: (workspaceId: number, body: unknown, key: string) =>
+    scopedPost<{ receipt: GoodsReceipt; bill?: SupplierBill; payment?: PaymentDetail }>(workspaceId, "/api/v1/goods-receipts", body, key),
   async listGoodsReceipts(workspaceId:number){const r=await scopedGet<{receipts:GoodsReceipt[]}>(workspaceId,"/api/v1/goods-receipts");return r.receipts??[]},
   getGoodsReceipt: (workspaceId: number, id: number) => scopedGet<{ receipt: GoodsReceipt }>(workspaceId, `/api/v1/goods-receipts/${id}`).then((result) => result.receipt),
+  payGoodsReceipt: (
+    workspaceId: number,
+    id: number,
+    body: {
+      account_id?: number;
+      amount?: string;
+      payment_date: string;
+      reference?: string;
+      legs?: Array<{ money_account_id: number; amount: string }>;
+      payment_legs?: Array<{ money_account_id: number; amount: string }>;
+    },
+    key: string,
+  ) =>
+    scopedPost<{ receipt: GoodsReceipt; bill: SupplierBill; payment: PaymentDetail }>(workspaceId, `/api/v1/goods-receipts/${id}/payments`, body, key),
   async listSupplierBills(workspaceId:number){const r=await scopedGet<{bills:SupplierBill[]}>(workspaceId,"/api/v1/supplier-bills");return r.bills??[]},
   getSupplierBill: (workspaceId: number, id: number) => scopedGet<{ bill: SupplierBill }>(workspaceId, `/api/v1/supplier-bills/${id}`).then((r) => r.bill),
-  createSupplierBill:(workspaceId:number,body:unknown,key:string)=>scopedPost<{bill:SupplierBill}>(workspaceId,"/api/v1/supplier-bills",body,key),
+  createSupplierBill: (workspaceId: number, body: unknown, key: string) =>
+    scopedPost<{ bill: SupplierBill; payment?: PaymentDetail }>(workspaceId, "/api/v1/supplier-bills", body, key),
   approveSupplierBill:(workspaceId:number,id:number,expectedVersion:number,key:string, acceptVariance = false)=>scopedPost<{bill:SupplierBill}>(workspaceId,`/api/v1/supplier-bills/${id}/commands/approve`,{expected_version:expectedVersion, accept_variance: acceptVariance},key),
   transitionSupplierBill: (workspaceId: number, id: number, command: "reject" | "dispute" | "reverse", expectedVersion: number, reason: string, key: string) =>
     scopedPost<{ bill: SupplierBill }>(workspaceId, `/api/v1/supplier-bills/${id}/commands/${command}`, { expected_version: expectedVersion, reason }, key),

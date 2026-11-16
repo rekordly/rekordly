@@ -78,3 +78,29 @@ UPDATE customer_statement_shares
 SET access_count = access_count + 1,
     last_accessed_at = now()
 WHERE id = $1;
+
+-- name: GetActivePurchaseOrderShareByOrderID :one
+SELECT id, workspace_id, purchase_order_id, raw_token, token_hash, supplier_email, expires_at, status, created_by_user_id, created_at, responded_at
+FROM purchase_order_shares
+WHERE workspace_id = $1
+  AND purchase_order_id = $2
+  AND status = 'active'
+  AND expires_at > now()
+  AND raw_token IS NOT NULL
+ORDER BY id DESC
+LIMIT 1;
+
+-- name: RevokeActivePurchaseOrderShares :exec
+UPDATE purchase_order_shares
+SET status = 'revoked'
+WHERE workspace_id = $1
+  AND purchase_order_id = $2
+  AND status = 'active';
+
+-- name: CreatePurchaseOrderShareWithRaw :one
+INSERT INTO purchase_order_shares (
+    workspace_id, purchase_order_id, token_hash, raw_token, supplier_email, expires_at, created_by_user_id
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7
+) RETURNING *;
+

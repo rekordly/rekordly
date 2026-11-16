@@ -150,7 +150,9 @@ func (s *Service) CreateStockAdjustment(ctx context.Context, workspaceID, userID
 			requested = pgtype.Int8{Int64: variant.ID, Valid: true}
 		}
 		variantID, err := stockVariant(ctx, q, workspaceID, prod, requested)
-		if err != nil { return StockAdjustmentView{}, err }
+		if err != nil {
+			return StockAdjustmentView{}, err
+		}
 
 		bal, err := q.GetInventoryBalanceForUpdate(ctx, db.GetInventoryBalanceForUpdateParams{
 			WorkspaceID: workspaceID,

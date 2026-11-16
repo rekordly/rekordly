@@ -33,17 +33,26 @@ func (h *Handler) RegisterProductV2Routes(protected *gin.RouterGroup) {
 
 func (h *Handler) saveProductOptionsV2(c *gin.Context) {
 	wsCtx, ok := businessWorkspace(c)
-	if !ok { return }
+	if !ok {
+		return
+	}
 	id, ok := productID(c)
-	if !ok { return }
+	if !ok {
+		return
+	}
 	var in SaveProductOptionsInput
 	if err := c.ShouldBindJSON(&in); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": err.Error()}})
 		return
 	}
-	if in.IdempotencyKey == "" { in.IdempotencyKey = c.GetHeader("Idempotency-Key") }
+	if in.IdempotencyKey == "" {
+		in.IdempotencyKey = c.GetHeader("Idempotency-Key")
+	}
 	detail, err := h.service.SaveProductOptions(c.Request.Context(), wsCtx.WorkspaceID, wsCtx.UserID, id, in)
-	if err != nil { productError(c, err, "SAVE_OPTIONS_FAILED"); return }
+	if err != nil {
+		productError(c, err, "SAVE_OPTIONS_FAILED")
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"data": detail})
 }
 

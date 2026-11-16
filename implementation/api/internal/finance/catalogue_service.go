@@ -212,16 +212,16 @@ type CreateProductOptionInput struct {
 }
 
 type ProductOptionView struct {
-	ID        int64    `json:"id"`
-	ProductID int64    `json:"product_id"`
-	Name      string   `json:"name"`
-	Position  int32    `json:"position"`
-	Values    []string `json:"values"`
+	ID           int64                    `json:"id"`
+	ProductID    int64                    `json:"product_id"`
+	Name         string                   `json:"name"`
+	Position     int32                    `json:"position"`
+	Values       []string                 `json:"values"`
 	ValueDetails []ProductOptionValueView `json:"value_details,omitempty"`
 }
 
 type ProductOptionValueView struct {
-	ID int64 `json:"id"`
+	ID    int64  `json:"id"`
 	Value string `json:"value"`
 }
 
@@ -244,21 +244,21 @@ type UpdateVariantInput struct {
 }
 
 type VariantView struct {
-	ID                int64             `json:"id"`
-	ProductID         int64             `json:"product_id"`
-	Name              string            `json:"name"`
-	SKU               *string           `json:"sku,omitempty"`
-	Barcode           *string           `json:"barcode,omitempty"`
-	SellingPriceMinor int64             `json:"selling_price_minor"`
-	CostPriceMinor    int64             `json:"cost_price_minor"`
-	CompareAtPriceMinor *int64          `json:"compare_at_price_minor,omitempty"`
-	Currency          string            `json:"currency"`
-	CurrencyExponent  int32             `json:"currency_exponent"`
-	IsDefault         bool              `json:"is_default"`
-	IsActive          bool              `json:"is_active"`
-	ArchivedAt        *time.Time        `json:"archived_at,omitempty"`
-	QuantityOnHand    string            `json:"quantity_on_hand"`
-	OptionValues      map[string]string `json:"option_values,omitempty"`
+	ID                  int64             `json:"id"`
+	ProductID           int64             `json:"product_id"`
+	Name                string            `json:"name"`
+	SKU                 *string           `json:"sku,omitempty"`
+	Barcode             *string           `json:"barcode,omitempty"`
+	SellingPriceMinor   int64             `json:"selling_price_minor"`
+	CostPriceMinor      int64             `json:"cost_price_minor"`
+	CompareAtPriceMinor *int64            `json:"compare_at_price_minor,omitempty"`
+	Currency            string            `json:"currency"`
+	CurrencyExponent    int32             `json:"currency_exponent"`
+	IsDefault           bool              `json:"is_default"`
+	IsActive            bool              `json:"is_active"`
+	ArchivedAt          *time.Time        `json:"archived_at,omitempty"`
+	QuantityOnHand      string            `json:"quantity_on_hand"`
+	OptionValues        map[string]string `json:"option_values,omitempty"`
 }
 
 func (s *Service) CreateProductOption(ctx context.Context, workspaceID, productID int64, in CreateProductOptionInput) (ProductOptionView, error) {
@@ -373,11 +373,11 @@ func (s *Service) ListProductOptions(ctx context.Context, workspaceID, productID
 	out := make([]ProductOptionView, 0, len(opts))
 	for _, o := range opts {
 		out = append(out, ProductOptionView{
-			ID:        o.ID,
-			ProductID: o.ProductID,
-			Name:      o.Name,
-			Position:  o.Position,
-			Values:    valsByOpt[o.ID],
+			ID:           o.ID,
+			ProductID:    o.ProductID,
+			Name:         o.Name,
+			Position:     o.Position,
+			Values:       valsByOpt[o.ID],
 			ValueDetails: detailsByOpt[o.ID],
 		})
 	}
@@ -524,23 +524,25 @@ func (s *Service) ListProductVariants(ctx context.Context, workspaceID, productI
 	out := make([]VariantView, 0, len(variants))
 	for _, v := range variants {
 		stock, err := s.queries.CountVariantStock(ctx, db.CountVariantStockParams{WorkspaceID: workspaceID, VariantID: v.ID})
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		out = append(out, VariantView{
-			ID:                v.ID,
-			ProductID:         v.ProductID,
-			Name:              v.Name,
-			SKU:               nullableText(v.Sku),
-			Barcode:           nullableText(v.Barcode),
-			SellingPriceMinor: v.SellingPriceMinor,
-			CostPriceMinor:    v.CostPriceMinor,
+			ID:                  v.ID,
+			ProductID:           v.ProductID,
+			Name:                v.Name,
+			SKU:                 nullableText(v.Sku),
+			Barcode:             nullableText(v.Barcode),
+			SellingPriceMinor:   v.SellingPriceMinor,
+			CostPriceMinor:      v.CostPriceMinor,
 			CompareAtPriceMinor: int64Ptr(v.CompareAtPriceMinor),
-			Currency:          v.Currency,
-			CurrencyExponent:  v.CurrencyExponent,
-			IsDefault:         v.IsDefault,
-			IsActive:          v.IsActive,
-			ArchivedAt:        timePtr(v.ArchivedAt),
-			QuantityOnHand:    stock.String(),
-			OptionValues:      optValsByVariant[v.ID],
+			Currency:            v.Currency,
+			CurrencyExponent:    v.CurrencyExponent,
+			IsDefault:           v.IsDefault,
+			IsActive:            v.IsActive,
+			ArchivedAt:          timePtr(v.ArchivedAt),
+			QuantityOnHand:      stock.String(),
+			OptionValues:        optValsByVariant[v.ID],
 		})
 	}
 	return out, nil

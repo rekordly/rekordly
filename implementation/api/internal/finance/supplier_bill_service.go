@@ -41,7 +41,41 @@ type CreateSupplierBillInput struct {
 	ExpenseAccountClass   string                  `json:"expense_account_class"`
 	Description           string                  `json:"description"`
 	Lines                 []SupplierBillLineInput `json:"lines"`
+	Approve               bool                    `json:"approve"`
+	Payment               *ReceiptPaymentInput    `json:"payment,omitempty"`
 	IdempotencyKey        string                  `json:"idempotency_key"`
+}
+
+type ReceiptBillInput struct {
+	SupplierInvoiceNumber string `json:"supplier_invoice_number"`
+	BillDate              string `json:"bill_date"`
+	DueDate               string `json:"due_date,omitempty"`
+	Approve               bool   `json:"approve"`
+}
+
+type ReceiptPaymentInput struct {
+	AccountID   int64             `json:"account_id,omitempty"`
+	Amount      string            `json:"amount"`
+	PaymentDate string            `json:"payment_date"`
+	Reference   string            `json:"reference,omitempty"`
+	PaymentLegs []PaymentLegInput `json:"payment_legs,omitempty"`
+	Legs        []PaymentLegInput `json:"legs,omitempty"`
+}
+
+type GoodsReceiptPaymentInput struct {
+	AccountID      int64             `json:"account_id,omitempty"`
+	Amount         string            `json:"amount"`
+	PaymentDate    string            `json:"payment_date"`
+	Reference      string            `json:"reference,omitempty"`
+	PaymentLegs    []PaymentLegInput `json:"payment_legs,omitempty"`
+	Legs           []PaymentLegInput `json:"legs,omitempty"`
+	IdempotencyKey string            `json:"idempotency_key"`
+}
+
+type GoodsReceiptPaymentResult struct {
+	Receipt GoodsReceiptView `json:"receipt"`
+	Bill    SupplierBillView `json:"bill"`
+	Payment PaymentDetail    `json:"payment"`
 }
 
 type SupplierBillCommandInput struct {
@@ -96,6 +130,7 @@ type SupplierBillView struct {
 	Overdue               bool                   `json:"overdue"`
 	ApprovedAt            *string                `json:"approved_at,omitempty"`
 	Lines                 []SupplierBillLineView `json:"lines,omitempty"`
+	Payment               *PaymentDetail         `json:"payment,omitempty"`
 }
 
 type SupplierBillMatch struct {
@@ -211,7 +246,11 @@ func (s *Service) CreateSupplierBill(ctx context.Context, ws, user int64, in Cre
 		return SupplierBillView{}, errors.New("supplier invoice number, bill date and idempotency key are required")
 	}
 	if old, e := s.queries.GetSupplierBillByIdempotency(ctx, db.GetSupplierBillByIdempotencyParams{WorkspaceID: ws, IdempotencyKey: key}); e == nil {
-		return billDetailView(ctx, s.queries, old)
+		bv, err := billDetailView(ctx, s.queries, old)
+		if err != nil {
+			return SupplierBillView{}, err
+		}
+		return bv, nil
 	} else if !errors.Is(e, pgx.ErrNoRows) {
 		return SupplierBillView{}, e
 	}
@@ -444,6 +483,58 @@ func (s *Service) CreateSupplierBill(ctx context.Context, ws, user int64, in Cre
 				return SupplierBillView{}, err
 			}
 		}
+
+		var pmtDetail *PaymentDetail
+		if in.Approve {
+			approved, appErr := s.approveSupplierBillTx(ctx, q, ws, user, b, true, key+":approve")
+			if appErr != nil {
+				return SupplierBillView{}, appErr
+			}
+			b = approved
+		}
+
+		if in.Payment != nil {
+			if !in.Approve {
+				return SupplierBillView{}, errors.New("bill must be approved to record payment")
+			}
+			legs := in.Payment.PaymentLegs
+			if len(legs) == 0 {
+				legs = in.Payment.Legs
+			}
+			amtStr := strings.TrimSpace(in.Payment.Amount)
+			if amtStr == "" || amtStr == "0" {
+				amtStr = FormatMinorToMajor(b.TotalMinor, CurrencyExponent(b.Currency))
+			}
+			if len(legs) == 0 && in.Payment.AccountID > 0 {
+				legs = []PaymentLegInput{{MoneyAccountID: in.Payment.AccountID, AmountMajor: amtStr}}
+			} else if len(legs) == 1 && legs[0].AmountMajor == "" {
+				legs[0].AmountMajor = amtStr
+			}
+			var cid *int64
+			if b.SupplierID > 0 {
+				cid = &b.SupplierID
+			}
+			pmt, pmtErr := s.createPaymentInternal(ctx, q, ws, user, CreatePaymentInput{
+				Direction:        "outgoing",
+				PaymentDate:      in.Payment.PaymentDate,
+				TotalAmount:      amtStr,
+				Currency:         b.Currency,
+				CounterpartyID:   cid,
+				LinkedRecordType: "supplier_bill",
+				LinkedRecordID:   &b.ID,
+				Reference:        in.Payment.Reference,
+				PaymentLegs:      legs,
+				IdempotencyKey:   key + ":payment",
+			})
+			if pmtErr != nil {
+				return SupplierBillView{}, pmtErr
+			}
+			pmtDetail = &pmt
+			if latestBill, err := q.GetSupplierBill(ctx, db.GetSupplierBillParams{WorkspaceID: ws, ID: b.ID}); err == nil {
+				b = latestBill
+			}
+		}
+
 		view, err := billDetailView(ctx, q, b)
 		if err != nil {
 			return SupplierBillView{}, err
@@ -451,6 +542,7 @@ func (s *Service) CreateSupplierBill(ctx context.Context, ws, user int64, in Cre
 		if err := tx.Commit(ctx); err != nil {
 			return SupplierBillView{}, err
 		}
+		view.Payment = pmtDetail
 		return view, nil
 	}
 
@@ -505,7 +597,15 @@ func (s *Service) CreateSupplierBill(ctx context.Context, ws, user int64, in Cre
 	if in.OutletID != nil && *in.OutletID > 0 {
 		outletID = pgtype.Int8{Int64: *in.OutletID, Valid: true}
 	}
-	b, e := s.queries.CreateSupplierBillWithDetails(ctx, db.CreateSupplierBillWithDetailsParams{
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return SupplierBillView{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := s.queries.WithTx(tx)
+
+	b, e := q.CreateSupplierBillWithDetails(ctx, db.CreateSupplierBillWithDetailsParams{
 		WorkspaceID:           ws,
 		SupplierID:            in.SupplierID,
 		OutletID:              outletID,
@@ -527,7 +627,78 @@ func (s *Service) CreateSupplierBill(ctx context.Context, ws, user int64, in Cre
 	if e != nil {
 		return SupplierBillView{}, e
 	}
-	return billDetailView(ctx, s.queries, b)
+
+	for _, line := range in.Lines {
+		qty, qErr := decimal.NewFromString(line.Quantity)
+		if qErr != nil {
+			qty = decimal.NewFromInt(1)
+		}
+		uCost, _ := ParseMajorToMinor(line.UnitCost, exponent)
+		tTax, _ := parseOptionalNonNegativeMajor(line.TaxAmount, exponent)
+		tDisc, _ := parseOptionalNonNegativeMajor(line.Discount, exponent)
+		lTotal, _ := requestLineTotal(uCost, qty)
+		if _, err := q.CreateSupplierBillLine(ctx, db.CreateSupplierBillLineParams{
+			WorkspaceID:    ws,
+			SupplierBillID: b.ID,
+			Description:    line.Description,
+			Quantity:       qty,
+			UnitCostMinor:  uCost,
+			DiscountMinor:  tDisc,
+			TaxAmountMinor: tTax,
+			LineTotalMinor: lTotal,
+		}); err != nil {
+			return SupplierBillView{}, err
+		}
+	}
+
+	var pmtDetail *PaymentDetail
+	if in.Approve {
+		approved, appErr := s.approveSupplierBillTx(ctx, q, ws, user, b, true, key+":approve")
+		if appErr != nil {
+			return SupplierBillView{}, appErr
+		}
+		b = approved
+	}
+
+	if in.Payment != nil {
+		if !in.Approve {
+			return SupplierBillView{}, errors.New("bill must be approved to record payment")
+		}
+		legs := in.Payment.PaymentLegs
+		if len(legs) == 0 && in.Payment.AccountID > 0 {
+			legs = []PaymentLegInput{{MoneyAccountID: in.Payment.AccountID, AmountMajor: in.Payment.Amount}}
+		}
+		var cid *int64
+		if b.SupplierID > 0 {
+			cid = &b.SupplierID
+		}
+		pmt, pmtErr := s.createPaymentInternal(ctx, q, ws, user, CreatePaymentInput{
+			Direction:        "outgoing",
+			PaymentDate:      in.Payment.PaymentDate,
+			TotalAmount:      in.Payment.Amount,
+			Currency:         b.Currency,
+			CounterpartyID:   cid,
+			LinkedRecordType: "supplier_bill",
+			LinkedRecordID:   &b.ID,
+			Reference:        in.Payment.Reference,
+			PaymentLegs:      legs,
+			IdempotencyKey:   key + ":payment",
+		})
+		if pmtErr != nil {
+			return SupplierBillView{}, pmtErr
+		}
+		pmtDetail = &pmt
+	}
+
+	view, err := billDetailView(ctx, q, b)
+	if err != nil {
+		return SupplierBillView{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return SupplierBillView{}, err
+	}
+	view.Payment = pmtDetail
+	return view, nil
 }
 
 func withinVarianceTolerance(varianceMinor, baseMinor int64, toleranceBps int32) bool {
@@ -545,6 +716,172 @@ func withinVarianceTolerance(varianceMinor, baseMinor int64, toleranceBps int32)
 	lhs := new(big.Int).Mul(big.NewInt(absVar), big.NewInt(10_000))
 	rhs := new(big.Int).Mul(big.NewInt(baseMinor), big.NewInt(int64(toleranceBps)))
 	return lhs.Cmp(rhs) <= 0
+}
+
+func (s *Service) approveSupplierBillTx(ctx context.Context, q *db.Queries, ws, user int64, b db.SupplierBill, acceptVariance bool, key string) (db.SupplierBill, error) {
+	if b.Status != "draft" && b.Status != "disputed" {
+		return db.SupplierBill{}, ErrPurchaseRequestVersion
+	}
+	if b.GoodsReceiptID.Valid && b.VarianceMinor != 0 {
+		policy, pErr := q.GetProcurementApprovalPolicy(ctx, ws)
+		var tolBps int32
+		if pErr == nil {
+			tolBps = policy.PriceVarianceToleranceBps
+		}
+		grniBase := b.TotalMinor - b.TaxAmountMinor - b.VarianceMinor
+		if !withinVarianceTolerance(b.VarianceMinor, grniBase, tolBps) && !acceptVariance {
+			return db.SupplierBill{}, errors.New("supplier bill variance exceeds workspace tolerance; explicit variance acceptance required")
+		}
+	}
+	var updated db.SupplierBill
+	var e error
+	if b.Status == "draft" {
+		updated, e = q.ApproveSupplierBill(ctx, db.ApproveSupplierBillParams{WorkspaceID: ws, ID: b.ID, Version: b.Version, ApprovedByUserID: pgtype.Int8{Int64: user, Valid: true}})
+	} else {
+		updated, e = q.UpdateSupplierBillStatusCommand(ctx, db.UpdateSupplierBillStatusCommandParams{WorkspaceID: ws, ID: b.ID, Version: b.Version, Status: "approved", Column5: ""})
+	}
+	if e != nil {
+		return db.SupplierBill{}, e
+	}
+	entry, e := q.CreateLedgerEntry(ctx, db.CreateLedgerEntryParams{WorkspaceID: ws, SourceType: "supplier_bill", SourceID: b.ID, EntryDate: b.BillDate, Currency: b.Currency, CurrencyExponent: b.CurrencyExponent, Description: optionalPgText("Supplier bill approval")})
+	if e != nil {
+		return db.SupplierBill{}, e
+	}
+	if !b.GoodsReceiptID.Valid {
+		debitClass := b.ExpenseAccountClass
+		netAmount := b.TotalMinor - b.TaxAmountMinor
+		if netAmount > 0 {
+			if _, e = q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{LedgerEntryID: entry.ID, WorkspaceID: ws, AccountClass: debitClass, DebitMinor: netAmount, Description: optionalPgText("Direct supplier bill expense")}); e != nil {
+				return db.SupplierBill{}, e
+			}
+		}
+		if b.TaxAmountMinor > 0 {
+			if _, e = q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{LedgerEntryID: entry.ID, WorkspaceID: ws, AccountClass: "asset", DebitMinor: b.TaxAmountMinor, Description: optionalPgText("Input tax recoverable")}); e != nil {
+				return db.SupplierBill{}, e
+			}
+		}
+		if _, e = q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{LedgerEntryID: entry.ID, WorkspaceID: ws, AccountClass: "liability", CreditMinor: b.TotalMinor, Description: optionalPgText("Accounts Payable")}); e != nil {
+			return db.SupplierBill{}, e
+		}
+	} else {
+		grniPortion := b.TotalMinor - b.TaxAmountMinor - b.VarianceMinor
+		if grniPortion > 0 {
+			if _, e = q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{LedgerEntryID: entry.ID, WorkspaceID: ws, AccountClass: "liability", DebitMinor: grniPortion, Description: optionalPgText("Clear GRNI")}); e != nil {
+				return db.SupplierBill{}, e
+			}
+		}
+		if b.TaxAmountMinor > 0 {
+			if _, e = q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{LedgerEntryID: entry.ID, WorkspaceID: ws, AccountClass: "asset", DebitMinor: b.TaxAmountMinor, Description: optionalPgText("Input tax recoverable")}); e != nil {
+				return db.SupplierBill{}, e
+			}
+		}
+		if b.VarianceMinor > 0 {
+			if _, e = q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{LedgerEntryID: entry.ID, WorkspaceID: ws, AccountClass: "expense", DebitMinor: b.VarianceMinor, Description: optionalPgText("Purchase price variance")}); e != nil {
+				return db.SupplierBill{}, e
+			}
+		} else if b.VarianceMinor < 0 {
+			if _, e = q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{LedgerEntryID: entry.ID, WorkspaceID: ws, AccountClass: "expense", CreditMinor: -b.VarianceMinor, Description: optionalPgText("Favorable purchase price variance")}); e != nil {
+				return db.SupplierBill{}, e
+			}
+		}
+		if _, e = q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{LedgerEntryID: entry.ID, WorkspaceID: ws, AccountClass: "liability", CreditMinor: b.TotalMinor, Description: optionalPgText("Accounts Payable")}); e != nil {
+			return db.SupplierBill{}, e
+		}
+	}
+	if key != "" {
+		_ = q.CreateSupplierBillCommand(ctx, db.CreateSupplierBillCommandParams{WorkspaceID: ws, SupplierBillID: b.ID, Command: "approve", ExpectedVersion: b.Version, IdempotencyKey: key, ActorUserID: user})
+	}
+	return updated, nil
+}
+
+func (s *Service) createSupplierBillForReceiptTx(ctx context.Context, q *db.Queries, ws, user, receiptID int64, invoice string, billDate time.Time, due pgtype.Date, key string) (db.SupplierBill, error) {
+	source, sourceErr := q.GetReceiptBillSource(ctx, db.GetReceiptBillSourceParams{WorkspaceID: ws, ID: receiptID})
+	if errors.Is(sourceErr, pgx.ErrNoRows) {
+		return db.SupplierBill{}, ErrNotFound
+	}
+	if sourceErr != nil || !source.SupplierID.Valid {
+		return db.SupplierBill{}, errors.New("receipt must have a supplier before billing")
+	}
+	receiptLines, err := q.GetGoodsReceiptLinesByReceipt(ctx, db.GetGoodsReceiptLinesByReceiptParams{
+		WorkspaceID:    ws,
+		GoodsReceiptID: receiptID,
+	})
+	if err != nil {
+		return db.SupplierBill{}, err
+	}
+	if len(receiptLines) == 0 {
+		return db.SupplierBill{}, errors.New("goods receipt has no billable lines")
+	}
+	var totalMinor, grniExpected int64
+	prepared := make([]preparedBillLine, 0, len(receiptLines))
+	for _, rl := range receiptLines {
+		if rl.AcceptedQuantity.IsZero() {
+			continue
+		}
+		desc := "Receipt item"
+		if rl.Description.Valid && strings.TrimSpace(rl.Description.String) != "" {
+			desc = rl.Description.String
+		}
+		totalMinor += rl.LineTotalMinor
+		grniExpected += rl.LineTotalMinor
+		prepared = append(prepared, preparedBillLine{
+			grLineID:       pgtype.Int8{Int64: rl.ID, Valid: true},
+			poLineID:       rl.PurchaseOrderLineID,
+			description:    desc,
+			qty:            rl.AcceptedQuantity,
+			unitCostMinor:  rl.UnitCostMinor,
+			lineTotalMinor: rl.LineTotalMinor,
+			grniPortion:    rl.LineTotalMinor,
+		})
+	}
+	varianceMinor := totalMinor - grniExpected
+	matchStatus := "exact"
+	if varianceMinor > 0 {
+		matchStatus = "overbilled"
+	} else if varianceMinor < 0 {
+		matchStatus = "price_or_quantity_variance"
+	}
+	b, err := q.CreateSupplierBillWithDetails(ctx, db.CreateSupplierBillWithDetailsParams{
+		WorkspaceID:           ws,
+		GoodsReceiptID:        pgtype.Int8{Int64: receiptID, Valid: true},
+		SupplierID:            source.SupplierID.Int64,
+		OutletID:              source.OutletID,
+		SupplierInvoiceNumber: invoice,
+		BillDate:              pgtype.Date{Time: billDate, Valid: true},
+		DueDate:               due,
+		Currency:              source.Currency,
+		CurrencyExponent:      source.CurrencyExponent,
+		TotalMinor:            totalMinor,
+		TaxAmountMinor:        0,
+		DiscountMinor:         0,
+		VarianceMinor:         varianceMinor,
+		MatchStatus:           matchStatus,
+		BillType:              "receipt",
+		ExpenseAccountClass:   "expense",
+		Description:           optionalPgText(fmt.Sprintf("Bill for receipt #%d", receiptID)),
+		IdempotencyKey:        key,
+		CreatedByUserID:       user,
+	})
+	if err != nil {
+		return db.SupplierBill{}, err
+	}
+	for _, pl := range prepared {
+		if _, err := q.CreateSupplierBillLine(ctx, db.CreateSupplierBillLineParams{
+			WorkspaceID:         ws,
+			SupplierBillID:      b.ID,
+			GoodsReceiptLineID:  pl.grLineID,
+			PurchaseOrderLineID: pl.poLineID,
+			Description:         pl.description,
+			Quantity:            pl.qty,
+			UnitCostMinor:       pl.unitCostMinor,
+			DiscountMinor:       pl.discountMinor,
+			TaxAmountMinor:      pl.taxAmountMinor,
+			LineTotalMinor:      pl.lineTotalMinor,
+		}); err != nil {
+			return db.SupplierBill{}, err
+		}
+	}
+	return b, nil
 }
 
 func (s *Service) ApproveSupplierBill(ctx context.Context, ws, user, id int64, in SupplierBillCommandInput) (SupplierBillView, error) {
@@ -573,77 +910,12 @@ func (s *Service) ApproveSupplierBill(ctx context.Context, ws, user, id int64, i
 	} else if !errors.Is(e, pgx.ErrNoRows) {
 		return SupplierBillView{}, e
 	}
-	if b.Version != in.ExpectedVersion || (b.Status != "draft" && b.Status != "disputed") {
+	if b.Version != in.ExpectedVersion {
 		return SupplierBillView{}, ErrPurchaseRequestVersion
 	}
-	if b.GoodsReceiptID.Valid && b.VarianceMinor != 0 {
-		policy, pErr := q.GetProcurementApprovalPolicy(ctx, ws)
-		var tolBps int32
-		if pErr == nil {
-			tolBps = policy.PriceVarianceToleranceBps
-		}
-		grniBase := b.TotalMinor - b.TaxAmountMinor - b.VarianceMinor
-		if !withinVarianceTolerance(b.VarianceMinor, grniBase, tolBps) && !in.AcceptVariance {
-			return SupplierBillView{}, errors.New("supplier bill variance exceeds workspace tolerance; explicit variance acceptance required")
-		}
-	}
-	// Approve from draft or disputed
-	var updated db.SupplierBill
-	if b.Status == "draft" {
-		updated, e = q.ApproveSupplierBill(ctx, db.ApproveSupplierBillParams{WorkspaceID: ws, ID: id, Version: b.Version, ApprovedByUserID: pgtype.Int8{Int64: user, Valid: true}})
-	} else {
-		updated, e = q.UpdateSupplierBillStatusCommand(ctx, db.UpdateSupplierBillStatusCommandParams{WorkspaceID: ws, ID: id, Version: b.Version, Status: "approved", Column5: ""})
-	}
-	if e != nil {
-		return SupplierBillView{}, e
-	}
-	entry, e := q.CreateLedgerEntry(ctx, db.CreateLedgerEntryParams{WorkspaceID: ws, SourceType: "supplier_bill", SourceID: id, EntryDate: b.BillDate, Currency: b.Currency, CurrencyExponent: b.CurrencyExponent, Description: optionalPgText("Supplier bill approval")})
-	if e != nil {
-		return SupplierBillView{}, e
-	}
-	if !b.GoodsReceiptID.Valid {
-		debitClass := b.ExpenseAccountClass
-		netAmount := b.TotalMinor - b.TaxAmountMinor
-		if netAmount > 0 {
-			if _, e = q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{LedgerEntryID: entry.ID, WorkspaceID: ws, AccountClass: debitClass, DebitMinor: netAmount, Description: optionalPgText("Direct supplier bill expense")}); e != nil {
-				return SupplierBillView{}, e
-			}
-		}
-		if b.TaxAmountMinor > 0 {
-			if _, e = q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{LedgerEntryID: entry.ID, WorkspaceID: ws, AccountClass: "asset", DebitMinor: b.TaxAmountMinor, Description: optionalPgText("Input tax recoverable")}); e != nil {
-				return SupplierBillView{}, e
-			}
-		}
-		if _, e = q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{LedgerEntryID: entry.ID, WorkspaceID: ws, AccountClass: "liability", CreditMinor: b.TotalMinor, Description: optionalPgText("Accounts Payable")}); e != nil {
-			return SupplierBillView{}, e
-		}
-	} else {
-		grniPortion := b.TotalMinor - b.TaxAmountMinor - b.VarianceMinor
-		if grniPortion > 0 {
-			if _, e = q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{LedgerEntryID: entry.ID, WorkspaceID: ws, AccountClass: "liability", DebitMinor: grniPortion, Description: optionalPgText("Clear GRNI")}); e != nil {
-				return SupplierBillView{}, e
-			}
-		}
-		if b.TaxAmountMinor > 0 {
-			if _, e = q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{LedgerEntryID: entry.ID, WorkspaceID: ws, AccountClass: "asset", DebitMinor: b.TaxAmountMinor, Description: optionalPgText("Input tax recoverable")}); e != nil {
-				return SupplierBillView{}, e
-			}
-		}
-		if b.VarianceMinor > 0 {
-			if _, e = q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{LedgerEntryID: entry.ID, WorkspaceID: ws, AccountClass: "expense", DebitMinor: b.VarianceMinor, Description: optionalPgText("Purchase price variance")}); e != nil {
-				return SupplierBillView{}, e
-			}
-		} else if b.VarianceMinor < 0 {
-			if _, e = q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{LedgerEntryID: entry.ID, WorkspaceID: ws, AccountClass: "expense", CreditMinor: -b.VarianceMinor, Description: optionalPgText("Favorable purchase price variance")}); e != nil {
-				return SupplierBillView{}, e
-			}
-		}
-		if _, e = q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{LedgerEntryID: entry.ID, WorkspaceID: ws, AccountClass: "liability", CreditMinor: b.TotalMinor, Description: optionalPgText("Accounts Payable")}); e != nil {
-			return SupplierBillView{}, e
-		}
-	}
-	if e = q.CreateSupplierBillCommand(ctx, db.CreateSupplierBillCommandParams{WorkspaceID: ws, SupplierBillID: id, Command: "approve", ExpectedVersion: b.Version, IdempotencyKey: key, ActorUserID: user}); e != nil {
-		return SupplierBillView{}, e
+	updated, err := s.approveSupplierBillTx(ctx, q, ws, user, b, in.AcceptVariance, key)
+	if err != nil {
+		return SupplierBillView{}, err
 	}
 	view, err := billDetailView(ctx, q, updated)
 	if err != nil {
@@ -653,6 +925,105 @@ func (s *Service) ApproveSupplierBill(ctx context.Context, ws, user, id int64, i
 		return SupplierBillView{}, e
 	}
 	return view, nil
+}
+
+func (s *Service) PayGoodsReceipt(ctx context.Context, ws, user, receiptID int64, in GoodsReceiptPaymentInput) (GoodsReceiptPaymentResult, error) {
+	key := strings.TrimSpace(in.IdempotencyKey)
+	if receiptID <= 0 || key == "" {
+		return GoodsReceiptPaymentResult{}, errors.New("receipt id and idempotency key are required")
+	}
+	date, err := time.Parse("2006-01-02", strings.TrimSpace(in.PaymentDate))
+	if err != nil {
+		return GoodsReceiptPaymentResult{}, errors.New("payment date must be YYYY-MM-DD")
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return GoodsReceiptPaymentResult{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := s.queries.WithTx(tx)
+
+	receipt, err := s.GetGoodsReceipt(ctx, ws, receiptID)
+	if err != nil {
+		return GoodsReceiptPaymentResult{}, err
+	}
+
+	existingBill, err := q.GetSupplierBillByGoodsReceiptID(ctx, db.GetSupplierBillByGoodsReceiptIDParams{
+		WorkspaceID:    ws,
+		GoodsReceiptID: pgtype.Int8{Int64: receiptID, Valid: true},
+	})
+	var bill db.SupplierBill
+	if errors.Is(err, pgx.ErrNoRows) {
+		invoiceNum := fmt.Sprintf("INV-GR-%d", receiptID)
+		createdBill, bErr := s.createSupplierBillForReceiptTx(ctx, q, ws, user, receiptID, invoiceNum, date, pgtype.Date{Time: date, Valid: true}, key+":bill")
+		if bErr != nil {
+			return GoodsReceiptPaymentResult{}, bErr
+		}
+		bill = createdBill
+	} else if err != nil {
+		return GoodsReceiptPaymentResult{}, err
+	} else {
+		bill = existingBill
+	}
+
+	if bill.Status == "draft" || bill.Status == "disputed" {
+		approved, appErr := s.approveSupplierBillTx(ctx, q, ws, user, bill, true, key+":approve")
+		if appErr != nil {
+			return GoodsReceiptPaymentResult{}, appErr
+		}
+		bill = approved
+	} else if bill.Status != "approved" && bill.Status != "partially_paid" {
+		return GoodsReceiptPaymentResult{}, fmt.Errorf("cannot pay bill in status %s", bill.Status)
+	}
+
+	legs := in.PaymentLegs
+	if len(legs) == 0 {
+		legs = in.Legs
+	}
+	amtStr := strings.TrimSpace(in.Amount)
+	if amtStr == "" || amtStr == "0" {
+		amtStr = FormatMinorToMajor(bill.TotalMinor, CurrencyExponent(bill.Currency))
+	}
+	if len(legs) == 0 && in.AccountID > 0 {
+		legs = []PaymentLegInput{{MoneyAccountID: in.AccountID, AmountMajor: amtStr}}
+	} else if len(legs) == 1 && legs[0].AmountMajor == "" {
+		legs[0].AmountMajor = amtStr
+	}
+
+	var counterpartyID *int64
+	if receipt.SupplierID != nil && *receipt.SupplierID > 0 {
+		counterpartyID = receipt.SupplierID
+	} else if bill.SupplierID > 0 {
+		counterpartyID = &bill.SupplierID
+	}
+
+	pmt, pmtErr := s.createPaymentInternal(ctx, q, ws, user, CreatePaymentInput{
+		Direction:        "outgoing",
+		PaymentDate:      in.PaymentDate,
+		TotalAmount:      amtStr,
+		Currency:         bill.Currency,
+		CounterpartyID:   counterpartyID,
+		LinkedRecordType: "supplier_bill",
+		LinkedRecordID:   &bill.ID,
+		Reference:        in.Reference,
+		PaymentLegs:      legs,
+		IdempotencyKey:   key,
+	})
+	if pmtErr != nil {
+		return GoodsReceiptPaymentResult{}, pmtErr
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return GoodsReceiptPaymentResult{}, err
+	}
+
+	bView, _ := s.GetSupplierBill(ctx, ws, bill.ID)
+	return GoodsReceiptPaymentResult{
+		Receipt: receipt.GoodsReceiptView,
+		Bill:    bView,
+		Payment: pmt,
+	}, nil
 }
 
 func (s *Service) TransitionSupplierBill(ctx context.Context, ws, user, id int64, command string, in SupplierBillCommandInput) (SupplierBillView, error) {

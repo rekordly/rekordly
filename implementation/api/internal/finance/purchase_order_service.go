@@ -95,7 +95,24 @@ type CreatePurchaseOrderInput struct {
 	Notes             string                   `json:"notes"`
 	Currency          string                   `json:"currency"`
 	Lines             []PurchaseOrderLineInput `json:"lines"`
+	Issue             bool                     `json:"issue"`
+	Share             bool                     `json:"share"`
+	ForceNewLink      bool                     `json:"force_new_link"`
+	CanApprove        bool                     `json:"-"`
 	IdempotencyKey    string                   `json:"idempotency_key"`
+}
+
+type IssuePurchaseOrderInput struct {
+	Share          bool   `json:"share"`
+	ForceNewLink   bool   `json:"force_new_link"`
+	IdempotencyKey string `json:"idempotency_key"`
+}
+
+type IssuePurchaseOrderResult struct {
+	Order     PurchaseOrderView       `json:"order"`
+	StoppedAt string                  `json:"stopped_at,omitempty"`
+	Message   string                  `json:"message,omitempty"`
+	Share     *PurchaseOrderShareView `json:"share,omitempty"`
 }
 
 type UpdatePurchaseOrderDraftInput struct {
@@ -401,6 +418,248 @@ func (s *Service) AdvancePurchaseOrder(ctx context.Context, ws, user, id int64, 
 	return purchaseOrderView(updated), nil
 }
 
+// IssuePurchaseOrder transitions a purchase order (draft -> submitted -> approved -> issued)
+// in one transaction. If canApprove is false, it advances as far as submitted and stops.
+// If in.Share is true, it returns the active share link (reusing existing unless force_new_link).
+func (s *Service) IssuePurchaseOrder(ctx context.Context, ws, user, id int64, canApprove bool, in IssuePurchaseOrderInput) (IssuePurchaseOrderResult, error) {
+	key := strings.TrimSpace(in.IdempotencyKey)
+	if id <= 0 {
+		return IssuePurchaseOrderResult{}, errors.New("purchase order id is required")
+	}
+
+	if key != "" {
+		if previous, err := s.queries.GetPurchaseOrderCommand(ctx, db.GetPurchaseOrderCommandParams{WorkspaceID: ws, IdempotencyKey: key}); err == nil {
+			if previous.PurchaseOrderID != id || previous.Command != "issued" {
+				return IssuePurchaseOrderResult{}, ErrDuplicateIdempotent
+			}
+			po, getErr := s.GetPurchaseOrder(ctx, ws, id)
+			if getErr != nil {
+				return IssuePurchaseOrderResult{}, getErr
+			}
+			var shareView *PurchaseOrderShareView
+			if in.Share && (po.Status == "issued" || po.Status == "acknowledged" || po.Status == "partially_received" || po.Status == "fully_received") {
+				sv, err := s.CreatePurchaseOrderShare(ctx, ws, user, id, CreatePurchaseOrderShareInput{
+					ForceNewLink: in.ForceNewLink,
+				})
+				if err == nil {
+					shareView = &sv
+				}
+			}
+			return IssuePurchaseOrderResult{Order: po, Share: shareView}, nil
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			return IssuePurchaseOrderResult{}, err
+		}
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return IssuePurchaseOrderResult{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := s.queries.WithTx(tx)
+
+	po, err := q.GetPurchaseOrderForUpdate(ctx, db.GetPurchaseOrderForUpdateParams{WorkspaceID: ws, ID: id})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return IssuePurchaseOrderResult{}, ErrNotFound
+	}
+	if err != nil {
+		return IssuePurchaseOrderResult{}, err
+	}
+
+	if po.Status == "cancelled" || po.Status == "closed" {
+		return IssuePurchaseOrderResult{}, errors.New("cannot issue a cancelled or closed purchase order")
+	}
+
+	curVersion := po.Version
+
+	if po.Status == "draft" {
+		if !canApprove {
+			sub, e := q.AdvancePurchaseOrder(ctx, db.AdvancePurchaseOrderParams{
+				WorkspaceID: ws, ID: id, Version: curVersion, Status: "submitted",
+				ApprovedByUserID: pgtype.Int8{}, OrderNumber: pgtype.Text{},
+			})
+			if e != nil {
+				return IssuePurchaseOrderResult{}, e
+			}
+			if key != "" {
+				if e = q.CreatePurchaseOrderCommand(ctx, db.CreatePurchaseOrderCommandParams{
+					WorkspaceID: ws, PurchaseOrderID: id, Command: "issued", ExpectedVersion: curVersion, IdempotencyKey: key, ActorUserID: user,
+				}); e != nil {
+					return IssuePurchaseOrderResult{}, e
+				}
+			}
+			if _, e = q.CreatePurchaseOrderEvent(ctx, db.CreatePurchaseOrderEventParams{
+				WorkspaceID: ws, PurchaseOrderID: id, EventType: "submitted", OrderVersion: curVersion, ActorUserID: user,
+			}); e != nil {
+				return IssuePurchaseOrderResult{}, e
+			}
+			if e = tx.Commit(ctx); e != nil {
+				return IssuePurchaseOrderResult{}, e
+			}
+			view, e := s.GetPurchaseOrder(ctx, ws, id)
+			if e != nil {
+				view = purchaseOrderView(sub)
+			}
+			return IssuePurchaseOrderResult{
+				Order:     view,
+				StoppedAt: "submitted",
+				Message:   "Sent for approval. Someone who can approve orders must send it.",
+			}, nil
+		}
+
+		sub, e := q.AdvancePurchaseOrder(ctx, db.AdvancePurchaseOrderParams{
+			WorkspaceID: ws, ID: id, Version: curVersion, Status: "submitted",
+			ApprovedByUserID: pgtype.Int8{}, OrderNumber: pgtype.Text{},
+		})
+		if e != nil {
+			return IssuePurchaseOrderResult{}, e
+		}
+		if _, e = q.CreatePurchaseOrderEvent(ctx, db.CreatePurchaseOrderEventParams{
+			WorkspaceID: ws, PurchaseOrderID: id, EventType: "submitted", OrderVersion: curVersion, ActorUserID: user,
+		}); e != nil {
+			return IssuePurchaseOrderResult{}, e
+		}
+		curVersion = sub.Version
+
+		app, e := q.AdvancePurchaseOrder(ctx, db.AdvancePurchaseOrderParams{
+			WorkspaceID: ws, ID: id, Version: curVersion, Status: "approved",
+			ApprovedByUserID: pgtype.Int8{Int64: user, Valid: true}, OrderNumber: pgtype.Text{},
+		})
+		if e != nil {
+			return IssuePurchaseOrderResult{}, e
+		}
+		if _, e = q.CreatePurchaseOrderEvent(ctx, db.CreatePurchaseOrderEventParams{
+			WorkspaceID: ws, PurchaseOrderID: id, EventType: "approved", OrderVersion: curVersion, ActorUserID: user,
+		}); e != nil {
+			return IssuePurchaseOrderResult{}, e
+		}
+		curVersion = app.Version
+
+		n, e := q.NextPurchaseOrderSequence(ctx, ws)
+		if e != nil {
+			return IssuePurchaseOrderResult{}, e
+		}
+		number := pgtype.Text{String: fmt.Sprintf("PO-%06d", n), Valid: true}
+		iss, e := q.AdvancePurchaseOrder(ctx, db.AdvancePurchaseOrderParams{
+			WorkspaceID: ws, ID: id, Version: curVersion, Status: "issued",
+			ApprovedByUserID: pgtype.Int8{Int64: user, Valid: true}, OrderNumber: number,
+		})
+		if e != nil {
+			return IssuePurchaseOrderResult{}, e
+		}
+		if _, e = q.CreatePurchaseOrderEvent(ctx, db.CreatePurchaseOrderEventParams{
+			WorkspaceID: ws, PurchaseOrderID: id, EventType: "issued", OrderVersion: curVersion, ActorUserID: user,
+		}); e != nil {
+			return IssuePurchaseOrderResult{}, e
+		}
+		curVersion = iss.Version
+		po = iss
+	} else if po.Status == "submitted" {
+		if !canApprove {
+			_ = tx.Rollback(ctx)
+			view, e := s.GetPurchaseOrder(ctx, ws, id)
+			if e != nil {
+				return IssuePurchaseOrderResult{}, e
+			}
+			return IssuePurchaseOrderResult{
+				Order:     view,
+				StoppedAt: "submitted",
+				Message:   "Sent for approval. Someone who can approve orders must send it.",
+			}, nil
+		}
+		app, e := q.AdvancePurchaseOrder(ctx, db.AdvancePurchaseOrderParams{
+			WorkspaceID: ws, ID: id, Version: curVersion, Status: "approved",
+			ApprovedByUserID: pgtype.Int8{Int64: user, Valid: true}, OrderNumber: pgtype.Text{},
+		})
+		if e != nil {
+			return IssuePurchaseOrderResult{}, e
+		}
+		if _, e = q.CreatePurchaseOrderEvent(ctx, db.CreatePurchaseOrderEventParams{
+			WorkspaceID: ws, PurchaseOrderID: id, EventType: "approved", OrderVersion: curVersion, ActorUserID: user,
+		}); e != nil {
+			return IssuePurchaseOrderResult{}, e
+		}
+		curVersion = app.Version
+
+		n, e := q.NextPurchaseOrderSequence(ctx, ws)
+		if e != nil {
+			return IssuePurchaseOrderResult{}, e
+		}
+		number := pgtype.Text{String: fmt.Sprintf("PO-%06d", n), Valid: true}
+		iss, e := q.AdvancePurchaseOrder(ctx, db.AdvancePurchaseOrderParams{
+			WorkspaceID: ws, ID: id, Version: curVersion, Status: "issued",
+			ApprovedByUserID: pgtype.Int8{Int64: user, Valid: true}, OrderNumber: number,
+		})
+		if e != nil {
+			return IssuePurchaseOrderResult{}, e
+		}
+		if _, e = q.CreatePurchaseOrderEvent(ctx, db.CreatePurchaseOrderEventParams{
+			WorkspaceID: ws, PurchaseOrderID: id, EventType: "issued", OrderVersion: curVersion, ActorUserID: user,
+		}); e != nil {
+			return IssuePurchaseOrderResult{}, e
+		}
+		curVersion = iss.Version
+		po = iss
+	} else if po.Status == "approved" {
+		n, e := q.NextPurchaseOrderSequence(ctx, ws)
+		if e != nil {
+			return IssuePurchaseOrderResult{}, e
+		}
+		number := pgtype.Text{String: fmt.Sprintf("PO-%06d", n), Valid: true}
+		iss, e := q.AdvancePurchaseOrder(ctx, db.AdvancePurchaseOrderParams{
+			WorkspaceID: ws, ID: id, Version: curVersion, Status: "issued",
+			ApprovedByUserID: pgtype.Int8{Int64: user, Valid: true}, OrderNumber: number,
+		})
+		if e != nil {
+			return IssuePurchaseOrderResult{}, e
+		}
+		if _, e = q.CreatePurchaseOrderEvent(ctx, db.CreatePurchaseOrderEventParams{
+			WorkspaceID: ws, PurchaseOrderID: id, EventType: "issued", OrderVersion: curVersion, ActorUserID: user,
+		}); e != nil {
+			return IssuePurchaseOrderResult{}, e
+		}
+		curVersion = iss.Version
+		po = iss
+	}
+
+	if key != "" {
+		if e := q.CreatePurchaseOrderCommand(ctx, db.CreatePurchaseOrderCommandParams{
+			WorkspaceID: ws, PurchaseOrderID: id, Command: "issued", ExpectedVersion: curVersion, IdempotencyKey: key, ActorUserID: user,
+		}); e != nil {
+			var pgErr *pgconn.PgError
+			if errors.As(e, &pgErr) && pgErr.Code == "23505" {
+				return IssuePurchaseOrderResult{}, ErrDuplicateIdempotent
+			}
+			return IssuePurchaseOrderResult{}, e
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return IssuePurchaseOrderResult{}, err
+	}
+
+	view, err := s.GetPurchaseOrder(ctx, ws, id)
+	if err != nil {
+		view = purchaseOrderView(po)
+	}
+
+	var shareView *PurchaseOrderShareView
+	if in.Share && (po.Status == "issued" || po.Status == "acknowledged" || po.Status == "partially_received" || po.Status == "fully_received") {
+		sv, err := s.CreatePurchaseOrderShare(ctx, ws, user, id, CreatePurchaseOrderShareInput{
+			ForceNewLink: in.ForceNewLink,
+		})
+		if err != nil {
+			return IssuePurchaseOrderResult{}, fmt.Errorf("create share failed: %w", err)
+		}
+		shareView = &sv
+	}
+
+	return IssuePurchaseOrderResult{
+		Order: view,
+		Share: shareView,
+	}, nil
+}
+
 // ResolvePurchaseOrder closes only an operational commitment. It never
 // deletes or reverses receipts, bills, payments, inventory movements, or GL.
 // Any financial correction must use its own controlled document.
@@ -670,12 +929,70 @@ func (s *Service) CreateDirectPurchaseOrder(ctx context.Context, ws, user int64,
 			return PurchaseOrderView{}, err
 		}
 	}
+	if in.Issue {
+		curVer := po.Version
+		if !in.CanApprove {
+			sub, e := q.AdvancePurchaseOrder(ctx, db.AdvancePurchaseOrderParams{
+				WorkspaceID: ws, ID: po.ID, Version: curVer, Status: "submitted",
+				ApprovedByUserID: pgtype.Int8{}, OrderNumber: pgtype.Text{},
+			})
+			if e != nil {
+				return PurchaseOrderView{}, e
+			}
+			_, _ = q.CreatePurchaseOrderEvent(ctx, db.CreatePurchaseOrderEventParams{
+				WorkspaceID: ws, PurchaseOrderID: po.ID, EventType: "submitted", OrderVersion: curVer, ActorUserID: user,
+			})
+			po = sub
+		} else {
+			sub, e := q.AdvancePurchaseOrder(ctx, db.AdvancePurchaseOrderParams{
+				WorkspaceID: ws, ID: po.ID, Version: curVer, Status: "submitted",
+				ApprovedByUserID: pgtype.Int8{}, OrderNumber: pgtype.Text{},
+			})
+			if e != nil {
+				return PurchaseOrderView{}, e
+			}
+			_, _ = q.CreatePurchaseOrderEvent(ctx, db.CreatePurchaseOrderEventParams{
+				WorkspaceID: ws, PurchaseOrderID: po.ID, EventType: "submitted", OrderVersion: curVer, ActorUserID: user,
+			})
+			app, e := q.AdvancePurchaseOrder(ctx, db.AdvancePurchaseOrderParams{
+				WorkspaceID: ws, ID: po.ID, Version: sub.Version, Status: "approved",
+				ApprovedByUserID: pgtype.Int8{Int64: user, Valid: true}, OrderNumber: pgtype.Text{},
+			})
+			if e != nil {
+				return PurchaseOrderView{}, e
+			}
+			_, _ = q.CreatePurchaseOrderEvent(ctx, db.CreatePurchaseOrderEventParams{
+				WorkspaceID: ws, PurchaseOrderID: po.ID, EventType: "approved", OrderVersion: sub.Version, ActorUserID: user,
+			})
+			n, e := q.NextPurchaseOrderSequence(ctx, ws)
+			if e != nil {
+				return PurchaseOrderView{}, e
+			}
+			number := pgtype.Text{String: fmt.Sprintf("PO-%06d", n), Valid: true}
+			iss, e := q.AdvancePurchaseOrder(ctx, db.AdvancePurchaseOrderParams{
+				WorkspaceID: ws, ID: po.ID, Version: app.Version, Status: "issued",
+				ApprovedByUserID: pgtype.Int8{Int64: user, Valid: true}, OrderNumber: number,
+			})
+			if e != nil {
+				return PurchaseOrderView{}, e
+			}
+			_, _ = q.CreatePurchaseOrderEvent(ctx, db.CreatePurchaseOrderEventParams{
+				WorkspaceID: ws, PurchaseOrderID: po.ID, EventType: "issued", OrderVersion: app.Version, ActorUserID: user,
+			})
+			po = iss
+		}
+	}
 	view, err := purchaseOrderDetail(ctx, q, po)
 	if err != nil {
 		return PurchaseOrderView{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return PurchaseOrderView{}, err
+	}
+	if in.Issue && in.Share && po.Status == "issued" {
+		_, _ = s.CreatePurchaseOrderShare(ctx, ws, user, po.ID, CreatePurchaseOrderShareInput{
+			ForceNewLink: in.ForceNewLink,
+		})
 	}
 	return view, nil
 }

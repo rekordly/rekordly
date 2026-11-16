@@ -30,6 +30,10 @@ type CreateGoodsReceiptInput struct {
 	LandedCost        string                  `json:"landed_cost"`
 	ReceivedOn        string                  `json:"received_on" binding:"required"`
 	Lines             []GoodsReceiptLineInput `json:"lines" binding:"required"`
+	IssueOrder        bool                    `json:"issue_order"`
+	CanApprovePO      bool                    `json:"-"`
+	Bill              *ReceiptBillInput       `json:"bill,omitempty"`
+	Payment           *ReceiptPaymentInput    `json:"payment,omitempty"`
 	IdempotencyKey    string                  `json:"idempotency_key"`
 }
 
@@ -47,27 +51,29 @@ type GoodsReceiptLineInput struct {
 }
 
 type GoodsReceiptView struct {
-	ID                  int64   `json:"id"`
-	PurchaseOrderID     int64   `json:"purchase_order_id"`
-	SupplierID          *int64  `json:"supplier_id,omitempty"`
-	LocationID          *int64  `json:"location_id,omitempty"`
-	SourceType          string  `json:"source_type"`
-	Reason              *string `json:"reason,omitempty"`
-	PurchaseOrderStatus string  `json:"purchase_order_status"`
-	Status              string  `json:"status,omitempty"`
-	BillID              *int64  `json:"bill_id,omitempty"`
-	BillStatus          string  `json:"bill_status,omitempty"`
-	BillVersion         int32   `json:"bill_version,omitempty"`
-	ReceivedOn          string  `json:"received_on"`
-	Currency            string  `json:"currency,omitempty"`
-	CurrencyExponent    int32   `json:"currency_exponent,omitempty"`
-	GoodsTotalMinor     string  `json:"goods_total_minor,omitempty"`
-	PaidMinor           string  `json:"paid_minor,omitempty"`
-	OutstandingMinor    string  `json:"outstanding_minor,omitempty"`
-	TotalMinor          string  `json:"total_minor"`
-	LandedCostMinor     string  `json:"landed_cost_minor,omitempty"`
-	DeliveryReference   *string `json:"delivery_reference,omitempty"`
-	ServiceAccepted     bool    `json:"service_accepted"`
+	ID                  int64             `json:"id"`
+	PurchaseOrderID     int64             `json:"purchase_order_id"`
+	SupplierID          *int64            `json:"supplier_id,omitempty"`
+	LocationID          *int64            `json:"location_id,omitempty"`
+	SourceType          string            `json:"source_type"`
+	Reason              *string           `json:"reason,omitempty"`
+	PurchaseOrderStatus string            `json:"purchase_order_status"`
+	Status              string            `json:"status,omitempty"`
+	BillID              *int64            `json:"bill_id,omitempty"`
+	BillStatus          string            `json:"bill_status,omitempty"`
+	BillVersion         int32             `json:"bill_version,omitempty"`
+	ReceivedOn          string            `json:"received_on"`
+	Currency            string            `json:"currency,omitempty"`
+	CurrencyExponent    int32             `json:"currency_exponent,omitempty"`
+	GoodsTotalMinor     string            `json:"goods_total_minor,omitempty"`
+	PaidMinor           string            `json:"paid_minor,omitempty"`
+	OutstandingMinor    string            `json:"outstanding_minor,omitempty"`
+	TotalMinor          string            `json:"total_minor"`
+	LandedCostMinor     string            `json:"landed_cost_minor,omitempty"`
+	DeliveryReference   *string           `json:"delivery_reference,omitempty"`
+	ServiceAccepted     bool              `json:"service_accepted"`
+	Bill                *SupplierBillView `json:"bill,omitempty"`
+	Payment             *PaymentDetail    `json:"payment,omitempty"`
 }
 
 type GoodsReceiptLineView struct {
@@ -372,7 +378,7 @@ func (s *Service) CreateGoodsReceipt(ctx context.Context, ws, user int64, in Cre
 		if existingPO != in.PurchaseOrderID {
 			return GoodsReceiptView{}, ErrDuplicateIdempotent
 		}
-		return GoodsReceiptView{
+		view := GoodsReceiptView{
 			ID:                existing.ID,
 			PurchaseOrderID:   existingPO,
 			SupplierID:        nullableInt8(existing.SupplierID),
@@ -384,7 +390,8 @@ func (s *Service) CreateGoodsReceipt(ctx context.Context, ws, user int64, in Cre
 			LandedCostMinor:   fmt.Sprint(existing.LandedCostMinor),
 			DeliveryReference: nullableText(existing.DeliveryReference),
 			ServiceAccepted:   existing.ServiceAccepted,
-		}, nil
+		}
+		return view, nil
 	} else if !errors.Is(e, pgx.ErrNoRows) {
 		return GoodsReceiptView{}, e
 	}
@@ -421,6 +428,58 @@ func (s *Service) CreateGoodsReceipt(ctx context.Context, ws, user int64, in Cre
 		}
 		if err != nil {
 			return GoodsReceiptView{}, err
+		}
+		if in.IssueOrder && (po.Status == "draft" || po.Status == "submitted" || po.Status == "approved") {
+			if !in.CanApprovePO {
+				return GoodsReceiptView{}, errors.New("approval permission required to issue linked purchase order")
+			}
+			curVer := po.Version
+			if po.Status == "draft" {
+				sub, e := q.AdvancePurchaseOrder(ctx, db.AdvancePurchaseOrderParams{
+					WorkspaceID: ws, ID: po.ID, Version: curVer, Status: "submitted",
+					ApprovedByUserID: pgtype.Int8{}, OrderNumber: pgtype.Text{},
+				})
+				if e != nil {
+					return GoodsReceiptView{}, e
+				}
+				_, _ = q.CreatePurchaseOrderEvent(ctx, db.CreatePurchaseOrderEventParams{
+					WorkspaceID: ws, PurchaseOrderID: po.ID, EventType: "submitted", OrderVersion: curVer, ActorUserID: user,
+				})
+				curVer = sub.Version
+				po = sub
+			}
+			if po.Status == "submitted" {
+				app, e := q.AdvancePurchaseOrder(ctx, db.AdvancePurchaseOrderParams{
+					WorkspaceID: ws, ID: po.ID, Version: curVer, Status: "approved",
+					ApprovedByUserID: pgtype.Int8{Int64: user, Valid: true}, OrderNumber: pgtype.Text{},
+				})
+				if e != nil {
+					return GoodsReceiptView{}, e
+				}
+				_, _ = q.CreatePurchaseOrderEvent(ctx, db.CreatePurchaseOrderEventParams{
+					WorkspaceID: ws, PurchaseOrderID: po.ID, EventType: "approved", OrderVersion: curVer, ActorUserID: user,
+				})
+				curVer = app.Version
+				po = app
+			}
+			if po.Status == "approved" {
+				n, e := q.NextPurchaseOrderSequence(ctx, ws)
+				if e != nil {
+					return GoodsReceiptView{}, e
+				}
+				number := pgtype.Text{String: fmt.Sprintf("PO-%06d", n), Valid: true}
+				iss, e := q.AdvancePurchaseOrder(ctx, db.AdvancePurchaseOrderParams{
+					WorkspaceID: ws, ID: po.ID, Version: curVer, Status: "issued",
+					ApprovedByUserID: pgtype.Int8{Int64: user, Valid: true}, OrderNumber: number,
+				})
+				if e != nil {
+					return GoodsReceiptView{}, e
+				}
+				_, _ = q.CreatePurchaseOrderEvent(ctx, db.CreatePurchaseOrderEventParams{
+					WorkspaceID: ws, PurchaseOrderID: po.ID, EventType: "issued", OrderVersion: curVer, ActorUserID: user,
+				})
+				po = iss
+			}
 		}
 		if po.Status != "issued" && po.Status != "acknowledged" && po.Status != "partially_received" {
 			return GoodsReceiptView{}, errors.New("purchase order must be issued before receiving")
@@ -740,10 +799,102 @@ func (s *Service) CreateGoodsReceipt(ctx context.Context, ws, user int64, in Cre
 			return GoodsReceiptView{}, err
 		}
 	}
+
+	var billView *SupplierBillView
+	var paymentDetail *PaymentDetail
+
+	if in.Bill != nil {
+		inv := strings.TrimSpace(in.Bill.SupplierInvoiceNumber)
+		if inv == "" {
+			inv = fmt.Sprintf("INV-GR-%d", receipt.ID)
+		}
+		billDateStr := strings.TrimSpace(in.Bill.BillDate)
+		if billDateStr == "" {
+			billDateStr = in.ReceivedOn
+		}
+		billDate, bDateErr := time.Parse("2006-01-02", billDateStr)
+		if bDateErr != nil {
+			return GoodsReceiptView{}, errors.New("bill date must be YYYY-MM-DD")
+		}
+		var due pgtype.Date
+		if strings.TrimSpace(in.Bill.DueDate) != "" {
+			if dv, de := time.Parse("2006-01-02", strings.TrimSpace(in.Bill.DueDate)); de == nil {
+				due = pgtype.Date{Time: dv, Valid: true}
+			}
+		}
+		if !due.Valid {
+			due = pgtype.Date{Time: billDate, Valid: true}
+		}
+
+		createdBill, billErr := s.createSupplierBillForReceiptTx(ctx, q, ws, user, receipt.ID, inv, billDate, due, key+":bill")
+		if billErr != nil {
+			return GoodsReceiptView{}, billErr
+		}
+
+		if in.Bill.Approve {
+			appBill, appErr := s.approveSupplierBillTx(ctx, q, ws, user, createdBill, true, key+":bill-approve")
+			if appErr != nil {
+				return GoodsReceiptView{}, appErr
+			}
+			createdBill = appBill
+		}
+
+		bv, err := billDetailView(ctx, q, createdBill)
+		if err != nil {
+			return GoodsReceiptView{}, err
+		}
+		billView = &bv
+
+		if in.Payment != nil {
+			if !in.Bill.Approve {
+				return GoodsReceiptView{}, errors.New("bill must be approved to record payment")
+			}
+			legs := in.Payment.PaymentLegs
+			if len(legs) == 0 {
+				legs = in.Payment.Legs
+			}
+			amtStr := strings.TrimSpace(in.Payment.Amount)
+			if amtStr == "" || amtStr == "0" {
+				amtStr = FormatMinorToMajor(createdBill.TotalMinor, CurrencyExponent(createdBill.Currency))
+			}
+			if len(legs) == 0 && in.Payment.AccountID > 0 {
+				legs = []PaymentLegInput{{MoneyAccountID: in.Payment.AccountID, AmountMajor: amtStr}}
+			} else if len(legs) == 1 && legs[0].AmountMajor == "" {
+				legs[0].AmountMajor = amtStr
+			}
+			var pmtCounterparty *int64
+			if receipt.SupplierID.Valid {
+				cid := receipt.SupplierID.Int64
+				pmtCounterparty = &cid
+			}
+			pmt, pmtErr := s.createPaymentInternal(ctx, q, ws, user, CreatePaymentInput{
+				Direction:        "outgoing",
+				PaymentDate:      in.Payment.PaymentDate,
+				TotalAmount:      amtStr,
+				Currency:         createdBill.Currency,
+				CounterpartyID:   pmtCounterparty,
+				LinkedRecordType: "supplier_bill",
+				LinkedRecordID:   &createdBill.ID,
+				Reference:        in.Payment.Reference,
+				PaymentLegs:      legs,
+				IdempotencyKey:   key + ":payment",
+			})
+			if pmtErr != nil {
+				return GoodsReceiptView{}, pmtErr
+			}
+			paymentDetail = &pmt
+			if latestBill, err := q.GetSupplierBill(ctx, db.GetSupplierBillParams{WorkspaceID: ws, ID: createdBill.ID}); err == nil {
+				if latestBv, err := billDetailView(ctx, q, latestBill); err == nil {
+					billView = &latestBv
+				}
+			}
+		}
+	}
+
 	if err = tx.Commit(ctx); err != nil {
 		return GoodsReceiptView{}, err
 	}
-	return GoodsReceiptView{
+	grView := GoodsReceiptView{
 		ID:                  receipt.ID,
 		PurchaseOrderID:     poIDOut,
 		SupplierID:          nullableInt8(receipt.SupplierID),
@@ -758,7 +909,10 @@ func (s *Service) CreateGoodsReceipt(ctx context.Context, ws, user int64, in Cre
 		LandedCostMinor:     fmt.Sprintf("%d", landedCostMinor),
 		DeliveryReference:   nullableText(receipt.DeliveryReference),
 		ServiceAccepted:     receipt.ServiceAccepted,
-	}, nil
+		Bill:                billView,
+		Payment:             paymentDetail,
+	}
+	return grView, nil
 }
 
 func (s *Service) GetGoodsReceipt(ctx context.Context, ws, id int64) (GoodsReceiptDetailView, error) {

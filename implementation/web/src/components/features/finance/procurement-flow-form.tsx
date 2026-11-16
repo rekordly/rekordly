@@ -422,8 +422,6 @@ function ProcurementFlowInner({ workspaceId, currency, mode }: WorkspaceInfo & {
   const sourcePoId = Number(searchParams.get("poId") || "0");
   const sourceReceiptId = Number(searchParams.get("receiptId") || "0");
   const sourceBillId = Number(searchParams.get("billId") || "0");
-  const savedReceiptRef = useRef<{ id: number } | null>(null);
-  const savedBillRef = useRef<{ id: number; version: number; total_minor: string; status: string } | null>(null);
 
   const [step, setStep] = useState(1);
   const [party, setParty] = useState<ContactValue | null>(null);
@@ -719,225 +717,139 @@ function ProcurementFlowInner({ workspaceId, currency, mode }: WorkspaceInfo & {
               discount: line.discount_amount?.replace(/,/g, "") || "0",
               tax_amount: "0",
             })),
+            issue: issueImmediately,
           },
           key,
         );
-        let order = created.order;
-        if (issueImmediately && order.status === "draft") {
-          try {
-            const sub = await financeApi.advancePurchaseOrder(workspaceId, order.id, order.version, "submitted", `${key}:sub`);
-            const app = await financeApi.advancePurchaseOrder(workspaceId, order.id, sub.order.version, "approved", `${key}:app`);
-            const iss = await financeApi.advancePurchaseOrder(workspaceId, order.id, app.order.version, "issued", `${key}:iss`);
-            order = iss.order;
-          } catch {
-            // If user lacks approve/issue permission, leave in highest reached state
-          }
-        }
-        return { redirect: `/purchase-orders/${order.id}` };
+        return { redirect: `/purchase-orders/${created.order.id}` };
       }
 
       if (mode === "receipt") {
-        const runKey = createIdempotencyKey("receipt-flow");
-        // If linked to a draft/approved PO that isn't issued yet, advance it first so it can be received
-        if (sourcePoId > 0 && sourcePo.data && ["draft", "submitted", "approved"].includes(sourcePo.data.status)) {
-          let cur = sourcePo.data;
-          if (cur.status === "draft") {
-            cur = (await financeApi.advancePurchaseOrder(workspaceId, cur.id, cur.version, "submitted", `${runKey}:po-sub`)).order;
-          }
-          if (cur.status === "submitted") {
-            cur = (await financeApi.advancePurchaseOrder(workspaceId, cur.id, cur.version, "approved", `${runKey}:po-app`)).order;
-          }
-          if (cur.status === "approved") {
-            await financeApi.advancePurchaseOrder(workspaceId, cur.id, cur.version, "issued", `${runKey}:po-iss`);
-          }
-        }
-
         const landedMajor = costTreatment === "divide" && extraCostsMinor > BigInt(0) ? minorToMajor(extraCostsMinor, EXPONENT) : "0";
-        let createdReceipt = savedReceiptRef.current;
-        if (!createdReceipt) {
-          const receiptRes = await financeApi.createGoodsReceipt(
+        const shouldBill = paymentStatus !== "receipt_only" && Boolean(supplierId);
+        const shouldPay = shouldBill && (paymentStatus === "paid" || paymentStatus === "part") && Boolean(accountId);
+
+        const billInput = shouldBill
+          ? {
+              supplier_invoice_number: reference.trim() || undefined,
+              bill_date: date,
+              due_date: dueDate || undefined,
+              approve: true,
+            }
+          : undefined;
+
+        const paymentInput = shouldPay
+          ? {
+              account_id: Number(accountId),
+              amount: paymentStatus === "paid" ? "" : paidAmount.replace(/,/g, ""),
+              payment_date: date,
+              reference: reference.trim() || undefined,
+            }
+          : undefined;
+
+        const receiptRes = await financeApi.createGoodsReceipt(
+          workspaceId,
+          {
+            purchase_order_id: sourcePoId > 0 ? sourcePoId : undefined,
+            supplier_id: supplierId,
+            location_id: chosenOutletId,
+            reason: combinedNotes || "Goods procurement receipt",
+            currency,
+            received_on: date,
+            receipt_reference: reference.trim() || undefined,
+            delivery_reference: deliveryReference.trim() || undefined,
+            landed_cost: landedMajor || "0",
+            issue_order: sourcePoId > 0 && sourcePo.data && ["draft", "submitted", "approved"].includes(sourcePo.data.status),
+            bill: billInput,
+            payment: paymentInput,
+            lines: items.map((line, idx) => ({
+              purchase_order_line_id: poLineMap[idx] || undefined,
+              product_id: line.product_id,
+              description: line.description,
+              accepted_quantity: line.quantity,
+              rejected_quantity: "0",
+              actual_unit_cost: line.unit_price.replace(/,/g, ""),
+            })),
+          },
+          key,
+        );
+
+        // If operational cost was selected and there are extra costs + supplier, record operational expense bill
+        if (costTreatment === "operational" && extraCostsMinor > BigInt(0) && supplierId) {
+          await financeApi.createSupplierBill(
             workspaceId,
             {
-              purchase_order_id: sourcePoId > 0 ? sourcePoId : undefined,
               supplier_id: supplierId,
-              location_id: chosenOutletId,
-              reason: combinedNotes || "Goods procurement receipt",
+              outlet_id: chosenOutletId,
+              supplier_invoice_number: `EXP-${receiptRes.receipt.id}-${Date.now().toString().slice(-4)}`,
+              bill_date: date,
+              amount: minorToMajor(extraCostsMinor, EXPONENT),
               currency,
-              received_on: date,
-              receipt_reference: reference.trim() || undefined,
-              delivery_reference: deliveryReference.trim() || undefined,
-              landed_cost: landedMajor || "0",
-              lines: items.map((line, idx) => ({
-                purchase_order_line_id: poLineMap[idx] || undefined,
-                product_id: line.product_id,
-                description: line.description,
-                accepted_quantity: line.quantity,
-                rejected_quantity: "0",
-                actual_unit_cost: line.unit_price.replace(/,/g, ""),
-              })),
+              bill_type: "direct_expense",
+              description: extraCostSummary || "Procurement operational costs",
             },
-            runKey,
+            `${key}:op-cost`,
           );
-          createdReceipt = { id: receiptRes.receipt.id };
-          savedReceiptRef.current = createdReceipt;
-
-          // If operational cost was selected and there are extra costs + supplier, record operational expense bill
-          if (costTreatment === "operational" && extraCostsMinor > BigInt(0) && supplierId) {
-            await financeApi.createSupplierBill(
-              workspaceId,
-              {
-                supplier_id: supplierId,
-                outlet_id: chosenOutletId,
-                supplier_invoice_number: `EXP-${createdReceipt.id}-${Date.now().toString().slice(-4)}`,
-                bill_date: date,
-                amount: minorToMajor(extraCostsMinor, EXPONENT),
-                currency,
-                bill_type: "direct_expense",
-                description: extraCostSummary || "Procurement operational costs",
-              },
-              `${runKey}:op-cost`,
-            );
-          }
         }
 
-        // If user also chose to create bill / pay now
-        if (paymentStatus !== "receipt_only" && supplierId) {
-          let bill = savedBillRef.current;
-          if (!bill) {
-            const billRes = await financeApi.createSupplierBill(
-              workspaceId,
-              {
-                goods_receipt_id: createdReceipt.id,
-                supplier_id: supplierId,
-                outlet_id: chosenOutletId,
-                supplier_invoice_number: reference.trim() || `INV-GR-${createdReceipt.id}`,
-                bill_date: date,
-                due_date: dueDate || undefined,
-                currency,
-                description: combinedNotes || "Goods receipt supplier bill",
-              },
-              `${runKey}:bill`,
-            );
-            bill = billRes.bill;
-            savedBillRef.current = bill;
-          }
-
-          if (bill.status === "draft" || bill.status === "disputed") {
-            const approvedBill = await financeApi.approveSupplierBill(
-              workspaceId,
-              bill.id,
-              bill.version,
-              `${runKey}:bill-approve`,
-              true,
-            );
-            bill = approvedBill.bill;
-            savedBillRef.current = bill;
-          }
-
-          if ((paymentStatus === "paid" || paymentStatus === "part") && accountId) {
-            const payMajor =
-              paymentStatus === "paid"
-                ? minorToMajor(bill.total_minor, EXPONENT)
-                : paidAmount.replace(/,/g, "");
-            if (payMajor && toMinor(payMajor) > BigInt(0)) {
-              await financeApi.createPayment(
-                workspaceId,
-                {
-                  direction: "outgoing",
-                  counterparty_id: supplierId,
-                  counterparty_name: party?.name,
-                  payment_date: date,
-                  amount: payMajor,
-                  currency,
-                  linked_record_type: "supplier_bill",
-                  linked_record_id: bill.id,
-                  reference: reference.trim() || undefined,
-                  notes: combinedNotes || undefined,
-                  payment_legs: [{ money_account_id: Number(accountId), amount: payMajor }],
-                },
-                `${runKey}:pay`,
-              );
-            }
-          }
-        }
-
-        return { redirect: `/procurement/${createdReceipt.id}` };
+        return { redirect: `/procurement/${receiptRes.receipt.id}` };
       }
 
       if (mode === "bill") {
-        const runKey = createIdempotencyKey("bill-flow");
-        let bill = savedBillRef.current;
-        if (!bill) {
-          const billRes = await financeApi.createSupplierBill(
-            workspaceId,
-            sourceReceiptId > 0
-              ? {
-                  goods_receipt_id: sourceReceiptId,
-                  supplier_id: supplierId!,
-                  outlet_id: chosenOutletId,
-                  supplier_invoice_number: reference.trim() || `INV-${Date.now().toString().slice(-6)}`,
-                  bill_date: date,
-                  due_date: dueDate || undefined,
-                  currency,
-                  description: combinedNotes || "Supplier bill",
-                }
-              : {
-                  supplier_id: supplierId!,
-                  outlet_id: chosenOutletId,
-                  supplier_invoice_number: reference.trim() || `BILL-${Date.now().toString().slice(-6)}`,
-                  bill_date: date,
-                  due_date: dueDate || undefined,
-                  amount: minorToMajor(totalMinor, EXPONENT),
-                  currency,
-                  bill_type: "direct_expense",
-                  description: combinedNotes || items.map((i) => i.description).join(", ") || "Supplier bill",
-                  lines:
-                    items.length > 0
-                      ? items.map((line, idx) => ({
-                          description: line.description,
-                          quantity: line.quantity,
-                          unit_cost:
-                            costTreatment === "divide" && allocations[idx]
-                              ? minorToMajor(allocations[idx].effectiveUnitMinor, EXPONENT) || line.unit_price.replace(/,/g, "")
-                              : line.unit_price.replace(/,/g, ""),
-                          discount: line.discount_amount?.replace(/,/g, "") || "0",
-                          tax_amount: "0",
-                        }))
-                      : undefined,
-                },
-            runKey,
-          );
-          bill = billRes.bill;
-          savedBillRef.current = bill;
-        }
+        const shouldPay = (paymentStatus === "paid" || paymentStatus === "part") && Boolean(accountId);
+        const paymentInput = shouldPay
+          ? {
+              account_id: Number(accountId),
+              amount: paymentStatus === "paid" ? "" : paidAmount.replace(/,/g, ""),
+              payment_date: date,
+              reference: reference.trim() || undefined,
+            }
+          : undefined;
 
-        if (paymentStatus === "paid" || paymentStatus === "part") {
-          if (bill.status === "draft" || bill.status === "disputed") {
-            const app = await financeApi.approveSupplierBill(workspaceId, bill.id, bill.version, `${runKey}:approve`, true);
-            bill = app.bill;
-            savedBillRef.current = bill;
-          }
-          const payMajor = paymentStatus === "paid" ? minorToMajor(bill.total_minor, EXPONENT) : paidAmount.replace(/,/g, "");
-          if (payMajor && toMinor(payMajor) > BigInt(0) && accountId) {
-            await financeApi.createPayment(
-              workspaceId,
-              {
-                direction: "outgoing",
-                counterparty_id: supplierId,
-                counterparty_name: party?.name,
-                payment_date: date,
-                amount: payMajor,
+        const billRes = await financeApi.createSupplierBill(
+          workspaceId,
+          sourceReceiptId > 0
+            ? {
+                goods_receipt_id: sourceReceiptId,
+                supplier_id: supplierId!,
+                outlet_id: chosenOutletId,
+                supplier_invoice_number: reference.trim() || `INV-${Date.now().toString().slice(-6)}`,
+                bill_date: date,
+                due_date: dueDate || undefined,
                 currency,
-                linked_record_type: "supplier_bill",
-                linked_record_id: bill.id,
-                reference: reference.trim() || undefined,
-                payment_legs: [{ money_account_id: Number(accountId), amount: payMajor }],
+                description: combinedNotes || "Supplier bill",
+                approve: shouldPay,
+                payment: paymentInput,
+              }
+            : {
+                supplier_id: supplierId!,
+                outlet_id: chosenOutletId,
+                supplier_invoice_number: reference.trim() || `BILL-${Date.now().toString().slice(-6)}`,
+                bill_date: date,
+                due_date: dueDate || undefined,
+                amount: minorToMajor(totalMinor, EXPONENT),
+                currency,
+                bill_type: "direct_expense",
+                description: combinedNotes || items.map((i) => i.description).join(", ") || "Supplier bill",
+                approve: shouldPay,
+                payment: paymentInput,
+                lines:
+                  items.length > 0
+                    ? items.map((line, idx) => ({
+                        description: line.description,
+                        quantity: line.quantity,
+                        unit_cost:
+                          costTreatment === "divide" && allocations[idx]
+                            ? minorToMajor(allocations[idx].effectiveUnitMinor, EXPONENT) || line.unit_price.replace(/,/g, "")
+                            : line.unit_price.replace(/,/g, ""),
+                        discount: line.discount_amount?.replace(/,/g, "") || "0",
+                        tax_amount: "0",
+                      }))
+                    : undefined,
               },
-              `${runKey}:pay`,
-            );
-          }
-        }
-        return { redirect: `/bills/${bill.id}` };
+          key,
+        );
+        return { redirect: `/bills/${billRes.bill.id}` };
       }
 
       // Default: mode === "purchase"

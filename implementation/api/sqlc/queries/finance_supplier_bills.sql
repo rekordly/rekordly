@@ -20,3 +20,11 @@ INSERT INTO supplier_bill_commands(workspace_id,supplier_bill_id,command,expecte
 UPDATE supplier_bills SET status='approved',version=version+1,approved_by_user_id=$4,approved_at=now(),updated_at=now() WHERE workspace_id=$1 AND id=$2 AND version=$3 AND status='draft' RETURNING *;
 -- name: ListSupplierBills :many
 SELECT * FROM supplier_bills WHERE workspace_id=$1 AND (sqlc.narg('before_id')::bigint IS NULL OR id<sqlc.narg('before_id')) ORDER BY id DESC LIMIT $2;
+
+-- name: GetSupplierBillByGoodsReceiptID :one
+SELECT * FROM supplier_bills
+WHERE workspace_id = $1
+  AND goods_receipt_id = $2
+  AND status NOT IN ('rejected', 'voided', 'reversed')
+ORDER BY id DESC
+LIMIT 1;

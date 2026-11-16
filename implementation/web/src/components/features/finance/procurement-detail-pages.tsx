@@ -290,12 +290,9 @@ function PurchaseOrderDetailContent({ workspaceId, id }: WorkspaceInfo & { id: n
   }
 
   const ensureIssued = async (po: PurchaseOrder): Promise<PurchaseOrder> => {
-    let current = po;
-    for (const command of ["submitted", "approved", "issued"] as const) {
-      const from = { submitted: "draft", approved: "submitted", issued: "approved" }[command];
-      if (current.status === from) current = (await financeApi.advancePurchaseOrder(workspaceId, id, current.version, command, `${crypto.randomUUID()}-${command}`)).order;
-    }
-    return current;
+    if (po.status === "issued" || po.status === "partially_received" || po.status === "fully_received" || po.status === "closed") return po;
+    const res = await financeApi.issuePurchaseOrder(workspaceId, id, {}, `${crypto.randomUUID()}-issue`);
+    return res.order;
   };
 
   const advance = useFinanceAction(workspaceId, ({ version, command }: { version: number; command: "submitted" | "approved" | "issued" }, key) => financeApi.advancePurchaseOrder(workspaceId, id, version, command, key), {
@@ -304,14 +301,14 @@ function PurchaseOrderDetailContent({ workspaceId, id }: WorkspaceInfo & { id: n
   });
   const issueAndShare = useFinanceAction(
     workspaceId,
-    async (po: PurchaseOrder, key: string) => {
-      await ensureIssued(po);
-      return financeApi.createPurchaseOrderShare(workspaceId, id, { expires_in_days: 14 }, key);
+    async (_po: PurchaseOrder, key: string) => {
+      return financeApi.issuePurchaseOrder(workspaceId, id, { share: true }, key);
     },
     {
       success: "Order sent. Share the link below.",
       onDone: (res) => {
-        setShareToken((res as { share: { token: string } }).share.token);
+        const r = res as { share?: { token: string }; stopped_at?: string; message?: string };
+        if (r.share?.token) setShareToken(r.share.token);
         void orderQuery.refetch();
       },
     },

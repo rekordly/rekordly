@@ -18,6 +18,7 @@ import (
 type CreatePurchaseOrderShareInput struct {
 	SupplierEmail string `json:"supplier_email"`
 	ExpiresInDays int    `json:"expires_in_days"`
+	ForceNewLink  bool   `json:"force_new_link"`
 }
 
 type SupplierShareLineUpdate struct {
@@ -28,6 +29,7 @@ type SupplierShareLineUpdate struct {
 
 type PurchaseOrderShareView struct {
 	Token         string            `json:"token,omitempty"`
+	URL           string            `json:"url,omitempty"`
 	Status        string            `json:"status"`
 	WorkspaceName string            `json:"workspace_name,omitempty"`
 	SupplierName  string            `json:"supplier_name,omitempty"`
@@ -75,28 +77,65 @@ func (s *Service) CreatePurchaseOrderShare(ctx context.Context, workspaceID, use
 	if po.Status != "issued" && po.Status != "acknowledged" && po.Status != "partially_received" && po.Status != "fully_received" {
 		return PurchaseOrderShareView{}, errors.New("only an issued purchase order can be shared")
 	}
+
+	if !in.ForceNewLink {
+		if active, err := s.queries.GetActivePurchaseOrderShareByOrderID(ctx, db.GetActivePurchaseOrderShareByOrderIDParams{
+			WorkspaceID:     workspaceID,
+			PurchaseOrderID: orderID,
+		}); err == nil && active.RawToken.Valid && active.RawToken.String != "" {
+			detail, err := s.GetPurchaseOrder(ctx, workspaceID, orderID)
+			if err != nil {
+				return PurchaseOrderShareView{}, err
+			}
+			wsName, supName := s.enrichPOShareNames(ctx, workspaceID, detail.SupplierID)
+			token := active.RawToken.String
+			return PurchaseOrderShareView{
+				Token:         token,
+				URL:           "/purchase-orders/share/" + token,
+				Status:        active.Status,
+				WorkspaceName: wsName,
+				SupplierName:  supName,
+				SupplierEmail: nullableText(active.SupplierEmail),
+				ExpiresAt:     active.ExpiresAt.Time.UTC().Format(time.RFC3339),
+				Order:         detail,
+			}, nil
+		}
+	} else {
+		_ = s.queries.RevokeActivePurchaseOrderShares(ctx, db.RevokeActivePurchaseOrderSharesParams{
+			WorkspaceID:     workspaceID,
+			PurchaseOrderID: orderID,
+		})
+	}
+
 	token, hash, err := shareToken()
 	if err != nil {
 		return PurchaseOrderShareView{}, err
 	}
-	var id int64
 	var expires = time.Now().UTC().Add(time.Duration(days) * 24 * time.Hour)
-	if err = s.pool.QueryRow(ctx, "INSERT INTO purchase_order_shares(workspace_id,purchase_order_id,token_hash,supplier_email,expires_at,created_by_user_id) VALUES($1,$2,$3,$4,$5,$6) RETURNING id", workspaceID, orderID, hash, optionalText(in.SupplierEmail), expires, userID).Scan(&id); err != nil {
+	if _, err = s.queries.CreatePurchaseOrderShareWithRaw(ctx, db.CreatePurchaseOrderShareWithRawParams{
+		WorkspaceID:     workspaceID,
+		PurchaseOrderID: orderID,
+		TokenHash:       hash,
+		RawToken:        pgtype.Text{String: token, Valid: true},
+		SupplierEmail:   optionalPgText(in.SupplierEmail),
+		ExpiresAt:       pgtype.Timestamptz{Time: expires, Valid: true},
+		CreatedByUserID: userID,
+	}); err != nil {
 		return PurchaseOrderShareView{}, err
 	}
-	_ = id
 	detail, err := s.GetPurchaseOrder(ctx, workspaceID, orderID)
 	if err != nil {
 		return PurchaseOrderShareView{}, err
 	}
+	wsName, supName := s.enrichPOShareNames(ctx, workspaceID, detail.SupplierID)
 	var email *string
 	if strings.TrimSpace(in.SupplierEmail) != "" {
 		v := strings.TrimSpace(in.SupplierEmail)
 		email = &v
 	}
-	wsName, supName := s.enrichPOShareNames(ctx, workspaceID, detail.SupplierID)
 	return PurchaseOrderShareView{
 		Token:         token,
+		URL:           "/purchase-orders/share/" + token,
 		Status:        "active",
 		WorkspaceName: wsName,
 		SupplierName:  supName,
@@ -133,6 +172,8 @@ func (s *Service) GetPurchaseOrderShare(ctx context.Context, token string) (Purc
 	}
 	wsName, supName := s.enrichPOShareNames(ctx, workspaceID, detail.SupplierID)
 	return PurchaseOrderShareView{
+		Token:         token,
+		URL:           "/purchase-orders/share/" + token,
 		Status:        status,
 		WorkspaceName: wsName,
 		SupplierName:  supName,
@@ -337,6 +378,8 @@ func (s *Service) RespondPurchaseOrderShareWithLines(
 		respNotePtr = &note
 	}
 	return PurchaseOrderShareView{
+		Token:         token,
+		URL:           "/purchase-orders/share/" + token,
 		Status:        status,
 		WorkspaceName: wsName,
 		SupplierName:  supName,

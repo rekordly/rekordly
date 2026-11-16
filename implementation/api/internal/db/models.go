@@ -2595,6 +2595,7 @@ type PurchaseOrderShare struct {
 	CreatedByUserID int64              `json:"created_by_user_id"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	RespondedAt     pgtype.Timestamptz `json:"responded_at"`
+	RawToken        pgtype.Text        `json:"raw_token"`
 }
 
 type PurchaseOrderVersion struct {

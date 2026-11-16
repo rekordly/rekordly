@@ -17,6 +17,7 @@ func (h *Handler) RegisterPurchaseOrderRoutes(g *gin.RouterGroup) {
 	g.POST("/purchase-orders/:id/share", h.createPurchaseOrderShare)
 	g.GET("/purchase-orders", h.listPurchaseOrders)
 	g.GET("/purchase-orders/:id", h.getPurchaseOrder)
+	g.POST("/purchase-orders/:id/commands/issue", h.issuePurchaseOrder)
 	g.POST("/purchase-orders/:id/commands/:command", h.advancePurchaseOrder)
 }
 
@@ -89,12 +90,40 @@ func (h *Handler) createPurchaseOrder(c *gin.Context) {
 	if strings.TrimSpace(in.IdempotencyKey) == "" {
 		in.IdempotencyKey = c.GetHeader("Idempotency-Key")
 	}
+	in.CanApprove = ws.HasPermission("purchases.approve_po")
 	po, e := h.service.CreateDirectPurchaseOrder(c, ws.WorkspaceID, ws.UserID, in)
 	if e != nil {
 		h.procurementError(c, e)
 		return
 	}
 	c.JSON(201, gin.H{"data": gin.H{"order": po}})
+}
+
+func (h *Handler) issuePurchaseOrder(c *gin.Context) {
+	ws, ok := requireProcurementPermission(c, "purchases.create_po", "purchases.create", "purchases.approve_po", "purchases.issue_po")
+	if !ok {
+		return
+	}
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"message": "Invalid purchase order"}})
+		return
+	}
+	var in IssuePurchaseOrderInput
+	if err := c.ShouldBindJSON(&in); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"message": "Invalid request"}})
+		return
+	}
+	if strings.TrimSpace(in.IdempotencyKey) == "" {
+		in.IdempotencyKey = c.GetHeader("Idempotency-Key")
+	}
+	canApprove := ws.HasPermission("purchases.approve_po")
+	result, err := h.service.IssuePurchaseOrder(c.Request.Context(), ws.WorkspaceID, ws.UserID, id, canApprove, in)
+	if err != nil {
+		h.procurementError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": result})
 }
 
 func (h *Handler) updatePurchaseOrderDraft(c *gin.Context) {

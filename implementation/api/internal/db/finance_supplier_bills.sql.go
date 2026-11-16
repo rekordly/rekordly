@@ -240,6 +240,59 @@ func (q *Queries) GetSupplierBill(ctx context.Context, arg GetSupplierBillParams
 	return i, err
 }
 
+const getSupplierBillByGoodsReceiptID = `-- name: GetSupplierBillByGoodsReceiptID :one
+SELECT id, workspace_id, goods_receipt_id, supplier_id, supplier_invoice_number, bill_date, due_date, currency, currency_exponent, total_minor, outstanding_minor, status, version, idempotency_key, created_by_user_id, approved_by_user_id, approved_at, created_at, updated_at, bill_type, expense_account_class, description, outlet_id, tax_amount_minor, discount_minor, variance_minor, credited_minor, match_status, dispute_reason, reversed_at, reversal_reason FROM supplier_bills
+WHERE workspace_id = $1
+  AND goods_receipt_id = $2
+  AND status NOT IN ('rejected', 'voided', 'reversed')
+ORDER BY id DESC
+LIMIT 1
+`
+
+type GetSupplierBillByGoodsReceiptIDParams struct {
+	WorkspaceID    int64       `json:"workspace_id"`
+	GoodsReceiptID pgtype.Int8 `json:"goods_receipt_id"`
+}
+
+func (q *Queries) GetSupplierBillByGoodsReceiptID(ctx context.Context, arg GetSupplierBillByGoodsReceiptIDParams) (SupplierBill, error) {
+	row := q.db.QueryRow(ctx, getSupplierBillByGoodsReceiptID, arg.WorkspaceID, arg.GoodsReceiptID)
+	var i SupplierBill
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.GoodsReceiptID,
+		&i.SupplierID,
+		&i.SupplierInvoiceNumber,
+		&i.BillDate,
+		&i.DueDate,
+		&i.Currency,
+		&i.CurrencyExponent,
+		&i.TotalMinor,
+		&i.OutstandingMinor,
+		&i.Status,
+		&i.Version,
+		&i.IdempotencyKey,
+		&i.CreatedByUserID,
+		&i.ApprovedByUserID,
+		&i.ApprovedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.BillType,
+		&i.ExpenseAccountClass,
+		&i.Description,
+		&i.OutletID,
+		&i.TaxAmountMinor,
+		&i.DiscountMinor,
+		&i.VarianceMinor,
+		&i.CreditedMinor,
+		&i.MatchStatus,
+		&i.DisputeReason,
+		&i.ReversedAt,
+		&i.ReversalReason,
+	)
+	return i, err
+}
+
 const getSupplierBillByIdempotency = `-- name: GetSupplierBillByIdempotency :one
 SELECT id, workspace_id, goods_receipt_id, supplier_id, supplier_invoice_number, bill_date, due_date, currency, currency_exponent, total_minor, outstanding_minor, status, version, idempotency_key, created_by_user_id, approved_by_user_id, approved_at, created_at, updated_at, bill_type, expense_account_class, description, outlet_id, tax_amount_minor, discount_minor, variance_minor, credited_minor, match_status, dispute_reason, reversed_at, reversal_reason FROM supplier_bills WHERE workspace_id=$1 AND idempotency_key=$2
 `

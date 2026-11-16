@@ -102,9 +102,13 @@ func (s *Service) ReserveStock(ctx context.Context, workspaceID, userID int64, i
 		return StockReservationView{}, err
 	}
 	var requested pgtype.Int8
-	if in.VariantID != nil && *in.VariantID > 0 { requested = pgtype.Int8{Int64: *in.VariantID, Valid: true} }
+	if in.VariantID != nil && *in.VariantID > 0 {
+		requested = pgtype.Int8{Int64: *in.VariantID, Valid: true}
+	}
 	variantID, err := stockVariant(ctx, q, workspaceID, product, requested)
-	if err != nil { return StockReservationView{}, err }
+	if err != nil {
+		return StockReservationView{}, err
+	}
 
 	bal, err := q.GetInventoryBalanceForUpdate(ctx, db.GetInventoryBalanceForUpdateParams{
 		WorkspaceID: workspaceID,

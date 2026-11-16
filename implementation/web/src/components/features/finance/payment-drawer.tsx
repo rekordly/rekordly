@@ -158,39 +158,22 @@ export function PaymentDrawer({
 
       const effectiveAmount = legs.length > 0 ? minorToMajor(totalLegsMinor) : amount;
 
-      let targetType: string | undefined = preset?.linkedType;
-      let targetId: number | undefined = preset?.linkedId;
-
       if (preset?.linkedType === "goods_receipt") {
-        let billId = preset.billId ?? 0;
-        let billStatus = preset.billStatus ?? "";
-        let billVersion = preset.billVersion ?? 1;
-
-        if (!billId) {
-          const billRes = await financeApi.createSupplierBill(
-            workspaceId,
-            {
-              goods_receipt_id: preset.linkedId,
-              supplier_id: preset.supplierId ?? undefined,
-              supplier_invoice_number: `INV-GR-${preset.linkedId}`,
-              bill_date: date,
-              currency,
-              bill_type: "receipt",
-            },
-            `${key}-bill`,
-          );
-          billId = billRes.bill.id;
-          billStatus = billRes.bill.status;
-          billVersion = billRes.bill.version;
-        }
-
-        if (billStatus === "draft" || billStatus === "disputed") {
-          await financeApi.approveSupplierBill(workspaceId, billId, billVersion, `${key}-approve`, true);
-        }
-
-        targetType = "supplier_bill";
-        targetId = billId;
+        return financeApi.payGoodsReceipt(
+          workspaceId,
+          preset.linkedId,
+          {
+            amount: effectiveAmount,
+            payment_date: date,
+            legs: paymentLegs,
+            reference: reference.trim() || undefined,
+          },
+          key,
+        );
       }
+
+      const targetType: string | undefined = preset?.linkedType;
+      const targetId: number | undefined = preset?.linkedId;
 
       return financeApi.createPayment(
         workspaceId,
