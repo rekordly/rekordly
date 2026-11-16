@@ -64,6 +64,7 @@ type MerchantOrderView struct {
 	CustomerNote          *string                      `json:"customer_note,omitempty"`
 	PaymentArrangement    *string                      `json:"payment_arrangement,omitempty"`
 	LinkedInvoiceID       *int64                       `json:"linked_invoice_id,omitempty"`
+	LinkedSaleID          *int64                       `json:"linked_sale_id,omitempty"`
 	DeclineOrCancelReason *string                      `json:"decline_or_cancel_reason,omitempty"`
 	CreatedAt             string                       `json:"created_at"`
 	Lines                 []MerchantOrderLineView      `json:"lines,omitempty"`
@@ -102,6 +103,9 @@ func merchantOrderHeader(o db.StorefrontOrder) MerchantOrderView {
 
 func (s *Service) buildMerchantOrderDetail(ctx context.Context, o db.StorefrontOrder) (MerchantOrderView, error) {
 	v := merchantOrderHeader(o)
+	if saleID, err := s.queries.GetStorefrontOrderSaleID(ctx, db.GetStorefrontOrderSaleIDParams{WorkspaceID: o.WorkspaceID, StorefrontOrderID: pgtype.Int8{Int64: o.ID, Valid: true}}); err == nil {
+		v.LinkedSaleID = &saleID
+	}
 	lines, err := s.queries.ListStorefrontOrderLines(ctx, o.ID)
 	if err != nil {
 		return MerchantOrderView{}, err

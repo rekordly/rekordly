@@ -425,6 +425,7 @@ type ListSalesFilter struct {
 	CustomerID int64  `form:"customer_id"`
 	BeforeID   int64  `form:"before_id"`
 	Limit      int32  `form:"limit"`
+	Source     string `form:"source"`
 }
 
 func (s *Service) ListSales(ctx context.Context, workspaceID int64, f ListSalesFilter) ([]db.Sale, error) {
@@ -449,6 +450,10 @@ func (s *Service) ListSales(ctx context.Context, workspaceID int64, f ListSalesF
 	if f.Status != "" {
 		statusParam = pgtype.Text{String: f.Status, Valid: true}
 	}
+	var sourceParam pgtype.Text
+	if f.Source == "in_person" || f.Source == "online_store" {
+		sourceParam = pgtype.Text{String: f.Source, Valid: true}
+	}
 
 	var customerIDParam pgtype.Int8
 	if f.CustomerID > 0 {
@@ -467,6 +472,7 @@ func (s *Service) ListSales(ctx context.Context, workspaceID int64, f ListSalesF
 		FromDate:    fromDateParam,
 		ToDate:      toDateParam,
 		Status:      statusParam,
+		Source:      sourceParam,
 		CustomerID:  customerIDParam,
 		BeforeID:    beforeIDParam,
 	})
@@ -1083,6 +1089,9 @@ func (s *Service) createPaymentInternal(ctx context.Context, qtx *db.Queries, wo
 			}); err != nil {
 				return PaymentDetail{}, fmt.Errorf("update invoice paid amount: %w", err)
 			}
+			if err := s.createPaidStorefrontSale(ctx, qtx, workspaceID, userID, invoice.ID); err != nil {
+				return PaymentDetail{}, fmt.Errorf("record paid online store order: %w", err)
+			}
 			validatedAllocations = append(validatedAllocations, validatedAllocation{
 				documentType: "invoice", documentID: invoice.ID, amountMinor: totalMinor,
 			})
@@ -1240,6 +1249,9 @@ func (s *Service) createPaymentInternal(ctx context.Context, qtx *db.Queries, wo
 				}
 				if _, invoiceErr = qtx.UpdateInvoicePaidAmount(ctx, db.UpdateInvoicePaidAmountParams{ID: invoice.ID, WorkspaceID: workspaceID, PaidAmountMinor: amount}); invoiceErr != nil {
 					return PaymentDetail{}, fmt.Errorf("update invoice paid amount: %w", invoiceErr)
+				}
+				if invoiceErr = s.createPaidStorefrontSale(ctx, qtx, workspaceID, userID, invoice.ID); invoiceErr != nil {
+					return PaymentDetail{}, fmt.Errorf("record paid online store order: %w", invoiceErr)
 				}
 				allocatedTotal += amount
 				validatedAllocations = append(validatedAllocations, validatedAllocation{documentType: "invoice", documentID: invoice.ID, amountMinor: amount})

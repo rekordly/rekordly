@@ -2364,6 +2364,7 @@ type Product struct {
 	LongDescription  pgtype.Text        `json:"long_description"`
 	ImageUrls        []byte             `json:"image_urls"`
 	ArchivedAt       pgtype.Timestamptz `json:"archived_at"`
+	ShowOnStore      bool               `json:"show_on_store"`
 }
 
 type ProductCollection struct {
@@ -2374,6 +2375,8 @@ type ProductCollection struct {
 	Position    int32              `json:"position"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	ShowOnStore bool               `json:"show_on_store"`
+	ImageUrl    pgtype.Text        `json:"image_url"`
 }
 
 type ProductCollectionItem struct {
@@ -2837,26 +2840,28 @@ type RolePermission struct {
 }
 
 type Sale struct {
-	ID               int64              `json:"id"`
-	WorkspaceID      int64              `json:"workspace_id"`
-	CustomerID       pgtype.Int8        `json:"customer_id"`
-	CustomerName     string             `json:"customer_name"`
-	SaleDate         pgtype.Date        `json:"sale_date"`
-	TotalAmountMinor int64              `json:"total_amount_minor"`
-	PaidAmountMinor  int64              `json:"paid_amount_minor"`
-	Currency         string             `json:"currency"`
-	CurrencyExponent int32              `json:"currency_exponent"`
-	Status           string             `json:"status"`
-	Notes            pgtype.Text        `json:"notes"`
-	Reference        pgtype.Text        `json:"reference"`
-	IdempotencyKey   pgtype.Text        `json:"idempotency_key"`
-	CreatedByUserID  pgtype.Int8        `json:"created_by_user_id"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
-	SubtotalMinor    pgtype.Int8        `json:"subtotal_minor"`
-	TaxAmountMinor   int64              `json:"tax_amount_minor"`
-	OutletID         pgtype.Int8        `json:"outlet_id"`
-	LocationID       pgtype.Int8        `json:"location_id"`
+	ID                int64              `json:"id"`
+	WorkspaceID       int64              `json:"workspace_id"`
+	CustomerID        pgtype.Int8        `json:"customer_id"`
+	CustomerName      string             `json:"customer_name"`
+	SaleDate          pgtype.Date        `json:"sale_date"`
+	TotalAmountMinor  int64              `json:"total_amount_minor"`
+	PaidAmountMinor   int64              `json:"paid_amount_minor"`
+	Currency          string             `json:"currency"`
+	CurrencyExponent  int32              `json:"currency_exponent"`
+	Status            string             `json:"status"`
+	Notes             pgtype.Text        `json:"notes"`
+	Reference         pgtype.Text        `json:"reference"`
+	IdempotencyKey    pgtype.Text        `json:"idempotency_key"`
+	CreatedByUserID   pgtype.Int8        `json:"created_by_user_id"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	SubtotalMinor     pgtype.Int8        `json:"subtotal_minor"`
+	TaxAmountMinor    int64              `json:"tax_amount_minor"`
+	OutletID          pgtype.Int8        `json:"outlet_id"`
+	LocationID        pgtype.Int8        `json:"location_id"`
+	Source            string             `json:"source"`
+	StorefrontOrderID pgtype.Int8        `json:"storefront_order_id"`
 }
 
 type SaleItem struct {
@@ -3139,6 +3144,14 @@ type StorefrontCartLine struct {
 	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
 }
 
+type StorefrontCatalogueMutation struct {
+	ID             int64              `json:"id"`
+	WorkspaceID    int64              `json:"workspace_id"`
+	IdempotencyKey string             `json:"idempotency_key"`
+	RequestHash    string             `json:"request_hash"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
 type StorefrontCollection struct {
 	ID           int64              `json:"id"`
 	WorkspaceID  int64              `json:"workspace_id"`
@@ -3151,6 +3164,18 @@ type StorefrontCollection struct {
 	IsVisible    bool               `json:"is_visible"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
+type StorefrontDesignEvent struct {
+	ID             int64              `json:"id"`
+	WorkspaceID    int64              `json:"workspace_id"`
+	StorefrontID   int64              `json:"storefront_id"`
+	ActorUserID    pgtype.Int8        `json:"actor_user_id"`
+	EventType      string             `json:"event_type"`
+	IdempotencyKey string             `json:"idempotency_key"`
+	RequestHash    string             `json:"request_hash"`
+	Version        int32              `json:"version"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
 type StorefrontDomain struct {
@@ -3286,15 +3311,15 @@ type StorefrontProduct struct {
 	CollectionID       pgtype.Int8        `json:"collection_id"`
 	IsPublished        bool               `json:"is_published"`
 	IsFeatured         bool               `json:"is_featured"`
-	PublicTitle        string             `json:"public_title"`
+	PublicTitle        pgtype.Text        `json:"public_title"`
 	PublicDescription  pgtype.Text        `json:"public_description"`
 	PublicSku          pgtype.Text        `json:"public_sku"`
 	ImageUrls          []byte             `json:"image_urls"`
-	PublicPriceMinor   int64              `json:"public_price_minor"`
-	AvailabilityPolicy string             `json:"availability_policy"`
-	LowStockThreshold  int32              `json:"low_stock_threshold"`
-	MaxQtyPerOrder     int32              `json:"max_qty_per_order"`
-	ContactOnly        bool               `json:"contact_only"`
+	PublicPriceMinor   pgtype.Int8        `json:"public_price_minor"`
+	AvailabilityPolicy pgtype.Text        `json:"availability_policy"`
+	LowStockThreshold  pgtype.Int4        `json:"low_stock_threshold"`
+	MaxQtyPerOrder     pgtype.Int4        `json:"max_qty_per_order"`
+	ContactOnly        pgtype.Bool        `json:"contact_only"`
 	Position           int32              `json:"position"`
 	SeoSlug            pgtype.Text        `json:"seo_slug"`
 	SeoTitle           pgtype.Text        `json:"seo_title"`
@@ -3338,6 +3363,17 @@ type StorefrontSetting struct {
 	CanonicalDomainID       pgtype.Int8        `json:"canonical_domain_id"`
 	Version                 int32              `json:"version"`
 	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
+	Brand                   []byte             `json:"brand"`
+	Sections                []byte             `json:"sections"`
+	DraftName               pgtype.Text        `json:"draft_name"`
+	DraftThemeKey           string             `json:"draft_theme_key"`
+	DraftBrand              []byte             `json:"draft_brand"`
+	DraftSections           []byte             `json:"draft_sections"`
+	PublishedAt             pgtype.Timestamptz `json:"published_at"`
+	AutoShowNewProducts     bool               `json:"auto_show_new_products"`
+	ShowSoldOut             bool               `json:"show_sold_out"`
+	ShowStockCount          bool               `json:"show_stock_count"`
+	LowStockThreshold       int32              `json:"low_stock_threshold"`
 }
 
 type Subscription struct {

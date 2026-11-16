@@ -278,7 +278,7 @@ INSERT INTO sales (
     status, notes, reference, idempotency_key, created_by_user_id
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
-) RETURNING id, workspace_id, customer_id, customer_name, sale_date, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, reference, idempotency_key, created_by_user_id, created_at, updated_at, subtotal_minor, tax_amount_minor, outlet_id, location_id
+) RETURNING id, workspace_id, customer_id, customer_name, sale_date, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, reference, idempotency_key, created_by_user_id, created_at, updated_at, subtotal_minor, tax_amount_minor, outlet_id, location_id, source, storefront_order_id
 `
 
 type CreateSaleParams struct {
@@ -335,6 +335,8 @@ func (q *Queries) CreateSale(ctx context.Context, arg CreateSaleParams) (Sale, e
 		&i.TaxAmountMinor,
 		&i.OutletID,
 		&i.LocationID,
+		&i.Source,
+		&i.StorefrontOrderID,
 	)
 	return i, err
 }
@@ -520,7 +522,7 @@ func (q *Queries) GetPurchaseByIdempotency(ctx context.Context, arg GetPurchaseB
 }
 
 const getSaleByID = `-- name: GetSaleByID :one
-SELECT id, workspace_id, customer_id, customer_name, sale_date, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, reference, idempotency_key, created_by_user_id, created_at, updated_at, subtotal_minor, tax_amount_minor, outlet_id, location_id FROM sales
+SELECT id, workspace_id, customer_id, customer_name, sale_date, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, reference, idempotency_key, created_by_user_id, created_at, updated_at, subtotal_minor, tax_amount_minor, outlet_id, location_id, source, storefront_order_id FROM sales
 WHERE id = $1 AND workspace_id = $2
 `
 
@@ -553,12 +555,14 @@ func (q *Queries) GetSaleByID(ctx context.Context, arg GetSaleByIDParams) (Sale,
 		&i.TaxAmountMinor,
 		&i.OutletID,
 		&i.LocationID,
+		&i.Source,
+		&i.StorefrontOrderID,
 	)
 	return i, err
 }
 
 const getSaleByIdempotency = `-- name: GetSaleByIdempotency :one
-SELECT id, workspace_id, customer_id, customer_name, sale_date, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, reference, idempotency_key, created_by_user_id, created_at, updated_at, subtotal_minor, tax_amount_minor, outlet_id, location_id FROM sales
+SELECT id, workspace_id, customer_id, customer_name, sale_date, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, reference, idempotency_key, created_by_user_id, created_at, updated_at, subtotal_minor, tax_amount_minor, outlet_id, location_id, source, storefront_order_id FROM sales
 WHERE workspace_id = $1 AND idempotency_key = $2 AND status <> 'voided'
 `
 
@@ -591,6 +595,8 @@ func (q *Queries) GetSaleByIdempotency(ctx context.Context, arg GetSaleByIdempot
 		&i.TaxAmountMinor,
 		&i.OutletID,
 		&i.LocationID,
+		&i.Source,
+		&i.StorefrontOrderID,
 	)
 	return i, err
 }
@@ -917,14 +923,15 @@ func (q *Queries) ListPurchases(ctx context.Context, arg ListPurchasesParams) ([
 }
 
 const listSales = `-- name: ListSales :many
-SELECT id, workspace_id, customer_id, customer_name, sale_date, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, reference, idempotency_key, created_by_user_id, created_at, updated_at, subtotal_minor, tax_amount_minor, outlet_id, location_id FROM sales
+SELECT id, workspace_id, customer_id, customer_name, sale_date, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, reference, idempotency_key, created_by_user_id, created_at, updated_at, subtotal_minor, tax_amount_minor, outlet_id, location_id, source, storefront_order_id FROM sales
 WHERE workspace_id = $1
   AND ($3::date IS NULL OR sale_date >= $3)
   AND ($4::date IS NULL OR sale_date <= $4)
   AND ($5::text IS NULL OR status = $5)
-  AND ($6::bigint IS NULL OR customer_id = $6)
-  AND ($7::bigint IS NULL OR id < $7)
-  AND ($8::text IS NULL OR customer_name ILIKE '%' || $8::text || '%' OR reference ILIKE '%' || $8::text || '%')
+  AND ($6::text IS NULL OR source = $6)
+  AND ($7::bigint IS NULL OR customer_id = $7)
+  AND ($8::bigint IS NULL OR id < $8)
+  AND ($9::text IS NULL OR customer_name ILIKE '%' || $9::text || '%' OR reference ILIKE '%' || $9::text || '%')
 ORDER BY sale_date DESC, id DESC
 LIMIT $2
 `
@@ -935,6 +942,7 @@ type ListSalesParams struct {
 	FromDate    pgtype.Date `json:"from_date"`
 	ToDate      pgtype.Date `json:"to_date"`
 	Status      pgtype.Text `json:"status"`
+	Source      pgtype.Text `json:"source"`
 	CustomerID  pgtype.Int8 `json:"customer_id"`
 	BeforeID    pgtype.Int8 `json:"before_id"`
 	Search      pgtype.Text `json:"search"`
@@ -947,6 +955,7 @@ func (q *Queries) ListSales(ctx context.Context, arg ListSalesParams) ([]Sale, e
 		arg.FromDate,
 		arg.ToDate,
 		arg.Status,
+		arg.Source,
 		arg.CustomerID,
 		arg.BeforeID,
 		arg.Search,
@@ -979,6 +988,8 @@ func (q *Queries) ListSales(ctx context.Context, arg ListSalesParams) ([]Sale, e
 			&i.TaxAmountMinor,
 			&i.OutletID,
 			&i.LocationID,
+			&i.Source,
+			&i.StorefrontOrderID,
 		); err != nil {
 			return nil, err
 		}
@@ -1136,7 +1147,7 @@ SET paid_amount_minor = paid_amount_minor + $3,
     END,
     updated_at = now()
 WHERE id = $1 AND workspace_id = $2
-RETURNING id, workspace_id, customer_id, customer_name, sale_date, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, reference, idempotency_key, created_by_user_id, created_at, updated_at, subtotal_minor, tax_amount_minor, outlet_id, location_id
+RETURNING id, workspace_id, customer_id, customer_name, sale_date, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, reference, idempotency_key, created_by_user_id, created_at, updated_at, subtotal_minor, tax_amount_minor, outlet_id, location_id, source, storefront_order_id
 `
 
 type UpdateSalePaidAmountParams struct {
@@ -1169,6 +1180,8 @@ func (q *Queries) UpdateSalePaidAmount(ctx context.Context, arg UpdateSalePaidAm
 		&i.TaxAmountMinor,
 		&i.OutletID,
 		&i.LocationID,
+		&i.Source,
+		&i.StorefrontOrderID,
 	)
 	return i, err
 }
@@ -1259,7 +1272,7 @@ UPDATE sales
 SET status = 'voided',
     updated_at = now()
 WHERE id = $1 AND workspace_id = $2 AND status <> 'voided'
-RETURNING id, workspace_id, customer_id, customer_name, sale_date, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, reference, idempotency_key, created_by_user_id, created_at, updated_at, subtotal_minor, tax_amount_minor, outlet_id, location_id
+RETURNING id, workspace_id, customer_id, customer_name, sale_date, total_amount_minor, paid_amount_minor, currency, currency_exponent, status, notes, reference, idempotency_key, created_by_user_id, created_at, updated_at, subtotal_minor, tax_amount_minor, outlet_id, location_id, source, storefront_order_id
 `
 
 type VoidSaleParams struct {
@@ -1291,6 +1304,8 @@ func (q *Queries) VoidSale(ctx context.Context, arg VoidSaleParams) (Sale, error
 		&i.TaxAmountMinor,
 		&i.OutletID,
 		&i.LocationID,
+		&i.Source,
+		&i.StorefrontOrderID,
 	)
 	return i, err
 }

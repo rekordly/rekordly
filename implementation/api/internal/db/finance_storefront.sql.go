@@ -69,9 +69,14 @@ func (q *Queries) CountPublishedStorefrontProducts(ctx context.Context, storefro
 }
 
 const createDefaultStorefrontSettings = `-- name: CreateDefaultStorefrontSettings :one
-INSERT INTO storefront_settings (storefront_id, workspace_id)
-VALUES ($1, $2)
-RETURNING storefront_id, workspace_id, tagline, description, logo_url, banner_url, primary_color, accent_color, background_color, text_color, font_family, section_order, contact_phone, contact_email, whatsapp_number, address, business_hours, social_links, delivery_methods, delivery_guidance, default_delivery_fee_minor, checkout_require_email, checkout_require_phone, return_policy, privacy_policy, terms_policy, custom_policy, seo_title, seo_description, seo_image_url, seo_indexable, canonical_domain_id, version, updated_at
+INSERT INTO storefront_settings (storefront_id, workspace_id, brand, draft_brand, sections, draft_sections, draft_name)
+VALUES ($1, $2,
+    '{"palette":"green","font_style":"modern"}'::jsonb,
+    '{"palette":"green","font_style":"modern"}'::jsonb,
+    '[{"id":"hero-1","type":"hero","enabled":true,"content":{"heading":"Welcome to your store","subheading":"Quality products, delivered to you","button_label":"Shop now"}},{"id":"product_grid-1","type":"product_grid","enabled":true,"content":{"title":"Shop our products","source":"new","limit":12}},{"id":"about-1","type":"about","enabled":true,"content":{"heading":"About us","body":"Tell shoppers a little about your business."}},{"id":"contact-1","type":"contact","enabled":true,"content":{}}]'::jsonb,
+    '[{"id":"hero-1","type":"hero","enabled":true,"content":{"heading":"Welcome to your store","subheading":"Quality products, delivered to you","button_label":"Shop now"}},{"id":"product_grid-1","type":"product_grid","enabled":true,"content":{"title":"Shop our products","source":"new","limit":12}},{"id":"about-1","type":"about","enabled":true,"content":{"heading":"About us","body":"Tell shoppers a little about your business."}},{"id":"contact-1","type":"contact","enabled":true,"content":{}}]'::jsonb,
+    'your store')
+RETURNING storefront_id, workspace_id, tagline, description, logo_url, banner_url, primary_color, accent_color, background_color, text_color, font_family, section_order, contact_phone, contact_email, whatsapp_number, address, business_hours, social_links, delivery_methods, delivery_guidance, default_delivery_fee_minor, checkout_require_email, checkout_require_phone, return_policy, privacy_policy, terms_policy, custom_policy, seo_title, seo_description, seo_image_url, seo_indexable, canonical_domain_id, version, updated_at, brand, sections, draft_name, draft_theme_key, draft_brand, draft_sections, published_at, auto_show_new_products, show_sold_out, show_stock_count, low_stock_threshold
 `
 
 type CreateDefaultStorefrontSettingsParams struct {
@@ -117,6 +122,17 @@ func (q *Queries) CreateDefaultStorefrontSettings(ctx context.Context, arg Creat
 		&i.CanonicalDomainID,
 		&i.Version,
 		&i.UpdatedAt,
+		&i.Brand,
+		&i.Sections,
+		&i.DraftName,
+		&i.DraftThemeKey,
+		&i.DraftBrand,
+		&i.DraftSections,
+		&i.PublishedAt,
+		&i.AutoShowNewProducts,
+		&i.ShowSoldOut,
+		&i.ShowStockCount,
+		&i.LowStockThreshold,
 	)
 	return i, err
 }
@@ -1193,7 +1209,7 @@ func (q *Queries) GetStorefrontOrderForUpdateByPublicHash(ctx context.Context, p
 }
 
 const getStorefrontSettings = `-- name: GetStorefrontSettings :one
-SELECT storefront_id, workspace_id, tagline, description, logo_url, banner_url, primary_color, accent_color, background_color, text_color, font_family, section_order, contact_phone, contact_email, whatsapp_number, address, business_hours, social_links, delivery_methods, delivery_guidance, default_delivery_fee_minor, checkout_require_email, checkout_require_phone, return_policy, privacy_policy, terms_policy, custom_policy, seo_title, seo_description, seo_image_url, seo_indexable, canonical_domain_id, version, updated_at FROM storefront_settings
+SELECT storefront_id, workspace_id, tagline, description, logo_url, banner_url, primary_color, accent_color, background_color, text_color, font_family, section_order, contact_phone, contact_email, whatsapp_number, address, business_hours, social_links, delivery_methods, delivery_guidance, default_delivery_fee_minor, checkout_require_email, checkout_require_phone, return_policy, privacy_policy, terms_policy, custom_policy, seo_title, seo_description, seo_image_url, seo_indexable, canonical_domain_id, version, updated_at, brand, sections, draft_name, draft_theme_key, draft_brand, draft_sections, published_at, auto_show_new_products, show_sold_out, show_stock_count, low_stock_threshold FROM storefront_settings
 WHERE storefront_id = $1 AND workspace_id = $2
 `
 
@@ -1240,6 +1256,17 @@ func (q *Queries) GetStorefrontSettings(ctx context.Context, arg GetStorefrontSe
 		&i.CanonicalDomainID,
 		&i.Version,
 		&i.UpdatedAt,
+		&i.Brand,
+		&i.Sections,
+		&i.DraftName,
+		&i.DraftThemeKey,
+		&i.DraftBrand,
+		&i.DraftSections,
+		&i.PublishedAt,
+		&i.AutoShowNewProducts,
+		&i.ShowSoldOut,
+		&i.ShowStockCount,
+		&i.LowStockThreshold,
 	)
 	return i, err
 }
@@ -1297,15 +1324,15 @@ type ListMerchantStorefrontProductsRow struct {
 	CollectionID       pgtype.Int8        `json:"collection_id"`
 	IsPublished        bool               `json:"is_published"`
 	IsFeatured         bool               `json:"is_featured"`
-	PublicTitle        string             `json:"public_title"`
+	PublicTitle        pgtype.Text        `json:"public_title"`
 	PublicDescription  pgtype.Text        `json:"public_description"`
 	PublicSku          pgtype.Text        `json:"public_sku"`
 	ImageUrls          []byte             `json:"image_urls"`
-	PublicPriceMinor   int64              `json:"public_price_minor"`
-	AvailabilityPolicy string             `json:"availability_policy"`
-	LowStockThreshold  int32              `json:"low_stock_threshold"`
-	MaxQtyPerOrder     int32              `json:"max_qty_per_order"`
-	ContactOnly        bool               `json:"contact_only"`
+	PublicPriceMinor   pgtype.Int8        `json:"public_price_minor"`
+	AvailabilityPolicy pgtype.Text        `json:"availability_policy"`
+	LowStockThreshold  pgtype.Int4        `json:"low_stock_threshold"`
+	MaxQtyPerOrder     pgtype.Int4        `json:"max_qty_per_order"`
+	ContactOnly        pgtype.Bool        `json:"contact_only"`
 	Position           int32              `json:"position"`
 	SeoSlug            pgtype.Text        `json:"seo_slug"`
 	SeoTitle           pgtype.Text        `json:"seo_title"`
@@ -1371,10 +1398,13 @@ func (q *Queries) ListMerchantStorefrontProducts(ctx context.Context, arg ListMe
 }
 
 const listPublicStorefrontCollections = `-- name: ListPublicStorefrontCollections :many
-SELECT id, name, slug, description, image_url, position
-FROM storefront_collections
-WHERE storefront_id = $1 AND is_visible = true
-ORDER BY position ASC, id ASC
+SELECT pc.id, pc.name,
+       trim(both '-' from regexp_replace(lower(pc.name), '[^a-z0-9]+', '-', 'g'))::text AS slug,
+       pc.description, pc.image_url, pc.position
+FROM product_collections pc
+JOIN storefronts sf ON sf.workspace_id = pc.workspace_id
+WHERE sf.id = $1 AND sf.workspace_id = pc.workspace_id AND pc.show_on_store = true
+ORDER BY pc.position ASC, pc.id ASC
 `
 
 type ListPublicStorefrontCollectionsRow struct {
@@ -1386,8 +1416,8 @@ type ListPublicStorefrontCollectionsRow struct {
 	Position    int32       `json:"position"`
 }
 
-func (q *Queries) ListPublicStorefrontCollections(ctx context.Context, storefrontID int64) ([]ListPublicStorefrontCollectionsRow, error) {
-	rows, err := q.db.Query(ctx, listPublicStorefrontCollections, storefrontID)
+func (q *Queries) ListPublicStorefrontCollections(ctx context.Context, id int64) ([]ListPublicStorefrontCollectionsRow, error) {
+	rows, err := q.db.Query(ctx, listPublicStorefrontCollections, id)
 	if err != nil {
 		return nil, err
 	}
@@ -1415,9 +1445,9 @@ func (q *Queries) ListPublicStorefrontCollections(ctx context.Context, storefron
 
 const listPublicStorefrontProducts = `-- name: ListPublicStorefrontProducts :many
 SELECT sp.id, sp.storefront_id, sp.product_id, sp.variant_id, sp.collection_id,
-       sp.is_featured, sp.public_title, sp.public_description, sp.public_sku,
-       sp.image_urls, sp.public_price_minor, sp.availability_policy, sp.low_stock_threshold,
-       sp.max_qty_per_order, sp.contact_only, sp.position, sp.seo_slug, sp.seo_title, sp.seo_description,
+       sp.is_featured, p.name AS public_title, COALESCE(p.long_description, p.short_description) AS public_description, pv.sku AS public_sku,
+       p.image_urls, pv.selling_price_minor AS public_price_minor, 'in_out_stock'::text AS availability_policy, 3::integer AS low_stock_threshold,
+       50::integer AS max_qty_per_order, false AS contact_only, sp.position, NULL::text AS seo_slug, NULL::text AS seo_title, NULL::text AS seo_description,
        p.kind AS product_kind, p.unit_name, pv.name AS variant_name, pv.currency, pv.currency_exponent,
        COALESCE((
            SELECT sum(ib.quantity_on_hand - ib.reserved_quantity)
@@ -1432,6 +1462,8 @@ JOIN product_variants pv ON pv.id = sp.variant_id AND pv.workspace_id = sp.works
 WHERE sp.storefront_id = $1
   AND sp.is_published = true
   AND p.status = 'active'
+  AND p.archived_at IS NULL
+  AND p.show_on_store = true
   AND pv.is_active = true
 ORDER BY sp.is_featured DESC, sp.position ASC, sp.id ASC
 `
@@ -1550,25 +1582,44 @@ func (q *Queries) ListStorefrontCartLines(ctx context.Context, cartID int64) ([]
 }
 
 const listStorefrontCollections = `-- name: ListStorefrontCollections :many
-SELECT id, workspace_id, storefront_id, name, slug, description, image_url, position, is_visible, created_at, updated_at FROM storefront_collections
-WHERE storefront_id = $1 AND workspace_id = $2
-ORDER BY position ASC, id ASC
+SELECT pc.id, pc.workspace_id, sf.id AS storefront_id, pc.name,
+       trim(both '-' from regexp_replace(lower(pc.name), '[^a-z0-9]+', '-', 'g'))::text AS slug,
+       pc.description, pc.image_url, pc.position, pc.show_on_store AS is_visible,
+       now() AS created_at, now() AS updated_at
+FROM product_collections pc
+JOIN storefronts sf ON sf.workspace_id = pc.workspace_id AND sf.id = $1
+WHERE sf.id = $1 AND pc.workspace_id = $2
+ORDER BY pc.position ASC, pc.id ASC
 `
 
 type ListStorefrontCollectionsParams struct {
-	StorefrontID int64 `json:"storefront_id"`
-	WorkspaceID  int64 `json:"workspace_id"`
+	ID          int64 `json:"id"`
+	WorkspaceID int64 `json:"workspace_id"`
 }
 
-func (q *Queries) ListStorefrontCollections(ctx context.Context, arg ListStorefrontCollectionsParams) ([]StorefrontCollection, error) {
-	rows, err := q.db.Query(ctx, listStorefrontCollections, arg.StorefrontID, arg.WorkspaceID)
+type ListStorefrontCollectionsRow struct {
+	ID           int64       `json:"id"`
+	WorkspaceID  int64       `json:"workspace_id"`
+	StorefrontID int64       `json:"storefront_id"`
+	Name         string      `json:"name"`
+	Slug         string      `json:"slug"`
+	Description  pgtype.Text `json:"description"`
+	ImageUrl     pgtype.Text `json:"image_url"`
+	Position     int32       `json:"position"`
+	IsVisible    bool        `json:"is_visible"`
+	CreatedAt    interface{} `json:"created_at"`
+	UpdatedAt    interface{} `json:"updated_at"`
+}
+
+func (q *Queries) ListStorefrontCollections(ctx context.Context, arg ListStorefrontCollectionsParams) ([]ListStorefrontCollectionsRow, error) {
+	rows, err := q.db.Query(ctx, listStorefrontCollections, arg.ID, arg.WorkspaceID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []StorefrontCollection{}
+	items := []ListStorefrontCollectionsRow{}
 	for rows.Next() {
-		var i StorefrontCollection
+		var i ListStorefrontCollectionsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.WorkspaceID,
@@ -2247,10 +2298,14 @@ SET tagline = $3,
     seo_description = $29,
     seo_image_url = $30,
     seo_indexable = $31,
+    auto_show_new_products = COALESCE($32::boolean, auto_show_new_products),
+    show_sold_out = COALESCE($33::boolean, show_sold_out),
+    show_stock_count = COALESCE($34::boolean, show_stock_count),
+    low_stock_threshold = COALESCE($35::integer, low_stock_threshold),
     version = version + 1,
     updated_at = now()
 WHERE storefront_id = $1 AND workspace_id = $2
-RETURNING storefront_id, workspace_id, tagline, description, logo_url, banner_url, primary_color, accent_color, background_color, text_color, font_family, section_order, contact_phone, contact_email, whatsapp_number, address, business_hours, social_links, delivery_methods, delivery_guidance, default_delivery_fee_minor, checkout_require_email, checkout_require_phone, return_policy, privacy_policy, terms_policy, custom_policy, seo_title, seo_description, seo_image_url, seo_indexable, canonical_domain_id, version, updated_at
+RETURNING storefront_id, workspace_id, tagline, description, logo_url, banner_url, primary_color, accent_color, background_color, text_color, font_family, section_order, contact_phone, contact_email, whatsapp_number, address, business_hours, social_links, delivery_methods, delivery_guidance, default_delivery_fee_minor, checkout_require_email, checkout_require_phone, return_policy, privacy_policy, terms_policy, custom_policy, seo_title, seo_description, seo_image_url, seo_indexable, canonical_domain_id, version, updated_at, brand, sections, draft_name, draft_theme_key, draft_brand, draft_sections, published_at, auto_show_new_products, show_sold_out, show_stock_count, low_stock_threshold
 `
 
 type UpdateStorefrontSettingsParams struct {
@@ -2285,6 +2340,10 @@ type UpdateStorefrontSettingsParams struct {
 	SeoDescription          pgtype.Text `json:"seo_description"`
 	SeoImageUrl             pgtype.Text `json:"seo_image_url"`
 	SeoIndexable            bool        `json:"seo_indexable"`
+	AutoShowNewProducts     pgtype.Bool `json:"auto_show_new_products"`
+	ShowSoldOut             pgtype.Bool `json:"show_sold_out"`
+	ShowStockCount          pgtype.Bool `json:"show_stock_count"`
+	LowStockThreshold       pgtype.Int4 `json:"low_stock_threshold"`
 }
 
 func (q *Queries) UpdateStorefrontSettings(ctx context.Context, arg UpdateStorefrontSettingsParams) (StorefrontSetting, error) {
@@ -2320,6 +2379,10 @@ func (q *Queries) UpdateStorefrontSettings(ctx context.Context, arg UpdateStoref
 		arg.SeoDescription,
 		arg.SeoImageUrl,
 		arg.SeoIndexable,
+		arg.AutoShowNewProducts,
+		arg.ShowSoldOut,
+		arg.ShowStockCount,
+		arg.LowStockThreshold,
 	)
 	var i StorefrontSetting
 	err := row.Scan(
@@ -2357,6 +2420,17 @@ func (q *Queries) UpdateStorefrontSettings(ctx context.Context, arg UpdateStoref
 		&i.CanonicalDomainID,
 		&i.Version,
 		&i.UpdatedAt,
+		&i.Brand,
+		&i.Sections,
+		&i.DraftName,
+		&i.DraftThemeKey,
+		&i.DraftBrand,
+		&i.DraftSections,
+		&i.PublishedAt,
+		&i.AutoShowNewProducts,
+		&i.ShowSoldOut,
+		&i.ShowStockCount,
+		&i.LowStockThreshold,
 	)
 	return i, err
 }
@@ -2434,15 +2508,15 @@ type UpsertStorefrontProductParams struct {
 	CollectionID       pgtype.Int8 `json:"collection_id"`
 	IsPublished        bool        `json:"is_published"`
 	IsFeatured         bool        `json:"is_featured"`
-	PublicTitle        string      `json:"public_title"`
+	PublicTitle        pgtype.Text `json:"public_title"`
 	PublicDescription  pgtype.Text `json:"public_description"`
 	PublicSku          pgtype.Text `json:"public_sku"`
 	ImageUrls          []byte      `json:"image_urls"`
-	PublicPriceMinor   int64       `json:"public_price_minor"`
-	AvailabilityPolicy string      `json:"availability_policy"`
-	LowStockThreshold  int32       `json:"low_stock_threshold"`
-	MaxQtyPerOrder     int32       `json:"max_qty_per_order"`
-	ContactOnly        bool        `json:"contact_only"`
+	PublicPriceMinor   pgtype.Int8 `json:"public_price_minor"`
+	AvailabilityPolicy pgtype.Text `json:"availability_policy"`
+	LowStockThreshold  pgtype.Int4 `json:"low_stock_threshold"`
+	MaxQtyPerOrder     pgtype.Int4 `json:"max_qty_per_order"`
+	ContactOnly        pgtype.Bool `json:"contact_only"`
 	Position           int32       `json:"position"`
 	SeoSlug            pgtype.Text `json:"seo_slug"`
 	SeoTitle           pgtype.Text `json:"seo_title"`

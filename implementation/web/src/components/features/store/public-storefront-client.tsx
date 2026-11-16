@@ -11,6 +11,7 @@ import { FormDrawer } from "@/components/ui/form-drawer";
 import { StatusPill } from "@/components/ui/page";
 import { createIdempotencyKey } from "@/lib/utils";
 import { financeApi, formatMinorAmount } from "@/lib/money";
+import { createDefaultSections, resolvePalette, STORE_THEMES, type BrandSettings, type ThemeKey } from "@/lib/store-themes";
 import type { GuestCheckoutConfirmation, PublicStorefrontProduct, ValidatedCart } from "@/types/finance";
 
 type CartDraftLine = {
@@ -25,11 +26,11 @@ type CartDraftLine = {
 function availabilityLabel(p: PublicStorefrontProduct): { text: string; tone: "success" | "warning" | "danger" | "neutral" } {
   if (p.availability_state === "in_stock") {
     return {
-      text: p.available_quantity ? `In stock (${p.available_quantity})` : "In stock",
+      text: p.available_quantity ? `${p.available_quantity} left` : "In stock",
       tone: "success",
     };
   }
-  if (p.availability_state === "low_stock") return { text: "Low stock", tone: "warning" };
+  if (p.availability_state === "low_stock") return { text: p.available_quantity ? `Only ${p.available_quantity} left` : "Low stock", tone: "warning" };
   if (p.availability_state === "request_only") return { text: "Available on request", tone: "neutral" };
   return { text: "Out of stock", tone: "danger" };
 }
@@ -196,6 +197,17 @@ export function PublicStorefrontClient({ slug }: { slug: string }) {
 
   const sf = storeQuery.data;
 
+  const themeKey: ThemeKey = sf.theme_key === "boutique" || sf.theme_key === "editorial" ? "boutique" : "simple";
+  const brand: BrandSettings = sf.brand ?? {
+    logo_url: sf.logo_url ?? undefined,
+    palette: "custom",
+    custom_color: sf.primary_color,
+    font_style: sf.font_family === "merriweather" ? "classic" : sf.font_family === "plus_jakarta" ? "friendly" : "modern",
+  };
+  const resolvedBrand = { ...brand, resolved_palette: sf.brand?.resolved_palette ?? resolvePalette(brand.palette, brand.custom_color) };
+  const sections = sf.sections?.length ? sf.sections : createDefaultSections(themeKey, sf.name);
+  const Renderer = STORE_THEMES[themeKey].Renderer;
+
   // Group published variants by internal product_id so customers see unified products + variant selector
   const productGroups = new Map<number, PublicStorefrontProduct[]>();
   for (const p of sf.products) {
@@ -231,92 +243,43 @@ export function PublicStorefrontClient({ slug }: { slug: string }) {
 
   const totalCount = cart.reduce((acc, i) => acc + i.quantity, 0);
 
+  const productTools = (
+    <section className="flex flex-wrap items-center gap-3">
+      <div className="min-w-0 flex-1 sm:min-w-[220px]">
+        <AppInput placeholder="Search products or services…" value={searchText} onChange={(e) => setSearchText(e.target.value)} startContent={<MagnifyingGlass size={16} />} />
+      </div>
+      <div className="flex max-w-full flex-wrap gap-2">
+        <AppButton size="sm" variant={selectedCol === "" ? "primary" : "secondary"} label="All" onPress={() => setSelectedCol("")} />
+        {sf.collections.map((collection) => <AppButton key={collection.id} size="sm" variant={selectedCol === collection.slug ? "primary" : "secondary"} label={collection.name} onPress={() => setSelectedCol(collection.slug)} />)}
+      </div>
+      {productGroups.size === 0 ? <div className="w-full rounded-2xl border border-black/10 p-8 text-center"><p className="font-semibold">No matching items found</p><p className="mt-1 text-xs opacity-75">Try another search or contact {sf.contact_phone || sf.contact_email || "the merchant"} directly.</p></div> : null}
+    </section>
+  );
+
+  const renderProduct = (product: { product_id: number; id: number }) => {
+    const variants = productGroups.get(product.product_id) ?? sf.products.filter((item) => item.product_id === product.product_id);
+    const primary = variants[0];
+    if (!primary) return null;
+    const badge = availabilityLabel(primary);
+    return <div key={primary.product_id} className="flex h-full flex-col justify-between gap-3 rounded-2xl border border-black/10 bg-white/80 p-4 shadow-xs">
+      <div className="space-y-2"><div className="flex items-start justify-between gap-2"><h2 className="text-sm font-semibold text-gray-900">{primary.title}</h2><StatusPill tone={badge.tone}>{badge.text}</StatusPill></div>
+        {primary.description ? <p className="line-clamp-2 text-xs text-gray-600">{primary.description}</p> : null}
+        <p className="tabular text-base font-bold" style={{ color: sf.accent_color }}>{formatMinorAmount(primary.price_minor, primary.currency, primary.currency_exponent)}{variants.length > 1 ? ` · ${variants.length} options` : ""}</p>
+      </div>
+      <AppButton size="sm" variant="secondary" label={variants.length > 1 ? "Select option" : "View & add"} onPress={() => { setActiveProductGroup(variants); setSelectedVariantId(primary.id); }} />
+    </div>;
+  };
+
   return (
-    <div className="min-h-screen flex flex-col" style={{ backgroundColor: sf.background_color, color: sf.text_color }}>
-      <header className="sticky top-0 z-20 border-b border-black/10 text-white" style={{ backgroundColor: sf.primary_color }}>
-        <div className="mx-auto max-w-6xl px-4 py-3.5 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0">
-            {sf.logo_url ? <img src={sf.logo_url} alt={sf.name} className="h-9 w-9 rounded-lg object-cover bg-white" /> : null}
-            <div className="min-w-0">
-              <p className="font-bold text-base truncate">{sf.name}</p>
-              {sf.tagline ? <p className="text-xs opacity-85 truncate">{sf.tagline}</p> : null}
-            </div>
-          </div>
-          <AppButton
-            size="sm"
-            variant="secondary"
-            startContent={<ShoppingCart weight="duotone" />}
-            label={`Request cart (${totalCount})`}
-            onPress={openCart}
-          />
-        </div>
-      </header>
-
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 space-y-6">
-        {sf.description ? (
-          <section className="rounded-2xl border border-black/10 p-5 bg-black/[0.02]">
-            <p className="text-sm opacity-90">{sf.description}</p>
-            <p className="text-xs opacity-70 mt-2">Submit an order request without an account — we confirm availability, delivery and payment directly.</p>
-          </section>
-        ) : null}
-
-        <section className="flex flex-wrap items-center gap-3">
-          <div className="flex-1 min-w-[220px]">
-            <AppInput
-              placeholder="Search products or services…"
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              startContent={<MagnifyingGlass size={16} />}
-            />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <AppButton size="sm" variant={selectedCol === "" ? "primary" : "secondary"} label="All" onPress={() => setSelectedCol("")} />
-            {sf.collections.map((c) => (
-              <AppButton key={c.id} size="sm" variant={selectedCol === c.slug ? "primary" : "secondary"} label={c.name} onPress={() => setSelectedCol(c.slug)} />
-            ))}
-          </div>
-        </section>
-
-        {Array.from(productGroups.values()).length === 0 ? (
-          <div className="rounded-2xl border border-black/10 p-8 text-center space-y-2">
-            <p className="font-semibold">No matching items found</p>
-            <p className="text-xs opacity-75">Try another search or contact {sf.contact_phone || sf.contact_email || "the merchant"} directly.</p>
-          </div>
-        ) : (
-          <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {Array.from(productGroups.values()).map((variants) => {
-              const primary = variants[0];
-              const badge = availabilityLabel(primary);
-              return (
-                <div key={primary.product_id} className="rounded-2xl border border-black/10 bg-white/80 p-4 flex flex-col justify-between gap-3 shadow-xs">
-                  <div className="space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <h2 className="font-semibold text-sm text-gray-900">{primary.title}</h2>
-                      <StatusPill tone={badge.tone}>{badge.text}</StatusPill>
-                    </div>
-                    {primary.description ? <p className="text-xs text-gray-600 line-clamp-2">{primary.description}</p> : null}
-                    <p className="text-base font-bold tabular" style={{ color: sf.accent_color }}>
-                      {formatMinorAmount(primary.price_minor, primary.currency, primary.currency_exponent)}
-                      {variants.length > 1 ? ` · ${variants.length} options` : ""}
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    <AppButton
-                      size="sm"
-                      variant="secondary"
-                      label={variants.length > 1 ? "Select option" : "View & add"}
-                      onPress={() => {
-                        setActiveProductGroup(variants);
-                        setSelectedVariantId(primary.id);
-                      }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </section>
-        )}
-      </main>
+    <div className="min-h-screen" style={{ backgroundColor: resolvedBrand.resolved_palette?.background ?? sf.background_color, color: resolvedBrand.resolved_palette?.text ?? sf.text_color }}>
+      <Renderer
+        store={{ name: sf.name, slug: sf.slug, logo_url: brand.logo_url ?? sf.logo_url, phone: sf.contact_phone, whatsapp_number: sf.whatsapp_number, address: sf.address, business_hours: sf.business_hours, products: sf.products.map((product) => ({ ...product, is_featured: product.is_featured ?? false })), collections: sf.collections }}
+        brand={resolvedBrand}
+        sections={sections}
+        productTools={productTools}
+        renderProduct={renderProduct}
+        headerAction={<AppButton size="sm" variant="secondary" startContent={<ShoppingCart weight="duotone" />} label={`Request cart (${totalCount})`} onPress={openCart} />}
+      />
 
       <footer className="border-t border-black/10 px-4 py-6 text-xs opacity-80">
         <div className="mx-auto max-w-6xl grid sm:grid-cols-3 gap-4">

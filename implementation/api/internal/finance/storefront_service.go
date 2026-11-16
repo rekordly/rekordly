@@ -163,7 +163,7 @@ func validateAccessibleColors(primary, accent, bg, text string) (string, string,
 
 func validateStorefrontSlug(raw string) (string, error) {
 	s := strings.ToLower(strings.TrimSpace(raw))
-	if len(s) < 3 || len(s) > 63 || !storefrontSlugPattern.MatchString(s) {
+	if len(s) < 3 || len(s) > 40 || !storefrontSlugPattern.MatchString(s) {
 		return "", errors.New("slug must be 3-63 lowercase letters, numbers, or hyphens")
 	}
 	if reservedStorefrontSlugs[s] {
@@ -217,6 +217,10 @@ type StorefrontSettingsView struct {
 	DefaultDeliveryFeeMinor string            `json:"default_delivery_fee_minor"`
 	CheckoutRequireEmail    bool              `json:"checkout_require_email"`
 	CheckoutRequirePhone    bool              `json:"checkout_require_phone"`
+	AutoShowNewProducts     bool              `json:"auto_show_new_products"`
+	ShowSoldOut             bool              `json:"show_sold_out"`
+	ShowStockCount          bool              `json:"show_stock_count"`
+	LowStockThreshold       int32             `json:"low_stock_threshold"`
 	ReturnPolicy            *string           `json:"return_policy,omitempty"`
 	PrivacyPolicy           *string           `json:"privacy_policy,omitempty"`
 	TermsPolicy             *string           `json:"terms_policy,omitempty"`
@@ -289,6 +293,10 @@ type UpdateStorefrontSettingsInput struct {
 	SeoDescription       string            `json:"seo_description"`
 	SeoImageURL          string            `json:"seo_image_url"`
 	SeoIndexable         *bool             `json:"seo_indexable"`
+	AutoShowNewProducts  *bool             `json:"auto_show_new_products"`
+	ShowSoldOut          *bool             `json:"show_sold_out"`
+	ShowStockCount       *bool             `json:"show_stock_count"`
+	LowStockThreshold    *int32            `json:"low_stock_threshold"`
 }
 
 func settingsToView(st db.StorefrontSetting) StorefrontSettingsView {
@@ -328,6 +336,10 @@ func settingsToView(st db.StorefrontSetting) StorefrontSettingsView {
 		DefaultDeliveryFeeMinor: fmt.Sprint(st.DefaultDeliveryFeeMinor),
 		CheckoutRequireEmail:    st.CheckoutRequireEmail,
 		CheckoutRequirePhone:    st.CheckoutRequirePhone,
+		AutoShowNewProducts:     st.AutoShowNewProducts,
+		ShowSoldOut:             st.ShowSoldOut,
+		ShowStockCount:          st.ShowStockCount,
+		LowStockThreshold:       st.LowStockThreshold,
 		ReturnPolicy:            nullableText(st.ReturnPolicy),
 		PrivacyPolicy:           nullableText(st.PrivacyPolicy),
 		TermsPolicy:             nullableText(st.TermsPolicy),
@@ -377,12 +389,9 @@ func (s *Service) CreateStorefront(ctx context.Context, ws, user int64, in Creat
 	if err != nil {
 		return StorefrontView{}, err
 	}
-	theme := strings.TrimSpace(in.ThemeKey)
-	if theme == "" {
-		theme = "classic"
-	}
-	if theme != "classic" && theme != "modern" && theme != "editorial" && theme != "minimal" {
-		return StorefrontView{}, errors.New("unsupported theme template")
+	theme, err := normalizeStorefrontTheme(in.ThemeKey)
+	if err != nil {
+		return StorefrontView{}, err
 	}
 	currency := strings.ToUpper(strings.TrimSpace(in.Currency))
 	if currency == "" {
@@ -492,9 +501,9 @@ func (s *Service) UpdateStorefrontSettings(ctx context.Context, ws int64, in Upd
 	}
 	var nextTheme pgtype.Text
 	if strings.TrimSpace(in.ThemeKey) != "" {
-		t := strings.TrimSpace(in.ThemeKey)
-		if t != "classic" && t != "modern" && t != "editorial" && t != "minimal" {
-			return StorefrontView{}, errors.New("unsupported theme template")
+		t, err := normalizeStorefrontTheme(in.ThemeKey)
+		if err != nil {
+			return StorefrontView{}, err
 		}
 		nextTheme = pgtype.Text{String: t, Valid: true}
 	}
@@ -625,14 +634,18 @@ func (s *Service) UpdateStorefrontSettings(ctx context.Context, ws int64, in Upd
 		DefaultDeliveryFeeMinor: feeMinor,
 		CheckoutRequireEmail:    reqEmail,
 		CheckoutRequirePhone:    reqPhone,
-		ReturnPolicy:            optionalPgText(sanitizePublicText(in.ReturnPolicy, 5000)),
-		PrivacyPolicy:           optionalPgText(sanitizePublicText(in.PrivacyPolicy, 5000)),
-		TermsPolicy:             optionalPgText(sanitizePublicText(in.TermsPolicy, 5000)),
-		CustomPolicy:            optionalPgText(sanitizePublicText(in.CustomPolicy, 5000)),
+		ReturnPolicy:            optionalPgText(SanitizeRichText(in.ReturnPolicy)),
+		PrivacyPolicy:           optionalPgText(SanitizeRichText(in.PrivacyPolicy)),
+		TermsPolicy:             optionalPgText(SanitizeRichText(in.TermsPolicy)),
+		CustomPolicy:            optionalPgText(SanitizeRichText(in.CustomPolicy)),
 		SeoTitle:                optionalPgText(sanitizePublicText(in.SeoTitle, 160)),
 		SeoDescription:          optionalPgText(sanitizePublicText(in.SeoDescription, 400)),
 		SeoImageUrl:             optionalPgText(sanitizeURLOrCloudinary(in.SeoImageURL)),
 		SeoIndexable:            idxable,
+		AutoShowNewProducts:     nullablePgBool(in.AutoShowNewProducts),
+		ShowSoldOut:             nullablePgBool(in.ShowSoldOut),
+		ShowStockCount:          nullablePgBool(in.ShowStockCount),
+		LowStockThreshold:       nullablePgInt4(in.LowStockThreshold),
 	}); err != nil {
 		return StorefrontView{}, err
 	}
@@ -655,6 +668,20 @@ func fallbackStr(v, cur string) string {
 		return strings.TrimSpace(v)
 	}
 	return cur
+}
+
+func nullablePgBool(value *bool) pgtype.Bool {
+	if value == nil {
+		return pgtype.Bool{}
+	}
+	return pgtype.Bool{Bool: *value, Valid: true}
+}
+
+func nullablePgInt4(value *int32) pgtype.Int4 {
+	if value == nil {
+		return pgtype.Int4{}
+	}
+	return pgtype.Int4{Int32: *value, Valid: true}
 }
 
 func (s *Service) PublishStorefront(ctx context.Context, ws int64, publish bool) (StorefrontView, error) {
@@ -784,13 +811,13 @@ func (s *Service) ListStorefrontCollections(ctx context.Context, ws int64) ([]St
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.queries.ListStorefrontCollections(ctx, db.ListStorefrontCollectionsParams{StorefrontID: sf.ID, WorkspaceID: ws})
+	rows, err := s.queries.ListStorefrontCollections(ctx, db.ListStorefrontCollectionsParams{ID: sf.ID, WorkspaceID: ws})
 	if err != nil {
 		return nil, err
 	}
 	out := make([]StorefrontCollectionView, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, collectionToView(r))
+		out = append(out, StorefrontCollectionView{ID: r.ID, Name: r.Name, Slug: r.Slug, Description: nullableText(r.Description), ImageURL: nullableText(r.ImageUrl), Position: r.Position, IsVisible: r.IsVisible})
 	}
 	return out, nil
 }
@@ -952,15 +979,15 @@ func (s *Service) UpsertStorefrontProduct(ctx context.Context, ws, variantID int
 		CollectionID:       colID,
 		IsPublished:        in.IsPublished,
 		IsFeatured:         in.IsFeatured,
-		PublicTitle:        title,
+		PublicTitle:        optionalPgText(title),
 		PublicDescription:  optionalPgText(desc),
 		PublicSku:          optionalPgText(sanitizePublicText(in.PublicSKU, 80)),
 		ImageUrls:          imgBytes,
-		PublicPriceMinor:   priceMinor,
-		AvailabilityPolicy: availPolicy,
-		LowStockThreshold:  lowThreshold,
-		MaxQtyPerOrder:     maxQty,
-		ContactOnly:        in.ContactOnly,
+		PublicPriceMinor:   pgtype.Int8{Int64: priceMinor, Valid: true},
+		AvailabilityPolicy: optionalPgText(availPolicy),
+		LowStockThreshold:  pgtype.Int4{Int32: lowThreshold, Valid: true},
+		MaxQtyPerOrder:     pgtype.Int4{Int32: maxQty, Valid: true},
+		ContactOnly:        pgtype.Bool{Bool: in.ContactOnly, Valid: true},
 		Position:           in.Position,
 		SeoSlug:            optionalPgText(sanitizePublicText(in.SeoSlug, 120)),
 		SeoTitle:           optionalPgText(sanitizePublicText(in.SeoTitle, 160)),
@@ -977,16 +1004,16 @@ func (s *Service) UpsertStorefrontProduct(ctx context.Context, ws, variantID int
 		CollectionID:       nullableInt8(row.CollectionID),
 		IsPublished:        row.IsPublished,
 		IsFeatured:         row.IsFeatured,
-		PublicTitle:        row.PublicTitle,
+		PublicTitle:        storefrontTextOr(row.PublicTitle, "Product"),
 		PublicDescription:  nullableText(row.PublicDescription),
 		PublicSKU:          nullableText(row.PublicSku),
 		ImageURLs:          cleanImages,
-		PublicPriceMinor:   fmt.Sprint(row.PublicPriceMinor),
+		PublicPriceMinor:   storefrontMinorOr(row.PublicPriceMinor),
 		Currency:           variant.Currency,
-		AvailabilityPolicy: row.AvailabilityPolicy,
-		LowStockThreshold:  row.LowStockThreshold,
-		MaxQtyPerOrder:     row.MaxQtyPerOrder,
-		ContactOnly:        row.ContactOnly,
+		AvailabilityPolicy: storefrontTextOr(row.AvailabilityPolicy, "in_out_stock"),
+		LowStockThreshold:  storefrontInt4Or(row.LowStockThreshold, 3),
+		MaxQtyPerOrder:     storefrontInt4Or(row.MaxQtyPerOrder, 50),
+		ContactOnly:        storefrontBoolOr(row.ContactOnly, false),
 		Position:           row.Position,
 		ProductKind:        product.Kind,
 		VariantName:        variant.Name,
@@ -1026,16 +1053,16 @@ func (s *Service) ListMerchantStorefrontProducts(ctx context.Context, ws int64) 
 			CollectionID:       nullableInt8(r.CollectionID),
 			IsPublished:        r.IsPublished,
 			IsFeatured:         r.IsFeatured,
-			PublicTitle:        r.PublicTitle,
+			PublicTitle:        storefrontTextOr(r.PublicTitle, "Product"),
 			PublicDescription:  nullableText(r.PublicDescription),
 			PublicSKU:          nullableText(r.PublicSku),
 			ImageURLs:          imgs,
-			PublicPriceMinor:   fmt.Sprint(r.PublicPriceMinor),
+			PublicPriceMinor:   storefrontMinorOr(r.PublicPriceMinor),
 			Currency:           r.Currency,
-			AvailabilityPolicy: r.AvailabilityPolicy,
-			LowStockThreshold:  r.LowStockThreshold,
-			MaxQtyPerOrder:     r.MaxQtyPerOrder,
-			ContactOnly:        r.ContactOnly,
+			AvailabilityPolicy: storefrontTextOr(r.AvailabilityPolicy, "in_out_stock"),
+			LowStockThreshold:  storefrontInt4Or(r.LowStockThreshold, 3),
+			MaxQtyPerOrder:     storefrontInt4Or(r.MaxQtyPerOrder, 50),
+			ContactOnly:        storefrontBoolOr(r.ContactOnly, false),
 			Position:           r.Position,
 			ProductKind:        r.ProductKind,
 			VariantName:        r.VariantName,

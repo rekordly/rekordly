@@ -18,6 +18,7 @@ import {
   Sparkle,
   UsersThree,
   SquaresFour,
+  Storefront as StorefrontIcon,
   Wallet,
   type Icon as PhosphorIcon,
 } from "@phosphor-icons/react";
@@ -133,7 +134,19 @@ const NAVIGATION: Readonly<Record<ShellMode, NavGroup[]>> = {
           children: [
             { label: "Products", href: "/products" },
             { label: "Inventory", href: "/inventory", permission: PERMISSIONS.INVENTORY_VIEW_QUANTITY },
-            { label: "Storefront", href: "/store", permission: PERMISSIONS.STOREFRONT_VIEW },
+          ],
+        },
+        {
+          label: "Store",
+          href: "/store",
+          icon: StorefrontIcon,
+          permission: PERMISSIONS.STOREFRONT_VIEW,
+          children: [
+            { label: "Overview", href: "/store" },
+            { label: "Orders", href: "/store/orders" },
+            { label: "Products", href: "/store/products" },
+            { label: "Design", href: "/store/design" },
+            { label: "Settings", href: "/store/settings" },
           ],
         },
         {

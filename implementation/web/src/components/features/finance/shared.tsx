@@ -63,7 +63,7 @@ export function WorkspaceGate({
 }
 
 /** One workspace's list, searched and paged on the server by cursor. */
-export function useRecords<T extends { id: number }>(resource: RecordResource, workspaceId: number) {
+export function useRecords<T extends { id: number }>(resource: RecordResource, workspaceId: number, filters: Record<string, string | number | undefined> = {}) {
   const pageSize = useUIStore((state) => state.pageSize);
   const [search, setSearch] = useState("");
   const [submittedSearch, setSubmittedSearch] = useState("");
@@ -74,9 +74,9 @@ export function useRecords<T extends { id: number }>(resource: RecordResource, w
   }, [search]);
 
   const query = useInfiniteQuery({
-    queryKey: [...moneyKeys.workspace(workspaceId), resource, submittedSearch, pageSize],
+    queryKey: [...moneyKeys.workspace(workspaceId), resource, submittedSearch, pageSize, filters],
     queryFn: ({ pageParam }) =>
-      listRecords<T>(workspaceId, resource, { limit: pageSize, search: submittedSearch || undefined, before_id: pageParam }),
+      listRecords<T>(workspaceId, resource, { ...filters, limit: pageSize, search: submittedSearch || undefined, before_id: pageParam }),
     initialPageParam: undefined as number | undefined,
     getNextPageParam: (lastPage) => (lastPage.length === pageSize ? lastPage[lastPage.length - 1]?.id : undefined),
     placeholderData: keepPreviousData,

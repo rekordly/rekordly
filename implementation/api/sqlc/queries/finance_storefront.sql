@@ -7,8 +7,13 @@ INSERT INTO storefronts (
 RETURNING *;
 
 -- name: CreateDefaultStorefrontSettings :one
-INSERT INTO storefront_settings (storefront_id, workspace_id)
-VALUES ($1, $2)
+INSERT INTO storefront_settings (storefront_id, workspace_id, brand, draft_brand, sections, draft_sections, draft_name)
+VALUES ($1, $2,
+    '{"palette":"green","font_style":"modern"}'::jsonb,
+    '{"palette":"green","font_style":"modern"}'::jsonb,
+    '[{"id":"hero-1","type":"hero","enabled":true,"content":{"heading":"Welcome to your store","subheading":"Quality products, delivered to you","button_label":"Shop now"}},{"id":"product_grid-1","type":"product_grid","enabled":true,"content":{"title":"Shop our products","source":"new","limit":12}},{"id":"about-1","type":"about","enabled":true,"content":{"heading":"About us","body":"Tell shoppers a little about your business."}},{"id":"contact-1","type":"contact","enabled":true,"content":{}}]'::jsonb,
+    '[{"id":"hero-1","type":"hero","enabled":true,"content":{"heading":"Welcome to your store","subheading":"Quality products, delivered to you","button_label":"Shop now"}},{"id":"product_grid-1","type":"product_grid","enabled":true,"content":{"title":"Shop our products","source":"new","limit":12}},{"id":"about-1","type":"about","enabled":true,"content":{"heading":"About us","body":"Tell shoppers a little about your business."}},{"id":"contact-1","type":"contact","enabled":true,"content":{}}]'::jsonb,
+    'your store')
 RETURNING *;
 
 -- name: GetStorefrontByWorkspace :one
@@ -81,6 +86,10 @@ SET tagline = $3,
     seo_description = $29,
     seo_image_url = $30,
     seo_indexable = $31,
+    auto_show_new_products = COALESCE(sqlc.narg('auto_show_new_products')::boolean, auto_show_new_products),
+    show_sold_out = COALESCE(sqlc.narg('show_sold_out')::boolean, show_sold_out),
+    show_stock_count = COALESCE(sqlc.narg('show_stock_count')::boolean, show_stock_count),
+    low_stock_threshold = COALESCE(sqlc.narg('low_stock_threshold')::integer, low_stock_threshold),
     version = version + 1,
     updated_at = now()
 WHERE storefront_id = $1 AND workspace_id = $2
@@ -93,15 +102,23 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING *;
 
 -- name: ListStorefrontCollections :many
-SELECT * FROM storefront_collections
-WHERE storefront_id = $1 AND workspace_id = $2
-ORDER BY position ASC, id ASC;
+SELECT pc.id, pc.workspace_id, sf.id AS storefront_id, pc.name,
+       trim(both '-' from regexp_replace(lower(pc.name), '[^a-z0-9]+', '-', 'g'))::text AS slug,
+       pc.description, pc.image_url, pc.position, pc.show_on_store AS is_visible,
+       now() AS created_at, now() AS updated_at
+FROM product_collections pc
+JOIN storefronts sf ON sf.workspace_id = pc.workspace_id AND sf.id = $1
+WHERE sf.id = $1 AND pc.workspace_id = $2
+ORDER BY pc.position ASC, pc.id ASC;
 
 -- name: ListPublicStorefrontCollections :many
-SELECT id, name, slug, description, image_url, position
-FROM storefront_collections
-WHERE storefront_id = $1 AND is_visible = true
-ORDER BY position ASC, id ASC;
+SELECT pc.id, pc.name,
+       trim(both '-' from regexp_replace(lower(pc.name), '[^a-z0-9]+', '-', 'g'))::text AS slug,
+       pc.description, pc.image_url, pc.position
+FROM product_collections pc
+JOIN storefronts sf ON sf.workspace_id = pc.workspace_id
+WHERE sf.id = $1 AND sf.workspace_id = pc.workspace_id AND pc.show_on_store = true
+ORDER BY pc.position ASC, pc.id ASC;
 
 -- name: UpdateStorefrontCollection :one
 UPDATE storefront_collections
@@ -164,9 +181,9 @@ WHERE sp.storefront_id = $1 AND sp.is_published = true AND p.status = 'active' A
 
 -- name: ListPublicStorefrontProducts :many
 SELECT sp.id, sp.storefront_id, sp.product_id, sp.variant_id, sp.collection_id,
-       sp.is_featured, sp.public_title, sp.public_description, sp.public_sku,
-       sp.image_urls, sp.public_price_minor, sp.availability_policy, sp.low_stock_threshold,
-       sp.max_qty_per_order, sp.contact_only, sp.position, sp.seo_slug, sp.seo_title, sp.seo_description,
+       sp.is_featured, p.name AS public_title, COALESCE(p.long_description, p.short_description) AS public_description, pv.sku AS public_sku,
+       p.image_urls, pv.selling_price_minor AS public_price_minor, 'in_out_stock'::text AS availability_policy, 3::integer AS low_stock_threshold,
+       50::integer AS max_qty_per_order, false AS contact_only, sp.position, NULL::text AS seo_slug, NULL::text AS seo_title, NULL::text AS seo_description,
        p.kind AS product_kind, p.unit_name, pv.name AS variant_name, pv.currency, pv.currency_exponent,
        COALESCE((
            SELECT sum(ib.quantity_on_hand - ib.reserved_quantity)
@@ -181,6 +198,8 @@ JOIN product_variants pv ON pv.id = sp.variant_id AND pv.workspace_id = sp.works
 WHERE sp.storefront_id = $1
   AND sp.is_published = true
   AND p.status = 'active'
+  AND p.archived_at IS NULL
+  AND p.show_on_store = true
   AND pv.is_active = true
 ORDER BY sp.is_featured DESC, sp.position ASC, sp.id ASC;
 

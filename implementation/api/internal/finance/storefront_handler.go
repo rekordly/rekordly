@@ -10,16 +10,25 @@ import (
 )
 
 func (h *Handler) RegisterStorefrontRoutes(g *gin.RouterGroup) {
+	h.registerStorefrontDesignRoutes(g)
 	g.POST("/storefront", h.createStorefront)
 	g.GET("/storefront", h.getMerchantStorefront)
+	g.GET("/storefront/settings", h.getMerchantStorefront)
 	g.PATCH("/storefront/settings", h.updateStorefrontSettings)
 	g.POST("/storefront/commands/publish", h.publishStorefront)
 	g.POST("/storefront/commands/unpublish", h.unpublishStorefront)
 	g.POST("/storefront/commands/entitlement", h.setStorefrontEntitlement)
 	g.GET("/storefront/collections", h.listStorefrontCollections)
-	g.POST("/storefront/collections", h.createStorefrontCollection)
+	g.POST("/storefront/collections", func(c *gin.Context) {
+		c.JSON(http.StatusGone, gin.H{"error": gin.H{"code": "GONE", "message": "Manage collections from Products."}})
+	})
+	g.GET("/storefront/products", h.listStorefrontProductCards)
+	g.PATCH("/storefront/products/:productId", h.patchStorefrontProduct)
+	g.POST("/storefront/products/bulk", h.bulkPatchStorefrontProducts)
 	g.GET("/storefront/catalogue", h.listMerchantStorefrontProducts)
-	g.PUT("/storefront/catalogue/:variantId", h.upsertStorefrontProduct)
+	g.PUT("/storefront/catalogue/:variantId", func(c *gin.Context) {
+		c.JSON(http.StatusGone, gin.H{"error": gin.H{"code": "GONE", "message": "Manage products from Products."}})
+	})
 	g.GET("/storefront/domains", h.listStorefrontDomains)
 	g.POST("/storefront/domains", h.addCustomDomain)
 	g.POST("/storefront/domains/:domainId/commands/recheck", h.recheckCustomDomain)
@@ -44,6 +53,10 @@ func (h *Handler) storefrontError(c *gin.Context, err error) {
 		status, code = http.StatusTooManyRequests, "CHECKOUT_RATE_LIMITED"
 	case errors.Is(err, ErrOrderVersionConflict):
 		status, code = http.StatusConflict, "ORDER_VERSION_CONFLICT"
+	case errors.Is(err, ErrStorefrontDesignVersionConflict):
+		status, code = http.StatusConflict, "STOREFRONT_DESIGN_VERSION_CONFLICT"
+	case errors.Is(err, ErrDuplicateIdempotent):
+		status, code = http.StatusConflict, "IDEMPOTENCY_KEY_REUSED"
 	case errors.Is(err, ErrOrderAlreadyHandled):
 		status, code = http.StatusConflict, "ORDER_ALREADY_HANDLED"
 	case errors.Is(err, ErrInsufficientStock):

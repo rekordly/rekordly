@@ -437,6 +437,7 @@ function MerchantOrderDetailInner({
             </div>
           ) : null}
 
+          {order.linked_sale_id ? <a href="/sales?source=online_store" className="inline-flex h-9 items-center rounded-full bg-primary px-4 text-sm font-semibold text-primary-foreground">View sale #{order.linked_sale_id}</a> : null}
           {!order.linked_invoice_id && !["declined", "cancelled"].includes(order.commercial_status) ? (
             <div className="flex flex-wrap gap-2">
               <AppButton size="sm" variant="secondary" startContent={<LinkSimple />} label="Create Draft Invoice" onPress={() => invoiceAct.mutate(false)} />

@@ -13,6 +13,7 @@ export interface Product {
   short_description?: string | null;
   long_description?: string | null;
   image_urls: string[];
+  show_on_store: boolean;
   default_variant_id: number;
   sku?: string | null;
   barcode?: string | null;
@@ -74,6 +75,7 @@ export interface SaveProductPayload {
   short_description?: string;
   long_description?: string;
   image_urls?: string[];
+  show_on_store?: boolean;
   sku?: string;
   barcode?: string;
   selling_price: string;
@@ -98,6 +100,8 @@ export interface ProductCollection {
   name: string;
   description?: string | null;
   product_count: number;
+  show_on_store: boolean;
+  image_url?: string | null;
 }
 
 export interface ProductPriceChange {

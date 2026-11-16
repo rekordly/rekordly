@@ -49,19 +49,27 @@ func (q *Queries) AddProductOutlet(ctx context.Context, arg AddProductOutletPara
 }
 
 const createProductCollection = `-- name: CreateProductCollection :one
-INSERT INTO product_collections (workspace_id, name, description)
-VALUES ($1, $2, $3)
-RETURNING id, workspace_id, name, description, position, created_at, updated_at
+INSERT INTO product_collections (workspace_id, name, description, show_on_store, image_url)
+VALUES ($1, $2, $3, COALESCE($4::boolean, true), $5)
+RETURNING id, workspace_id, name, description, position, created_at, updated_at, show_on_store, image_url
 `
 
 type CreateProductCollectionParams struct {
 	WorkspaceID int64       `json:"workspace_id"`
 	Name        string      `json:"name"`
 	Description pgtype.Text `json:"description"`
+	ShowOnStore pgtype.Bool `json:"show_on_store"`
+	ImageUrl    pgtype.Text `json:"image_url"`
 }
 
 func (q *Queries) CreateProductCollection(ctx context.Context, arg CreateProductCollectionParams) (ProductCollection, error) {
-	row := q.db.QueryRow(ctx, createProductCollection, arg.WorkspaceID, arg.Name, arg.Description)
+	row := q.db.QueryRow(ctx, createProductCollection,
+		arg.WorkspaceID,
+		arg.Name,
+		arg.Description,
+		arg.ShowOnStore,
+		arg.ImageUrl,
+	)
 	var i ProductCollection
 	err := row.Scan(
 		&i.ID,
@@ -71,6 +79,8 @@ func (q *Queries) CreateProductCollection(ctx context.Context, arg CreateProduct
 		&i.Position,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ShowOnStore,
+		&i.ImageUrl,
 	)
 	return i, err
 }
@@ -347,7 +357,7 @@ func (q *Queries) ListProductCollectionsForProduct(ctx context.Context, arg List
 }
 
 const listProductCollectionsV2 = `-- name: ListProductCollectionsV2 :many
-SELECT c.id, c.workspace_id, c.name, c.description, c.position, c.created_at, c.updated_at,
+SELECT c.id, c.workspace_id, c.name, c.description, c.position, c.created_at, c.updated_at, c.show_on_store, c.image_url,
     (SELECT COUNT(*) FROM product_collection_items ci WHERE ci.collection_id = c.id)::bigint AS product_count
 FROM product_collections c
 WHERE c.workspace_id = $1
@@ -362,6 +372,8 @@ type ListProductCollectionsV2Row struct {
 	Position     int32              `json:"position"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	ShowOnStore  bool               `json:"show_on_store"`
+	ImageUrl     pgtype.Text        `json:"image_url"`
 	ProductCount int64              `json:"product_count"`
 }
 
@@ -382,6 +394,8 @@ func (q *Queries) ListProductCollectionsV2(ctx context.Context, workspaceID int6
 			&i.Position,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ShowOnStore,
+			&i.ImageUrl,
 			&i.ProductCount,
 		); err != nil {
 			return nil, err
@@ -638,7 +652,7 @@ func (q *Queries) ListProductStockByOutlet(ctx context.Context, arg ListProductS
 const listProductsV2 = `-- name: ListProductsV2 :many
 
 SELECT
-    p.id, p.workspace_id, p.name, p.description, p.kind, p.status, p.unit_name,
+    p.id, p.workspace_id, p.name, p.description, p.kind, p.status, p.show_on_store, p.unit_name,
     p.short_description, p.long_description, p.image_urls, p.archived_at,
     p.created_at, p.updated_at,
     v.id AS default_variant_id, v.sku, v.barcode, v.selling_price_minor, v.cost_price_minor,
@@ -683,6 +697,7 @@ type ListProductsV2Row struct {
 	Description         pgtype.Text        `json:"description"`
 	Kind                string             `json:"kind"`
 	Status              string             `json:"status"`
+	ShowOnStore         bool               `json:"show_on_store"`
 	UnitName            string             `json:"unit_name"`
 	ShortDescription    pgtype.Text        `json:"short_description"`
 	LongDescription     pgtype.Text        `json:"long_description"`
@@ -728,6 +743,7 @@ func (q *Queries) ListProductsV2(ctx context.Context, arg ListProductsV2Params) 
 			&i.Description,
 			&i.Kind,
 			&i.Status,
+			&i.ShowOnStore,
 			&i.UnitName,
 			&i.ShortDescription,
 			&i.LongDescription,
@@ -835,14 +851,18 @@ func (q *Queries) UpdateDefaultVariantV2(ctx context.Context, arg UpdateDefaultV
 
 const updateProductCollection = `-- name: UpdateProductCollection :one
 UPDATE product_collections
-SET name = $1, description = $2, updated_at = now()
-WHERE workspace_id = $3 AND id = $4
-RETURNING id, workspace_id, name, description, position, created_at, updated_at
+SET name = $1, description = $2,
+    show_on_store = COALESCE($3::boolean, show_on_store),
+    image_url = COALESCE($4, image_url), updated_at = now()
+WHERE workspace_id = $5 AND id = $6
+RETURNING id, workspace_id, name, description, position, created_at, updated_at, show_on_store, image_url
 `
 
 type UpdateProductCollectionParams struct {
 	Name        string      `json:"name"`
 	Description pgtype.Text `json:"description"`
+	ShowOnStore pgtype.Bool `json:"show_on_store"`
+	ImageUrl    pgtype.Text `json:"image_url"`
 	WorkspaceID int64       `json:"workspace_id"`
 	ID          int64       `json:"id"`
 }
@@ -851,6 +871,8 @@ func (q *Queries) UpdateProductCollection(ctx context.Context, arg UpdateProduct
 	row := q.db.QueryRow(ctx, updateProductCollection,
 		arg.Name,
 		arg.Description,
+		arg.ShowOnStore,
+		arg.ImageUrl,
 		arg.WorkspaceID,
 		arg.ID,
 	)
@@ -863,8 +885,30 @@ func (q *Queries) UpdateProductCollection(ctx context.Context, arg UpdateProduct
 		&i.Position,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ShowOnStore,
+		&i.ImageUrl,
 	)
 	return i, err
+}
+
+const updateProductShowOnStore = `-- name: UpdateProductShowOnStore :execrows
+UPDATE products
+SET show_on_store = $1, updated_at = now()
+WHERE workspace_id = $2 AND id = $3 AND status <> 'archived' AND archived_at IS NULL
+`
+
+type UpdateProductShowOnStoreParams struct {
+	ShowOnStore bool  `json:"show_on_store"`
+	WorkspaceID int64 `json:"workspace_id"`
+	ProductID   int64 `json:"product_id"`
+}
+
+func (q *Queries) UpdateProductShowOnStore(ctx context.Context, arg UpdateProductShowOnStoreParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateProductShowOnStore, arg.ShowOnStore, arg.WorkspaceID, arg.ProductID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateProductV2 = `-- name: UpdateProductV2 :one
@@ -880,7 +924,7 @@ SET name = $1,
     archived_at = $9,
     updated_at = now()
 WHERE workspace_id = $10 AND id = $11
-RETURNING id, workspace_id, name, description, kind, status, unit_name, idempotency_key, created_by_user_id, created_at, updated_at, short_description, long_description, image_urls, archived_at
+RETURNING id, workspace_id, name, description, kind, status, unit_name, idempotency_key, created_by_user_id, created_at, updated_at, short_description, long_description, image_urls, archived_at, show_on_store
 `
 
 type UpdateProductV2Params struct {
@@ -928,6 +972,7 @@ func (q *Queries) UpdateProductV2(ctx context.Context, arg UpdateProductV2Params
 		&i.LongDescription,
 		&i.ImageUrls,
 		&i.ArchivedAt,
+		&i.ShowOnStore,
 	)
 	return i, err
 }

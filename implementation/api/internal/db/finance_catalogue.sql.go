@@ -13,10 +13,10 @@ import (
 
 const createProduct = `-- name: CreateProduct :one
 INSERT INTO products (
-    workspace_id, name, description, kind, status, unit_name, idempotency_key, created_by_user_id
+    workspace_id, name, description, kind, status, unit_name, idempotency_key, created_by_user_id, show_on_store
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8
-) RETURNING id, workspace_id, name, description, kind, status, unit_name, idempotency_key, created_by_user_id, created_at, updated_at, short_description, long_description, image_urls, archived_at
+    $1, $2, $3, $4, $5, $6, $7, $8, $9
+) RETURNING id, workspace_id, name, description, kind, status, unit_name, idempotency_key, created_by_user_id, created_at, updated_at, short_description, long_description, image_urls, archived_at, show_on_store
 `
 
 type CreateProductParams struct {
@@ -28,6 +28,7 @@ type CreateProductParams struct {
 	UnitName        string      `json:"unit_name"`
 	IdempotencyKey  string      `json:"idempotency_key"`
 	CreatedByUserID pgtype.Int8 `json:"created_by_user_id"`
+	ShowOnStore     bool        `json:"show_on_store"`
 }
 
 func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error) {
@@ -40,6 +41,7 @@ func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (P
 		arg.UnitName,
 		arg.IdempotencyKey,
 		arg.CreatedByUserID,
+		arg.ShowOnStore,
 	)
 	var i Product
 	err := row.Scan(
@@ -58,6 +60,7 @@ func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (P
 		&i.LongDescription,
 		&i.ImageUrls,
 		&i.ArchivedAt,
+		&i.ShowOnStore,
 	)
 	return i, err
 }
@@ -156,7 +159,7 @@ func (q *Queries) GetDefaultProductVariant(ctx context.Context, arg GetDefaultPr
 }
 
 const getProductByID = `-- name: GetProductByID :one
-SELECT id, workspace_id, name, description, kind, status, unit_name, idempotency_key, created_by_user_id, created_at, updated_at, short_description, long_description, image_urls, archived_at FROM products
+SELECT id, workspace_id, name, description, kind, status, unit_name, idempotency_key, created_by_user_id, created_at, updated_at, short_description, long_description, image_urls, archived_at, show_on_store FROM products
 WHERE id = $1 AND workspace_id = $2
 `
 
@@ -184,12 +187,13 @@ func (q *Queries) GetProductByID(ctx context.Context, arg GetProductByIDParams) 
 		&i.LongDescription,
 		&i.ImageUrls,
 		&i.ArchivedAt,
+		&i.ShowOnStore,
 	)
 	return i, err
 }
 
 const getProductByIdempotency = `-- name: GetProductByIdempotency :one
-SELECT id, workspace_id, name, description, kind, status, unit_name, idempotency_key, created_by_user_id, created_at, updated_at, short_description, long_description, image_urls, archived_at FROM products
+SELECT id, workspace_id, name, description, kind, status, unit_name, idempotency_key, created_by_user_id, created_at, updated_at, short_description, long_description, image_urls, archived_at, show_on_store FROM products
 WHERE workspace_id = $1 AND idempotency_key = $2
 `
 
@@ -217,6 +221,7 @@ func (q *Queries) GetProductByIdempotency(ctx context.Context, arg GetProductByI
 		&i.LongDescription,
 		&i.ImageUrls,
 		&i.ArchivedAt,
+		&i.ShowOnStore,
 	)
 	return i, err
 }

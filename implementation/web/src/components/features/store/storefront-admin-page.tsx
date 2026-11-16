@@ -17,6 +17,7 @@ import { useState } from "react";
 
 import { AppButton } from "@/components/ui/app-button";
 import { AppInput } from "@/components/ui/app-input";
+import { AppSwitch } from "@/components/ui/app-switch";
 import { AppSelect } from "@/components/ui/app-select";
 import { DataView } from "@/components/ui/data-view";
 import { FormDrawer } from "@/components/ui/form-drawer";
@@ -41,8 +42,8 @@ const ADMIN_TABS = [
   { key: "analytics", label: "Analytics" },
 ] as const;
 
-function StorefrontAdminContent({ workspaceId, currency }: WorkspaceInfo) {
-  const [tab, setTab] = useState<(typeof ADMIN_TABS)[number]["key"]>("overview");
+function StorefrontAdminContent({ workspaceId, currency, initialTab = "overview" }: WorkspaceInfo & { initialTab?: (typeof ADMIN_TABS)[number]["key"] }) {
+  const [tab, setTab] = useState<(typeof ADMIN_TABS)[number]["key"]>(initialTab);
   const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">("desktop");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [publishItem, setPublishItem] = useState<CatalogueItem | null>(null);
@@ -98,7 +99,7 @@ function StorefrontAdminContent({ workspaceId, currency }: WorkspaceInfo) {
   // Draft creation form state
   const [newName, setNewName] = useState("");
   const [newSlug, setNewSlug] = useState("");
-  const [newTheme, setNewTheme] = useState("classic");
+  const [newTheme, setNewTheme] = useState("simple");
   const [newOutletId, setNewOutletId] = useState("");
   const createSF = useFinanceAction(
     workspaceId,
@@ -155,7 +156,7 @@ function StorefrontAdminContent({ workspaceId, currency }: WorkspaceInfo) {
         <FormDrawer isOpen={isCreateOpen} onOpenChange={setIsCreateOpen} title="Create business storefront" description="Your storefront starts safely in draft mode. Nothing goes public until you publish." submitLabel="Create draft" isSubmitting={createSF.isPending} onSubmit={(e) => { e.preventDefault(); createSF.mutate(undefined); }}>
           <AppInput label="Store display name" isRequired value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Kola Ventures" />
           <AppInput label="Subdomain slug" isRequired value={newSlug} onChange={(e) => setNewSlug(e.target.value)} placeholder="kola-ventures" description="Customers can visit kola-ventures.rekordly.com" />
-          <AppSelect label="Starter theme" selectedKey={newTheme} onSelectionChange={setNewTheme} options={[{ key: "classic", label: "Classic" }, { key: "modern", label: "Modern" }, { key: "editorial", label: "Editorial" }, { key: "minimal", label: "Minimal" }]} />
+          <AppSelect label="Starter theme" selectedKey={newTheme} onSelectionChange={setNewTheme} options={[{ key: "simple", label: "Simple" }, { key: "boutique", label: "Boutique" }]} />
           <AppSelect label="Default fulfilment outlet" selectedKey={newOutletId} onSelectionChange={setNewOutletId} placeholder="Choose default outlet" options={(outletsQuery.data ?? []).map((o) => ({ key: String(o.id), label: o.name }))} />
         </FormDrawer>
       </Page>
@@ -189,7 +190,7 @@ function StorefrontAdminContent({ workspaceId, currency }: WorkspaceInfo) {
       />
       <StorefrontStats workspaceId={workspaceId} />
 
-      <Segmented aria-label="Storefront sections" options={ADMIN_TABS} value={tab} onChange={setTab} />
+      {initialTab === "overview" ? <Segmented aria-label="Storefront sections" options={ADMIN_TABS} value={tab} onChange={setTab} /> : null}
 
       {tab === "overview" ? (
         <div className="space-y-6">
@@ -447,6 +448,10 @@ function AppearanceAndPolicyForm({ workspaceId, storefront, readOnly }: { worksp
   const [termsPolicy, setTermsPolicy] = useState(s.terms_policy ?? "");
   const [seoTitle, setSeoTitle] = useState(s.seo_title ?? "");
   const [seoDesc, setSeoDesc] = useState(s.seo_description ?? "");
+  const [showSoldOut, setShowSoldOut] = useState(s.show_sold_out);
+  const [showStockCount, setShowStockCount] = useState(s.show_stock_count);
+  const [autoShowNewProducts, setAutoShowNewProducts] = useState(s.auto_show_new_products);
+  const [lowStockThreshold, setLowStockThreshold] = useState(String(s.low_stock_threshold));
 
   const save = useFinanceAction(workspaceId, (body: unknown) => financeApi.updateStorefrontSettings(workspaceId, body), { success: "Storefront settings updated" });
 
@@ -476,13 +481,17 @@ function AppearanceAndPolicyForm({ workspaceId, storefront, readOnly }: { worksp
           terms_policy: termsPolicy,
           seo_title: seoTitle,
           seo_description: seoDesc,
+          show_sold_out: showSoldOut,
+          show_stock_count: showStockCount,
+          auto_show_new_products: autoShowNewProducts,
+          low_stock_threshold: Number(lowStockThreshold) || 0,
         });
       }}
     >
       <div className="grid sm:grid-cols-3 gap-3">
         <AppInput label="Storefront name" value={name} onChange={(e) => setName(e.target.value)} isDisabled={readOnly} />
         <AppInput label="Slug" value={slug} onChange={(e) => setSlug(e.target.value)} isDisabled={readOnly} />
-        <AppSelect label="Theme" selectedKey={theme} onSelectionChange={setTheme} isDisabled={readOnly} options={[{ key: "classic", label: "Classic" }, { key: "modern", label: "Modern" }, { key: "editorial", label: "Editorial" }, { key: "minimal", label: "Minimal" }]} />
+        <AppSelect label="Theme" selectedKey={theme} onSelectionChange={setTheme} isDisabled={readOnly} options={[{ key: "simple", label: "Simple" }, { key: "boutique", label: "Boutique" }]} />
       </div>
       <div className="grid sm:grid-cols-2 gap-3">
         <AppInput label="Tagline" value={tagline} onChange={(e) => setTagline(e.target.value)} isDisabled={readOnly} />
@@ -513,11 +522,17 @@ function AppearanceAndPolicyForm({ workspaceId, storefront, readOnly }: { worksp
         <AppInput label="SEO title" value={seoTitle} onChange={(e) => setSeoTitle(e.target.value)} isDisabled={readOnly} />
         <AppInput label="SEO description" value={seoDesc} onChange={(e) => setSeoDesc(e.target.value)} isDisabled={readOnly} />
       </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <AppSwitch label="Show sold-out products" isSelected={showSoldOut} onChange={setShowSoldOut} isDisabled={readOnly} />
+        <AppSwitch label="Show stock count" isSelected={showStockCount} onChange={setShowStockCount} isDisabled={readOnly} />
+        <AppSwitch label="Show new products automatically" isSelected={autoShowNewProducts} onChange={setAutoShowNewProducts} isDisabled={readOnly} />
+        <AppInput label="Show ‘Only X left’ at" type="number" min="0" value={lowStockThreshold} onChange={(e) => setLowStockThreshold(e.target.value)} isDisabled={readOnly} />
+      </div>
       {!readOnly ? <AppButton type="submit" label="Save appearance & policies" isLoading={save.isPending} /> : null}
     </form>
   );
 }
 
-export function StorefrontAdminPage() {
-  return <WorkspaceGate businessOnly>{(workspace) => <StorefrontAdminContent key={workspace.workspaceId} {...workspace} />}</WorkspaceGate>;
+export function StorefrontAdminPage({ initialTab = "overview" }: { initialTab?: (typeof ADMIN_TABS)[number]["key"] } = {}) {
+  return <WorkspaceGate businessOnly>{(workspace) => <StorefrontAdminContent key={`${workspace.workspaceId}:${initialTab}`} {...workspace} initialTab={initialTab} />}</WorkspaceGate>;
 }

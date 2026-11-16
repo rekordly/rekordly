@@ -65,6 +65,7 @@ WHERE workspace_id = $1
   AND (sqlc.narg('from_date')::date IS NULL OR sale_date >= sqlc.narg('from_date'))
   AND (sqlc.narg('to_date')::date IS NULL OR sale_date <= sqlc.narg('to_date'))
   AND (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status'))
+  AND (sqlc.narg('source')::text IS NULL OR source = sqlc.narg('source'))
   AND (sqlc.narg('customer_id')::bigint IS NULL OR customer_id = sqlc.narg('customer_id'))
   AND (sqlc.narg('before_id')::bigint IS NULL OR id < sqlc.narg('before_id'))
   AND (sqlc.narg('search')::text IS NULL OR customer_name ILIKE '%' || sqlc.narg('search')::text || '%' OR reference ILIKE '%' || sqlc.narg('search')::text || '%')

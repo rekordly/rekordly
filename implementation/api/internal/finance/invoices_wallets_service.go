@@ -1289,6 +1289,9 @@ func (s *Service) PayInvoiceWithWallet(ctx context.Context, workspaceID, userID,
 	if err != nil {
 		return InvoiceDetail{}, fmt.Errorf("update invoice paid amount: %w", err)
 	}
+	if err := s.createPaidStorefrontSale(ctx, qtx, workspaceID, userID, inv.ID); err != nil {
+		return InvoiceDetail{}, fmt.Errorf("record paid online store order: %w", err)
+	}
 
 	// 4. Create balanced double-entry ledger entry:
 	// Debit: Customer Deposit Liability (Liability)

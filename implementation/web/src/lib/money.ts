@@ -45,8 +45,10 @@ import type {
   PublicStatementView,
   PurchaseOrderShareView,
   Storefront,
+  StorefrontDesign,
   StorefrontCollection,
   MerchantStorefrontProduct,
+  StorefrontProductCard,
   StorefrontDomain,
   StorefrontAnalytics,
   PublicStorefrontProjection,
@@ -81,6 +83,7 @@ import type {
   EvidenceAccess,
   EvidenceUploadAuthorization,
 } from "@/types/finance";
+import type { Product } from "@/types/products";
 
 export type { MoneyAccount, MoneyCategory, MoneyTransaction } from "@/types/finance";
 
@@ -811,11 +814,11 @@ export const financeApi = {
   markDocumentMessagesRead: (workspaceId: number, docType: string, id: number, lastReadMessageId: number) =>
     scopedPost<{ success: boolean }>(workspaceId, `/api/v1/documents/${docType}/${id}/messages/read`, { last_read_message_id: lastReadMessageId }),
   attachDocumentFile: (workspaceId: number, docType: string, id: number, evidenceId: number, key?: string) =>
-    scopedPost<{ file: any }>(workspaceId, `/api/v1/documents/${docType}/${id}/files`, { evidence_id: evidenceId, idempotency_key: key }).then((r) => r.file),
+    scopedPost<{ file: DocumentFileView }>(workspaceId, `/api/v1/documents/${docType}/${id}/files`, { evidence_id: evidenceId, idempotency_key: key }).then((r) => r.file),
   removeDocumentFile: (workspaceId: number, docType: string, id: number, fileId: number) =>
     apiClient.delete(`/api/v1/documents/${docType}/${id}/files/${fileId}`, { headers: workspaceHeaders(workspaceId) }),
   getInventoryOverview: (workspaceId: number) =>
-    scopedGet<{ products: any[]; outlets: any[]; balances: any[] }>(workspaceId, "/api/v1/inventory/overview"),
+    scopedGet<{ products: Product[]; outlets: InventoryOutlet[]; balances: InventoryBalance[] }>(workspaceId, "/api/v1/inventory/overview"),
 
   claimExternalPartyLink: (documentType: string, token: string) =>
     apiClient
@@ -861,6 +864,22 @@ export const financeApi = {
     scopedPost<{ storefront: Storefront }>(workspaceId, "/api/v1/storefront", body).then((r) => r.storefront),
   updateStorefrontSettings: (workspaceId: number, body: unknown) =>
     scopedPatch<{ storefront: Storefront }>(workspaceId, "/api/v1/storefront/settings", body).then((r) => r.storefront),
+  getStorefrontDesign: (workspaceId: number) =>
+    scopedGet<{ design: StorefrontDesign }>(workspaceId, "/api/v1/storefront/design").then((r) => r.design),
+  saveStorefrontDesignDraft: (workspaceId: number, body: unknown) =>
+    scopedPut<{ design: StorefrontDesign }>(workspaceId, "/api/v1/storefront/design/draft", body).then((r) => r.design),
+  publishStorefrontDesign: (workspaceId: number, body: { expected_version: number; idempotency_key: string }) =>
+    scopedPost<{ design: StorefrontDesign }>(workspaceId, "/api/v1/storefront/design/publish", body).then((r) => r.design),
+  discardStorefrontDesign: (workspaceId: number, body: { expected_version: number; idempotency_key: string }) =>
+    scopedPost<{ design: StorefrontDesign }>(workspaceId, "/api/v1/storefront/design/discard", body).then((r) => r.design),
+  getStorefrontDesignPreview: (workspaceId: number) =>
+    scopedGet<{ design: StorefrontDesign; storefront: PublicStorefrontProjection }>(workspaceId, "/api/v1/storefront/design/preview-data"),
+  listStorefrontProductCards: (workspaceId: number, params: { filter?: string; collection_id?: number; before_id?: number; limit?: number } = {}) =>
+    scopedGet<{ products: StorefrontProductCard[]; collections: StorefrontCollection[]; next_before_id: number }>(workspaceId, "/api/v1/storefront/products", params),
+  changeStorefrontProduct: (workspaceId: number, id: number, body: unknown) =>
+    scopedPatch(workspaceId, `/api/v1/storefront/products/${id}`, body),
+  bulkChangeStorefrontProducts: (workspaceId: number, body: unknown) =>
+    scopedPost(workspaceId, "/api/v1/storefront/products/bulk", body),
   publishStorefront: (workspaceId: number) =>
     scopedPost<{ storefront: Storefront }>(workspaceId, "/api/v1/storefront/commands/publish", {}).then((r) => r.storefront),
   unpublishStorefront: (workspaceId: number) =>

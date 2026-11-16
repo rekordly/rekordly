@@ -94,6 +94,8 @@ export interface ThemeRendererProps {
   sections: StoreSection[];
   preview?: boolean;
   onSectionClick?: (section: StoreSection) => void;
-  renderProduct?: (product: ThemeProduct) => ReactNode;
+  renderProduct?: (product: ThemeProduct, variants?: ThemeProduct[]) => ReactNode;
+  productTools?: ReactNode;
+  headerAction?: ReactNode;
 }
 

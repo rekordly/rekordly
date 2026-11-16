@@ -2,7 +2,7 @@
 
 -- name: ListProductsV2 :many
 SELECT
-    p.id, p.workspace_id, p.name, p.description, p.kind, p.status, p.unit_name,
+    p.id, p.workspace_id, p.name, p.description, p.kind, p.status, p.show_on_store, p.unit_name,
     p.short_description, p.long_description, p.image_urls, p.archived_at,
     p.created_at, p.updated_at,
     v.id AS default_variant_id, v.sku, v.barcode, v.selling_price_minor, v.cost_price_minor,
@@ -43,6 +43,11 @@ SET name = @name,
     updated_at = now()
 WHERE workspace_id = @workspace_id AND id = @id
 RETURNING *;
+
+-- name: UpdateProductShowOnStore :execrows
+UPDATE products
+SET show_on_store = @show_on_store, updated_at = now()
+WHERE workspace_id = @workspace_id AND id = @product_id AND status <> 'archived' AND archived_at IS NULL;
 
 -- name: UpdateDefaultVariantV2 :one
 UPDATE product_variants
@@ -106,13 +111,15 @@ WHERE i.workspace_id = @workspace_id AND i.product_id = @product_id
 ORDER BY c.position ASC, c.name ASC;
 
 -- name: CreateProductCollection :one
-INSERT INTO product_collections (workspace_id, name, description)
-VALUES (@workspace_id, @name, sqlc.narg('description'))
+INSERT INTO product_collections (workspace_id, name, description, show_on_store, image_url)
+VALUES (@workspace_id, @name, sqlc.narg('description'), COALESCE(sqlc.narg('show_on_store')::boolean, true), sqlc.narg('image_url'))
 RETURNING *;
 
 -- name: UpdateProductCollection :one
 UPDATE product_collections
-SET name = @name, description = sqlc.narg('description'), updated_at = now()
+SET name = @name, description = sqlc.narg('description'),
+    show_on_store = COALESCE(sqlc.narg('show_on_store')::boolean, show_on_store),
+    image_url = COALESCE(sqlc.narg('image_url'), image_url), updated_at = now()
 WHERE workspace_id = @workspace_id AND id = @id
 RETURNING *;
 

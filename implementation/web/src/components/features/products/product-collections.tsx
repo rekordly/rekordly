@@ -8,12 +8,13 @@ import { useState } from "react";
 
 import { AppButton } from "@/components/ui/app-button";
 import { AppInput } from "@/components/ui/app-input";
+import { AppSwitch } from "@/components/ui/app-switch";
 import { AppTextarea } from "@/components/ui/app-textarea";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { FormDrawer } from "@/components/ui/form-drawer";
 import { EmptyState } from "@/components/ui/page";
 import { useProductCollections } from "@/components/pickers";
-import { productKeys, productsApi } from "@/lib/products";
+import { productKeys, productsApi, uploadProductImage } from "@/lib/products";
 import type { ProductCollection } from "@/types/products";
 
 export function ProductCollections({ workspaceId, onView }: { workspaceId: number; onView: (collection: ProductCollection) => void }) {
@@ -23,6 +24,8 @@ export function ProductCollections({ workspaceId, onView }: { workspaceId: numbe
   const [deleting, setDeleting] = useState<ProductCollection | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [showOnStore, setShowOnStore] = useState(true);
+  const [imageUrl, setImageUrl] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -30,6 +33,8 @@ export function ProductCollections({ workspaceId, onView }: { workspaceId: numbe
     setEditing(target);
     setName(target === "new" ? "" : target.name);
     setDescription(target === "new" ? "" : target.description ?? "");
+    setShowOnStore(target === "new" ? true : target.show_on_store);
+    setImageUrl(target === "new" ? "" : target.image_url ?? "");
     setError("");
   };
 
@@ -39,7 +44,7 @@ export function ProductCollections({ workspaceId, onView }: { workspaceId: numbe
     if (!name.trim()) return setError("Name the collection");
     setBusy(true);
     try {
-      const body = { name: name.trim(), description: description.trim() || undefined };
+      const body = { name: name.trim(), description: description.trim() || undefined, show_on_store: showOnStore, image_url: imageUrl || undefined };
       if (editing === "new") await productsApi.createCollection(workspaceId, body);
       else if (editing) await productsApi.updateCollection(workspaceId, editing.id, body);
       await refresh();
@@ -129,6 +134,9 @@ export function ProductCollections({ workspaceId, onView }: { workspaceId: numbe
       >
         <AppInput label="Name" isRequired autoFocus placeholder="e.g. New arrivals" value={name} onChange={(event) => { setName(event.target.value); setError(""); }} errorMessage={error || undefined} />
         <AppTextarea label="Description" placeholder="Optional" value={description} onChange={(event) => setDescription(event.target.value)} />
+        <AppSwitch label="Show this collection on my store" isSelected={showOnStore} onChange={setShowOnStore} />
+        <label className="block space-y-2 text-sm font-medium">Collection image<input className="block w-full text-sm" type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (!file) return; void uploadProductImage(workspaceId, file).then(setImageUrl).catch((cause) => setError(cause instanceof Error ? cause.message : "Could not upload image")); }} /></label>
+        {imageUrl ? <p className="text-xs text-muted">Collection image added.</p> : null}
       </FormDrawer>
 
       <ConfirmDialog

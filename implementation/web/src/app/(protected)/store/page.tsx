@@ -1,5 +1,5 @@
-import { StorefrontAdminPage } from "@/components/features/store/storefront-admin-page";
+import { StorefrontOverviewPage } from "@/components/features/store/storefront-overview-page";
 
 export default function StorePage() {
-  return <StorefrontAdminPage />;
+  return <StorefrontOverviewPage />;
 }

@@ -33,6 +33,7 @@ type ProductSummary struct {
 	Description         *string    `json:"description,omitempty"`
 	Kind                string     `json:"kind"`
 	Status              string     `json:"status"`
+	ShowOnStore         bool       `json:"show_on_store"`
 	UnitName            string     `json:"unit_name"`
 	ShortDescription    *string    `json:"short_description,omitempty"`
 	LongDescription     *string    `json:"long_description,omitempty"`
@@ -90,6 +91,7 @@ type SaveProductInput struct {
 	Description      string                   `json:"description"`
 	Kind             string                   `json:"kind"`
 	Status           string                   `json:"status"`
+	ShowOnStore      *bool                    `json:"show_on_store"`
 	UnitName         string                   `json:"unit_name"`
 	ShortDescription string                   `json:"short_description"`
 	LongDescription  string                   `json:"long_description"`
@@ -166,6 +168,8 @@ type ProductCollection struct {
 	Name         string  `json:"name"`
 	Description  *string `json:"description,omitempty"`
 	ProductCount int64   `json:"product_count"`
+	ShowOnStore  bool    `json:"show_on_store"`
+	ImageURL     *string `json:"image_url,omitempty"`
 }
 
 type ProductPriceChange struct {
@@ -391,7 +395,7 @@ func productSummaryFromRow(row db.ListProductsV2Row) ProductSummary {
 	}
 	return ProductSummary{
 		ID: row.ID, Name: row.Name, Description: nullableText(row.Description), Kind: row.Kind, Status: row.Status,
-		UnitName: row.UnitName, ShortDescription: nullableText(row.ShortDescription), LongDescription: nullableText(row.LongDescription),
+		UnitName: row.UnitName, ShowOnStore: row.ShowOnStore, ShortDescription: nullableText(row.ShortDescription), LongDescription: nullableText(row.LongDescription),
 		ImageURLs: decodeImages(row.ImageUrls), DefaultVariantID: row.DefaultVariantID, SKU: nullableText(row.Sku),
 		Barcode: nullableText(row.Barcode), SellingPriceMinor: row.SellingPriceMinor, CostPriceMinor: row.CostPriceMinor,
 		CompareAtPriceMinor: int64Ptr(row.CompareAtPriceMinor), Currency: row.Currency, CurrencyExponent: row.CurrencyExponent,
@@ -603,10 +607,22 @@ func (s *Service) CreateProductV2(ctx context.Context, workspaceID, userID int64
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	qtx := s.queries.WithTx(tx)
+	showOnStore := true
+	if in.ShowOnStore != nil {
+		showOnStore = *in.ShowOnStore
+	} else if storefront, e := qtx.GetStorefrontByWorkspace(ctx, workspaceID); e == nil {
+		settings, e := qtx.GetStorefrontSettings(ctx, db.GetStorefrontSettingsParams{WorkspaceID: workspaceID, StorefrontID: storefront.ID})
+		if e != nil {
+			return ProductDetail{}, e
+		}
+		showOnStore = settings.AutoShowNewProducts
+	} else if !errors.Is(e, pgx.ErrNoRows) {
+		return ProductDetail{}, e
+	}
 
 	product, err := qtx.CreateProduct(ctx, db.CreateProductParams{
 		WorkspaceID: workspaceID, Name: v.name, Description: v.description, Kind: v.kind, Status: v.status,
-		UnitName: v.unit, IdempotencyKey: key, CreatedByUserID: pgtype.Int8{Int64: userID, Valid: true},
+		UnitName: v.unit, IdempotencyKey: key, CreatedByUserID: pgtype.Int8{Int64: userID, Valid: true}, ShowOnStore: showOnStore,
 	})
 	if err != nil {
 		return ProductDetail{}, fmt.Errorf("create product: %w", err)
@@ -783,6 +799,11 @@ func (s *Service) UpdateProductV2(ctx context.Context, workspaceID, userID, prod
 		WorkspaceID: workspaceID, ID: productID,
 	}); err != nil {
 		return ProductDetail{}, fmt.Errorf("update product: %w", err)
+	}
+	if in.ShowOnStore != nil {
+		if _, err := qtx.UpdateProductShowOnStore(ctx, db.UpdateProductShowOnStoreParams{WorkspaceID: workspaceID, ProductID: productID, ShowOnStore: *in.ShowOnStore}); err != nil {
+			return ProductDetail{}, fmt.Errorf("update store visibility: %w", err)
+		}
 	}
 	if _, err := qtx.UpdateDefaultVariantV2(ctx, db.UpdateDefaultVariantV2Params{
 		Sku: sku, Barcode: v.barcd, SellingPriceMinor: v.price, CostPriceMinor: v.cost, CompareAtPriceMinor: v.compareAt,
@@ -1515,7 +1536,7 @@ func (s *Service) ListProductCollections(ctx context.Context, workspaceID int64)
 	}
 	out := make([]ProductCollection, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, ProductCollection{ID: row.ID, Name: row.Name, Description: nullableText(row.Description), ProductCount: row.ProductCount})
+		out = append(out, ProductCollection{ID: row.ID, Name: row.Name, Description: nullableText(row.Description), ProductCount: row.ProductCount, ShowOnStore: row.ShowOnStore, ImageURL: nullableText(row.ImageUrl)})
 	}
 	return out, nil
 }
@@ -1523,6 +1544,8 @@ func (s *Service) ListProductCollections(ctx context.Context, workspaceID int64)
 type SaveCollectionInput struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
+	ShowOnStore *bool  `json:"show_on_store"`
+	ImageURL    string `json:"image_url"`
 }
 
 func validCollection(in SaveCollectionInput) (string, pgtype.Text, error) {
@@ -1546,14 +1569,15 @@ func (s *Service) CreateProductCollection(ctx context.Context, workspaceID int64
 	if err != nil {
 		return ProductCollection{}, err
 	}
-	row, err := s.queries.CreateProductCollection(ctx, db.CreateProductCollectionParams{WorkspaceID: workspaceID, Name: name, Description: desc})
+	show := nullablePgBool(in.ShowOnStore)
+	row, err := s.queries.CreateProductCollection(ctx, db.CreateProductCollectionParams{WorkspaceID: workspaceID, Name: name, Description: desc, ShowOnStore: show, ImageUrl: optionalPgText(sanitizeURLOrCloudinary(in.ImageURL))})
 	if isUniqueViolation(err) {
 		return ProductCollection{}, fmt.Errorf("you already have a collection called %s", name)
 	}
 	if err != nil {
 		return ProductCollection{}, err
 	}
-	return ProductCollection{ID: row.ID, Name: row.Name, Description: nullableText(row.Description)}, nil
+	return ProductCollection{ID: row.ID, Name: row.Name, Description: nullableText(row.Description), ShowOnStore: row.ShowOnStore, ImageURL: nullableText(row.ImageUrl)}, nil
 }
 
 func (s *Service) UpdateProductCollection(ctx context.Context, workspaceID, id int64, in SaveCollectionInput) (ProductCollection, error) {
@@ -1561,7 +1585,7 @@ func (s *Service) UpdateProductCollection(ctx context.Context, workspaceID, id i
 	if err != nil {
 		return ProductCollection{}, err
 	}
-	row, err := s.queries.UpdateProductCollection(ctx, db.UpdateProductCollectionParams{Name: name, Description: desc, WorkspaceID: workspaceID, ID: id})
+	row, err := s.queries.UpdateProductCollection(ctx, db.UpdateProductCollectionParams{Name: name, Description: desc, ShowOnStore: nullablePgBool(in.ShowOnStore), ImageUrl: optionalPgText(sanitizeURLOrCloudinary(in.ImageURL)), WorkspaceID: workspaceID, ID: id})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ProductCollection{}, errors.New("collection not found")
 	}
@@ -1571,7 +1595,7 @@ func (s *Service) UpdateProductCollection(ctx context.Context, workspaceID, id i
 	if err != nil {
 		return ProductCollection{}, err
 	}
-	return ProductCollection{ID: row.ID, Name: row.Name, Description: nullableText(row.Description)}, nil
+	return ProductCollection{ID: row.ID, Name: row.Name, Description: nullableText(row.Description), ShowOnStore: row.ShowOnStore, ImageURL: nullableText(row.ImageUrl)}, nil
 }
 
 func (s *Service) DeleteProductCollection(ctx context.Context, workspaceID, id int64) error {

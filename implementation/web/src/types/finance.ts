@@ -721,6 +721,8 @@ export interface Sale extends TradeRecord {
   customer_id?: number | null;
   customer_name: string;
   sale_date: string;
+  source: "in_person" | "online_store";
+  storefront_order_id?: number | null;
 }
 
 export interface Purchase extends TradeRecord {
@@ -1279,6 +1281,10 @@ export interface StorefrontSettings {
   default_delivery_fee_minor: string;
   checkout_require_email: boolean;
   checkout_require_phone: boolean;
+  auto_show_new_products: boolean;
+  show_sold_out: boolean;
+  show_stock_count: boolean;
+  low_stock_threshold: number;
   return_policy?: string | null;
   privacy_policy?: string | null;
   terms_policy?: string | null;
@@ -1296,7 +1302,7 @@ export interface Storefront {
   name: string;
   slug: string;
   status: "draft" | "published" | "unpublished" | "suspended" | "grace" | "disabled";
-  theme_key: "classic" | "modern" | "editorial" | "minimal";
+  theme_key: "simple" | "boutique" | "classic" | "modern" | "editorial" | "minimal";
   version: number;
   default_outlet_id?: number | null;
   currency: string;
@@ -1306,6 +1312,24 @@ export interface Storefront {
   subdomain_host: string;
   published_product_count: number;
   settings: StorefrontSettings;
+}
+
+export interface StorefrontDesign {
+  name: string;
+  draft_name: string;
+  slug: string;
+  link: string;
+  status: Storefront["status"];
+  version: number;
+  published_theme_key: "simple" | "boutique";
+  published_brand: import("@/lib/store-themes/types").BrandSettings;
+  published_sections: import("@/lib/store-themes/types").StoreSection[];
+  draft_theme_key: "simple" | "boutique";
+  draft_brand: import("@/lib/store-themes/types").BrandSettings;
+  draft_sections: import("@/lib/store-themes/types").StoreSection[];
+  contact: { phone?: string | null; email?: string | null; whatsapp_number?: string | null; address?: string | null; business_hours?: Record<string, string> };
+  available_themes: { key: "simple" | "boutique"; name: string; price: string; owned: boolean }[];
+  has_unpublished_changes: boolean;
 }
 
 export interface StorefrontCollection {
@@ -1338,6 +1362,18 @@ export interface MerchantStorefrontProduct {
   position: number;
   product_kind: string;
   variant_name: string;
+}
+
+export interface StorefrontProductCard {
+  id: number;
+  name: string;
+  image_url?: string;
+  price_minor: string;
+  variant_count: number;
+  in_stock: boolean;
+  show_on_store: boolean;
+  is_featured: boolean;
+  collection_ids: number[];
 }
 
 export interface StorefrontDomain {
@@ -1409,6 +1445,8 @@ export interface PublicStorefrontProjection {
   background_color: string;
   text_color: string;
   font_family: string;
+  brand?: import("@/lib/store-themes/types").BrandSettings & { resolved_palette?: import("@/lib/store-themes/types").ThemePalette };
+  sections?: import("@/lib/store-themes/types").StoreSection[];
   section_order: string[];
   contact_phone?: string | null;
   contact_email?: string | null;
@@ -1553,6 +1591,7 @@ export interface MerchantOrder {
   customer_note?: string | null;
   payment_arrangement?: string | null;
   linked_invoice_id?: number | null;
+  linked_sale_id?: number | null;
   decline_or_cancel_reason?: string | null;
   created_at: string;
   lines?: MerchantOrderLine[];

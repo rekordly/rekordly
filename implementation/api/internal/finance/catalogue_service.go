@@ -114,6 +114,7 @@ func (s *Service) CreateCatalogueItem(ctx context.Context, workspaceID, userID i
 		UnitName:        unitName,
 		IdempotencyKey:  idempotencyKey,
 		CreatedByUserID: pgtype.Int8{Int64: userID, Valid: true},
+		ShowOnStore:     true,
 	})
 	if err != nil {
 		return CatalogueItem{}, fmt.Errorf("create product: %w", err)

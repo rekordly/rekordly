@@ -50,21 +50,29 @@ export function HeroSection({ section, boutique, onSectionClick: onClick, previe
   </Frame>;
 }
 
-export function ProductGridSection({ section, data, renderProduct, onSectionClick: onClick, preview, boutique }: { section: StoreSection; data: ThemeRendererProps["store"]; renderProduct?: ThemeRendererProps["renderProduct"]; boutique?: boolean } & Pick<ThemeRendererProps, "onSectionClick" | "preview">) {
+export function ProductGridSection({ section, data, renderProduct, productTools, onSectionClick: onClick, preview, boutique }: { section: StoreSection; data: ThemeRendererProps["store"]; renderProduct?: ThemeRendererProps["renderProduct"]; productTools?: ReactNode; boutique?: boolean } & Pick<ThemeRendererProps, "onSectionClick" | "preview">) {
   const source = text(section, "source", "new");
   const collectionID = Number(section.content.collection_id);
   let products = [...data.products];
   if (source === "featured") products = products.filter((product) => product.is_featured);
   if (source === "collection" && Number.isFinite(collectionID)) products = products.filter((product) => product.collection_id === collectionID);
+  const groups = new Map<number, typeof products>();
+  for (const product of products) {
+    const group = groups.get(product.product_id) ?? [];
+    group.push(product);
+    groups.set(product.product_id, group);
+  }
   const limitValue = Number(section.content.limit);
-  if (Number.isFinite(limitValue) && limitValue > 0) products = products.slice(0, Math.min(limitValue, 48));
+  let productGroups = [...groups.values()];
+  if (Number.isFinite(limitValue) && limitValue > 0) productGroups = productGroups.slice(0, Math.min(limitValue, 48));
   return <Frame section={section} preview={preview} onClick={onClick}><div id="products" className="space-y-4 py-6">
     {text(section, "title", "Shop our products") ? <h2 className="font-[family-name:var(--store-heading-font)] text-xl font-bold tracking-tight sm:text-2xl">{text(section, "title", "Shop our products")}</h2> : null}
+    {productTools}
     <div className={`grid grid-cols-2 ${boutique ? "gap-3 sm:grid-cols-3 lg:grid-cols-4" : "gap-3 sm:gap-5 lg:grid-cols-4"}`}>
-      {products.map((product) => <div key={product.id}>{renderProduct?.(product) ?? <a href={`/s/${data.slug}/products/${product.product_id}`} className="block overflow-hidden rounded-xl border border-black/10 bg-[var(--store-surface)]">
+      {productGroups.map((variants) => { const product = variants[0]; return <div key={product.product_id}>{renderProduct?.(product, variants) ?? <a href={`/s/${data.slug}/products/${product.product_id}`} className="block overflow-hidden rounded-xl border border-black/10 bg-[var(--store-surface)]">
         <div className={`relative bg-black/5 ${boutique ? "aspect-[3/4]" : "aspect-square"}`}>{product.image_urls[0] ? <Image src={product.image_urls[0]} alt={product.title} fill sizes="(max-width: 640px) 50vw, 25vw" className="object-cover" unoptimized /> : null}</div>
         <div className="space-y-1 p-3"><p className="truncate text-sm font-medium">{product.title}</p><p className="text-sm font-semibold" style={{ color: "var(--store-primary)" }}>{formatMinorAmount(product.price_minor, product.currency, product.currency_exponent)}</p></div>
-      </a>}</div>)}
+      </a>}</div>;})}
     </div>
   </div></Frame>;
 }

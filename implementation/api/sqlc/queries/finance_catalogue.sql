@@ -1,8 +1,8 @@
 -- name: CreateProduct :one
 INSERT INTO products (
-    workspace_id, name, description, kind, status, unit_name, idempotency_key, created_by_user_id
+    workspace_id, name, description, kind, status, unit_name, idempotency_key, created_by_user_id, show_on_store
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8
+    $1, $2, $3, $4, $5, $6, $7, $8, $9
 ) RETURNING *;
 
 -- name: GetProductByID :one

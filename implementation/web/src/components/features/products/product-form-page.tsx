@@ -13,6 +13,7 @@ import { useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { AppButton } from "@/components/ui/app-button";
 import { AppInput } from "@/components/ui/app-input";
+import { AppSwitch } from "@/components/ui/app-switch";
 import { AppSelect } from "@/components/ui/app-select";
 import { FormGrid, FormPage, FormSection, StepNav } from "@/components/ui/form-kit";
 import { MoneyInput } from "@/components/ui/money-input";
@@ -28,7 +29,7 @@ import {
   unitLabel,
 } from "@/components/pickers";
 import { useFinanceAction, WorkspaceGate, type WorkspaceInfo } from "@/components/features/finance/shared";
-import { formatMinorAmount } from "@/lib/money";
+import { financeApi, formatMinorAmount } from "@/lib/money";
 import { productKeys, productsApi } from "@/lib/products";
 import type { ProductDetail, ProductKind, SaveProductPayload } from "@/types/products";
 import { initialOptions, optionMatrix, optionsPayload, ProductOptionsEditor, type OptionDraft, type VariantDraft } from "./product-options-editor";
@@ -57,6 +58,7 @@ interface FormState {
   images: string[];
   shortDescription: string;
   longDescription: string;
+  showOnStore: boolean | null;
 }
 
 type Errors = Partial<Record<"name" | "price" | "compareAt" | "openingStock" | "shortDescription", string>>;
@@ -87,6 +89,7 @@ function fromDetail(detail?: ProductDetail): FormState {
     images: product?.image_urls ?? [],
     shortDescription: product?.short_description ?? "",
     longDescription: product?.long_description ?? "",
+    showOnStore: product ? product.show_on_store : null,
   };
 }
 
@@ -175,6 +178,7 @@ function ProductForm({ workspaceId, currency, detail }: WorkspaceInfo & { detail
   const isEdit = Boolean(detail);
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<FormState>(() => fromDetail(detail));
+  const storefrontSettings = useQuery({ queryKey: ["storefront-settings-default", workspaceId], queryFn: () => financeApi.getMerchantStorefront(workspaceId), enabled: !detail, retry: false });
   const [optionsInitial] = useState(() => initialOptions(detail));
   const [options, setOptions] = useState<OptionDraft[]>(optionsInitial.options);
   const [variantRows, setVariantRows] = useState<Record<string, VariantDraft>>(optionsInitial.rows);
@@ -223,6 +227,7 @@ function ProductForm({ workspaceId, currency, detail }: WorkspaceInfo & { detail
     image_urls: form.images,
     short_description: form.shortDescription.trim() || undefined,
     long_description: form.longDescription.trim() || undefined,
+    show_on_store: form.showOnStore ?? undefined,
   });
 
   const save = useFinanceAction(
@@ -417,6 +422,7 @@ function ProductForm({ workspaceId, currency, detail }: WorkspaceInfo & { detail
         <div className="animate-fade-up space-y-4">
           <FormSection title="Where it is sold">
             <OutletPicker workspaceId={workspaceId} value={form.outletIds} onChange={(ids) => set("outletIds", ids)} label="" />
+            <AppSwitch label="Show on my online store" description="Shoppers can see this product on your public store." isSelected={form.showOnStore ?? storefrontSettings.data?.settings.auto_show_new_products ?? true} onChange={(value) => set("showOnStore", value)} />
           </FormSection>
 
           {form.kind === "stock_tracked" && !hasOptions ? (

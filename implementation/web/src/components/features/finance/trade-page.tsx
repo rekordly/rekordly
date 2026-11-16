@@ -3,7 +3,7 @@
 // Sales and purchases lists. Recording happens on its own page (/sales/new, /purchases/new).
 
 import { HandCoins, Plus, Receipt, ShoppingCart } from "@phosphor-icons/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { AppButton } from "@/components/ui/app-button";
@@ -29,6 +29,7 @@ interface TradeRow {
   currency: string;
   currency_exponent: number;
   status: string;
+  source?: string;
   reference?: string | null;
 }
 
@@ -43,6 +44,7 @@ function toRow(record: Sale | Purchase): TradeRow {
     currency: record.currency,
     currency_exponent: record.currency_exponent,
     status: record.status,
+    source: isSale ? record.source : undefined,
     reference: record.reference,
   };
 }
@@ -71,8 +73,10 @@ const COPY = {
 function TradeContent({ workspaceId, currency, kind, startOpen }: WorkspaceInfo & { kind: Kind; startOpen: boolean }) {
   const copy = COPY[kind];
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [payment, setPayment] = useState<PaymentPreset | undefined>();
-  const records = useRecords<Sale | Purchase>(kind === "sale" ? "sales" : "purchases", workspaceId);
+  const [source, setSource] = useState(searchParams.get("source") ?? "");
+  const records = useRecords<Sale | Purchase>(kind === "sale" ? "sales" : "purchases", workspaceId, source ? { source } : {});
 
   // Old links that asked for the form to open now go to the form page.
   useEffect(() => {
@@ -128,11 +132,13 @@ function TradeContent({ workspaceId, currency, kind, startOpen }: WorkspaceInfo 
         server={records.controls}
         onRowClick={kind === "purchase" ? (row) => router.push(`/purchases/${row.id}`) : undefined}
         searchPlaceholder={`Search ${copy.party.toLowerCase()} or reference`}
+        filters={kind === "sale" ? <select aria-label="Sale source" value={source} onChange={(event) => setSource(event.target.value)} className="h-9 rounded-lg border border-border bg-surface px-2 text-sm"><option value="">All sources</option><option value="in_person">In person</option><option value="online_store">Online store</option></select> : undefined}
         empty={<EmptyState icon={kind === "sale" ? ShoppingCart : Receipt} title={copy.emptyTitle} description={copy.emptyBody} action={addButton} />}
         columns={[
           { key: "date", label: "Date", render: (row) => formatDate(row.date), sortValue: (row) => row.date },
           { key: "party", label: copy.party, render: (row) => <span className="font-medium text-foreground">{row.party}</span>, sortValue: (row) => row.party },
           { key: "ref", label: "Reference", render: (row) => row.reference ?? "—" },
+          ...(kind === "sale" ? [{ key: "source", label: "Source", render: (row: TradeRow) => row.source === "online_store" ? "Online store" : "In person" }] : []),
           { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> },
           { key: "paid", label: "Paid", align: "right", render: (row) => <span className="tabular">{money(row.paid, row)}</span>, sortValue: (row) => Number(row.paid) },
           { key: "total", label: "Total", align: "right", render: (row) => <span className="tabular font-semibold">{money(row.total, row)}</span>, sortValue: (row) => Number(row.total) },

@@ -113,7 +113,7 @@ export const productsApi = {
     );
   },
   async combinedHistory(workspaceId: number, id: number) {
-    const result = await apiClient.get<{ history: any[] }>(`/api/v1/catalogue/products/${id}/history`, headers(workspaceId));
+    const result = await apiClient.get<{ history: ProductEvent[] }>(`/api/v1/catalogue/products/${id}/history`, headers(workspaceId));
     return result.history ?? [];
   },
   changeStock: (workspaceId: number, id: number, body: ProductStockChange, key: string) =>
@@ -122,11 +122,11 @@ export const productsApi = {
     const result = await apiClient.get<{ collections: ProductCollection[] }>("/api/v1/catalogue/collections", headers(workspaceId));
     return result.collections ?? [];
   },
-  async createCollection(workspaceId: number, body: { name: string; description?: string }) {
+  async createCollection(workspaceId: number, body: { name: string; description?: string; show_on_store?: boolean; image_url?: string }) {
     const result = await apiClient.post<unknown, { collection: ProductCollection }>("/api/v1/catalogue/collections", body, headers(workspaceId));
     return result.collection;
   },
-  async updateCollection(workspaceId: number, id: number, body: { name: string; description?: string }) {
+  async updateCollection(workspaceId: number, id: number, body: { name: string; description?: string; show_on_store?: boolean; image_url?: string }) {
     const result = await apiClient.patch<unknown, { collection: ProductCollection }>(`/api/v1/catalogue/collections/${id}`, body, headers(workspaceId));
     return result.collection;
   },

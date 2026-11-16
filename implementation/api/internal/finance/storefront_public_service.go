@@ -87,6 +87,8 @@ type PublicStorefrontProjection struct {
 	BackgroundColor         string                     `json:"background_color"`
 	TextColor               string                     `json:"text_color"`
 	FontFamily              string                     `json:"font_family"`
+	Brand                   json.RawMessage            `json:"brand"`
+	Sections                []StorefrontSection        `json:"sections"`
 	SectionOrder            []string                   `json:"section_order"`
 	ContactPhone            *string                    `json:"contact_phone,omitempty"`
 	ContactEmail            *string                    `json:"contact_email,omitempty"`
@@ -99,6 +101,9 @@ type PublicStorefrontProjection struct {
 	DefaultDeliveryFeeMinor string                     `json:"default_delivery_fee_minor"`
 	CheckoutRequireEmail    bool                       `json:"checkout_require_email"`
 	CheckoutRequirePhone    bool                       `json:"checkout_require_phone"`
+	ShowSoldOut             bool                       `json:"show_sold_out"`
+	ShowStockCount          bool                       `json:"show_stock_count"`
+	LowStockThreshold       int32                      `json:"low_stock_threshold"`
 	ReturnPolicy            *string                    `json:"return_policy,omitempty"`
 	PrivacyPolicy           *string                    `json:"privacy_policy,omitempty"`
 	TermsPolicy             *string                    `json:"terms_policy,omitempty"`
@@ -217,7 +222,7 @@ func (s *Service) GetPublicStorefrontProjection(ctx context.Context, slugOrHost 
 			colViews = append(colViews, StorefrontCollectionView{
 				ID:          c.ID,
 				Name:        c.Name,
-				Slug:        c.Slug,
+				Slug:        string(c.Slug),
 				Description: nullableText(c.Description),
 				ImageURL:    nullableText(c.ImageUrl),
 				Position:    c.Position,
@@ -233,9 +238,21 @@ func (s *Service) GetPublicStorefrontProjection(ctx context.Context, slugOrHost 
 		}
 		prodViews := make([]PublicProductView, 0, len(prods))
 		for _, p := range prods {
-			state, visible, exact := computePublicAvailability(p.ProductKind, p.AvailabilityPolicy, p.LowStockThreshold, p.AvailableQuantity)
+			state, visible, _ := computePublicAvailability(p.ProductKind, p.AvailabilityPolicy, p.LowStockThreshold, p.AvailableQuantity)
+			if p.ProductKind == "stock_tracked" && p.AvailableQuantity.LessThanOrEqual(decimal.Zero) {
+				visible = st.ShowSoldOut
+				state = "out_of_stock"
+			}
 			if !visible {
 				continue
+			}
+			var exact *string
+			if p.ProductKind == "stock_tracked" && p.AvailableQuantity.GreaterThan(decimal.Zero) && (st.ShowStockCount || p.AvailableQuantity.LessThanOrEqual(decimal.NewFromInt(int64(st.LowStockThreshold)))) {
+				quantity := p.AvailableQuantity.Truncate(2).String()
+				exact = &quantity
+			}
+			if p.ProductKind == "stock_tracked" && p.AvailableQuantity.GreaterThan(decimal.Zero) && p.AvailableQuantity.LessThanOrEqual(decimal.NewFromInt(int64(st.LowStockThreshold))) {
+				state = "low_stock"
 			}
 			var imgs []string
 			_ = json.Unmarshal(p.ImageUrls, &imgs)
@@ -269,6 +286,15 @@ func (s *Service) GetPublicStorefrontProjection(ctx context.Context, slugOrHost 
 			})
 		}
 		stView := settingsToView(st)
+		var brand StorefrontBrand
+		_ = json.Unmarshal(st.Brand, &brand)
+		brand.ResolvedPalette = resolveStorefrontPalette(brand)
+		brandJSON, _ := json.Marshal(brand)
+		var sections []StorefrontSection
+		_ = json.Unmarshal(st.Sections, &sections)
+		if sections == nil {
+			sections = []StorefrontSection{}
+		}
 		proj = PublicStorefrontProjection{
 			Name:                    sf.Name,
 			Slug:                    sf.Slug,
@@ -284,6 +310,8 @@ func (s *Service) GetPublicStorefrontProjection(ctx context.Context, slugOrHost 
 			BackgroundColor:         stView.BackgroundColor,
 			TextColor:               stView.TextColor,
 			FontFamily:              stView.FontFamily,
+			Brand:                   brandJSON,
+			Sections:                sections,
 			SectionOrder:            stView.SectionOrder,
 			ContactPhone:            stView.ContactPhone,
 			ContactEmail:            stView.ContactEmail,
@@ -296,6 +324,9 @@ func (s *Service) GetPublicStorefrontProjection(ctx context.Context, slugOrHost 
 			DefaultDeliveryFeeMinor: stView.DefaultDeliveryFeeMinor,
 			CheckoutRequireEmail:    stView.CheckoutRequireEmail,
 			CheckoutRequirePhone:    stView.CheckoutRequirePhone,
+			ShowSoldOut:             stView.ShowSoldOut,
+			ShowStockCount:          stView.ShowStockCount,
+			LowStockThreshold:       stView.LowStockThreshold,
 			ReturnPolicy:            stView.ReturnPolicy,
 			PrivacyPolicy:           stView.PrivacyPolicy,
 			TermsPolicy:             stView.TermsPolicy,
