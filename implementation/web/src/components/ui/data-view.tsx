@@ -68,6 +68,8 @@ export interface DataViewProps<T> {
   heading?: ReactNode;
   /** Embedded lists show a fixed set of rows: no view switch and no page controls. */
   embedded?: boolean;
+  /** Optional handler when a row is clicked. */
+  onRowClick?: (row: T) => void;
 }
 
 type SortState = { key: string; direction: "asc" | "desc" } | null;
@@ -172,6 +174,7 @@ export function DataView<T>({
   onSelectionChange,
   heading,
   embedded = false,
+  onRowClick,
 }: DataViewProps<T>) {
   const storedView = useUIStore((state) => state.recordView);
   const view = embedded ? "table" : storedView;
@@ -316,7 +319,21 @@ export function DataView<T>({
   const cardGrid = (
     <div className={`grid gap-3 sm:grid-cols-2 xl:grid-cols-3 ${server?.isChanging ? "opacity-60" : ""}`}>
       {visibleRows.map((row) => (
-        <div key={rowKey(row)}>{renderCard(row)}</div>
+        <div
+          key={rowKey(row)}
+          onClick={
+            onRowClick
+              ? (event) => {
+                  const target = event.target as HTMLElement | null;
+                  if (target?.closest("a,button,input,label,[role='menuitem']")) return;
+                  onRowClick(row);
+                }
+              : undefined
+          }
+          className={onRowClick ? "cursor-pointer" : undefined}
+        >
+          {renderCard(row)}
+        </div>
       ))}
     </div>
   );
@@ -363,7 +380,20 @@ export function DataView<T>({
               const key = rowKey(row);
               const isSelected = selected.has(key);
               return (
-                <tr key={key} data-selected={isSelected || undefined}>
+                <tr
+                  key={key}
+                  data-selected={isSelected || undefined}
+                  onClick={
+                    onRowClick
+                      ? (event) => {
+                          const target = event.target as HTMLElement | null;
+                          if (target?.closest("a,button,input,label,[role='menuitem']")) return;
+                          onRowClick(row);
+                        }
+                      : undefined
+                  }
+                  className={onRowClick ? "cursor-pointer" : undefined}
+                >
                   {selectable ? (
                     <td className="w-10">
                       <input type="checkbox" aria-label="Select row" className={CHECKBOX} checked={isSelected} onChange={() => toggleOne(key)} />

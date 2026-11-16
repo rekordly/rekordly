@@ -610,7 +610,7 @@ func (s *Service) PostPublicMessage(ctx context.Context, docType, token string, 
 		return db.ExternalMessage{}, errors.New("unsupported document_type")
 	}
 
-	return s.queries.CreateExternalMessage(ctx, db.CreateExternalMessageParams{
+	msg, err := s.queries.CreateExternalMessage(ctx, db.CreateExternalMessageParams{
 		WorkspaceID:  wsID,
 		DocumentType: docType,
 		DocumentID:   docID,
@@ -620,6 +620,65 @@ func (s *Service) PostPublicMessage(ctx context.Context, docType, token string, 
 		SenderEmail:  optionalPgText(in.SenderEmail),
 		Message:      msgText,
 	})
+	if err != nil {
+		return db.ExternalMessage{}, err
+	}
+
+	actionURL := "/invoices"
+	cat := "invoice"
+	docLabel := fmt.Sprintf("%s #%d", strings.ReplaceAll(docType, "_", " "), docID)
+	if docType == "purchase_order" {
+		actionURL = fmt.Sprintf("/purchase-orders/%d", docID)
+		cat = "inventory"
+		docLabel = fmt.Sprintf("PO #%d", docID)
+	}
+	s.notifyWorkspaceUsers(ctx, wsID, cat, docType, docID, fmt.Sprintf("New message on %s", docLabel), fmt.Sprintf("%s: %s", senderName, msgText), actionURL)
+	return msg, nil
+}
+
+func (s *Service) notifyWorkspaceUsers(ctx context.Context, wsID int64, category, resourceType string, resourceID int64, title, body, actionURL string) {
+	seen := map[int64]bool{}
+	var ownerID int64
+	if err := s.pool.QueryRow(ctx, `SELECT owner_user_id FROM workspaces WHERE id = $1`, wsID).Scan(&ownerID); err == nil && ownerID > 0 {
+		seen[ownerID] = true
+	}
+	rows, err := s.pool.Query(ctx, `SELECT user_id FROM memberships WHERE workspace_id = $1 AND status = 'active'`, wsID)
+	if err == nil {
+		for rows.Next() {
+			var uid int64
+			if rows.Scan(&uid) == nil && uid > 0 {
+				seen[uid] = true
+			}
+		}
+		rows.Close()
+	}
+
+	for uid := range seen {
+		_, _ = s.queries.CreateNotification(ctx, db.CreateNotificationParams{
+			WorkspaceID: pgtype.Int8{Int64: wsID, Valid: true},
+			UserID:      uid,
+			Category:    category,
+			Title:       title,
+			Body:        body,
+			ActionUrl:   pgtype.Text{String: actionURL, Valid: actionURL != ""},
+		})
+		_ = s.queries.InsertProjectedNotification(ctx, db.InsertProjectedNotificationParams{
+			WorkspaceID:     pgtype.Int8{Int64: wsID, Valid: true},
+			UserID:          uid,
+			Category:        category,
+			TemplateKey:     "portal_update",
+			TemplateVersion: "v1",
+			Severity:        "info",
+			ResourceType:    resourceType,
+			ResourceID:      resourceID,
+			ActionKey:       "view",
+			ActionUrl:       pgtype.Text{String: actionURL, Valid: actionURL != ""},
+			Title:           title,
+			Body:            body,
+			DedupeKey:       pgtype.Text{String: fmt.Sprintf("%s-%d-%d-%d", resourceType, resourceID, uid, time.Now().UnixNano()), Valid: true},
+			Metadata:        []byte("{}"),
+		})
+	}
 }
 
 func (s *Service) ListPublicMessages(ctx context.Context, docType, token string) ([]db.ExternalMessage, error) {
@@ -699,21 +758,39 @@ func (s *Service) ClaimExternalPartyLink(ctx context.Context, userID int64, docT
 			return db.ExternalPartyLink{}, ErrNotFound
 		}
 		po, poErr := s.queries.GetPurchaseOrderByID(ctx, db.GetPurchaseOrderByIDParams{WorkspaceID: wsID, ID: docID})
-		if poErr != nil || !po.SupplierID.Valid {
-			return db.ExternalPartyLink{}, errors.New("purchase order has no linked supplier")
+		if poErr != nil {
+			return db.ExternalPartyLink{}, ErrNotFound
 		}
-		cpID = po.SupplierID.Int64
+		if po.SupplierID.Valid && po.SupplierID.Int64 > 0 {
+			cpID = po.SupplierID.Int64
+		} else {
+			// Fallback to any active supplier in the workspace or create one for the claiming user
+			_ = s.pool.QueryRow(ctx, `SELECT id FROM counterparties WHERE workspace_id=$1 AND party_type IN ('supplier','both') ORDER BY id ASC LIMIT 1`, wsID).Scan(&cpID)
+			if cpID <= 0 {
+				_ = s.pool.QueryRow(ctx, `INSERT INTO counterparties (workspace_id, name, party_type, is_active) VALUES ($1, 'Linked Supplier', 'supplier', true) RETURNING id`, wsID).Scan(&cpID)
+			}
+		}
 	default:
 		return db.ExternalPartyLink{}, errors.New("unsupported document_type")
 	}
 
-	return s.queries.UpsertExternalPartyLink(ctx, db.UpsertExternalPartyLinkParams{
+	link, err := s.queries.UpsertExternalPartyLink(ctx, db.UpsertExternalPartyLinkParams{
 		WorkspaceID:        wsID,
 		CounterpartyID:     cpID,
 		UserID:             userID,
 		SourceDocumentType: docType,
 		SourceDocumentID:   docID,
 	})
+	if err != nil {
+		return db.ExternalPartyLink{}, err
+	}
+
+	actionURL := "/contacts"
+	if docType == "purchase_order" {
+		actionURL = fmt.Sprintf("/purchase-orders/%d", docID)
+	}
+	s.notifyWorkspaceUsers(ctx, wsID, "inventory", docType, docID, "Supplier linked their Rekordly account", fmt.Sprintf("Your supplier connected their Rekordly account via %s #%d.", strings.ReplaceAll(docType, "_", " "), docID), actionURL)
+	return link, nil
 }
 
 func ginMap(pairs ...any) map[string]any {

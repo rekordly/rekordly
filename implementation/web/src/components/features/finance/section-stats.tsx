@@ -118,6 +118,62 @@ export function ProcurementStats({ workspaceId, currency }: { workspaceId: numbe
   );
 }
 
+/* Requests, orders and bills ---------------------------------------------- */
+
+export function PurchaseRequestStats({ workspaceId, currency }: { workspaceId: number; currency: string }) {
+  const { show } = useMoney(workspaceId, currency);
+  const requests = useQuery({ queryKey: [...moneyKeys.workspace(workspaceId), "purchase-requests"], queryFn: () => financeApi.listPurchaseRequests(workspaceId) });
+  const list = requests.data ?? [];
+  const open = list.filter((request) => ["draft", "submitted", "approved"].includes(request.status));
+  const waiting = list.filter((request) => request.status === "submitted").length;
+  const approved = list.filter((request) => request.status === "approved").length;
+  const urgent = open.filter((request) => request.priority === "urgent" || request.priority === "high").length;
+  return (
+    <Row>
+      <KpiCard loading={requests.isPending} tone="accent" icon={ClipboardText} label="Open requests" value={show(sumMinor(open.map((request) => request.estimated_total_minor)))} hint={plural(open.length, "request")} />
+      <KpiCard loading={requests.isPending} icon={Clock} label="Awaiting approval" value={String(waiting)} hint="Submitted" />
+      <KpiCard loading={requests.isPending} icon={CheckCircle} label="Ready to order" value={String(approved)} hint="Approved" />
+      <KpiCard loading={requests.isPending} icon={Warning} label="Urgent" value={String(urgent)} hint="High or urgent" />
+    </Row>
+  );
+}
+
+export function PurchaseOrderStats({ workspaceId, currency }: { workspaceId: number; currency: string }) {
+  const { show } = useMoney(workspaceId, currency);
+  const orders = useQuery({ queryKey: [...moneyKeys.workspace(workspaceId), "purchase-orders"], queryFn: () => financeApi.listPurchaseOrders(workspaceId) });
+  const list = orders.data ?? [];
+  const open = list.filter((order) => OPEN_ORDER.has(order.status));
+  const drafts = list.filter((order) => order.status === "draft" || order.status === "submitted").length;
+  const partial = list.filter((order) => order.status === "partially_received").length;
+  const received = list.filter((order) => order.status === "fully_received" || order.status === "closed").length;
+  return (
+    <Row>
+      <KpiCard loading={orders.isPending} tone="accent" icon={ClipboardText} label="Open orders" value={show(sumMinor(open.map((order) => order.total_minor)))} hint={plural(open.length, "order")} />
+      <KpiCard loading={orders.isPending} icon={FileText} label="Drafts" value={String(drafts)} hint="Not issued yet" />
+      <KpiCard loading={orders.isPending} icon={Package} label="Part received" value={String(partial)} hint="Goods still due" />
+      <KpiCard loading={orders.isPending} icon={CheckCircle} label="Received" value={String(received)} hint="Fully delivered" />
+    </Row>
+  );
+}
+
+export function SupplierBillStats({ workspaceId, currency }: { workspaceId: number; currency: string }) {
+  const { show } = useMoney(workspaceId, currency);
+  const bills = useQuery({ queryKey: [...moneyKeys.workspace(workspaceId), "supplier-bills"], queryFn: () => financeApi.listSupplierBills(workspaceId) });
+  const list = bills.data ?? [];
+  const unpaid = list.filter((bill) => ["approved", "partially_paid", "disputed"].includes(bill.status));
+  const overdue = unpaid.filter((bill) => bill.overdue);
+  const drafts = list.filter((bill) => bill.status === "draft").length;
+  const paid = list.filter((bill) => bill.status === "paid");
+  return (
+    <Row>
+      <KpiCard loading={bills.isPending} tone="accent" icon={Receipt} label="To pay" value={show(sumMinor(unpaid.map((bill) => bill.outstanding_minor)))} hint={plural(unpaid.length, "bill")} />
+      <KpiCard loading={bills.isPending} icon={Clock} label="Overdue" value={show(sumMinor(overdue.map((bill) => bill.outstanding_minor)))} hint={plural(overdue.length, "bill")} />
+      <KpiCard loading={bills.isPending} icon={FileText} label="To approve" value={String(drafts)} hint="Draft bills" />
+      <KpiCard loading={bills.isPending} icon={HandCoins} label="Paid" value={show(sumMinor(paid.map((bill) => bill.total_minor)))} hint={plural(paid.length, "bill")} />
+    </Row>
+  );
+}
+
 /* Budgets ------------------------------------------------------------------ */
 
 export function BudgetStats({ workspaceId, currency, budgets }: { workspaceId: number; currency: string; budgets: Budget[] }) {

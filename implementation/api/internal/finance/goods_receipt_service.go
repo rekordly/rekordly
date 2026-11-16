@@ -54,9 +54,16 @@ type GoodsReceiptView struct {
 	SourceType          string  `json:"source_type"`
 	Reason              *string `json:"reason,omitempty"`
 	PurchaseOrderStatus string  `json:"purchase_order_status"`
+	Status              string  `json:"status,omitempty"`
+	BillID              *int64  `json:"bill_id,omitempty"`
+	BillStatus          string  `json:"bill_status,omitempty"`
+	BillVersion         int32   `json:"bill_version,omitempty"`
 	ReceivedOn          string  `json:"received_on"`
 	Currency            string  `json:"currency,omitempty"`
 	CurrencyExponent    int32   `json:"currency_exponent,omitempty"`
+	GoodsTotalMinor     string  `json:"goods_total_minor,omitempty"`
+	PaidMinor           string  `json:"paid_minor,omitempty"`
+	OutstandingMinor    string  `json:"outstanding_minor,omitempty"`
 	TotalMinor          string  `json:"total_minor"`
 	LandedCostMinor     string  `json:"landed_cost_minor,omitempty"`
 	DeliveryReference   *string `json:"delivery_reference,omitempty"`
@@ -68,8 +75,10 @@ type GoodsReceiptLineView struct {
 	PurchaseOrderLineID    int64    `json:"purchase_order_line_id"`
 	ProductID              *int64   `json:"product_id,omitempty"`
 	Description            string   `json:"description"`
+	OrderedQuantity        *string  `json:"ordered_quantity,omitempty"`
 	AcceptedQuantity       string   `json:"accepted_quantity"`
 	RejectedQuantity       string   `json:"rejected_quantity,omitempty"`
+	OrderedUnitCostMinor   *string  `json:"ordered_unit_cost_minor,omitempty"`
 	UnitCostMinor          string   `json:"unit_cost_minor"`
 	ActualUnitCostMinor    string   `json:"actual_unit_cost_minor"`
 	LandedCostMinor        string   `json:"landed_cost_minor,omitempty"`
@@ -81,10 +90,20 @@ type GoodsReceiptLineView struct {
 	Notes                  *string  `json:"notes,omitempty"`
 }
 
+type GoodsReceiptHistoryEvent struct {
+	Kind        string `json:"kind"`
+	Title       string `json:"title"`
+	Subtitle    string `json:"subtitle,omitempty"`
+	Date        string `json:"date"`
+	AmountMinor string `json:"amount_minor,omitempty"`
+	Href        string `json:"href,omitempty"`
+}
+
 type GoodsReceiptDetailView struct {
 	GoodsReceiptView
-	ReceiptReference *string                `json:"receipt_reference,omitempty"`
-	Lines            []GoodsReceiptLineView `json:"lines"`
+	ReceiptReference *string                    `json:"receipt_reference,omitempty"`
+	Lines            []GoodsReceiptLineView     `json:"lines"`
+	History          []GoodsReceiptHistoryEvent `json:"history,omitempty"`
 }
 
 type ReceiptOptionLine struct {
@@ -99,9 +118,78 @@ type GoodsReceiptListItem struct {
 	SupplierID       *int64  `json:"supplier_id,omitempty"`
 	LocationID       *int64  `json:"location_id,omitempty"`
 	SourceType       string  `json:"source_type"`
+	Status           string  `json:"status"`
+	BillID           *int64  `json:"bill_id,omitempty"`
+	BillStatus       string  `json:"bill_status,omitempty"`
+	BillVersion      int32   `json:"bill_version,omitempty"`
+	Currency         string  `json:"currency,omitempty"`
+	CurrencyExponent int32   `json:"currency_exponent,omitempty"`
+	GoodsTotalMinor  string  `json:"goods_total_minor,omitempty"`
+	PaidMinor        string  `json:"paid_minor,omitempty"`
+	OutstandingMinor string  `json:"outstanding_minor,omitempty"`
+	TotalMinor       string  `json:"total_minor"`
 	LandedCostMinor  string  `json:"landed_cost_minor,omitempty"`
 	ReceivedOn       string  `json:"received_on"`
 	ReceiptReference *string `json:"receipt_reference,omitempty"`
+}
+
+type receiptFinancialSummary struct {
+	linesTotal       int64
+	currency         string
+	exponent         int32
+	status           string
+	billID           *int64
+	billStatus       string
+	billVersion      int32
+	paidMinor        int64
+	outstandingMinor int64
+}
+
+func (s *Service) receiptBillSummary(ctx context.Context, ws, receiptID int64) receiptFinancialSummary {
+	sum := receiptFinancialSummary{
+		currency: "NGN",
+		exponent: 2,
+		status:   "unpaid",
+	}
+	_ = s.pool.QueryRow(ctx, `
+		SELECT
+			COALESCE((SELECT SUM(line_total_minor) FROM goods_receipt_lines grl WHERE grl.workspace_id = $1 AND grl.goods_receipt_id = $2), 0),
+			COALESCE(gr.currency, 'NGN'),
+			COALESCE(gr.currency_exponent, 2)
+		FROM goods_receipts gr
+		WHERE gr.workspace_id = $1 AND gr.id = $2
+	`, ws, receiptID).Scan(&sum.linesTotal, &sum.currency, &sum.exponent)
+
+	sum.outstandingMinor = sum.linesTotal
+
+	var bID int64
+	var bStatus string
+	var bVersion int32
+	var bTotal, bOut int64
+	err := s.pool.QueryRow(ctx, `
+		SELECT id, status, version, total_minor, outstanding_minor
+		FROM supplier_bills
+		WHERE workspace_id = $1 AND goods_receipt_id = $2 AND status <> 'reversed'
+		ORDER BY id DESC LIMIT 1
+	`, ws, receiptID).Scan(&bID, &bStatus, &bVersion, &bTotal, &bOut)
+	if err == nil && bID > 0 {
+		sum.billID = &bID
+		sum.billStatus = bStatus
+		sum.billVersion = bVersion
+		sum.outstandingMinor = bOut
+		if bTotal > bOut {
+			sum.paidMinor = bTotal - bOut
+		}
+		switch {
+		case bStatus == "paid" || (bStatus == "approved" && bTotal > 0 && bOut <= 0):
+			sum.status = "paid"
+		case bStatus == "partially_paid" || (bOut > 0 && bOut < bTotal):
+			sum.status = "partially_paid"
+		default:
+			sum.status = "unpaid"
+		}
+	}
+	return sum
 }
 
 func (s *Service) ListGoodsReceipts(ctx context.Context, ws int64) ([]GoodsReceiptListItem, error) {
@@ -115,12 +203,23 @@ func (s *Service) ListGoodsReceipts(ctx context.Context, ws int64) ([]GoodsRecei
 		if r.PurchaseOrderID.Valid {
 			poID = r.PurchaseOrderID.Int64
 		}
+		fin := s.receiptBillSummary(ctx, ws, r.ID)
 		out = append(out, GoodsReceiptListItem{
 			ID:               r.ID,
 			PurchaseOrderID:  poID,
 			SupplierID:       nullableInt8(r.SupplierID),
 			LocationID:       nullableInt8(r.LocationID),
 			SourceType:       r.SourceType,
+			Status:           fin.status,
+			BillID:           fin.billID,
+			BillStatus:       fin.billStatus,
+			BillVersion:      fin.billVersion,
+			Currency:         fin.currency,
+			CurrencyExponent: fin.exponent,
+			GoodsTotalMinor:  fmt.Sprint(fin.linesTotal),
+			PaidMinor:        fmt.Sprint(fin.paidMinor),
+			OutstandingMinor: fmt.Sprint(fin.outstandingMinor),
+			TotalMinor:       fmt.Sprint(fin.linesTotal + r.LandedCostMinor),
 			LandedCostMinor:  fmt.Sprint(r.LandedCostMinor),
 			ReceivedOn:       r.ReceivedOn.Time.Format("2006-01-02"),
 			ReceiptReference: nullableText(r.ReceiptReference),
@@ -719,13 +818,30 @@ func (s *Service) GetGoodsReceipt(ctx context.Context, ws, id int64) (GoodsRecei
 		if lt, parseErr := strconvParseIntSafe(lineTotalStr); parseErr == nil {
 			totalMinor += lt
 		}
+		var orderedQty, orderedUnitCost *string
+		if poLineID > 0 {
+			var oQty decimal.Decimal
+			var oCost int64
+			if err := s.pool.QueryRow(ctx, `
+				SELECT quantity, expected_unit_cost_minor
+				FROM purchase_order_lines
+				WHERE workspace_id = $1 AND id = $2
+			`, ws, poLineID).Scan(&oQty, &oCost); err == nil {
+				qs := oQty.String()
+				cs := fmt.Sprint(oCost)
+				orderedQty = &qs
+				orderedUnitCost = &cs
+			}
+		}
 		lines = append(lines, GoodsReceiptLineView{
 			ID:                     rl.ID,
 			PurchaseOrderLineID:    poLineID,
 			ProductID:              rl.ProductID,
 			Description:            desc,
+			OrderedQuantity:        orderedQty,
 			AcceptedQuantity:       jsonRawScalarString(rl.AcceptedQuantity),
 			RejectedQuantity:       jsonRawScalarString(rl.RejectedQuantity),
+			OrderedUnitCostMinor:   orderedUnitCost,
 			UnitCostMinor:          jsonRawScalarString(rl.UnitCostMinor),
 			ActualUnitCostMinor:    jsonRawScalarString(rl.ActualUnitCostMinor),
 			LandedCostMinor:        jsonRawScalarString(rl.LandedCostMinor),
@@ -741,6 +857,9 @@ func (s *Service) GetGoodsReceipt(ctx context.Context, ws, id int64) (GoodsRecei
 	if row.PurchaseOrderID.Valid {
 		poID = row.PurchaseOrderID.Int64
 	}
+	fin := s.receiptBillSummary(ctx, ws, row.ID)
+	receivedOnStr := row.ReceivedOn.Time.Format("2006-01-02")
+	history := s.buildReceiptHistory(ctx, ws, row.ID, poID, receivedOnStr, nullableText(row.ReceiptReference), len(lines), totalMinor, row.LandedCostMinor)
 	return GoodsReceiptDetailView{
 		GoodsReceiptView: GoodsReceiptView{
 			ID:                row.ID,
@@ -749,9 +868,16 @@ func (s *Service) GetGoodsReceipt(ctx context.Context, ws, id int64) (GoodsRecei
 			LocationID:        nullableInt8(row.LocationID),
 			SourceType:        row.SourceType,
 			Reason:            nullableText(row.Reason),
-			ReceivedOn:        row.ReceivedOn.Time.Format("2006-01-02"),
+			Status:            fin.status,
+			BillID:            fin.billID,
+			BillStatus:        fin.billStatus,
+			BillVersion:       fin.billVersion,
+			ReceivedOn:        receivedOnStr,
 			Currency:          row.Currency,
 			CurrencyExponent:  row.CurrencyExponent,
+			GoodsTotalMinor:   fmt.Sprint(totalMinor),
+			PaidMinor:         fmt.Sprint(fin.paidMinor),
+			OutstandingMinor:  fmt.Sprint(fin.outstandingMinor),
 			TotalMinor:        fmt.Sprint(totalMinor + row.LandedCostMinor),
 			LandedCostMinor:   fmt.Sprint(row.LandedCostMinor),
 			DeliveryReference: nullableText(row.DeliveryReference),
@@ -759,7 +885,198 @@ func (s *Service) GetGoodsReceipt(ctx context.Context, ws, id int64) (GoodsRecei
 		},
 		ReceiptReference: nullableText(row.ReceiptReference),
 		Lines:            lines,
+		History:          history,
 	}, nil
+}
+
+func (s *Service) buildReceiptHistory(
+	ctx context.Context,
+	ws, receiptID, poID int64,
+	receivedOn string,
+	receiptRef *string,
+	itemCount int,
+	goodsTotalMinor, landedCostMinor int64,
+) []GoodsReceiptHistoryEvent {
+	var events []GoodsReceiptHistoryEvent
+
+	// 1. Purchase Request & Purchase Order (if linked)
+	if poID > 0 {
+		var reqID pgtype.Int8
+		var poNum pgtype.Text
+		var poStatus string
+		var poTotal int64
+		var poCreated time.Time
+		if err := s.pool.QueryRow(ctx, `
+			SELECT source_purchase_request_id, order_number, status, total_minor, created_at
+			FROM purchase_orders
+			WHERE workspace_id = $1 AND id = $2
+		`, ws, poID).Scan(&reqID, &poNum, &poStatus, &poTotal, &poCreated); err == nil {
+			if reqID.Valid && reqID.Int64 > 0 {
+				var reqReason, reqPriority string
+				var reqEst int64
+				var reqCreated time.Time
+				if rErr := s.pool.QueryRow(ctx, `
+					SELECT reason, priority, estimated_total_minor, created_at
+					FROM purchase_requests
+					WHERE workspace_id = $1 AND id = $2
+				`, ws, reqID.Int64).Scan(&reqReason, &reqPriority, &reqEst, &reqCreated); rErr == nil {
+					events = append(events, GoodsReceiptHistoryEvent{
+						Kind:        "request",
+						Title:       fmt.Sprintf("Purchase request #%d approved", reqID.Int64),
+						Subtitle:    fmt.Sprintf("%s · %s priority", reqReason, reqPriority),
+						Date:        reqCreated.Format("2006-01-02"),
+						AmountMinor: fmt.Sprint(reqEst),
+						Href:        fmt.Sprintf("/purchase-requests/%d", reqID.Int64),
+					})
+				}
+			}
+			poLabel := fmt.Sprintf("PO #%d", poID)
+			if poNum.Valid && strings.TrimSpace(poNum.String) != "" {
+				poLabel = poNum.String
+			}
+			events = append(events, GoodsReceiptHistoryEvent{
+				Kind:        "order",
+				Title:       fmt.Sprintf("Purchase order %s (%s)", poLabel, strings.ReplaceAll(poStatus, "_", " ")),
+				Subtitle:    "Ordered from supplier",
+				Date:        poCreated.Format("2006-01-02"),
+				AmountMinor: fmt.Sprint(poTotal),
+				Href:        fmt.Sprintf("/purchase-orders/%d", poID),
+			})
+		}
+	}
+
+	// 2. Goods Receipt event
+	recTitle := fmt.Sprintf("Goods received into stock (Receipt #%d)", receiptID)
+	if receiptRef != nil && *receiptRef != "" {
+		recTitle = fmt.Sprintf("Goods received into stock (%s)", *receiptRef)
+	}
+	recSub := fmt.Sprintf("%d item line(s) added to inventory", itemCount)
+	if landedCostMinor > 0 {
+		recSub = fmt.Sprintf("%d item line(s) · includes extra/transport costs", itemCount)
+	}
+	events = append(events, GoodsReceiptHistoryEvent{
+		Kind:        "receipt",
+		Title:       recTitle,
+		Subtitle:    recSub,
+		Date:        receivedOn,
+		AmountMinor: fmt.Sprint(goodsTotalMinor + landedCostMinor),
+	})
+
+	// 3. Linked Supplier Bills & Payments
+	billRows, bErr := s.pool.Query(ctx, `
+		SELECT id, supplier_invoice_number, bill_date, status, total_minor, variance_minor
+		FROM supplier_bills
+		WHERE workspace_id = $1 AND goods_receipt_id = $2 AND status <> 'reversed'
+		ORDER BY id ASC
+	`, ws, receiptID)
+	var billIDs []int64
+	if bErr == nil {
+		defer billRows.Close()
+		for billRows.Next() {
+			var bID, bTotal, bVar int64
+			var bInv, bStatus string
+			var bDate pgtype.Date
+			if err := billRows.Scan(&bID, &bInv, &bDate, &bStatus, &bTotal, &bVar); err == nil {
+				billIDs = append(billIDs, bID)
+				dateStr := receivedOn
+				if bDate.Valid {
+					dateStr = bDate.Time.Format("2006-01-02")
+				}
+				sub := fmt.Sprintf("Status: %s", strings.ReplaceAll(bStatus, "_", " "))
+				if bVar != 0 {
+					sub += " · price variance recorded"
+				}
+				events = append(events, GoodsReceiptHistoryEvent{
+					Kind:        "bill",
+					Title:       fmt.Sprintf("Supplier bill %s", bInv),
+					Subtitle:    sub,
+					Date:        dateStr,
+					AmountMinor: fmt.Sprint(bTotal),
+					Href:        fmt.Sprintf("/bills/%d", bID),
+				})
+			}
+		}
+	}
+
+	// 4. Payments against those bills
+	for _, bID := range billIDs {
+		pmtRows, pErr := s.pool.Query(ctx, `
+			SELECT p.id, p.payment_date, p.total_amount_minor, COALESCE(p.reference, ''),
+				COALESCE((
+					SELECT string_agg(ma.name, ', ')
+					FROM payment_legs pl
+					JOIN money_accounts ma ON ma.id = pl.money_account_id AND ma.workspace_id = pl.workspace_id
+					WHERE pl.workspace_id = p.workspace_id AND pl.payment_id = p.id
+				), 'Account')
+			FROM payments p
+			WHERE p.workspace_id = $1
+			  AND (
+			    (p.linked_record_type = 'supplier_bill' AND p.linked_record_id = $2)
+			    OR EXISTS (
+			      SELECT 1 FROM payment_allocations pa
+			      WHERE pa.workspace_id = p.workspace_id AND pa.payment_id = p.id
+			        AND pa.document_type = 'supplier_bill' AND pa.document_id = $2
+			    )
+			  )
+			ORDER BY p.payment_date ASC, p.id ASC
+		`, ws, bID)
+		if pErr == nil {
+			for pmtRows.Next() {
+				var pID, pAmt int64
+				var pDate pgtype.Date
+				var pRef, acctNames string
+				if err := pmtRows.Scan(&pID, &pDate, &pAmt, &pRef, &acctNames); err == nil {
+					dateStr := receivedOn
+					if pDate.Valid {
+						dateStr = pDate.Time.Format("2006-01-02")
+					}
+					sub := fmt.Sprintf("Paid from %s", acctNames)
+					if strings.TrimSpace(pRef) != "" {
+						sub += fmt.Sprintf(" · Ref: %s", pRef)
+					}
+					events = append(events, GoodsReceiptHistoryEvent{
+						Kind:        "payment",
+						Title:       "Payment recorded",
+						Subtitle:    sub,
+						Date:        dateStr,
+						AmountMinor: fmt.Sprint(pAmt),
+					})
+				}
+			}
+			pmtRows.Close()
+		}
+	}
+
+	// 5. Stock returns against this receipt
+	retRows, rErr := s.pool.Query(ctx, `
+		SELECT id, effective_on, reason, total_minor
+		FROM supplier_returns
+		WHERE workspace_id = $1 AND goods_receipt_id = $2
+		ORDER BY effective_on ASC, id ASC
+	`, ws, receiptID)
+	if rErr == nil {
+		defer retRows.Close()
+		for retRows.Next() {
+			var rID, rTotal int64
+			var rDate pgtype.Date
+			var rReason string
+			if err := retRows.Scan(&rID, &rDate, &rReason, &rTotal); err == nil {
+				dateStr := receivedOn
+				if rDate.Valid {
+					dateStr = rDate.Time.Format("2006-01-02")
+				}
+				events = append(events, GoodsReceiptHistoryEvent{
+					Kind:        "return",
+					Title:       "Stock returned to supplier",
+					Subtitle:    rReason,
+					Date:        dateStr,
+					AmountMinor: fmt.Sprint(rTotal),
+				})
+			}
+		}
+	}
+
+	return events
 }
 
 func jsonRawScalarString(raw json.RawMessage) string {

@@ -130,6 +130,7 @@ export function useFinanceAction<TVariables>(
       options.onDone?.(data);
     },
     onError: (error: Error) => {
+      idempotencyKey.current = createIdempotencyKey();
       toast.danger(error.message);
     },
   });
@@ -165,17 +166,34 @@ export function useCategoryOptions(workspaceId: number, direction: string) {
 const STATUS_TONES: Readonly<Record<string, StatusTone>> = {
   paid: "success",
   posted: "success",
-  finalized: "accent",
-  partially_paid: "warning",
-  reversed: "warning",
-  unpaid: "brand",
-  draft: "neutral",
-  voided: "danger",
-  sent: "brand",
+  approved: "success",
   accepted: "success",
-  declined: "danger",
+  received: "success",
+  fully_received: "success",
+  closed: "success",
+  completed: "success",
+  active: "success",
+  finalized: "accent",
+  acknowledged: "accent",
   converted: "accent",
+  issued: "brand",
+  sent: "brand",
+  unpaid: "brand",
+  open: "brand",
+  submitted: "warning",
+  pending: "warning",
+  partially_paid: "warning",
+  partially_received: "warning",
+  partially_cancelled: "warning",
+  reversed: "warning",
+  draft: "neutral",
   expired: "neutral",
+  voided: "danger",
+  declined: "danger",
+  rejected: "danger",
+  disputed: "danger",
+  cancelled: "danger",
+  overdue: "danger",
 };
 
 export function StatusBadge({ status }: { status: string }) {

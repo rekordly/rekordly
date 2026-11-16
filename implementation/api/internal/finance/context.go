@@ -186,9 +186,14 @@ func AuthAndWorkspaceMiddleware(pool *pgxpool.Pool, authValidator AuthSessionVal
 
 		workspaceIDStr := resolveWorkspaceIDString(c)
 		if workspaceIDStr == "" {
-			// If exactly one workspace exists, use that workspace by default
-			if len(user.Workspaces) == 1 {
+			if len(user.Workspaces) > 0 {
 				ws := user.Workspaces[0]
+				for _, candidate := range user.Workspaces {
+					if candidate.Kind == "business" {
+						ws = candidate
+						break
+					}
+				}
 				c.Set(ContextUserIDKey, user.ID)
 				c.Set(ContextWorkspaceKey, WorkspaceContext{
 					WorkspaceID: ws.ID,

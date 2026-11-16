@@ -109,6 +109,9 @@ const NAVIGATION: Readonly<Record<ShellMode, NavGroup[]>> = {
           children: [
             { label: "Purchases", href: "/purchases", permission: PERMISSIONS.PURCHASES_VIEW },
             { label: "Procurement", href: "/procurement", permission: PERMISSIONS.PURCHASES_VIEW },
+            { label: "Purchase orders", href: "/purchase-orders", permission: PERMISSIONS.PURCHASES_VIEW },
+            { label: "Bills", href: "/bills", permission: PERMISSIONS.PURCHASES_VIEW },
+            { label: "Requests", href: "/purchase-requests", permission: PERMISSIONS.PURCHASES_VIEW },
           ],
         },
         {

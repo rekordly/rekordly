@@ -21,6 +21,7 @@ import type {
   StockTransfer,
   StockCount,
   StockAdjustment,
+  Purchase,
   PurchaseRequest,
   PurchaseOrder,
   PurchaseOrderVersion,
@@ -434,6 +435,8 @@ export const financeApi = {
     const result = await scopedGet<{ requests: PurchaseRequest[] }>(workspaceId, "/api/v1/purchase-requests", { limit: 50, ...params });
     return result.requests ?? [];
   },
+  getPurchaseRequest: (workspaceId: number, id: number) =>
+    scopedGet<{ request: PurchaseRequest }>(workspaceId, `/api/v1/purchase-requests/${id}`).then((r) => r.request),
   createPurchaseRequest: (workspaceId: number, body: unknown, key: string) =>
     scopedPost<{ request: PurchaseRequest }>(workspaceId, "/api/v1/purchase-requests", body, key),
   submitPurchaseRequest: (workspaceId: number, id: number, expectedVersion: number, key: string) =>
@@ -534,7 +537,9 @@ export const financeApi = {
 
   createSale: (workspaceId: number, body: unknown, key: string) => scopedPost(workspaceId, "/api/v1/sales", body, key),
   createPurchase: (workspaceId: number, body: unknown, key: string) =>
-    scopedPost(workspaceId, "/api/v1/purchases", body, key),
+    scopedPost<{ purchase: Purchase; items?: Array<{ id: number; description: string; quantity: string; unit_price_minor: number; line_total_minor: number }>; payments?: PaymentDetail[] }>(workspaceId, "/api/v1/purchases", body, key),
+  getPurchase: (workspaceId: number, id: number) =>
+    scopedGet<{ purchase: Purchase; items?: Array<{ id: number; description: string; quantity: string; unit_price_minor: number; line_total_minor: number }>; payments?: PaymentDetail[] }>(workspaceId, `/api/v1/purchases/${id}`),
   createPayment: (workspaceId: number, body: unknown, key: string) =>
     scopedPost<PaymentDetail>(workspaceId, "/api/v1/payments", body, key),
   getPayment: (workspaceId: number, id: number) =>
@@ -763,11 +768,20 @@ export const financeApi = {
     apiClient.post<typeof body, { message: ExternalMessage }>(`/api/v1/public/${docType}/${token}/messages`, body).then((r) => r.message),
   getPublicPurchaseOrderShare: (token: string) =>
     apiClient.get<{ share: PurchaseOrderShareView }>(`/api/v1/purchase-orders/share/${token}`).then((r) => r.share),
-  respondPublicPurchaseOrderShare: (token: string, response: "acknowledged" | "declined" | "change_requested", note?: string) =>
+  respondPublicPurchaseOrderShare: (
+    token: string,
+    response: "acknowledged" | "declined" | "change_requested",
+    note?: string,
+    lines?: { id: number; quantity?: string; unit_cost: string }[],
+  ) =>
     apiClient
-      .post<{ response: string; note?: string }, { share: PurchaseOrderShareView }>(`/api/v1/purchase-orders/share/${token}/respond`, {
+      .post<
+        { response: string; note?: string; lines?: { id: number; quantity?: string; unit_cost: string }[] },
+        { share: PurchaseOrderShareView }
+      >(`/api/v1/purchase-orders/share/${token}/respond`, {
         response,
         note,
+        lines,
       })
       .then((r) => r.share),
 

@@ -94,6 +94,7 @@ type SupplierBillView struct {
 	BillType              string                 `json:"bill_type"`
 	DueDate               *string                `json:"due_date,omitempty"`
 	Overdue               bool                   `json:"overdue"`
+	ApprovedAt            *string                `json:"approved_at,omitempty"`
 	Lines                 []SupplierBillLineView `json:"lines,omitempty"`
 }
 
@@ -124,7 +125,13 @@ func billView(b db.SupplierBill) SupplierBillView {
 	if b.BillDate.Valid {
 		billDate = b.BillDate.Time.Format("2006-01-02")
 	}
+	var approvedAt *string
+	if b.ApprovedAt.Valid {
+		value := b.ApprovedAt.Time.UTC().Format(time.RFC3339)
+		approvedAt = &value
+	}
 	return SupplierBillView{
+		ApprovedAt:            approvedAt,
 		ID:                    b.ID,
 		GoodsReceiptID:        receiptID,
 		SupplierID:            b.SupplierID,

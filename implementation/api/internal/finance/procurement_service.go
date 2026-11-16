@@ -87,6 +87,15 @@ type PurchaseRequestView struct {
 	UpdatedAt            time.Time                     `json:"updated_at"`
 	Lines                []PurchaseRequestLineView     `json:"lines,omitempty"`
 	Decisions            []PurchaseRequestDecisionView `json:"decisions,omitempty"`
+	// Orders made from this request (detail endpoint only).
+	Orders []PurchaseRequestOrderView `json:"orders,omitempty"`
+}
+
+type PurchaseRequestOrderView struct {
+	ID          int64   `json:"id"`
+	OrderNumber *string `json:"order_number,omitempty"`
+	Status      string  `json:"status"`
+	TotalMinor  string  `json:"total_minor"`
 }
 
 type ListPurchaseRequestsFilter struct {
@@ -226,6 +235,28 @@ func (s *Service) ListPurchaseRequests(ctx context.Context, workspaceID int64, f
 		items = append(items, purchaseRequestHeader(request))
 	}
 	return items, nil
+}
+
+func (s *Service) GetPurchaseRequest(ctx context.Context, workspaceID, requestID int64) (PurchaseRequestView, error) {
+	request, err := s.queries.GetPurchaseRequestByID(ctx, db.GetPurchaseRequestByIDParams{ID: requestID, WorkspaceID: workspaceID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return PurchaseRequestView{}, ErrNotFound
+	}
+	if err != nil {
+		return PurchaseRequestView{}, err
+	}
+	view, err := purchaseRequestDetail(ctx, s.queries, request)
+	if err != nil {
+		return PurchaseRequestView{}, err
+	}
+	order, err := s.queries.GetPurchaseOrderBySource(ctx, db.GetPurchaseOrderBySourceParams{WorkspaceID: workspaceID, SourcePurchaseRequestID: pgtype.Int8{Int64: requestID, Valid: true}})
+	if err == nil {
+		summary := purchaseOrderView(order)
+		view.Orders = []PurchaseRequestOrderView{{ID: summary.ID, OrderNumber: summary.OrderNumber, Status: summary.Status, TotalMinor: summary.TotalMinor}}
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return PurchaseRequestView{}, err
+	}
+	return view, nil
 }
 
 func (s *Service) SubmitPurchaseRequest(ctx context.Context, workspaceID, userID, requestID int64, in PurchaseRequestCommandInput) (PurchaseRequestView, error) {

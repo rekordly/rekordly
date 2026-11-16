@@ -36,14 +36,15 @@ func (h *Handler) getPurchaseOrderShare(c *gin.Context) {
 
 func (h *Handler) respondPurchaseOrderShare(c *gin.Context) {
 	var input struct {
-		Response string `json:"response"`
-		Note     string `json:"note"`
+		Response string                    `json:"response"`
+		Note     string                    `json:"note"`
+		Lines    []SupplierShareLineUpdate `json:"lines"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": err.Error()}})
 		return
 	}
-	share, err := h.service.RespondPurchaseOrderShare(c.Request.Context(), c.Param("token"), input.Response, input.Note)
+	share, err := h.service.RespondPurchaseOrderShareWithLines(c.Request.Context(), c.Param("token"), input.Response, input.Note, input.Lines)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "SHARE_RESPONSE_FAILED", "message": err.Error()}})
 		return

@@ -37,6 +37,10 @@ type PurchaseOrderView struct {
 	Lines                   []PurchaseOrderLineView    `json:"lines,omitempty"`
 	Events                  []PurchaseOrderEventView   `json:"events,omitempty"`
 	Versions                []PurchaseOrderVersionView `json:"versions,omitempty"`
+	// Filled on the detail endpoint only.
+	Receipts  []PurchaseOrderReceiptView `json:"receipts,omitempty"`
+	Bills     []PurchaseOrderBillView    `json:"bills,omitempty"`
+	PaidMinor string                     `json:"paid_minor,omitempty"`
 }
 
 type PurchaseOrderLineView struct {
@@ -49,6 +53,10 @@ type PurchaseOrderLineView struct {
 	DiscountMinor         string `json:"discount_minor"`
 	TaxAmountMinor        string `json:"tax_amount_minor"`
 	LineTotalMinor        string `json:"line_total_minor"`
+	// Filled on the detail endpoint only.
+	ReceivedQuantity string `json:"received_quantity,omitempty"`
+	RejectedQuantity string `json:"rejected_quantity,omitempty"`
+	BilledQuantity   string `json:"billed_quantity,omitempty"`
 }
 type PurchaseOrderEventView struct {
 	ID           int64   `json:"id"`
@@ -204,7 +212,14 @@ func (s *Service) GetPurchaseOrder(ctx context.Context, ws, id int64) (PurchaseO
 	if err != nil {
 		return PurchaseOrderView{}, err
 	}
-	return purchaseOrderDetail(ctx, s.queries, po)
+	view, err := purchaseOrderDetail(ctx, s.queries, po)
+	if err != nil {
+		return PurchaseOrderView{}, err
+	}
+	if err := s.attachPurchaseOrderLinks(ctx, ws, &view); err != nil {
+		return PurchaseOrderView{}, err
+	}
+	return view, nil
 }
 
 func (s *Service) CreatePurchaseOrderFromRequest(ctx context.Context, ws, user, requestID int64, key string) (PurchaseOrderView, error) {

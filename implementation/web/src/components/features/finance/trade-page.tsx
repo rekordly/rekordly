@@ -92,6 +92,16 @@ function TradeContent({ workspaceId, currency, kind, startOpen }: WorkspaceInfo 
     <AppRowActions
       ariaLabel={`${copy.party} actions`}
       items={[
+        ...(kind === "purchase"
+          ? [
+              {
+                key: "open",
+                label: "Open details",
+                icon: <Receipt size={16} aria-hidden="true" />,
+                onClick: () => router.push(`/purchases/${row.id}`),
+              },
+            ]
+          : []),
         {
           key: "payment",
           label: kind === "sale" ? "Record payment" : "Pay supplier",
@@ -116,6 +126,7 @@ function TradeContent({ workspaceId, currency, kind, startOpen }: WorkspaceInfo 
         isLoading={records.isPending}
         isError={records.isError}
         server={records.controls}
+        onRowClick={kind === "purchase" ? (row) => router.push(`/purchases/${row.id}`) : undefined}
         searchPlaceholder={`Search ${copy.party.toLowerCase()} or reference`}
         empty={<EmptyState icon={kind === "sale" ? ShoppingCart : Receipt} title={copy.emptyTitle} description={copy.emptyBody} action={addButton} />}
         columns={[
@@ -139,6 +150,7 @@ function TradeContent({ workspaceId, currency, kind, startOpen }: WorkspaceInfo 
               { label: "Date", value: formatDate(row.date) },
               { label: "Paid", value: money(row.paid, row) },
             ]}
+            onView={kind === "purchase" ? () => router.push(`/purchases/${row.id}`) : undefined}
             actions={actions(row)}
           />
         )}

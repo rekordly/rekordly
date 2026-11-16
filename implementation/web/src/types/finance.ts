@@ -225,6 +225,8 @@ export interface PurchaseRequest {
     actor_user_id: number;
     created_at: string;
   }>;
+  /** Orders made from this request (detail endpoint only). */
+  orders?: Array<{ id: number; order_number?: string | null; status: string; total_minor: string }>;
 }
 
 export interface PurchaseOrderLine {
@@ -237,6 +239,31 @@ export interface PurchaseOrderLine {
   discount_minor?: string;
   tax_amount_minor?: string;
   line_total_minor: string;
+  /** Detail endpoint only: decimal text, e.g. "8.0000". */
+  received_quantity?: string;
+  rejected_quantity?: string;
+  billed_quantity?: string;
+}
+/** A goods receipt against a purchase order (on the order's detail). */
+export interface PurchaseOrderReceipt {
+  id: number;
+  receipt_reference?: string | null;
+  received_on: string;
+  status: string;
+  total_minor: string;
+  outstanding_minor: string;
+}
+/** A bill for a purchase order's goods (on the order's detail). */
+export interface PurchaseOrderBill {
+  id: number;
+  goods_receipt_id: number;
+  supplier_invoice_number: string;
+  bill_date: string;
+  due_date?: string | null;
+  status: string;
+  total_minor: string;
+  outstanding_minor: string;
+  approved_at?: string | null;
 }
 export interface PurchaseOrderEvent {
   id: number;
@@ -277,6 +304,10 @@ export interface PurchaseOrder {
   lines?: PurchaseOrderLine[];
   events?: PurchaseOrderEvent[];
   versions?: PurchaseOrderVersion[];
+  /** Detail endpoint only. */
+  receipts?: PurchaseOrderReceipt[];
+  bills?: PurchaseOrderBill[];
+  paid_minor?: string;
 }
 
 export interface ReceiptOptionLine {
@@ -289,8 +320,10 @@ export interface GoodsReceiptLine {
   purchase_order_line_id: number;
   product_id?: number | null;
   description: string;
+  ordered_quantity?: string | null;
   accepted_quantity: string;
   rejected_quantity?: string;
+  ordered_unit_cost_minor?: string | null;
   unit_cost_minor: string;
   actual_unit_cost_minor?: string;
   landed_cost_minor?: string;
@@ -301,22 +334,40 @@ export interface GoodsReceiptLine {
   serial_numbers?: string[];
   notes?: string | null;
 }
+
+export interface GoodsReceiptHistoryEvent {
+  kind: "request" | "order" | "receipt" | "bill" | "payment" | "return";
+  title: string;
+  subtitle?: string;
+  date: string;
+  amount_minor?: string;
+  href?: string;
+}
+
 export interface GoodsReceipt {
   id: number;
   purchase_order_id: number;
   supplier_id?: number | null;
   location_id?: number | null;
   source_type?: "po" | "unplanned";
+  status?: string;
+  bill_id?: number | null;
+  bill_status?: string;
+  bill_version?: number;
   reason?: string | null;
   received_on: string;
   currency?: string;
   currency_exponent?: number;
+  goods_total_minor?: string;
+  paid_minor?: string;
+  outstanding_minor?: string;
   total_minor?: string;
   landed_cost_minor?: string;
   receipt_reference?: string | null;
   delivery_reference?: string | null;
   service_accepted?: boolean;
   lines?: GoodsReceiptLine[];
+  history?: GoodsReceiptHistoryEvent[];
 }
 export interface SupplierBillLine {
   id: number;
@@ -350,6 +401,7 @@ export interface SupplierBill {
   discount_minor?: string;
   variance_minor?: string;
   credited_minor?: string;
+  approved_at?: string | null;
   match_status?: string;
   dispute_reason?: string | null;
   reversal_reason?: string | null;
@@ -825,7 +877,10 @@ export interface ExternalPartyLink {
 export interface PurchaseOrderShareView {
   token?: string;
   status: string;
+  workspace_name?: string;
+  supplier_name?: string;
   supplier_email?: string | null;
+  response_note?: string | null;
   expires_at: string;
   order: PurchaseOrder;
 }

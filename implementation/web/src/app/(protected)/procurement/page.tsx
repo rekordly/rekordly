@@ -1,10 +1,10 @@
 import { PermissionGuard } from "@/components/auth/can";
-import { ProcurementPage } from "@/components/features/finance/procurement-page";
+import { ProcurementReceiptsListPage } from "@/components/features/finance/procurement-section-pages";
 
 export default function ProcurementRoute() {
   return (
     <PermissionGuard permission="purchases.view">
-      <ProcurementPage />
+      <ProcurementReceiptsListPage />
     </PermissionGuard>
   );
 }

@@ -12,6 +12,7 @@ import (
 func (h *Handler) RegisterProcurementRoutes(protected *gin.RouterGroup) {
 	protected.POST("/purchase-requests", h.createPurchaseRequest)
 	protected.GET("/purchase-requests", h.listPurchaseRequests)
+	protected.GET("/purchase-requests/:id", h.getPurchaseRequest)
 	protected.POST("/purchase-requests/:id/commands/submit", h.submitPurchaseRequest)
 	protected.POST("/purchase-requests/:id/commands/approve", h.approvePurchaseRequest)
 	protected.POST("/purchase-requests/:id/commands/reject", h.rejectPurchaseRequest)
@@ -216,6 +217,24 @@ func (h *Handler) listPurchaseRequests(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"requests": requests}})
+}
+
+func (h *Handler) getPurchaseRequest(c *gin.Context) {
+	wsCtx, ok := requireProcurementPermission(c, "purchases.view", "purchases.request", "purchases.create", "purchases.approve_request", "purchases.create_po")
+	if !ok {
+		return
+	}
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_ID", "message": "Invalid purchase request ID"}})
+		return
+	}
+	request, err := h.service.GetPurchaseRequest(c.Request.Context(), wsCtx.WorkspaceID, id)
+	if err != nil {
+		h.procurementError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"request": request}})
 }
 
 // @Summary Submit a purchase request for approval
