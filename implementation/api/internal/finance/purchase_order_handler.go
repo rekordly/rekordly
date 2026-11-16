@@ -63,7 +63,7 @@ func (h *Handler) getPurchaseOrder(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"message": "Invalid purchase order"}})
 		return
 	}
-	po, err := h.service.GetPurchaseOrder(c, ws.WorkspaceID, id)
+	po, err := h.service.GetPurchaseOrderForUser(c, ws.WorkspaceID, ws.UserID, id)
 	if err != nil {
 		h.procurementError(c, err)
 		return
@@ -250,7 +250,8 @@ func (h *Handler) listPurchaseOrders(c *gin.Context) {
 		return
 	}
 	before, _ := strconv.ParseInt(c.Query("before_id"), 10, 64)
-	rows, e := h.service.ListPurchaseOrders(c, ws.WorkspaceID, before)
+	limit64, _ := strconv.ParseInt(c.Query("limit"), 10, 32)
+	rows, nextBeforeID, e := h.service.ListPurchaseOrders(c, ws.WorkspaceID, int32(limit64), before)
 	if e != nil {
 		h.procurementError(c, e)
 		return
@@ -265,7 +266,7 @@ func (h *Handler) listPurchaseOrders(c *gin.Context) {
 		}
 		rows = filtered
 	}
-	c.JSON(200, gin.H{"data": gin.H{"orders": rows}})
+	c.JSON(200, gin.H{"data": gin.H{"orders": rows, "items": rows, "next_before_id": nextBeforeID}})
 }
 
 func (h *Handler) advancePurchaseOrder(c *gin.Context) {

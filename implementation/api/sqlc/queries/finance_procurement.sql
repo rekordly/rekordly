@@ -94,3 +94,27 @@ SELECT id, workspace_id, purchase_request_id, command, request_version, reason, 
 FROM purchase_request_decisions
 WHERE workspace_id = $1 AND purchase_request_id = $2
 ORDER BY id ASC;
+
+-- name: CountUnreadDocumentMessages :one
+SELECT count(*)::bigint AS unread_count
+FROM external_messages m
+WHERE m.workspace_id = $1
+  AND m.document_type = $2
+  AND m.document_id = $3
+  AND m.sender_type = 'guest'
+  AND m.id > COALESCE(
+    (SELECT last_read_message_id FROM document_message_reads r
+     WHERE r.workspace_id = m.workspace_id
+       AND r.user_id = $4
+       AND r.document_type = m.document_type
+       AND r.document_id = m.document_id),
+    0
+  );
+
+-- name: UpsertDocumentMessageRead :exec
+INSERT INTO document_message_reads (workspace_id, user_id, document_type, document_id, last_read_message_id, updated_at)
+VALUES ($1, $2, $3, $4, $5, now())
+ON CONFLICT (workspace_id, user_id, document_type, document_id)
+DO UPDATE SET
+  last_read_message_id = GREATEST(document_message_reads.last_read_message_id, EXCLUDED.last_read_message_id),
+  updated_at = now();

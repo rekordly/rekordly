@@ -37,6 +37,11 @@ WHERE workspace_id = $1
   AND (sqlc.narg('is_active')::boolean IS NULL OR is_active = sqlc.narg('is_active'))
 ORDER BY name ASC;
 
+-- name: ListCounterpartiesByIDs :many
+SELECT id, name, phone, email
+FROM counterparties
+WHERE workspace_id = $1 AND id = ANY($2::bigint[]);
+
 -- name: CreateSale :one
 INSERT INTO sales (
     workspace_id, customer_id, customer_name, sale_date,

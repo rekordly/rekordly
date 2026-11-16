@@ -108,6 +108,8 @@ type SupplierBillView struct {
 	ID                    int64                  `json:"id"`
 	GoodsReceiptID        int64                  `json:"goods_receipt_id"`
 	SupplierID            int64                  `json:"supplier_id"`
+	Supplier              *DocumentSupplierView  `json:"supplier,omitempty"`
+	SupplierName          string                 `json:"supplier_name,omitempty"`
 	OutletID              *int64                 `json:"outlet_id,omitempty"`
 	SupplierInvoiceNumber string                 `json:"supplier_invoice_number"`
 	BillDate              string                 `json:"bill_date"`
@@ -195,6 +197,17 @@ func billView(b db.SupplierBill) SupplierBillView {
 
 func billDetailView(ctx context.Context, q *db.Queries, b db.SupplierBill) (SupplierBillView, error) {
 	view := billView(b)
+	if b.SupplierID > 0 {
+		if c, err := q.GetCounterpartyByID(ctx, db.GetCounterpartyByIDParams{WorkspaceID: b.WorkspaceID, ID: b.SupplierID}); err == nil {
+			view.Supplier = &DocumentSupplierView{
+				ID:    c.ID,
+				Name:  c.Name,
+				Phone: nullableText(c.Phone),
+				Email: nullableText(c.Email),
+			}
+			view.SupplierName = c.Name
+		}
+	}
 	lines, err := q.ListSupplierBillLines(ctx, db.ListSupplierBillLinesParams{WorkspaceID: b.WorkspaceID, SupplierBillID: b.ID})
 	if err == nil && len(lines) > 0 {
 		view.Lines = make([]SupplierBillLineView, 0, len(lines))
@@ -235,7 +248,17 @@ func (s *Service) GetSupplierBill(ctx context.Context, ws, id int64) (SupplierBi
 	if err != nil {
 		return SupplierBillView{}, err
 	}
-	return billDetailView(ctx, s.queries, b)
+	view, err := billDetailView(ctx, s.queries, b)
+	if err != nil {
+		return SupplierBillView{}, err
+	}
+	if b.SupplierID > 0 {
+		if sup := s.getSupplierView(ctx, ws, b.SupplierID); sup != nil {
+			view.Supplier = sup
+			view.SupplierName = sup.Name
+		}
+	}
+	return view, nil
 }
 
 func (s *Service) CreateSupplierBill(ctx context.Context, ws, user int64, in CreateSupplierBillInput) (SupplierBillView, error) {
@@ -1278,16 +1301,45 @@ func (s *Service) ApplySupplierCreditToBill(ctx context.Context, ws, user, billI
 	return view, nil
 }
 
-func (s *Service) ListSupplierBills(ctx context.Context, ws int64) ([]SupplierBillView, error) {
-	rows, e := s.queries.ListSupplierBills(ctx, db.ListSupplierBillsParams{WorkspaceID: ws, Limit: 50})
-	if e != nil {
-		return nil, e
+func (s *Service) ListSupplierBills(ctx context.Context, ws int64, limit int32, before int64) ([]SupplierBillView, *int64, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
 	}
+	var cursor pgtype.Int8
+	if before > 0 {
+		cursor = pgtype.Int8{Int64: before, Valid: true}
+	}
+	rows, e := s.queries.ListSupplierBills(ctx, db.ListSupplierBillsParams{WorkspaceID: ws, Limit: limit + 1, BeforeID: cursor})
+	if e != nil {
+		return nil, nil, e
+	}
+	var nextBeforeID *int64
+	if len(rows) > int(limit) {
+		nextID := rows[limit-1].ID
+		nextBeforeID = &nextID
+		rows = rows[:limit]
+	}
+
+	supplierIDs := make([]int64, 0, len(rows))
+	for _, b := range rows {
+		if b.SupplierID > 0 {
+			supplierIDs = append(supplierIDs, b.SupplierID)
+		}
+	}
+	suppliers, _ := s.batchSuppliersMap(ctx, ws, supplierIDs)
+
 	out := make([]SupplierBillView, 0, len(rows))
 	for _, b := range rows {
-		out = append(out, billView(b))
+		v := billView(b)
+		if v.SupplierID > 0 {
+			if sup, ok := suppliers[v.SupplierID]; ok {
+				v.Supplier = sup
+				v.SupplierName = sup.Name
+			}
+		}
+		out = append(out, v)
 	}
-	return out, nil
+	return out, nextBeforeID, nil
 }
 
 func (s *Service) SupplierBillMatch(ctx context.Context, ws, id int64) (SupplierBillMatch, error) {

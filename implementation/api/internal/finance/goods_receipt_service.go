@@ -51,29 +51,31 @@ type GoodsReceiptLineInput struct {
 }
 
 type GoodsReceiptView struct {
-	ID                  int64             `json:"id"`
-	PurchaseOrderID     int64             `json:"purchase_order_id"`
-	SupplierID          *int64            `json:"supplier_id,omitempty"`
-	LocationID          *int64            `json:"location_id,omitempty"`
-	SourceType          string            `json:"source_type"`
-	Reason              *string           `json:"reason,omitempty"`
-	PurchaseOrderStatus string            `json:"purchase_order_status"`
-	Status              string            `json:"status,omitempty"`
-	BillID              *int64            `json:"bill_id,omitempty"`
-	BillStatus          string            `json:"bill_status,omitempty"`
-	BillVersion         int32             `json:"bill_version,omitempty"`
-	ReceivedOn          string            `json:"received_on"`
-	Currency            string            `json:"currency,omitempty"`
-	CurrencyExponent    int32             `json:"currency_exponent,omitempty"`
-	GoodsTotalMinor     string            `json:"goods_total_minor,omitempty"`
-	PaidMinor           string            `json:"paid_minor,omitempty"`
-	OutstandingMinor    string            `json:"outstanding_minor,omitempty"`
-	TotalMinor          string            `json:"total_minor"`
-	LandedCostMinor     string            `json:"landed_cost_minor,omitempty"`
-	DeliveryReference   *string           `json:"delivery_reference,omitempty"`
-	ServiceAccepted     bool              `json:"service_accepted"`
-	Bill                *SupplierBillView `json:"bill,omitempty"`
-	Payment             *PaymentDetail    `json:"payment,omitempty"`
+	ID                  int64                 `json:"id"`
+	PurchaseOrderID     int64                 `json:"purchase_order_id"`
+	SupplierID          *int64                `json:"supplier_id,omitempty"`
+	Supplier            *DocumentSupplierView `json:"supplier,omitempty"`
+	SupplierName        string                `json:"supplier_name,omitempty"`
+	LocationID          *int64                `json:"location_id,omitempty"`
+	SourceType          string                `json:"source_type"`
+	Reason              *string               `json:"reason,omitempty"`
+	PurchaseOrderStatus string                `json:"purchase_order_status"`
+	Status              string                `json:"status,omitempty"`
+	BillID              *int64                `json:"bill_id,omitempty"`
+	BillStatus          string                `json:"bill_status,omitempty"`
+	BillVersion         int32                 `json:"bill_version,omitempty"`
+	ReceivedOn          string                `json:"received_on"`
+	Currency            string                `json:"currency,omitempty"`
+	CurrencyExponent    int32                 `json:"currency_exponent,omitempty"`
+	GoodsTotalMinor     string                `json:"goods_total_minor,omitempty"`
+	PaidMinor           string                `json:"paid_minor,omitempty"`
+	OutstandingMinor    string                `json:"outstanding_minor,omitempty"`
+	TotalMinor          string                `json:"total_minor"`
+	LandedCostMinor     string                `json:"landed_cost_minor,omitempty"`
+	DeliveryReference   *string               `json:"delivery_reference,omitempty"`
+	ServiceAccepted     bool                  `json:"service_accepted"`
+	Bill                *SupplierBillView     `json:"bill,omitempty"`
+	Payment             *PaymentDetail        `json:"payment,omitempty"`
 }
 
 type GoodsReceiptLineView struct {
@@ -119,24 +121,26 @@ type ReceiptOptionLine struct {
 }
 
 type GoodsReceiptListItem struct {
-	ID               int64   `json:"id"`
-	PurchaseOrderID  int64   `json:"purchase_order_id"`
-	SupplierID       *int64  `json:"supplier_id,omitempty"`
-	LocationID       *int64  `json:"location_id,omitempty"`
-	SourceType       string  `json:"source_type"`
-	Status           string  `json:"status"`
-	BillID           *int64  `json:"bill_id,omitempty"`
-	BillStatus       string  `json:"bill_status,omitempty"`
-	BillVersion      int32   `json:"bill_version,omitempty"`
-	Currency         string  `json:"currency,omitempty"`
-	CurrencyExponent int32   `json:"currency_exponent,omitempty"`
-	GoodsTotalMinor  string  `json:"goods_total_minor,omitempty"`
-	PaidMinor        string  `json:"paid_minor,omitempty"`
-	OutstandingMinor string  `json:"outstanding_minor,omitempty"`
-	TotalMinor       string  `json:"total_minor"`
-	LandedCostMinor  string  `json:"landed_cost_minor,omitempty"`
-	ReceivedOn       string  `json:"received_on"`
-	ReceiptReference *string `json:"receipt_reference,omitempty"`
+	ID               int64                 `json:"id"`
+	PurchaseOrderID  int64                 `json:"purchase_order_id"`
+	SupplierID       *int64                `json:"supplier_id,omitempty"`
+	Supplier         *DocumentSupplierView `json:"supplier,omitempty"`
+	SupplierName     string                `json:"supplier_name,omitempty"`
+	LocationID       *int64                `json:"location_id,omitempty"`
+	SourceType       string                `json:"source_type"`
+	Status           string                `json:"status"`
+	BillID           *int64                `json:"bill_id,omitempty"`
+	BillStatus       string                `json:"bill_status,omitempty"`
+	BillVersion      int32                 `json:"bill_version,omitempty"`
+	Currency         string                `json:"currency,omitempty"`
+	CurrencyExponent int32                 `json:"currency_exponent,omitempty"`
+	GoodsTotalMinor  string                `json:"goods_total_minor,omitempty"`
+	PaidMinor        string                `json:"paid_minor,omitempty"`
+	OutstandingMinor string                `json:"outstanding_minor,omitempty"`
+	TotalMinor       string                `json:"total_minor"`
+	LandedCostMinor  string                `json:"landed_cost_minor,omitempty"`
+	ReceivedOn       string                `json:"received_on"`
+	ReceiptReference *string               `json:"receipt_reference,omitempty"`
 }
 
 type receiptFinancialSummary struct {
@@ -198,11 +202,43 @@ func (s *Service) receiptBillSummary(ctx context.Context, ws, receiptID int64) r
 	return sum
 }
 
-func (s *Service) ListGoodsReceipts(ctx context.Context, ws int64) ([]GoodsReceiptListItem, error) {
-	rows, e := s.queries.ListGoodsReceipts(ctx, db.ListGoodsReceiptsParams{WorkspaceID: ws, Limit: 50})
-	if e != nil {
-		return nil, e
+func (s *Service) ListGoodsReceipts(ctx context.Context, ws int64, limit int32, before int64) ([]GoodsReceiptListItem, *int64, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
 	}
+	var cursor pgtype.Int8
+	if before > 0 {
+		cursor = pgtype.Int8{Int64: before, Valid: true}
+	}
+	rows, e := s.queries.ListGoodsReceipts(ctx, db.ListGoodsReceiptsParams{WorkspaceID: ws, Limit: limit + 1, BeforeID: cursor})
+	if e != nil {
+		return nil, nil, e
+	}
+	var nextBeforeID *int64
+	if len(rows) > int(limit) {
+		nextID := rows[limit-1].ID
+		nextBeforeID = &nextID
+		rows = rows[:limit]
+	}
+
+	supplierIDs := make([]int64, 0, len(rows))
+	poIDsToFetch := make([]int64, 0)
+	for _, r := range rows {
+		if r.SupplierID.Valid {
+			supplierIDs = append(supplierIDs, r.SupplierID.Int64)
+		} else if r.PurchaseOrderID.Valid {
+			poIDsToFetch = append(poIDsToFetch, r.PurchaseOrderID.Int64)
+		}
+	}
+	poSupplierMap := make(map[int64]int64)
+	for _, pID := range poIDsToFetch {
+		if po, err := s.queries.GetPurchaseOrderByID(ctx, db.GetPurchaseOrderByIDParams{WorkspaceID: ws, ID: pID}); err == nil && po.SupplierID.Valid {
+			poSupplierMap[pID] = po.SupplierID.Int64
+			supplierIDs = append(supplierIDs, po.SupplierID.Int64)
+		}
+	}
+	suppliers, _ := s.batchSuppliersMap(ctx, ws, supplierIDs)
+
 	out := make([]GoodsReceiptListItem, 0, len(rows))
 	for _, r := range rows {
 		var poID int64
@@ -210,10 +246,16 @@ func (s *Service) ListGoodsReceipts(ctx context.Context, ws int64) ([]GoodsRecei
 			poID = r.PurchaseOrderID.Int64
 		}
 		fin := s.receiptBillSummary(ctx, ws, r.ID)
-		out = append(out, GoodsReceiptListItem{
+		var supID *int64
+		if r.SupplierID.Valid {
+			supID = &r.SupplierID.Int64
+		} else if sid, ok := poSupplierMap[poID]; ok {
+			supID = &sid
+		}
+		item := GoodsReceiptListItem{
 			ID:               r.ID,
 			PurchaseOrderID:  poID,
-			SupplierID:       nullableInt8(r.SupplierID),
+			SupplierID:       supID,
 			LocationID:       nullableInt8(r.LocationID),
 			SourceType:       r.SourceType,
 			Status:           fin.status,
@@ -229,9 +271,16 @@ func (s *Service) ListGoodsReceipts(ctx context.Context, ws int64) ([]GoodsRecei
 			LandedCostMinor:  fmt.Sprint(r.LandedCostMinor),
 			ReceivedOn:       r.ReceivedOn.Time.Format("2006-01-02"),
 			ReceiptReference: nullableText(r.ReceiptReference),
-		})
+		}
+		if supID != nil {
+			if sup, ok := suppliers[*supID]; ok {
+				item.Supplier = sup
+				item.SupplierName = sup.Name
+			}
+		}
+		out = append(out, item)
 	}
-	return out, nil
+	return out, nextBeforeID, nil
 }
 
 func (s *Service) ReceiptOptions(ctx context.Context, ws, purchaseOrderID int64) ([]ReceiptOptionLine, error) {
@@ -1014,11 +1063,31 @@ func (s *Service) GetGoodsReceipt(ctx context.Context, ws, id int64) (GoodsRecei
 	fin := s.receiptBillSummary(ctx, ws, row.ID)
 	receivedOnStr := row.ReceivedOn.Time.Format("2006-01-02")
 	history := s.buildReceiptHistory(ctx, ws, row.ID, poID, receivedOnStr, nullableText(row.ReceiptReference), len(lines), totalMinor, row.LandedCostMinor)
+
+	var supID *int64
+	if row.SupplierID.Valid {
+		supID = &row.SupplierID.Int64
+	} else if poID > 0 {
+		if po, err := s.queries.GetPurchaseOrderByID(ctx, db.GetPurchaseOrderByIDParams{WorkspaceID: ws, ID: poID}); err == nil && po.SupplierID.Valid {
+			supID = &po.SupplierID.Int64
+		}
+	}
+	var supView *DocumentSupplierView
+	var supName string
+	if supID != nil {
+		if sup := s.getSupplierView(ctx, ws, *supID); sup != nil {
+			supView = sup
+			supName = sup.Name
+		}
+	}
+
 	return GoodsReceiptDetailView{
 		GoodsReceiptView: GoodsReceiptView{
 			ID:                row.ID,
 			PurchaseOrderID:   poID,
-			SupplierID:        nullableInt8(row.SupplierID),
+			SupplierID:        supID,
+			Supplier:          supView,
+			SupplierName:      supName,
 			LocationID:        nullableInt8(row.LocationID),
 			SourceType:        row.SourceType,
 			Reason:            nullableText(row.Reason),

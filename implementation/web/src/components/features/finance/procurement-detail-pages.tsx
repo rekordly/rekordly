@@ -74,7 +74,7 @@ import {
   type StepState,
 } from "./document-page";
 import { PaymentDrawer } from "./payment-drawer";
-import { StatusBadge, useContacts, useFinanceAction, WorkspaceGate, type WorkspaceInfo } from "./shared";
+import { StatusBadge, useFinanceAction, WorkspaceGate, type WorkspaceInfo } from "./shared";
 
 const step = (key: string, label: string, state: StepState, extra: Partial<DocumentStep> = {}): DocumentStep => ({ key, label, state, ...extra });
 const ZERO = BigInt(0);
@@ -104,7 +104,6 @@ function PurchaseRequestDetailContent({ workspaceId, id }: WorkspaceInfo & { id:
   const router = useRouter();
   const back = { href: "/purchase-requests", label: "Purchase requests" };
   const requestQuery = useQuery({ queryKey: [...moneyKeys.workspace(workspaceId), "purchase-request", id], queryFn: () => financeApi.getPurchaseRequest(workspaceId, id) });
-  const suppliers = useContacts(workspaceId, "suppliers");
   const submitReq = useFinanceAction(workspaceId, ({ version }: { version: number }, key) => financeApi.submitPurchaseRequest(workspaceId, id, version, key), {
     success: "Sent for approval",
     onDone: () => void requestQuery.refetch(),
@@ -118,7 +117,7 @@ function PurchaseRequestDetailContent({ workspaceId, id }: WorkspaceInfo & { id:
   if (requestQuery.isError || !requestQuery.data) return <DocumentError back={back} message="This purchase request could not be loaded." />;
 
   const req = requestQuery.data;
-  const supplierName = suppliers.data?.find((s) => s.id === req.supplier_id)?.name || "Any supplier";
+  const supplierName = req.supplier?.name || req.supplier_name || "Any supplier";
   const money = (minor: string | number) => formatMinorAmount(minor, req.currency, req.currency_exponent);
   const linkedOrders = req.orders ?? [];
   const decided = (command: string) => [...(req.decisions ?? [])].reverse().find((decision) => decision.command === command)?.created_at;
@@ -278,7 +277,6 @@ function PurchaseOrderDetailContent({ workspaceId, id }: WorkspaceInfo & { id: n
   const [reason, setReason] = useState("");
 
   const orderQuery = useQuery({ queryKey: [...moneyKeys.workspace(workspaceId), "purchase-order", id], queryFn: () => financeApi.getPurchaseOrder(workspaceId, id) });
-  const suppliers = useContacts(workspaceId, "suppliers");
 
   const linkedReceipts = orderQuery.data?.receipts ?? [];
   const linkedBills = orderQuery.data?.bills ?? [];
@@ -350,8 +348,8 @@ function PurchaseOrderDetailContent({ workspaceId, id }: WorkspaceInfo & { id: n
   if (orderQuery.isError || !order) return <DocumentError back={back} message="This purchase order could not be loaded." />;
 
   const exp = order.currency_exponent ?? 2;
-  const supplier = suppliers.data?.find((s) => s.id === order.supplier_id);
-  const supplierName = supplier?.name || "Supplier";
+  const supplier = order.supplier;
+  const supplierName = supplier?.name || order.supplier_name || "Supplier";
   const money = (minor: string | number | bigint) => formatMinorAmount(String(minor), order.currency, exp);
   const title = order.order_number || `PO #${order.id}`;
   const shareUrl = shareToken ? `${typeof window !== "undefined" ? window.location.origin : ""}/purchase-orders/share/${shareToken}` : "";
@@ -457,7 +455,7 @@ function PurchaseOrderDetailContent({ workspaceId, id }: WorkspaceInfo & { id: n
       status={<StatusBadge status={order.status} />}
       actions={
         <>
-          {order.supplier_id ? <DocumentChat workspaceId={workspaceId} docType="purchase_order" docId={order.id} partyName={supplierName} /> : null}
+          {order.supplier_id ? <DocumentChat workspaceId={workspaceId} docType="purchase_order" docId={order.id} partyName={supplierName} unreadCount={order.unread_messages} /> : null}
           <DocumentActions
             primary={
               preIssue ? (
@@ -636,7 +634,6 @@ function GoodsReceiptDetailContent({ workspaceId, currency, id }: WorkspaceInfo 
   const [returnReason, setReturnReason] = useState("");
 
   const receiptQuery = useQuery({ queryKey: [...moneyKeys.workspace(workspaceId), "goods-receipt", id], queryFn: () => financeApi.getGoodsReceipt(workspaceId, id) });
-  const suppliers = useContacts(workspaceId, "suppliers");
   const createReturn = useFinanceAction(
     workspaceId,
     (_: null, key: string) =>
@@ -661,7 +658,7 @@ function GoodsReceiptDetailContent({ workspaceId, currency, id }: WorkspaceInfo 
   const exp = receipt.currency_exponent ?? 2;
   const cur = receipt.currency || currency;
   const money = (minor?: string | number) => formatMinorAmount(minor ?? "0", cur, exp);
-  const supplierName = suppliers.data?.find((s) => s.id === receipt.supplier_id)?.name || "Supplier";
+  const supplierName = receipt.supplier?.name || receipt.supplier_name || "Supplier";
   const total = receipt.total_minor ?? receipt.goods_total_minor ?? "0";
   const outstanding = receipt.outstanding_minor ?? total;
   const paid = receipt.paid_minor ?? (BigInt(total || "0") - BigInt(outstanding || "0")).toString();
@@ -876,7 +873,6 @@ function SupplierBillDetailContent({ workspaceId, currency, id }: WorkspaceInfo 
   const back = { href: "/bills", label: "Bills" };
   const [paying, setPaying] = useState(false);
   const billQuery = useQuery({ queryKey: [...moneyKeys.workspace(workspaceId), "supplier-bill", id], queryFn: () => financeApi.getSupplierBill(workspaceId, id) });
-  const suppliers = useContacts(workspaceId, "suppliers");
   const approve = useFinanceAction(workspaceId, ({ version, acceptVariance }: { version: number; acceptVariance: boolean }, key) => financeApi.approveSupplierBill(workspaceId, id, version, key, acceptVariance), {
     success: "Bill approved",
     onDone: () => void billQuery.refetch(),
@@ -889,7 +885,7 @@ function SupplierBillDetailContent({ workspaceId, currency, id }: WorkspaceInfo 
   const cur = bill.currency || currency;
   const exp = bill.currency_exponent ?? 2;
   const money = (minor?: string | number) => formatMinorAmount(minor ?? "0", cur, exp);
-  const supplierName = suppliers.data?.find((s) => s.id === bill.supplier_id)?.name || "Supplier";
+  const supplierName = bill.supplier?.name || bill.supplier_name || "Supplier";
   const hasVariance = Boolean(bill.variance_minor && bill.variance_minor !== "0");
   const outstanding = BigInt(bill.outstanding_minor || "0");
   const paid = (BigInt(bill.total_minor || "0") - outstanding - BigInt(bill.credited_minor || "0")).toString();

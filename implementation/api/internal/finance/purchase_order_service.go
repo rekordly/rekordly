@@ -20,6 +20,9 @@ type PurchaseOrderView struct {
 	ID                      int64                      `json:"id"`
 	SourcePurchaseRequestID int64                      `json:"source_purchase_request_id"`
 	SupplierID              *int64                     `json:"supplier_id,omitempty"`
+	Supplier                *DocumentSupplierView      `json:"supplier,omitempty"`
+	SupplierName            string                     `json:"supplier_name,omitempty"`
+	UnreadMessages          int64                      `json:"unread_messages"`
 	OutletID                *int64                     `json:"outlet_id,omitempty"`
 	Status                  string                     `json:"status"`
 	Version                 int32                      `json:"version"`
@@ -169,6 +172,17 @@ func purchaseOrderView(po db.PurchaseOrder) PurchaseOrderView {
 
 func purchaseOrderDetail(ctx context.Context, q *db.Queries, po db.PurchaseOrder) (PurchaseOrderView, error) {
 	view := purchaseOrderView(po)
+	if po.SupplierID.Valid {
+		if c, err := q.GetCounterpartyByID(ctx, db.GetCounterpartyByIDParams{WorkspaceID: po.WorkspaceID, ID: po.SupplierID.Int64}); err == nil {
+			view.Supplier = &DocumentSupplierView{
+				ID:    c.ID,
+				Name:  c.Name,
+				Phone: nullableText(c.Phone),
+				Email: nullableText(c.Email),
+			}
+			view.SupplierName = c.Name
+		}
+	}
 	lines, err := q.GetPurchaseOrderLines(ctx, db.GetPurchaseOrderLinesParams{WorkspaceID: po.WorkspaceID, PurchaseOrderID: po.ID})
 	if err != nil {
 		return PurchaseOrderView{}, err
@@ -221,7 +235,7 @@ func purchaseOrderDetail(ctx context.Context, q *db.Queries, po db.PurchaseOrder
 	return view, nil
 }
 
-func (s *Service) GetPurchaseOrder(ctx context.Context, ws, id int64) (PurchaseOrderView, error) {
+func (s *Service) GetPurchaseOrderForUser(ctx context.Context, ws, userID, id int64) (PurchaseOrderView, error) {
 	po, err := s.queries.GetPurchaseOrderByID(ctx, db.GetPurchaseOrderByIDParams{WorkspaceID: ws, ID: id})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return PurchaseOrderView{}, ErrNotFound
@@ -236,7 +250,27 @@ func (s *Service) GetPurchaseOrder(ctx context.Context, ws, id int64) (PurchaseO
 	if err := s.attachPurchaseOrderLinks(ctx, ws, &view); err != nil {
 		return PurchaseOrderView{}, err
 	}
+	if view.SupplierID != nil {
+		if sup := s.getSupplierView(ctx, ws, *view.SupplierID); sup != nil {
+			view.Supplier = sup
+			view.SupplierName = sup.Name
+		}
+	}
+	if userID > 0 {
+		if count, err := s.queries.CountUnreadDocumentMessages(ctx, db.CountUnreadDocumentMessagesParams{
+			WorkspaceID:  ws,
+			DocumentType: "purchase_order",
+			DocumentID:   id,
+			UserID:       userID,
+		}); err == nil {
+			view.UnreadMessages = count
+		}
+	}
 	return view, nil
+}
+
+func (s *Service) GetPurchaseOrder(ctx context.Context, ws, id int64) (PurchaseOrderView, error) {
+	return s.GetPurchaseOrderForUser(ctx, ws, 0, id)
 }
 
 func (s *Service) CreatePurchaseOrderFromRequest(ctx context.Context, ws, user, requestID int64, key string) (PurchaseOrderView, error) {
@@ -315,20 +349,45 @@ func (s *Service) CreatePurchaseOrderFromRequest(ctx context.Context, ws, user, 
 	return purchaseOrderView(po), nil
 }
 
-func (s *Service) ListPurchaseOrders(ctx context.Context, ws int64, before int64) ([]PurchaseOrderView, error) {
+func (s *Service) ListPurchaseOrders(ctx context.Context, ws int64, limit int32, before int64) ([]PurchaseOrderView, *int64, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
 	var cursor pgtype.Int8
 	if before > 0 {
 		cursor = pgtype.Int8{Int64: before, Valid: true}
 	}
-	rows, e := s.queries.ListPurchaseOrders(ctx, db.ListPurchaseOrdersParams{WorkspaceID: ws, Limit: 50, BeforeID: cursor})
+	rows, e := s.queries.ListPurchaseOrders(ctx, db.ListPurchaseOrdersParams{WorkspaceID: ws, Limit: limit + 1, BeforeID: cursor})
 	if e != nil {
-		return nil, e
+		return nil, nil, e
 	}
+	var nextBeforeID *int64
+	if len(rows) > int(limit) {
+		nextID := rows[limit-1].ID
+		nextBeforeID = &nextID
+		rows = rows[:limit]
+	}
+
+	supplierIDs := make([]int64, 0, len(rows))
+	for _, r := range rows {
+		if r.SupplierID.Valid {
+			supplierIDs = append(supplierIDs, r.SupplierID.Int64)
+		}
+	}
+	suppliers, _ := s.batchSuppliersMap(ctx, ws, supplierIDs)
+
 	out := make([]PurchaseOrderView, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, purchaseOrderView(r))
+		v := purchaseOrderView(r)
+		if v.SupplierID != nil {
+			if sup, ok := suppliers[*v.SupplierID]; ok {
+				v.Supplier = sup
+				v.SupplierName = sup.Name
+			}
+		}
+		out = append(out, v)
 	}
-	return out, nil
+	return out, nextBeforeID, nil
 }
 
 // AdvancePurchaseOrder moves an operational PO through its approval and issue

@@ -58,6 +58,7 @@ export function DocumentChat({
   docId,
   partyName,
   senderName,
+  unreadCount,
 }: {
   workspaceId: number;
   docType: string;
@@ -65,6 +66,7 @@ export function DocumentChat({
   partyName: string;
   /** Shown to the other side, e.g. the business name. */
   senderName?: string;
+  unreadCount?: number;
 }) {
   const [open, setOpen] = useState(false);
   const [seen, setSeen] = useState(() => (typeof window === "undefined" ? 0 : readSeen(docType, docId)));
@@ -76,11 +78,14 @@ export function DocumentChat({
   const messages = useQuery({
     queryKey,
     queryFn: () => financeApi.listTeamDocumentMessages(workspaceId, docType, docId),
-    refetchInterval: open ? 15_000 : 60_000,
+    enabled: open,
+    refetchInterval: open ? 15_000 : false,
   });
   const list: ExternalMessage[] = messages.data ?? [];
   const lastId = list.length ? Math.max(...list.map((message) => message.id)) : 0;
-  const unread = list.filter((message) => message.sender_type !== "team" && message.id > seen).length;
+  const unread = open
+    ? list.filter((message) => message.sender_type !== "team" && message.id > seen).length
+    : (unreadCount ?? 0);
 
   // While open, everything shown counts as read, and the newest message stays in view.
   useEffect(() => {

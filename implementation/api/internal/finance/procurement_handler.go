@@ -211,12 +211,12 @@ func (h *Handler) listPurchaseRequests(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_FILTER", "message": err.Error()}})
 		return
 	}
-	requests, err := h.service.ListPurchaseRequests(c.Request.Context(), wsCtx.WorkspaceID, filter)
+	requests, nextBeforeID, err := h.service.ListPurchaseRequests(c.Request.Context(), wsCtx.WorkspaceID, filter)
 	if err != nil {
 		h.procurementError(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": gin.H{"requests": requests}})
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"requests": requests, "items": requests, "next_before_id": nextBeforeID}})
 }
 
 func (h *Handler) getPurchaseRequest(c *gin.Context) {

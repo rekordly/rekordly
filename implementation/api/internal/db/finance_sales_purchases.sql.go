@@ -643,6 +643,49 @@ func (q *Queries) ListCounterparties(ctx context.Context, arg ListCounterparties
 	return items, nil
 }
 
+const listCounterpartiesByIDs = `-- name: ListCounterpartiesByIDs :many
+SELECT id, name, phone, email
+FROM counterparties
+WHERE workspace_id = $1 AND id = ANY($2::bigint[])
+`
+
+type ListCounterpartiesByIDsParams struct {
+	WorkspaceID int64   `json:"workspace_id"`
+	Column2     []int64 `json:"column_2"`
+}
+
+type ListCounterpartiesByIDsRow struct {
+	ID    int64       `json:"id"`
+	Name  string      `json:"name"`
+	Phone pgtype.Text `json:"phone"`
+	Email pgtype.Text `json:"email"`
+}
+
+func (q *Queries) ListCounterpartiesByIDs(ctx context.Context, arg ListCounterpartiesByIDsParams) ([]ListCounterpartiesByIDsRow, error) {
+	rows, err := q.db.Query(ctx, listCounterpartiesByIDs, arg.WorkspaceID, arg.Column2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCounterpartiesByIDsRow{}
+	for rows.Next() {
+		var i ListCounterpartiesByIDsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Phone,
+			&i.Email,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPaymentAllocationsByPaymentID = `-- name: ListPaymentAllocationsByPaymentID :many
 SELECT id, payment_id, workspace_id, document_type, document_id, amount_minor, created_at FROM payment_allocations
 WHERE payment_id = $1 AND workspace_id = $2

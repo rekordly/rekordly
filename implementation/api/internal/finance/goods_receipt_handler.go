@@ -41,7 +41,9 @@ func (h *Handler) listGoodsReceipts(c *gin.Context) {
 	if !ok {
 		return
 	}
-	rows, e := h.service.ListGoodsReceipts(c, ws.WorkspaceID)
+	before, _ := strconv.ParseInt(c.Query("before_id"), 10, 64)
+	limit64, _ := strconv.ParseInt(c.Query("limit"), 10, 32)
+	rows, nextBeforeID, e := h.service.ListGoodsReceipts(c, ws.WorkspaceID, int32(limit64), before)
 	if e != nil {
 		h.procurementError(c, e)
 		return
@@ -56,7 +58,7 @@ func (h *Handler) listGoodsReceipts(c *gin.Context) {
 		}
 		rows = filtered
 	}
-	c.JSON(200, gin.H{"data": gin.H{"receipts": rows}})
+	c.JSON(200, gin.H{"data": gin.H{"receipts": rows, "items": rows, "next_before_id": nextBeforeID}})
 }
 
 func (h *Handler) receiptOptions(c *gin.Context) {

@@ -20,7 +20,7 @@ import type { GoodsReceipt, PurchaseOrder, PurchaseRequest, SupplierBill } from 
 import { DocumentActions as DetailActions, minorToInput as formatMinorToMajor } from "./document-page";
 import { PaymentDrawer, type PaymentPreset } from "./payment-drawer";
 import { ProcurementStats, PurchaseOrderStats, PurchaseRequestStats, SupplierBillStats } from "./section-stats";
-import { StatusBadge, useContacts, WorkspaceGate, type WorkspaceInfo } from "./shared";
+import { StatusBadge, useRecords, WorkspaceGate, type WorkspaceInfo } from "./shared";
 
 
 /* -------------------------------------------------------------------------- */
@@ -37,12 +37,8 @@ import { StatusBadge, useContacts, WorkspaceGate, type WorkspaceInfo } from "./s
 
 function PurchaseRequestsListContent({ workspaceId, currency }: WorkspaceInfo) {
   const router = useRouter();
-  const requests = useQuery({
-    queryKey: [...moneyKeys.workspace(workspaceId), "purchase-requests"],
-    queryFn: () => financeApi.listPurchaseRequests(workspaceId),
-  });
-  const suppliers = useContacts(workspaceId, "suppliers");
-  const supplierName = (id?: number | null) => suppliers.data?.find((s) => s.id === id)?.name || "Any supplier";
+  const requests = useRecords<PurchaseRequest>("purchase-requests", workspaceId);
+  const supplierName = (r: PurchaseRequest) => r.supplier_name || r.supplier?.name || "Any supplier";
 
   const addButton = (
     <AppButton startContent={<Plus weight="bold" />} label="New request" onPress={() => router.push("/purchase-requests/new")} />
@@ -84,13 +80,14 @@ function PurchaseRequestsListContent({ workspaceId, currency }: WorkspaceInfo) {
       <PurchaseRequestStats workspaceId={workspaceId} currency={currency} />
       <DataView<PurchaseRequest>
         title="Purchase requests"
-        rows={requests.data ?? []}
+        server={requests.controls}
+        rows={requests.rows}
         rowKey={(r) => r.id}
         isLoading={requests.isPending}
         isError={requests.isError}
         onRowClick={(r) => router.push(`/purchase-requests/${r.id}`)}
         searchPlaceholder="Search reason, reference or supplier"
-        getSearchText={(r) => `${r.id} ${r.reason} ${r.reference ?? ""} ${supplierName(r.supplier_id)}`}
+        getSearchText={(r) => `${r.id} ${r.reason} ${r.reference ?? ""} ${supplierName(r)}`}
         empty={
           <EmptyState
             icon={ClipboardText}
@@ -100,7 +97,7 @@ function PurchaseRequestsListContent({ workspaceId, currency }: WorkspaceInfo) {
         }
         columns={[
           { key: "request", label: "Request", render: (r) => <span className="font-semibold">#{r.id} · {r.reason}</span> },
-          { key: "supplier", label: "Supplier", render: (r) => supplierName(r.supplier_id) },
+          { key: "supplier", label: "Supplier", render: (r) => supplierName(r) },
           { key: "priority", label: "Priority", render: (r) => <span className="capitalize">{r.priority}</span> },
           { key: "needed", label: "Needed by", render: (r) => (r.needed_by ? formatDate(r.needed_by) : "Flexible") },
           { key: "status", label: "Status", render: (r) => <StatusBadge status={r.status} /> },
@@ -121,7 +118,7 @@ function PurchaseRequestsListContent({ workspaceId, currency }: WorkspaceInfo) {
             amount={formatMinorAmount(r.estimated_total_minor, r.currency, r.currency_exponent)}
             status={<StatusBadge status={r.status} />}
             meta={[
-              { label: "Supplier", value: supplierName(r.supplier_id) },
+              { label: "Supplier", value: supplierName(r) },
               { label: "Priority", value: r.priority },
               { label: "Needed by", value: r.needed_by ? formatDate(r.needed_by) : "Flexible" },
             ]}
@@ -145,12 +142,8 @@ export function PurchaseRequestsListPage() {
 
 function PurchaseOrdersListContent({ workspaceId, currency }: WorkspaceInfo) {
   const router = useRouter();
-  const orders = useQuery({
-    queryKey: [...moneyKeys.workspace(workspaceId), "purchase-orders"],
-    queryFn: () => financeApi.listPurchaseOrders(workspaceId),
-  });
-  const suppliers = useContacts(workspaceId, "suppliers");
-  const supplierName = (id?: number | null) => suppliers.data?.find((s) => s.id === id)?.name || "Supplier";
+  const orders = useRecords<PurchaseOrder>("purchase-orders", workspaceId);
+  const supplierName = (o: PurchaseOrder) => o.supplier_name || o.supplier?.name || "Supplier";
 
   const addButton = (
     <AppButton startContent={<Plus weight="bold" />} label="New order" onPress={() => router.push("/purchase-orders/new")} />
@@ -194,13 +187,14 @@ function PurchaseOrdersListContent({ workspaceId, currency }: WorkspaceInfo) {
       <PurchaseOrderStats workspaceId={workspaceId} currency={currency} />
       <DataView<PurchaseOrder>
         title="Purchase orders"
-        rows={orders.data ?? []}
+        server={orders.controls}
+        rows={orders.rows}
         rowKey={(o) => o.id}
         isLoading={orders.isPending}
         isError={orders.isError}
         onRowClick={(o) => router.push(`/purchase-orders/${o.id}`)}
         searchPlaceholder="Search PO number, supplier or status"
-        getSearchText={(o) => `${o.order_number ?? ""} ${o.id} ${supplierName(o.supplier_id)} ${o.status}`}
+        getSearchText={(o) => `${o.order_number ?? ""} ${o.id} ${supplierName(o)} ${o.status}`}
         empty={
           <EmptyState
             icon={Package}
@@ -210,7 +204,7 @@ function PurchaseOrdersListContent({ workspaceId, currency }: WorkspaceInfo) {
         }
         columns={[
           { key: "number", label: "Purchase order", render: (o) => <span className="font-semibold">{o.order_number || `PO #${o.id}`}</span> },
-          { key: "supplier", label: "Supplier", render: (o) => supplierName(o.supplier_id) },
+          { key: "supplier", label: "Supplier", render: (o) => supplierName(o) },
           {
             key: "source",
             label: "Source",
@@ -229,7 +223,7 @@ function PurchaseOrdersListContent({ workspaceId, currency }: WorkspaceInfo) {
           <RecordCard
             icon={<Package size={18} weight="duotone" />}
             iconClassName="bg-primary-soft text-primary"
-            reference={supplierName(o.supplier_id)}
+            reference={supplierName(o)}
             title={o.order_number || `PO #${o.id}`}
             amount={formatMinorAmount(o.total_minor, o.currency, o.currency_exponent)}
             status={<StatusBadge status={o.status} />}
@@ -254,12 +248,8 @@ export function PurchaseOrdersListPage() {
 function ProcurementReceiptsListContent({ workspaceId, currency }: WorkspaceInfo) {
   const router = useRouter();
   const [payingReceipt, setPayingReceipt] = useState<PaymentPreset | null>(null);
-  const receipts = useQuery({
-    queryKey: [...moneyKeys.workspace(workspaceId), "goods-receipts"],
-    queryFn: () => financeApi.listGoodsReceipts(workspaceId),
-  });
-  const suppliers = useContacts(workspaceId, "suppliers");
-  const supplierName = (id?: number | null) => suppliers.data?.find((s) => s.id === id)?.name || "Direct supplier";
+  const receipts = useRecords<GoodsReceipt>("goods-receipts", workspaceId);
+  const supplierName = (r: GoodsReceipt) => r.supplier_name || r.supplier?.name || "Direct supplier";
 
   const openReceiptPayment = (r: GoodsReceipt) => {
     const exp = r.currency_exponent ?? 2;
@@ -273,9 +263,9 @@ function ProcurementReceiptsListContent({ workspaceId, currency }: WorkspaceInfo
       billId: r.bill_id,
       billStatus: r.bill_status,
       billVersion: r.bill_version,
-      partyName: supplierName(r.supplier_id),
+      partyName: supplierName(r),
       defaultAmount: formatMinorToMajor(outstanding, exp),
-      summary: `Pay ${supplierName(r.supplier_id)} for ${r.receipt_reference || `Receipt #${r.id}`} (${formatMinorAmount(outstanding, cur, exp)} outstanding).`,
+      summary: `Pay ${supplierName(r)} for ${r.receipt_reference || `Receipt #${r.id}`} (${formatMinorAmount(outstanding, cur, exp)} outstanding).`,
     });
   };
 
@@ -316,13 +306,14 @@ function ProcurementReceiptsListContent({ workspaceId, currency }: WorkspaceInfo
       <ProcurementStats workspaceId={workspaceId} currency={currency} />
       <DataView<GoodsReceipt>
         title="Goods receipts"
-        rows={receipts.data ?? []}
+        server={receipts.controls}
+        rows={receipts.rows}
         rowKey={(r) => r.id}
         isLoading={receipts.isPending}
         isError={receipts.isError}
         onRowClick={(r) => router.push(`/procurement/${r.id}`)}
         searchPlaceholder="Search receipt number, reference or supplier"
-        getSearchText={(r) => `${r.id} ${r.receipt_reference ?? ""} ${supplierName(r.supplier_id)} ${r.purchase_order_id || "direct"} ${r.status || ""}`}
+        getSearchText={(r) => `${r.id} ${r.receipt_reference ?? ""} ${supplierName(r)} ${r.purchase_order_id || "direct"} ${r.status || ""}`}
         empty={
           <EmptyState
             icon={Package}
@@ -336,7 +327,7 @@ function ProcurementReceiptsListContent({ workspaceId, currency }: WorkspaceInfo
             label: "Receipt",
             render: (r) => <span className="font-semibold">{r.receipt_reference || `Receipt #${r.id}`}</span>,
           },
-          { key: "supplier", label: "Supplier", render: (r) => supplierName(r.supplier_id) },
+          { key: "supplier", label: "Supplier", render: (r) => supplierName(r) },
           {
             key: "source",
             label: "Source",
@@ -372,7 +363,7 @@ function ProcurementReceiptsListContent({ workspaceId, currency }: WorkspaceInfo
             amount={formatMinorAmount(r.total_minor ?? "0", r.currency || currency, r.currency_exponent ?? 2)}
             status={<StatusBadge status={r.status || "unpaid"} />}
             meta={[
-              { label: "Supplier", value: supplierName(r.supplier_id) },
+              { label: "Supplier", value: supplierName(r) },
               { label: "Received", value: formatDate(r.received_on) },
             ]}
             onView={() => router.push(`/procurement/${r.id}`)}
@@ -406,12 +397,8 @@ export function ProcurementReceiptsListPage() {
 
 function SupplierBillsListContent({ workspaceId, currency }: WorkspaceInfo) {
   const router = useRouter();
-  const bills = useQuery({
-    queryKey: [...moneyKeys.workspace(workspaceId), "supplier-bills"],
-    queryFn: () => financeApi.listSupplierBills(workspaceId),
-  });
-  const suppliers = useContacts(workspaceId, "suppliers");
-  const supplierName = (id?: number | null) => suppliers.data?.find((s) => s.id === id)?.name || "Supplier";
+  const bills = useRecords<SupplierBill>("supplier-bills", workspaceId);
+  const supplierName = (b: SupplierBill) => b.supplier_name || b.supplier?.name || "Supplier";
 
   const addButton = <AppButton startContent={<Plus weight="bold" />} label="New bill" onPress={() => router.push("/bills/new")} />;
 
@@ -450,13 +437,14 @@ function SupplierBillsListContent({ workspaceId, currency }: WorkspaceInfo) {
       <SupplierBillStats workspaceId={workspaceId} currency={currency} />
       <DataView<SupplierBill>
         title="Supplier bills"
-        rows={bills.data ?? []}
+        server={bills.controls}
+        rows={bills.rows}
         rowKey={(b) => b.id}
         isLoading={bills.isPending}
         isError={bills.isError}
         onRowClick={(b) => router.push(`/bills/${b.id}`)}
         searchPlaceholder="Search invoice number, supplier or status"
-        getSearchText={(b) => `${b.supplier_invoice_number ?? ""} ${b.id} ${supplierName(b.supplier_id)} ${b.status}`}
+        getSearchText={(b) => `${b.supplier_invoice_number ?? ""} ${b.id} ${supplierName(b)} ${b.status}`}
         empty={
           <EmptyState
             icon={Receipt}
@@ -483,7 +471,7 @@ function SupplierBillsListContent({ workspaceId, currency }: WorkspaceInfo) {
               </div>
             ),
           },
-          { key: "supplier", label: "Supplier", render: (b) => supplierName(b.supplier_id) },
+          { key: "supplier", label: "Supplier", render: (b) => supplierName(b) },
           {
             key: "source",
             label: "Source",
@@ -513,7 +501,7 @@ function SupplierBillsListContent({ workspaceId, currency }: WorkspaceInfo) {
           <RecordCard
             icon={<Receipt size={18} weight="duotone" />}
             iconClassName="bg-primary-soft text-primary"
-            reference={supplierName(b.supplier_id)}
+            reference={supplierName(b)}
             title={b.supplier_invoice_number || `Bill #${b.id}`}
             amount={formatMinorAmount(b.total_minor, b.currency || currency, 2)}
             status={<StatusBadge status={b.status} />}

@@ -412,7 +412,7 @@ func (q *Queries) ListProductOutletIDs(ctx context.Context, arg ListProductOutle
 }
 
 const listProductPriceHistory = `-- name: ListProductPriceHistory :many
-SELECT id, workspace_id, product_id, variant_id, old_selling_price_minor, new_selling_price_minor, old_cost_price_minor, new_cost_price_minor, currency, currency_exponent, changed_by_user_id, changed_at FROM product_price_history
+SELECT id, workspace_id, product_id, variant_id, old_selling_price_minor, new_selling_price_minor, old_cost_price_minor, new_cost_price_minor, currency, currency_exponent, changed_by_user_id, changed_at, old_compare_at_price_minor, new_compare_at_price_minor, source FROM product_price_history
 WHERE workspace_id = $1 AND product_id = $2
 ORDER BY changed_at DESC, id DESC
 LIMIT 100
@@ -445,6 +445,9 @@ func (q *Queries) ListProductPriceHistory(ctx context.Context, arg ListProductPr
 			&i.CurrencyExponent,
 			&i.ChangedByUserID,
 			&i.ChangedAt,
+			&i.OldCompareAtPriceMinor,
+			&i.NewCompareAtPriceMinor,
+			&i.Source,
 		); err != nil {
 			return nil, err
 		}

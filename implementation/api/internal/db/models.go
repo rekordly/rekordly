@@ -838,6 +838,25 @@ type DocumentArtifact struct {
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 }
 
+type DocumentFile struct {
+	ID              int64              `json:"id"`
+	WorkspaceID     int64              `json:"workspace_id"`
+	DocumentType    string             `json:"document_type"`
+	DocumentID      int64              `json:"document_id"`
+	EvidenceAssetID int64              `json:"evidence_asset_id"`
+	CreatedByUserID int64              `json:"created_by_user_id"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
+type DocumentMessageRead struct {
+	WorkspaceID       int64              `json:"workspace_id"`
+	UserID            int64              `json:"user_id"`
+	DocumentType      string             `json:"document_type"`
+	DocumentID        int64              `json:"document_id"`
+	LastReadMessageID int64              `json:"last_read_message_id"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
 type DocumentVersion struct {
 	ID              int64              `json:"id"`
 	WorkspaceID     int64              `json:"workspace_id"`
@@ -2412,18 +2431,21 @@ type ProductOutlet struct {
 }
 
 type ProductPriceHistory struct {
-	ID                   int64              `json:"id"`
-	WorkspaceID          int64              `json:"workspace_id"`
-	ProductID            int64              `json:"product_id"`
-	VariantID            int64              `json:"variant_id"`
-	OldSellingPriceMinor pgtype.Int8        `json:"old_selling_price_minor"`
-	NewSellingPriceMinor int64              `json:"new_selling_price_minor"`
-	OldCostPriceMinor    pgtype.Int8        `json:"old_cost_price_minor"`
-	NewCostPriceMinor    int64              `json:"new_cost_price_minor"`
-	Currency             string             `json:"currency"`
-	CurrencyExponent     int32              `json:"currency_exponent"`
-	ChangedByUserID      pgtype.Int8        `json:"changed_by_user_id"`
-	ChangedAt            pgtype.Timestamptz `json:"changed_at"`
+	ID                     int64              `json:"id"`
+	WorkspaceID            int64              `json:"workspace_id"`
+	ProductID              int64              `json:"product_id"`
+	VariantID              int64              `json:"variant_id"`
+	OldSellingPriceMinor   pgtype.Int8        `json:"old_selling_price_minor"`
+	NewSellingPriceMinor   int64              `json:"new_selling_price_minor"`
+	OldCostPriceMinor      pgtype.Int8        `json:"old_cost_price_minor"`
+	NewCostPriceMinor      int64              `json:"new_cost_price_minor"`
+	Currency               string             `json:"currency"`
+	CurrencyExponent       int32              `json:"currency_exponent"`
+	ChangedByUserID        pgtype.Int8        `json:"changed_by_user_id"`
+	ChangedAt              pgtype.Timestamptz `json:"changed_at"`
+	OldCompareAtPriceMinor pgtype.Int8        `json:"old_compare_at_price_minor"`
+	NewCompareAtPriceMinor pgtype.Int8        `json:"new_compare_at_price_minor"`
+	Source                 string             `json:"source"`
 }
 
 type ProductVariant struct {
@@ -3422,6 +3444,17 @@ type SupplierBillCreditApplication struct {
 	IdempotencyKey   string             `json:"idempotency_key"`
 	AppliedByUserID  int64              `json:"applied_by_user_id"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
+type SupplierBillEvent struct {
+	ID             int64              `json:"id"`
+	WorkspaceID    int64              `json:"workspace_id"`
+	SupplierBillID int64              `json:"supplier_bill_id"`
+	EventType      string             `json:"event_type"`
+	BillVersion    int32              `json:"bill_version"`
+	Note           pgtype.Text        `json:"note"`
+	ActorUserID    int64              `json:"actor_user_id"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
 type SupplierBillLine struct {

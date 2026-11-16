@@ -74,7 +74,7 @@ func TestPurchaseRequestLifecycleIsIdempotentTenantScopedAndNonPosting(t *testin
 	require.Equal(t, "approved", approved.Status)
 	require.Equal(t, int32(3), approved.Version)
 
-	listB, err := service.ListPurchaseRequests(ctx, workspaceB, finance.ListPurchaseRequestsFilter{Limit: 50})
+	listB, _, err := service.ListPurchaseRequests(ctx, workspaceB, finance.ListPurchaseRequestsFilter{Limit: 50})
 	require.NoError(t, err)
 	require.Empty(t, listB)
 	_, err = service.SubmitPurchaseRequest(ctx, workspaceB, userA, created.ID, finance.PurchaseRequestCommandInput{ExpectedVersion: 3, IdempotencyKey: "foreign-submit"})

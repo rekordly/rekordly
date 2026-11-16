@@ -278,7 +278,17 @@ function scopedPut<T>(workspaceId: number, path: string, body: unknown): Promise
 
 export const RECORD_PAGE_SIZE = 25;
 
-export type RecordResource = "transactions" | "sales" | "purchases" | "payments" | "invoices" | "estimates";
+export type RecordResource =
+  | "transactions"
+  | "sales"
+  | "purchases"
+  | "payments"
+  | "invoices"
+  | "estimates"
+  | "purchase-requests"
+  | "purchase-orders"
+  | "goods-receipts"
+  | "supplier-bills";
 
 /** One cursor page of a financial list; the server caps page size and date window. */
 export async function listRecords<T>(
@@ -286,11 +296,19 @@ export async function listRecords<T>(
   resource: RecordResource,
   params: QueryParams = {},
 ): Promise<T[]> {
-  const result = await scopedGet<Record<RecordResource, T[]>>(workspaceId, `/api/v1/${resource}`, {
+  const result = await scopedGet<Record<string, T[]>>(workspaceId, `/api/v1/${resource}`, {
     limit: RECORD_PAGE_SIZE,
     ...params,
   });
-  return result[resource] ?? [];
+  return (
+    result[resource] ??
+    result.items ??
+    (result as Record<string, T[]>).requests ??
+    (result as Record<string, T[]>).orders ??
+    (result as Record<string, T[]>).receipts ??
+    (result as Record<string, T[]>).bills ??
+    []
+  );
 }
 
 export const financeApi = {
@@ -498,7 +516,14 @@ export const financeApi = {
   },
   createGoodsReceipt: (workspaceId: number, body: unknown, key: string) =>
     scopedPost<{ receipt: GoodsReceipt; bill?: SupplierBill; payment?: PaymentDetail }>(workspaceId, "/api/v1/goods-receipts", body, key),
-  async listGoodsReceipts(workspaceId:number){const r=await scopedGet<{receipts:GoodsReceipt[]}>(workspaceId,"/api/v1/goods-receipts");return r.receipts??[]},
+  async listGoodsReceipts(workspaceId: number, params: QueryParams = {}) {
+    const r = await scopedGet<{ receipts?: GoodsReceipt[]; items?: GoodsReceipt[]; next_before_id?: number }>(
+      workspaceId,
+      "/api/v1/goods-receipts",
+      { limit: 50, ...params },
+    );
+    return r.receipts ?? r.items ?? [];
+  },
   getGoodsReceipt: (workspaceId: number, id: number) => scopedGet<{ receipt: GoodsReceipt }>(workspaceId, `/api/v1/goods-receipts/${id}`).then((result) => result.receipt),
   payGoodsReceipt: (
     workspaceId: number,
@@ -514,7 +539,14 @@ export const financeApi = {
     key: string,
   ) =>
     scopedPost<{ receipt: GoodsReceipt; bill: SupplierBill; payment: PaymentDetail }>(workspaceId, `/api/v1/goods-receipts/${id}/payments`, body, key),
-  async listSupplierBills(workspaceId:number){const r=await scopedGet<{bills:SupplierBill[]}>(workspaceId,"/api/v1/supplier-bills");return r.bills??[]},
+  async listSupplierBills(workspaceId: number, params: QueryParams = {}) {
+    const r = await scopedGet<{ bills?: SupplierBill[]; items?: SupplierBill[]; next_before_id?: number }>(
+      workspaceId,
+      "/api/v1/supplier-bills",
+      { limit: 50, ...params },
+    );
+    return r.bills ?? r.items ?? [];
+  },
   getSupplierBill: (workspaceId: number, id: number) => scopedGet<{ bill: SupplierBill }>(workspaceId, `/api/v1/supplier-bills/${id}`).then((r) => r.bill),
   createSupplierBill: (workspaceId: number, body: unknown, key: string) =>
     scopedPost<{ bill: SupplierBill; payment?: PaymentDetail }>(workspaceId, "/api/v1/supplier-bills", body, key),

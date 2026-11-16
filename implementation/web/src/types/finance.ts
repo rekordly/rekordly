@@ -197,10 +197,19 @@ export interface PurchaseRequestLine {
   estimated_line_total_minor: string;
 }
 
+export interface DocumentSupplier {
+  id: number;
+  name: string;
+  phone?: string | null;
+  email?: string | null;
+}
+
 /** A non-posting procurement request. It is not a purchase, bill or receipt. */
 export interface PurchaseRequest {
   id: number;
   supplier_id?: number | null;
+  supplier?: DocumentSupplier | null;
+  supplier_name?: string;
   status: "draft" | "submitted" | "approved" | "rejected" | "changes_requested" | "cancelled";
   version: number;
   needed_by?: string | null;
@@ -287,6 +296,9 @@ export interface PurchaseOrder {
   id: number;
   source_purchase_request_id: number;
   supplier_id?: number | null;
+  supplier?: DocumentSupplier | null;
+  supplier_name?: string;
+  unread_messages?: number;
   outlet_id?: number | null;
   status: "draft" | "submitted" | "approved" | "issued" | "acknowledged" | "partially_received" | "fully_received" | "cancelled" | "partially_cancelled" | "closed";
   version: number;
@@ -348,6 +360,8 @@ export interface GoodsReceipt {
   id: number;
   purchase_order_id: number;
   supplier_id?: number | null;
+  supplier?: DocumentSupplier | null;
+  supplier_name?: string;
   location_id?: number | null;
   source_type?: "po" | "unplanned";
   status?: string;
@@ -384,6 +398,8 @@ export interface SupplierBill {
   id: number;
   goods_receipt_id: number;
   supplier_id?: number;
+  supplier?: DocumentSupplier | null;
+  supplier_name?: string;
   outlet_id?: number | null;
   supplier_invoice_number?: string;
   bill_date?: string;

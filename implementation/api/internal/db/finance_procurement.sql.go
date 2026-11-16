@@ -65,6 +65,42 @@ func (q *Queries) ApprovePurchaseRequest(ctx context.Context, arg ApprovePurchas
 	return i, err
 }
 
+const countUnreadDocumentMessages = `-- name: CountUnreadDocumentMessages :one
+SELECT count(*)::bigint AS unread_count
+FROM external_messages m
+WHERE m.workspace_id = $1
+  AND m.document_type = $2
+  AND m.document_id = $3
+  AND m.sender_type = 'guest'
+  AND m.id > COALESCE(
+    (SELECT last_read_message_id FROM document_message_reads r
+     WHERE r.workspace_id = m.workspace_id
+       AND r.user_id = $4
+       AND r.document_type = m.document_type
+       AND r.document_id = m.document_id),
+    0
+  )
+`
+
+type CountUnreadDocumentMessagesParams struct {
+	WorkspaceID  int64  `json:"workspace_id"`
+	DocumentType string `json:"document_type"`
+	DocumentID   int64  `json:"document_id"`
+	UserID       int64  `json:"user_id"`
+}
+
+func (q *Queries) CountUnreadDocumentMessages(ctx context.Context, arg CountUnreadDocumentMessagesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countUnreadDocumentMessages,
+		arg.WorkspaceID,
+		arg.DocumentType,
+		arg.DocumentID,
+		arg.UserID,
+	)
+	var unread_count int64
+	err := row.Scan(&unread_count)
+	return unread_count, err
+}
+
 const createPurchaseRequest = `-- name: CreatePurchaseRequest :one
 INSERT INTO purchase_requests (
     workspace_id, supplier_id, status, version, needed_by, reason, reference, priority,
@@ -649,4 +685,32 @@ func (q *Queries) SubmitPurchaseRequest(ctx context.Context, arg SubmitPurchaseR
 		&i.OutletID,
 	)
 	return i, err
+}
+
+const upsertDocumentMessageRead = `-- name: UpsertDocumentMessageRead :exec
+INSERT INTO document_message_reads (workspace_id, user_id, document_type, document_id, last_read_message_id, updated_at)
+VALUES ($1, $2, $3, $4, $5, now())
+ON CONFLICT (workspace_id, user_id, document_type, document_id)
+DO UPDATE SET
+  last_read_message_id = GREATEST(document_message_reads.last_read_message_id, EXCLUDED.last_read_message_id),
+  updated_at = now()
+`
+
+type UpsertDocumentMessageReadParams struct {
+	WorkspaceID       int64  `json:"workspace_id"`
+	UserID            int64  `json:"user_id"`
+	DocumentType      string `json:"document_type"`
+	DocumentID        int64  `json:"document_id"`
+	LastReadMessageID int64  `json:"last_read_message_id"`
+}
+
+func (q *Queries) UpsertDocumentMessageRead(ctx context.Context, arg UpsertDocumentMessageReadParams) error {
+	_, err := q.db.Exec(ctx, upsertDocumentMessageRead,
+		arg.WorkspaceID,
+		arg.UserID,
+		arg.DocumentType,
+		arg.DocumentID,
+		arg.LastReadMessageID,
+	)
+	return err
 }

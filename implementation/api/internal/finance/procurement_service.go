@@ -67,9 +67,18 @@ type PurchaseRequestDecisionView struct {
 	CreatedAt      time.Time `json:"created_at"`
 }
 
+type DocumentSupplierView struct {
+	ID    int64   `json:"id"`
+	Name  string  `json:"name"`
+	Phone *string `json:"phone,omitempty"`
+	Email *string `json:"email,omitempty"`
+}
+
 type PurchaseRequestView struct {
 	ID                   int64                         `json:"id"`
 	SupplierID           *int64                        `json:"supplier_id,omitempty"`
+	Supplier             *DocumentSupplierView         `json:"supplier,omitempty"`
+	SupplierName         string                        `json:"supplier_name,omitempty"`
 	Status               string                        `json:"status"`
 	Version              int32                         `json:"version"`
 	NeededBy             *string                       `json:"needed_by,omitempty"`
@@ -208,9 +217,62 @@ func (s *Service) CreatePurchaseRequest(ctx context.Context, workspaceID, userID
 	return detail, nil
 }
 
-func (s *Service) ListPurchaseRequests(ctx context.Context, workspaceID int64, filter ListPurchaseRequestsFilter) ([]PurchaseRequestView, error) {
+func (s *Service) batchSuppliersMap(ctx context.Context, workspaceID int64, supplierIDs []int64) (map[int64]*DocumentSupplierView, error) {
+	if len(supplierIDs) == 0 {
+		return map[int64]*DocumentSupplierView{}, nil
+	}
+	unique := make([]int64, 0, len(supplierIDs))
+	seen := make(map[int64]bool, len(supplierIDs))
+	for _, id := range supplierIDs {
+		if id > 0 && !seen[id] {
+			seen[id] = true
+			unique = append(unique, id)
+		}
+	}
+	if len(unique) == 0 {
+		return map[int64]*DocumentSupplierView{}, nil
+	}
+	rows, err := s.queries.ListCounterpartiesByIDs(ctx, db.ListCounterpartiesByIDsParams{
+		WorkspaceID: workspaceID,
+		Column2:     unique,
+	})
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[int64]*DocumentSupplierView, len(rows))
+	for _, r := range rows {
+		result[r.ID] = &DocumentSupplierView{
+			ID:    r.ID,
+			Name:  r.Name,
+			Phone: nullableText(r.Phone),
+			Email: nullableText(r.Email),
+		}
+	}
+	return result, nil
+}
+
+func (s *Service) getSupplierView(ctx context.Context, workspaceID int64, supplierID int64) *DocumentSupplierView {
+	if supplierID <= 0 {
+		return nil
+	}
+	c, err := s.queries.GetCounterpartyByID(ctx, db.GetCounterpartyByIDParams{
+		WorkspaceID: workspaceID,
+		ID:          supplierID,
+	})
+	if err != nil {
+		return nil
+	}
+	return &DocumentSupplierView{
+		ID:    c.ID,
+		Name:  c.Name,
+		Phone: nullableText(c.Phone),
+		Email: nullableText(c.Email),
+	}
+}
+
+func (s *Service) ListPurchaseRequests(ctx context.Context, workspaceID int64, filter ListPurchaseRequestsFilter) ([]PurchaseRequestView, *int64, error) {
 	limit := filter.Limit
-	if limit <= 0 || limit > 100 {
+	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
 	var beforeID pgtype.Int8
@@ -223,18 +285,41 @@ func (s *Service) ListPurchaseRequests(ctx context.Context, workspaceID int64, f
 		case "draft", "submitted", "approved", "rejected", "changes_requested", "cancelled":
 			status = pgtype.Text{String: value, Valid: true}
 		default:
-			return nil, errors.New("invalid purchase request status")
+			return nil, nil, errors.New("invalid purchase request status")
 		}
 	}
-	requests, err := s.queries.ListPurchaseRequests(ctx, db.ListPurchaseRequestsParams{WorkspaceID: workspaceID, Limit: limit, Status: status, BeforeID: beforeID})
+	requests, err := s.queries.ListPurchaseRequests(ctx, db.ListPurchaseRequestsParams{WorkspaceID: workspaceID, Limit: limit + 1, Status: status, BeforeID: beforeID})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+
+	var nextBeforeID *int64
+	if len(requests) > int(limit) {
+		nextID := requests[limit-1].ID
+		nextBeforeID = &nextID
+		requests = requests[:limit]
+	}
+
+	supplierIDs := make([]int64, 0, len(requests))
+	for _, r := range requests {
+		if r.SupplierID.Valid {
+			supplierIDs = append(supplierIDs, r.SupplierID.Int64)
+		}
+	}
+	suppliers, _ := s.batchSuppliersMap(ctx, workspaceID, supplierIDs)
+
 	items := make([]PurchaseRequestView, 0, len(requests))
 	for _, request := range requests {
-		items = append(items, purchaseRequestHeader(request))
+		v := purchaseRequestHeader(request)
+		if v.SupplierID != nil {
+			if sup, ok := suppliers[*v.SupplierID]; ok {
+				v.Supplier = sup
+				v.SupplierName = sup.Name
+			}
+		}
+		items = append(items, v)
 	}
-	return items, nil
+	return items, nextBeforeID, nil
 }
 
 func (s *Service) GetPurchaseRequest(ctx context.Context, workspaceID, requestID int64) (PurchaseRequestView, error) {
@@ -248,6 +333,12 @@ func (s *Service) GetPurchaseRequest(ctx context.Context, workspaceID, requestID
 	view, err := purchaseRequestDetail(ctx, s.queries, request)
 	if err != nil {
 		return PurchaseRequestView{}, err
+	}
+	if view.SupplierID != nil {
+		if sup := s.getSupplierView(ctx, workspaceID, *view.SupplierID); sup != nil {
+			view.Supplier = sup
+			view.SupplierName = sup.Name
+		}
 	}
 	order, err := s.queries.GetPurchaseOrderBySource(ctx, db.GetPurchaseOrderBySourceParams{WorkspaceID: workspaceID, SourcePurchaseRequestID: pgtype.Int8{Int64: requestID, Valid: true}})
 	if err == nil {
@@ -495,6 +586,20 @@ func optionalDate(input string) (pgtype.Date, error) {
 
 func purchaseRequestDetail(ctx context.Context, queries *db.Queries, request db.PurchaseRequest) (PurchaseRequestView, error) {
 	view := purchaseRequestHeader(request)
+	if request.SupplierID.Valid {
+		if c, err := queries.GetCounterpartyByID(ctx, db.GetCounterpartyByIDParams{
+			WorkspaceID: request.WorkspaceID,
+			ID:          request.SupplierID.Int64,
+		}); err == nil {
+			view.Supplier = &DocumentSupplierView{
+				ID:    c.ID,
+				Name:  c.Name,
+				Phone: nullableText(c.Phone),
+				Email: nullableText(c.Email),
+			}
+			view.SupplierName = c.Name
+		}
+	}
 	lines, err := queries.GetPurchaseRequestLines(ctx, db.GetPurchaseRequestLinesParams{WorkspaceID: request.WorkspaceID, PurchaseRequestID: request.ID})
 	if err != nil {
 		return PurchaseRequestView{}, err
