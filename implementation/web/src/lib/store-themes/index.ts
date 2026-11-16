@@ -2,7 +2,7 @@ import { boutiqueTheme } from "./boutique/manifest";
 import { simpleTheme } from "./simple/manifest";
 import { PALETTES, paletteFromColor, resolvePalette } from "./palettes";
 import { FONT_STYLES } from "./font-styles";
-import type { ThemeKey, ThemeManifest } from "./types";
+import type { ThemeKey, ThemeManifest, StoreSection, ThemeSettings } from "./types";
 
 export const STORE_THEMES: Record<ThemeKey, ThemeManifest> = {
   simple: simpleTheme,
@@ -11,8 +11,6 @@ export const STORE_THEMES: Record<ThemeKey, ThemeManifest> = {
 
 export { PALETTES, FONT_STYLES, paletteFromColor, resolvePalette };
 export * from "./types";
-
-import type { StoreSection, ThemeKey, ThemeSettings } from "./types";
 
 export function createDefaultSections(theme: ThemeKey, storeName: string): StoreSection[] {
   const safeName = storeName.trim() || "our store";

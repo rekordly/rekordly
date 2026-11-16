@@ -18,7 +18,7 @@ import { DataView } from "@/components/ui/data-view";
 import { FilterDropdown } from "@/components/ui/filter-dropdown";
 import { FormDrawer } from "@/components/ui/form-drawer";
 import { EmptyState, Page, PageHeader, Segmented, StatusPill } from "@/components/ui/page";
-import { stockNumber, useOutlets } from "@/components/pickers";
+import { stockNumber } from "@/components/pickers";
 import { KpiRow } from "@/components/features/finance/dashboard-parts";
 import { useFinanceAction, WorkspaceGate, type WorkspaceInfo } from "@/components/features/finance/shared";
 import { createIdempotencyKey } from "@/lib/utils";
@@ -185,19 +185,21 @@ function InventoryContent({ workspaceId, currency }: WorkspaceInfo) {
   const [outletFilter, setOutletFilter] = useState("");
   const [counting, setCounting] = useState(false);
   const [addingOutlet, setAddingOutlet] = useState(false);
-  const productFilter = { kind: "stock_tracked" as const };
-  const products = useQuery({ queryKey: productKeys.list(workspaceId, productFilter), queryFn: () => productsApi.list(workspaceId, productFilter) });
-  const balances = useQuery({ queryKey: [...moneyKeys.workspace(workspaceId), "inventory-balances"], queryFn: () => financeApi.listInventoryBalances(workspaceId) });
-  const outlets = useOutlets(workspaceId);
-  const activeOutlets = (outlets.data ?? []).filter((outlet) => outlet.is_active !== false);
+  const overview = useQuery({
+    queryKey: [...moneyKeys.workspace(workspaceId), "inventory-overview"],
+    queryFn: () => financeApi.getInventoryOverview(workspaceId),
+  });
+  const productsData = (overview.data?.products ?? []) as Product[];
+  const balancesData = (overview.data?.balances ?? []) as Array<{ product_id: number; location_id: number; quantity_on_hand: string; value_on_hand_minor: string }>;
+  const activeOutlets = ((overview.data?.outlets ?? []) as InventoryOutlet[]).filter((outlet) => outlet.is_active !== false);
   const mainOutlet = activeOutlets.find((outlet) => outlet.is_default) ?? activeOutlets[0];
   const money = (minor: bigint) => formatMinorAmount(minor.toString(), currency, 2);
 
   const outletId = outletFilter ? Number(outletFilter) : undefined;
-  const rows: StockRow[] = (products.data ?? [])
+  const rows: StockRow[] = productsData
     .filter((product) => product.status !== "archived")
     .map((product) => {
-      const lines = (balances.data ?? []).filter((line) => line.product_id === product.id && (outletId === undefined || line.location_id === outletId));
+      const lines = balancesData.filter((line) => line.product_id === product.id && (outletId === undefined || line.location_id === outletId));
       return {
         product,
         quantity: lines.reduce((sum, line) => sum + Number(line.quantity_on_hand), 0),
@@ -207,6 +209,7 @@ function InventoryContent({ workspaceId, currency }: WorkspaceInfo) {
 
   const makeMain = useFinanceAction(workspaceId, (id: number) => financeApi.updateOutlet(workspaceId, id, { is_default: true }), {
     success: "Main outlet changed",
+    onDone: () => void overview.refetch(),
   });
   const outletMenu = (outlet: InventoryOutlet) => (
     <AppRowActions
@@ -216,7 +219,7 @@ function InventoryContent({ workspaceId, currency }: WorkspaceInfo) {
   );
 
   const outletRows: OutletRow[] = activeOutlets.map((outlet) => {
-    const lines = (balances.data ?? []).filter((line) => line.location_id === outlet.id);
+    const lines = balancesData.filter((line) => line.location_id === outlet.id);
     return {
       outlet,
       productsInStock: lines.filter((line) => Number(line.quantity_on_hand) > 0).length,
@@ -228,10 +231,10 @@ function InventoryContent({ workspaceId, currency }: WorkspaceInfo) {
   const inStock = rows.filter((row) => row.quantity > 0).length;
   const outOfStock = rows.length - inStock;
   const countOutlet = outletId ? activeOutlets.find((outlet) => outlet.id === outletId) : mainOutlet;
-  const countRows: StockRow[] = (products.data ?? [])
+  const countRows: StockRow[] = productsData
     .filter((product) => product.status !== "archived")
     .map((product) => {
-      const line = (balances.data ?? []).find((item) => item.product_id === product.id && item.location_id === countOutlet?.id);
+      const line = balancesData.find((item) => item.product_id === product.id && item.location_id === countOutlet?.id);
       return { product, quantity: Number(line?.quantity_on_hand ?? 0), valueMinor: BigInt(line?.value_on_hand_minor ?? "0") };
     });
 
@@ -249,10 +252,10 @@ function InventoryContent({ workspaceId, currency }: WorkspaceInfo) {
       />
 
       <KpiRow className="xl:grid-cols-4">
-        <KpiCard loading={balances.isPending} tone="accent" icon={Coins} label="Stock value" value={money(totalValue)} hint="At what it cost you" />
-        <KpiCard loading={products.isPending} icon={Cube} label="In stock" value={String(inStock)} hint={`of ${rows.length} products with stock`} />
-        <KpiCard loading={products.isPending} icon={WarningCircle} label="Out of stock" value={String(outOfStock)} hint={outOfStock ? "Need restocking" : "Everything in stock"} />
-        <KpiCard loading={outlets.isPending} icon={Storefront} label="Outlets" value={String(activeOutlets.length || 1)} hint={activeOutlets.length > 1 ? "Where you keep stock" : "One place for now"} />
+        <KpiCard loading={overview.isPending} tone="accent" icon={Coins} label="Stock value" value={money(totalValue)} hint="At what it cost you" />
+        <KpiCard loading={overview.isPending} icon={Cube} label="In stock" value={String(inStock)} hint={`of ${rows.length} products with stock`} />
+        <KpiCard loading={overview.isPending} icon={WarningCircle} label="Out of stock" value={String(outOfStock)} hint={outOfStock ? "Need restocking" : "Everything in stock"} />
+        <KpiCard loading={overview.isPending} icon={Storefront} label="Outlets" value={String(activeOutlets.length || 1)} hint={activeOutlets.length > 1 ? "Where you keep stock" : "One place for now"} />
       </KpiRow>
 
       <Segmented
@@ -271,8 +274,8 @@ function InventoryContent({ workspaceId, currency }: WorkspaceInfo) {
           selectable={false}
           rows={rows}
           rowKey={(row) => row.product.id}
-          isLoading={products.isPending || balances.isPending}
-          isError={products.isError || balances.isError}
+          isLoading={overview.isPending}
+          isError={overview.isError}
           searchPlaceholder="Search products"
           getSearchText={(row) => `${row.product.name} ${row.product.sku ?? ""}`}
           filters={
@@ -344,8 +347,8 @@ function InventoryContent({ workspaceId, currency }: WorkspaceInfo) {
           selectable={false}
           rows={outletRows}
           rowKey={(row) => row.outlet.id}
-          isLoading={outlets.isPending || balances.isPending}
-          isError={outlets.isError}
+          isLoading={overview.isPending}
+          isError={overview.isError}
           searchPlaceholder="Search outlets"
           getSearchText={(row) => `${row.outlet.name} ${row.outlet.code ?? ""} ${row.outlet.address ?? ""}`}
           toolbarActions={<AppButton size="sm" variant="secondary" startContent={<Plus weight="bold" />} label="Add outlet" onPress={() => setAddingOutlet(true)} />}

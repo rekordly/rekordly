@@ -98,14 +98,12 @@ function ProductsContent({ workspaceId, currency }: WorkspaceInfo) {
   // One full list feeds the tiles and the filters, so switching filters is instant.
   const products = useQuery({ queryKey: productKeys.list(workspaceId, {}), queryFn: () => productsApi.list(workspaceId) });
   const collections = useProductCollections(workspaceId);
-  const filteredByCollection = useQuery({
-    queryKey: productKeys.list(workspaceId, { collection_id: Number(collectionId) }),
-    queryFn: () => productsApi.list(workspaceId, { collection_id: Number(collectionId) }),
-    enabled: Boolean(collectionId),
-  });
-
   const all = useMemo(() => products.data ?? [], [products.data]);
-  const source = collectionId ? filteredByCollection.data ?? [] : all;
+  const source = useMemo(() => {
+    if (!collectionId) return all;
+    const cid = Number(collectionId);
+    return all.filter((product) => (product.collection_ids ?? []).includes(cid));
+  }, [all, collectionId]);
   const rows = status === "all" ? source.filter((product) => product.status !== "archived") : source.filter((product) => product.status === status);
 
   const active = all.filter((product) => product.status === "active");
@@ -185,7 +183,7 @@ function ProductsContent({ workspaceId, currency }: WorkspaceInfo) {
           title="Products"
           rows={rows}
           rowKey={(product) => product.id}
-          isLoading={products.isPending || (Boolean(collectionId) && filteredByCollection.isPending)}
+          isLoading={products.isPending}
           isError={products.isError}
           searchPlaceholder="Search name or SKU"
           getSearchText={(product) => `${product.name} ${product.sku ?? ""} ${product.barcode ?? ""}`}

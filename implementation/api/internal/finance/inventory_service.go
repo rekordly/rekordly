@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -95,12 +96,30 @@ func (s *Service) ListInventoryBalances(ctx context.Context, workspaceID int64) 
 }
 
 func (s *Service) CreateOpeningStock(ctx context.Context, workspaceID, userID int64, in CreateOpeningStockInput) (InventoryBalanceView, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return InventoryBalanceView{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := s.queries.WithTx(tx)
+
+	view, err := createOpeningStockTx(ctx, q, workspaceID, userID, in, pgtype.Int8{})
+	if err != nil {
+		return InventoryBalanceView{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return InventoryBalanceView{}, err
+	}
+	return view, nil
+}
+
+func createOpeningStockTx(ctx context.Context, q *db.Queries, workspaceID, userID int64, in CreateOpeningStockInput, variantID pgtype.Int8) (InventoryBalanceView, error) {
 	key := strings.TrimSpace(in.IdempotencyKey)
 	if key == "" || len(key) > 200 || in.ProductID <= 0 {
 		return InventoryBalanceView{}, errors.New("product and idempotency key are required")
 	}
-	if existing, err := s.queries.GetInventoryOpeningByIdempotency(ctx, db.GetInventoryOpeningByIdempotencyParams{WorkspaceID: workspaceID, IdempotencyKey: key}); err == nil {
-		balance, e := s.queries.GetInventoryBalance(ctx, db.GetInventoryBalanceParams{WorkspaceID: workspaceID, LocationID: existing.LocationID, ProductID: existing.ProductID})
+	if existing, err := q.GetInventoryOpeningByIdempotency(ctx, db.GetInventoryOpeningByIdempotencyParams{WorkspaceID: workspaceID, IdempotencyKey: key}); err == nil {
+		balance, e := q.GetInventoryBalance(ctx, db.GetInventoryBalanceParams{WorkspaceID: workspaceID, LocationID: existing.LocationID, ProductID: existing.ProductID})
 		if e != nil {
 			return InventoryBalanceView{}, e
 		}
@@ -125,7 +144,7 @@ func (s *Service) CreateOpeningStock(ctx context.Context, workspaceID, userID in
 	}
 	date, err := time.Parse("2006-01-02", strings.TrimSpace(in.EffectiveOn))
 	if err != nil {
-		return InventoryBalanceView{}, errors.New("effective date must be YYYY-MM-DD")
+		date = time.Now()
 	}
 	currency := strings.ToUpper(strings.TrimSpace(in.Currency))
 	if len(currency) != 3 {
@@ -148,14 +167,8 @@ func (s *Service) CreateOpeningStock(ctx context.Context, workspaceID, userID in
 	}
 	reason := strings.TrimSpace(in.Reason)
 	if reason == "" || len(reason) > 500 {
-		return InventoryBalanceView{}, errors.New("a reason is required")
+		reason = "Opening stock"
 	}
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return InventoryBalanceView{}, err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	q := s.queries.WithTx(tx)
 	product, err := q.GetProductByID(ctx, db.GetProductByIDParams{WorkspaceID: workspaceID, ID: in.ProductID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return InventoryBalanceView{}, ErrNotFound
@@ -177,10 +190,10 @@ func (s *Service) CreateOpeningStock(ctx context.Context, workspaceID, userID in
 	if err != nil {
 		return InventoryBalanceView{}, err
 	}
-	if _, err = q.CreateInventoryMovement(ctx, db.CreateInventoryMovementParams{WorkspaceID: workspaceID, ProductID: product.ID, GoodsReceiptLineID: pgtype.Int8{}, LocationID: pgtype.Int8{Int64: location.ID, Valid: true}, MovementType: "opening", SourceType: "inventory_opening", SourceID: pgtype.Int8{Int64: entry.ID, Valid: true}, QuantityDelta: qty, ValueDeltaMinor: value, OccurredOn: pgtype.Date{Time: date, Valid: true}}); err != nil {
+	if _, err = q.CreateInventoryMovement(ctx, db.CreateInventoryMovementParams{WorkspaceID: workspaceID, ProductID: product.ID, VariantID: variantID, GoodsReceiptLineID: pgtype.Int8{}, LocationID: pgtype.Int8{Int64: location.ID, Valid: true}, MovementType: "opening", SourceType: "inventory_opening", SourceID: pgtype.Int8{Int64: entry.ID, Valid: true}, QuantityDelta: qty, ValueDeltaMinor: value, OccurredOn: pgtype.Date{Time: date, Valid: true}}); err != nil {
 		return InventoryBalanceView{}, err
 	}
-	bal, err := q.UpsertInventoryBalance(ctx, db.UpsertInventoryBalanceParams{WorkspaceID: workspaceID, LocationID: location.ID, ProductID: product.ID, QuantityOnHand: qty, ValueOnHandMinor: value})
+	bal, err := q.UpsertInventoryBalance(ctx, db.UpsertInventoryBalanceParams{WorkspaceID: workspaceID, LocationID: location.ID, ProductID: product.ID, VariantID: variantID, QuantityOnHand: qty, ValueOnHandMinor: value})
 	if err != nil {
 		return InventoryBalanceView{}, err
 	}
@@ -194,12 +207,13 @@ func (s *Service) CreateOpeningStock(ctx context.Context, workspaceID, userID in
 	if _, err = q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{LedgerEntryID: ledger.ID, WorkspaceID: workspaceID, AccountClass: "equity", CreditMinor: value, Description: optionalPgText("Opening balance equity")}); err != nil {
 		return InventoryBalanceView{}, err
 	}
-	if err = tx.Commit(ctx); err != nil {
-		return InventoryBalanceView{}, err
-	}
 	avail := bal.QuantityOnHand.Sub(bal.ReservedQuantity)
 	if avail.IsNegative() {
 		avail = decimal.Zero
+	}
+	avgCost := "0"
+	if bal.QuantityOnHand.GreaterThan(decimal.Zero) {
+		avgCost = decimal.NewFromInt(bal.ValueOnHandMinor).Div(bal.QuantityOnHand).StringFixed(4)
 	}
 	return InventoryBalanceView{
 		ID:                bal.ID,
@@ -213,7 +227,7 @@ func (s *Service) CreateOpeningStock(ctx context.Context, workspaceID, userID in
 		AvailableQuantity: avail.StringFixed(4),
 		InTransitQuantity: bal.InTransitQuantity.StringFixed(4),
 		ValueOnHandMinor:  fmt.Sprintf("%d", bal.ValueOnHandMinor),
-		AverageCostMinor:  decimal.NewFromInt(bal.ValueOnHandMinor).Div(bal.QuantityOnHand).StringFixed(4),
+		AverageCostMinor:  avgCost,
 		CostingMethod:     bal.CostingMethod,
 		Version:           bal.Version,
 	}, nil
@@ -463,5 +477,87 @@ func (s *Service) IssueSaleStock(ctx context.Context, workspaceID, userID int64,
 		},
 		COGSMinor:     cogsMinor,
 		LedgerEntryID: ledger.ID,
+	}, nil
+}
+
+type InventoryOverview struct {
+	Products        []ProductSummary       `json:"products"`
+	Balances        []InventoryBalanceView `json:"balances"`
+	Outlets         []OutletView           `json:"outlets"`
+	TotalValueMinor int64                  `json:"total_value_minor"`
+	InStockCount    int                    `json:"in_stock_count"`
+	OutOfStockCount int                    `json:"out_of_stock_count"`
+	OutletSummaries []OutletStockSummary   `json:"outlet_summaries"`
+}
+
+type OutletStockSummary struct {
+	OutletID        int64 `json:"outlet_id"`
+	ProductsInStock int   `json:"products_in_stock"`
+	StockValueMinor int64 `json:"stock_value_minor"`
+}
+
+func (s *Service) GetInventoryOverview(ctx context.Context, workspaceID int64) (InventoryOverview, error) {
+	products, err := s.ListProducts(ctx, workspaceID, ListProductsFilter{Kind: "stock_tracked", Limit: 200})
+	if err != nil {
+		return InventoryOverview{}, err
+	}
+	balances, err := s.ListInventoryBalances(ctx, workspaceID)
+	if err != nil {
+		return InventoryOverview{}, err
+	}
+	outlets, err := s.ListOutlets(ctx, workspaceID, true)
+	if err != nil {
+		return InventoryOverview{}, err
+	}
+
+	var totalValue int64
+	inStockMap := make(map[int64]bool)
+	outletVal := make(map[int64]int64)
+	outletProds := make(map[int64]map[int64]bool)
+
+	for _, b := range balances {
+		val, _ := strconv.ParseInt(b.ValueOnHandMinor, 10, 64)
+		totalValue += val
+		outletVal[b.LocationID] += val
+
+		qty, _ := decimal.NewFromString(b.QuantityOnHand)
+		if qty.GreaterThan(decimal.Zero) {
+			inStockMap[b.ProductID] = true
+			if outletProds[b.LocationID] == nil {
+				outletProds[b.LocationID] = make(map[int64]bool)
+			}
+			outletProds[b.LocationID][b.ProductID] = true
+		}
+	}
+
+	activeProds := 0
+	inStockCount := 0
+	for _, p := range products {
+		if p.Status != "archived" {
+			activeProds++
+			if inStockMap[p.ID] {
+				inStockCount++
+			}
+		}
+	}
+	outOfStockCount := activeProds - inStockCount
+
+	outletSummaries := make([]OutletStockSummary, 0, len(outlets))
+	for _, o := range outlets {
+		outletSummaries = append(outletSummaries, OutletStockSummary{
+			OutletID:        o.ID,
+			ProductsInStock: len(outletProds[o.ID]),
+			StockValueMinor: outletVal[o.ID],
+		})
+	}
+
+	return InventoryOverview{
+		Products:        products,
+		Balances:        balances,
+		Outlets:         outlets,
+		TotalValueMinor: totalValue,
+		InStockCount:    inStockCount,
+		OutOfStockCount: outOfStockCount,
+		OutletSummaries: outletSummaries,
 	}, nil
 }

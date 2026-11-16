@@ -9,8 +9,22 @@ import (
 
 func (h *Handler) RegisterInventoryRoutes(protected *gin.RouterGroup) {
 	protected.GET("/inventory/balances", h.listInventoryBalances)
+	protected.GET("/inventory/overview", h.getInventoryOverview)
 	protected.POST("/inventory/opening-stock", h.createOpeningStock)
 	protected.POST("/inventory/issue-sale", h.issueSaleStock)
+}
+
+func (h *Handler) getInventoryOverview(c *gin.Context) {
+	ws, ok := businessWorkspace(c)
+	if !ok {
+		return
+	}
+	overview, err := h.service.GetInventoryOverview(c.Request.Context(), ws.WorkspaceID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVENTORY_OVERVIEW_FAILED", "message": err.Error()}})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": overview})
 }
 
 func (h *Handler) createInventoryAdjustment(c *gin.Context) {

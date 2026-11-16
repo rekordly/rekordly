@@ -28,7 +28,7 @@ import { EmptyState, Page, Segmented, StatusPill, type StatusTone } from "@/comp
 import { RichText } from "@/components/ui/rich-text-editor";
 import { ChangePriceDrawer } from "./product-price-drawer";
 import { ProductStockPanel } from "./product-stock";
-import { productTypeLabel, unitLabel, useOutlets, useProductCollections } from "@/components/pickers";
+import { productTypeLabel, unitLabel } from "@/components/pickers";
 import { KpiRow } from "@/components/features/finance/dashboard-parts";
 import { WorkspaceGate, type WorkspaceInfo } from "@/components/features/finance/shared";
 import { formatDate } from "@/lib/format";
@@ -163,10 +163,11 @@ function ProductDetailContent({ workspaceId, productId }: WorkspaceInfo & { prod
   const [priceOpen, setPriceOpen] = useState(false);
   const [activeImage, setActiveImage] = useState(0);
   const detail = useQuery({ queryKey: productKeys.detail(workspaceId, productId), queryFn: () => productsApi.get(workspaceId, productId) });
-  const prices = useQuery({ queryKey: productKeys.priceHistory(workspaceId, productId), queryFn: () => productsApi.priceHistory(workspaceId, productId), enabled: tab === "history" });
-  const events = useQuery({ queryKey: productKeys.events(workspaceId, productId), queryFn: () => productsApi.events(workspaceId, productId), enabled: tab === "history" });
-  const collections = useProductCollections(workspaceId);
-  const outlets = useOutlets(workspaceId);
+  const history = useQuery({
+    queryKey: [...productKeys.detail(workspaceId, productId), "history"],
+    queryFn: () => productsApi.combinedHistory(workspaceId, productId),
+    enabled: tab === "history",
+  });
 
   const archive = useMutation({
     mutationFn: (archived: boolean) => (archived ? productsApi.archive(workspaceId, productId) : productsApi.restore(workspaceId, productId)),
@@ -208,8 +209,8 @@ function ProductDetailContent({ workspaceId, productId }: WorkspaceInfo & { prod
   const margin = priceMinor > BigInt(0) && costMinor > BigInt(0) ? Number((profit * BigInt(1000)) / priceMinor) / 10 : null;
   const unit = unitLabel(product.unit_name).replace(/ \(.*\)/, "").toLowerCase();
   const isArchived = product.status === "archived";
-  const productCollections = (collections.data ?? []).filter((collection) => (detail.data.collection_ids ?? []).includes(collection.id));
-  const productOutlets = (outlets.data ?? []).filter((outlet) => (detail.data.outlet_ids ?? []).includes(outlet.id));
+  const productCollections = detail.data.collections ?? [];
+  const productOutlets = detail.data.outlets ?? [];
   const image = product.image_urls[Math.min(activeImage, product.image_urls.length - 1)];
 
   const variantPrices = activeVariants.map((variant) => BigInt(variant.selling_price_minor || "0")).filter((v) => v > BigInt(0));
@@ -356,69 +357,76 @@ function ProductDetailContent({ workspaceId, productId }: WorkspaceInfo & { prod
       ) : null}
 
       {tab === "history" ? (
-        <div className="space-y-4">
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Panel title="Price history">
-              {prices.isPending ? (
-                <div className="h-24 animate-pulse rounded-xl bg-default" />
-              ) : (prices.data ?? []).length === 0 ? (
-                <p className="text-[13px] text-muted">No price changes yet.</p>
-              ) : (
-                <div className="scroll-thin overflow-x-auto">
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>Date</th>
-                        <th className="text-right">Selling price</th>
-                        <th className="text-right">Cost price</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(prices.data ?? []).map((change) => {
-                        const money = (minor?: string | null) => (minor ? formatMinorAmount(minor, change.currency, change.currency_exponent) : "—");
-                        return (
-                          <tr key={change.id}>
-                            <td>{formatDate(change.changed_at)}</td>
-                            <td className="text-right tabular">
-                              {change.old_selling_price_minor && change.old_selling_price_minor !== change.new_selling_price_minor ? (
-                                <span className="mr-2 text-muted line-through">{money(change.old_selling_price_minor)}</span>
-                              ) : null}
-                              <span className="font-semibold">{money(change.new_selling_price_minor)}</span>
-                            </td>
-                            <td className="text-right tabular">
-                              {change.old_cost_price_minor && change.old_cost_price_minor !== change.new_cost_price_minor ? (
-                                <span className="mr-2 text-muted line-through">{money(change.old_cost_price_minor)}</span>
-                              ) : null}
-                              {money(change.new_cost_price_minor)}
-                            </td>
+        (() => {
+          const historyList = (history.data ?? []) as any[];
+          const pricesList = historyList.filter((item) => item.kind === "price");
+          const eventsList = historyList.filter((item) => item.kind === "event");
+          return (
+            <div className="space-y-4">
+              <div className="grid gap-4 lg:grid-cols-2">
+                <Panel title="Price history">
+                  {history.isPending ? (
+                    <div className="h-24 animate-pulse rounded-xl bg-default" />
+                  ) : pricesList.length === 0 ? (
+                    <p className="text-[13px] text-muted">No price changes yet.</p>
+                  ) : (
+                    <div className="scroll-thin overflow-x-auto">
+                      <table className="data-table">
+                        <thead>
+                          <tr>
+                            <th>Date</th>
+                            <th className="text-right">Selling price</th>
+                            <th className="text-right">Cost price</th>
                           </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </Panel>
+                        </thead>
+                        <tbody>
+                          {pricesList.map((change) => {
+                            const money = (minor?: string | null) => (minor ? formatMinorAmount(minor, change.currency, change.currency_exponent) : "—");
+                            return (
+                              <tr key={change.id}>
+                                <td>{formatDate(change.created_at)}</td>
+                                <td className="text-right tabular">
+                                  {change.old_selling_price_minor && change.old_selling_price_minor !== change.new_selling_price_minor ? (
+                                    <span className="mr-2 text-muted line-through">{money(change.old_selling_price_minor)}</span>
+                                  ) : null}
+                                  <span className="font-semibold">{money(change.new_selling_price_minor)}</span>
+                                </td>
+                                <td className="text-right tabular">
+                                  {change.old_cost_price_minor && change.old_cost_price_minor !== change.new_cost_price_minor ? (
+                                    <span className="mr-2 text-muted line-through">{money(change.old_cost_price_minor)}</span>
+                                  ) : null}
+                                  {money(change.new_cost_price_minor)}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Panel>
 
-            <Panel title="Product changes">
-              {events.isPending ? (
-                <div className="h-24 animate-pulse rounded-xl bg-default" />
-              ) : (events.data ?? []).length === 0 ? (
-                <EmptyState icon={ClockCounterClockwise} title="No history yet" description="Changes to this product will show here." />
-              ) : (
-                <ol className="relative ml-2 space-y-4 border-l border-separator pl-5">
-                  {(events.data ?? []).map((event) => (
-                    <li key={event.id} className="relative">
-                      <span className={`absolute top-1.5 -left-[25px] size-2.5 rounded-full ring-4 ring-surface ${event.event_type === "price_changed" ? "bg-secondary" : event.event_type === "archived" ? "bg-muted" : "bg-primary"}`} />
-                      <p className="text-[14px] font-medium">{event.summary}</p>
-                      <p className="text-[12px] text-muted">{formatDate(event.created_at)}</p>
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </Panel>
-          </div>
-        </div>
+                <Panel title="Product changes">
+                  {history.isPending ? (
+                    <div className="h-24 animate-pulse rounded-xl bg-default" />
+                  ) : eventsList.length === 0 ? (
+                    <EmptyState icon={ClockCounterClockwise} title="No history yet" description="Changes to this product will show here." />
+                  ) : (
+                    <ol className="relative ml-2 space-y-4 border-l border-separator pl-5">
+                      {eventsList.map((event) => (
+                        <li key={event.id} className="relative">
+                          <span className={`absolute top-1.5 -left-[25px] size-2.5 rounded-full ring-4 ring-surface ${event.event_type === "price_changed" ? "bg-secondary" : event.event_type === "archived" ? "bg-muted" : "bg-primary"}`} />
+                          <p className="text-[14px] font-medium">{event.summary}</p>
+                          <p className="text-[12px] text-muted">{formatDate(event.created_at)}</p>
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                </Panel>
+              </div>
+            </div>
+          );
+        })()
       ) : null}
 
       {priceOpen ? <ChangePriceDrawer workspaceId={workspaceId} detail={detail.data} onClose={() => setPriceOpen(false)} /> : null}
