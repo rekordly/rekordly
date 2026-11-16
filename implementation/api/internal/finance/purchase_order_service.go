@@ -44,6 +44,7 @@ type PurchaseOrderView struct {
 	Receipts  []PurchaseOrderReceiptView `json:"receipts,omitempty"`
 	Bills     []PurchaseOrderBillView    `json:"bills,omitempty"`
 	PaidMinor string                     `json:"paid_minor,omitempty"`
+	Files     []DocumentFileView         `json:"files,omitempty"`
 }
 
 type PurchaseOrderLineView struct {
@@ -67,6 +68,7 @@ type PurchaseOrderEventView struct {
 	OrderVersion int32   `json:"order_version"`
 	Note         *string `json:"note,omitempty"`
 	ActorUserID  int64   `json:"actor_user_id"`
+	ActorName    string  `json:"actor_name"`
 	CreatedAt    string  `json:"created_at"`
 }
 type PurchaseOrderVersionView struct {
@@ -206,7 +208,7 @@ func purchaseOrderDetail(ctx context.Context, q *db.Queries, po db.PurchaseOrder
 			LineTotalMinor:        strconv.FormatInt(line.LineTotalMinor, 10),
 		})
 	}
-	events, err := q.ListPurchaseOrderEvents(ctx, db.ListPurchaseOrderEventsParams{WorkspaceID: po.WorkspaceID, PurchaseOrderID: po.ID})
+	events, err := q.ListPurchaseOrderEventsWithActor(ctx, db.ListPurchaseOrderEventsWithActorParams{WorkspaceID: po.WorkspaceID, PurchaseOrderID: po.ID})
 	if err != nil {
 		return PurchaseOrderView{}, err
 	}
@@ -216,7 +218,22 @@ func purchaseOrderDetail(ctx context.Context, q *db.Queries, po db.PurchaseOrder
 		if event.Note.Valid {
 			note = &event.Note.String
 		}
-		view.Events = append(view.Events, PurchaseOrderEventView{ID: event.ID, EventType: event.EventType, OrderVersion: event.OrderVersion, Note: note, ActorUserID: event.ActorUserID, CreatedAt: event.CreatedAt.Time.UTC().Format(time.RFC3339)})
+		view.Events = append(view.Events, PurchaseOrderEventView{ID: event.ID, EventType: event.EventType, OrderVersion: event.OrderVersion, Note: note, ActorUserID: event.ActorUserID, ActorName: event.ActorName, CreatedAt: event.CreatedAt.Time.UTC().Format(time.RFC3339)})
+	}
+	files, err := q.ListDocumentFiles(ctx, db.ListDocumentFilesParams{WorkspaceID: po.WorkspaceID, DocumentType: "purchase_order", DocumentID: po.ID})
+	if err == nil {
+		view.Files = make([]DocumentFileView, 0, len(files))
+		for _, f := range files {
+			view.Files = append(view.Files, DocumentFileView{
+				ID:             f.ID,
+				EvidenceID:     f.EvidenceID,
+				FileName:       f.FileName,
+				MimeType:       f.MimeType,
+				SizeBytes:      f.SizeBytes,
+				CreatedAt:      f.CreatedAt.Time,
+				UploadedByName: f.UploadedByName,
+			})
+		}
 	}
 	versions, err := q.ListPurchaseOrderVersions(ctx, db.ListPurchaseOrderVersionsParams{WorkspaceID: po.WorkspaceID, PurchaseOrderID: po.ID})
 	if err == nil && len(versions) > 0 {

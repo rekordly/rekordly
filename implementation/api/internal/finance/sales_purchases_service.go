@@ -493,9 +493,10 @@ type CreatePurchaseInput struct {
 }
 
 type PurchaseDetail struct {
-	Purchase db.Purchase       `json:"purchase"`
-	Items    []db.PurchaseItem `json:"items"`
-	Payments []PaymentDetail   `json:"payments,omitempty"`
+	Purchase db.Purchase        `json:"purchase"`
+	Items    []db.PurchaseItem  `json:"items"`
+	Payments []PaymentDetail    `json:"payments,omitempty"`
+	Files    []DocumentFileView `json:"files,omitempty"`
 }
 
 func (s *Service) CreatePurchase(ctx context.Context, workspaceID, userID int64, in CreatePurchaseInput) (PurchaseDetail, error) {
@@ -692,10 +693,37 @@ func (s *Service) GetPurchase(ctx context.Context, workspaceID, purchaseID int64
 	if err != nil {
 		return PurchaseDetail{}, err
 	}
+
+	files, err := s.queries.ListDocumentFiles(ctx, db.ListDocumentFilesParams{
+		WorkspaceID:  workspaceID,
+		DocumentType: "purchase",
+		DocumentID:   purchaseID,
+	})
+	var filesView []DocumentFileView
+	if err == nil && len(files) > 0 {
+		filesView = make([]DocumentFileView, 0, len(files))
+		for _, f := range files {
+			uploader := "Team"
+			if f.UploadedByName != "" {
+				uploader = f.UploadedByName
+			}
+			filesView = append(filesView, DocumentFileView{
+				ID:             f.ID,
+				EvidenceID:     f.EvidenceID,
+				FileName:       f.FileName,
+				MimeType:       f.MimeType,
+				SizeBytes:      f.SizeBytes,
+				CreatedAt:      f.CreatedAt.Time,
+				UploadedByName: uploader,
+			})
+		}
+	}
+
 	return PurchaseDetail{
 		Purchase: purchase,
 		Items:    items,
 		Payments: payments,
+		Files:    filesView,
 	}, nil
 }
 

@@ -31,13 +31,71 @@ func (q *Queries) AttachEvidenceAssetsToMoneyRecord(ctx context.Context, arg Att
 	return result.RowsAffected(), nil
 }
 
+const createDocumentEvidenceAsset = `-- name: CreateDocumentEvidenceAsset :one
+INSERT INTO evidence_assets (
+    workspace_id, uploaded_by_user_id, storage_provider,
+    asset_id, delivery_type, original_file_name, byte_size, mime_type, sha256_hash,
+    status, purpose
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'document')
+RETURNING id, workspace_id, draft_id, money_record_id, uploaded_by_user_id, storage_provider, asset_id, delivery_type, original_file_name, byte_size, mime_type, sha256_hash, status, retention_until, created_at, updated_at, purpose
+`
+
+type CreateDocumentEvidenceAssetParams struct {
+	WorkspaceID      int64       `json:"workspace_id"`
+	UploadedByUserID pgtype.Int8 `json:"uploaded_by_user_id"`
+	StorageProvider  string      `json:"storage_provider"`
+	AssetID          string      `json:"asset_id"`
+	DeliveryType     string      `json:"delivery_type"`
+	OriginalFileName string      `json:"original_file_name"`
+	ByteSize         int64       `json:"byte_size"`
+	MimeType         string      `json:"mime_type"`
+	Sha256Hash       pgtype.Text `json:"sha256_hash"`
+	Status           string      `json:"status"`
+}
+
+func (q *Queries) CreateDocumentEvidenceAsset(ctx context.Context, arg CreateDocumentEvidenceAssetParams) (EvidenceAsset, error) {
+	row := q.db.QueryRow(ctx, createDocumentEvidenceAsset,
+		arg.WorkspaceID,
+		arg.UploadedByUserID,
+		arg.StorageProvider,
+		arg.AssetID,
+		arg.DeliveryType,
+		arg.OriginalFileName,
+		arg.ByteSize,
+		arg.MimeType,
+		arg.Sha256Hash,
+		arg.Status,
+	)
+	var i EvidenceAsset
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.DraftID,
+		&i.MoneyRecordID,
+		&i.UploadedByUserID,
+		&i.StorageProvider,
+		&i.AssetID,
+		&i.DeliveryType,
+		&i.OriginalFileName,
+		&i.ByteSize,
+		&i.MimeType,
+		&i.Sha256Hash,
+		&i.Status,
+		&i.RetentionUntil,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Purpose,
+	)
+	return i, err
+}
+
 const createEvidenceAsset = `-- name: CreateEvidenceAsset :one
 INSERT INTO evidence_assets (
     workspace_id, draft_id, money_record_id, uploaded_by_user_id, storage_provider,
     asset_id, delivery_type, original_file_name, byte_size, mime_type, sha256_hash,
     status, retention_until
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-RETURNING id, workspace_id, draft_id, money_record_id, uploaded_by_user_id, storage_provider, asset_id, delivery_type, original_file_name, byte_size, mime_type, sha256_hash, status, retention_until, created_at, updated_at
+RETURNING id, workspace_id, draft_id, money_record_id, uploaded_by_user_id, storage_provider, asset_id, delivery_type, original_file_name, byte_size, mime_type, sha256_hash, status, retention_until, created_at, updated_at, purpose
 `
 
 type CreateEvidenceAssetParams struct {
@@ -90,6 +148,7 @@ func (q *Queries) CreateEvidenceAsset(ctx context.Context, arg CreateEvidenceAss
 		&i.RetentionUntil,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Purpose,
 	)
 	return i, err
 }
@@ -461,6 +520,41 @@ func (q *Queries) DiscardMoneyRecordDraft(ctx context.Context, arg DiscardMoneyR
 	return i, err
 }
 
+const getEvidenceAssetByID = `-- name: GetEvidenceAssetByID :one
+SELECT id, workspace_id, draft_id, money_record_id, uploaded_by_user_id, storage_provider, asset_id, delivery_type, original_file_name, byte_size, mime_type, sha256_hash, status, retention_until, created_at, updated_at, purpose FROM evidence_assets
+WHERE workspace_id = $1 AND id = $2 AND status <> 'deleted'
+`
+
+type GetEvidenceAssetByIDParams struct {
+	WorkspaceID int64 `json:"workspace_id"`
+	ID          int64 `json:"id"`
+}
+
+func (q *Queries) GetEvidenceAssetByID(ctx context.Context, arg GetEvidenceAssetByIDParams) (EvidenceAsset, error) {
+	row := q.db.QueryRow(ctx, getEvidenceAssetByID, arg.WorkspaceID, arg.ID)
+	var i EvidenceAsset
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.DraftID,
+		&i.MoneyRecordID,
+		&i.UploadedByUserID,
+		&i.StorageProvider,
+		&i.AssetID,
+		&i.DeliveryType,
+		&i.OriginalFileName,
+		&i.ByteSize,
+		&i.MimeType,
+		&i.Sha256Hash,
+		&i.Status,
+		&i.RetentionUntil,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Purpose,
+	)
+	return i, err
+}
+
 const getMoneyRecordByDraftID = `-- name: GetMoneyRecordByDraftID :one
 SELECT id, workspace_id, draft_id, transaction_id, direction, scope_type, purpose, entry_method, status, amount_minor, currency, currency_exponent, effective_date, money_account_id, destination_account_id, category_id, counterparty_id, counterparty_name, description, reference, created_by_user_id, confirmed_by_user_id, confirmed_at, reversed_at, reversal_record_id, created_at, sync_version FROM money_records
 WHERE draft_id = $1 AND workspace_id = $2
@@ -742,7 +836,7 @@ func (q *Queries) GetMoneyRecordLedgerEntry(ctx context.Context, arg GetMoneyRec
 }
 
 const getVerifiedEvidenceAssetByID = `-- name: GetVerifiedEvidenceAssetByID :one
-SELECT id, workspace_id, draft_id, money_record_id, uploaded_by_user_id, storage_provider, asset_id, delivery_type, original_file_name, byte_size, mime_type, sha256_hash, status, retention_until, created_at, updated_at FROM evidence_assets
+SELECT id, workspace_id, draft_id, money_record_id, uploaded_by_user_id, storage_provider, asset_id, delivery_type, original_file_name, byte_size, mime_type, sha256_hash, status, retention_until, created_at, updated_at, purpose FROM evidence_assets
 WHERE workspace_id = $1 AND id = $2 AND status = 'verified'
 `
 
@@ -771,12 +865,13 @@ func (q *Queries) GetVerifiedEvidenceAssetByID(ctx context.Context, arg GetVerif
 		&i.RetentionUntil,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Purpose,
 	)
 	return i, err
 }
 
 const listEvidenceAssetsByDraftID = `-- name: ListEvidenceAssetsByDraftID :many
-SELECT id, workspace_id, draft_id, money_record_id, uploaded_by_user_id, storage_provider, asset_id, delivery_type, original_file_name, byte_size, mime_type, sha256_hash, status, retention_until, created_at, updated_at FROM evidence_assets
+SELECT id, workspace_id, draft_id, money_record_id, uploaded_by_user_id, storage_provider, asset_id, delivery_type, original_file_name, byte_size, mime_type, sha256_hash, status, retention_until, created_at, updated_at, purpose FROM evidence_assets
 WHERE workspace_id = $1 AND draft_id = $2 AND status <> 'deleted'
 ORDER BY id ASC
 `
@@ -812,6 +907,7 @@ func (q *Queries) ListEvidenceAssetsByDraftID(ctx context.Context, arg ListEvide
 			&i.RetentionUntil,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Purpose,
 		); err != nil {
 			return nil, err
 		}
@@ -824,7 +920,7 @@ func (q *Queries) ListEvidenceAssetsByDraftID(ctx context.Context, arg ListEvide
 }
 
 const listEvidenceAssetsByMoneyRecordID = `-- name: ListEvidenceAssetsByMoneyRecordID :many
-SELECT id, workspace_id, draft_id, money_record_id, uploaded_by_user_id, storage_provider, asset_id, delivery_type, original_file_name, byte_size, mime_type, sha256_hash, status, retention_until, created_at, updated_at FROM evidence_assets
+SELECT id, workspace_id, draft_id, money_record_id, uploaded_by_user_id, storage_provider, asset_id, delivery_type, original_file_name, byte_size, mime_type, sha256_hash, status, retention_until, created_at, updated_at, purpose FROM evidence_assets
 WHERE workspace_id = $1 AND money_record_id = $2 AND status <> 'deleted'
 ORDER BY id ASC
 `
@@ -860,6 +956,7 @@ func (q *Queries) ListEvidenceAssetsByMoneyRecordID(ctx context.Context, arg Lis
 			&i.RetentionUntil,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Purpose,
 		); err != nil {
 			return nil, err
 		}

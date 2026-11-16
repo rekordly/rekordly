@@ -762,6 +762,18 @@ function ProcurementFlowInner({ workspaceId, currency, mode }: WorkspaceInfo & {
             issue_order: sourcePoId > 0 && sourcePo.data && ["draft", "submitted", "approved"].includes(sourcePo.data.status),
             bill: billInput,
             payment: paymentInput,
+            operational_bill:
+              costTreatment === "operational" && extraCostsMinor > BigInt(0) && supplierId
+                ? {
+                    supplier_id: supplierId,
+                    outlet_id: chosenOutletId,
+                    supplier_invoice_number: `EXP-${sourcePoId || "GR"}-${Date.now().toString().slice(-4)}`,
+                    bill_date: date,
+                    amount: minorToMajor(extraCostsMinor, EXPONENT),
+                    currency,
+                    description: extraCostSummary || "Procurement operational costs",
+                  }
+                : undefined,
             lines: items.map((line, idx) => ({
               purchase_order_line_id: poLineMap[idx] || undefined,
               product_id: line.product_id,
@@ -773,24 +785,6 @@ function ProcurementFlowInner({ workspaceId, currency, mode }: WorkspaceInfo & {
           },
           key,
         );
-
-        // If operational cost was selected and there are extra costs + supplier, record operational expense bill
-        if (costTreatment === "operational" && extraCostsMinor > BigInt(0) && supplierId) {
-          await financeApi.createSupplierBill(
-            workspaceId,
-            {
-              supplier_id: supplierId,
-              outlet_id: chosenOutletId,
-              supplier_invoice_number: `EXP-${receiptRes.receipt.id}-${Date.now().toString().slice(-4)}`,
-              bill_date: date,
-              amount: minorToMajor(extraCostsMinor, EXPONENT),
-              currency,
-              bill_type: "direct_expense",
-              description: extraCostSummary || "Procurement operational costs",
-            },
-            `${key}:op-cost`,
-          );
-        }
 
         return { redirect: `/procurement/${receiptRes.receipt.id}` };
       }

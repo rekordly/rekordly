@@ -511,6 +511,63 @@ func (q *Queries) ListPurchaseOrderEvents(ctx context.Context, arg ListPurchaseO
 	return items, nil
 }
 
+const listPurchaseOrderEventsWithActor = `-- name: ListPurchaseOrderEventsWithActor :many
+SELECT
+    e.id, e.workspace_id, e.purchase_order_id, e.event_type, e.order_version, e.note, e.actor_user_id, e.created_at,
+    COALESCE(NULLIF(u.display_name, ''), 'Team')::text AS actor_name
+FROM purchase_order_events e
+LEFT JOIN users u ON u.id = e.actor_user_id
+WHERE e.workspace_id = $1 AND e.purchase_order_id = $2
+ORDER BY e.id ASC
+`
+
+type ListPurchaseOrderEventsWithActorParams struct {
+	WorkspaceID     int64 `json:"workspace_id"`
+	PurchaseOrderID int64 `json:"purchase_order_id"`
+}
+
+type ListPurchaseOrderEventsWithActorRow struct {
+	ID              int64              `json:"id"`
+	WorkspaceID     int64              `json:"workspace_id"`
+	PurchaseOrderID int64              `json:"purchase_order_id"`
+	EventType       string             `json:"event_type"`
+	OrderVersion    int32              `json:"order_version"`
+	Note            pgtype.Text        `json:"note"`
+	ActorUserID     int64              `json:"actor_user_id"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	ActorName       string             `json:"actor_name"`
+}
+
+func (q *Queries) ListPurchaseOrderEventsWithActor(ctx context.Context, arg ListPurchaseOrderEventsWithActorParams) ([]ListPurchaseOrderEventsWithActorRow, error) {
+	rows, err := q.db.Query(ctx, listPurchaseOrderEventsWithActor, arg.WorkspaceID, arg.PurchaseOrderID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPurchaseOrderEventsWithActorRow{}
+	for rows.Next() {
+		var i ListPurchaseOrderEventsWithActorRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.PurchaseOrderID,
+			&i.EventType,
+			&i.OrderVersion,
+			&i.Note,
+			&i.ActorUserID,
+			&i.CreatedAt,
+			&i.ActorName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPurchaseOrders = `-- name: ListPurchaseOrders :many
 SELECT id, workspace_id, source_purchase_request_id, supplier_id, status, version, order_number, currency, currency_exponent, total_minor, idempotency_key, created_by_user_id, approved_by_user_id, issued_by_user_id, issued_at, created_at, updated_at, cancellation_reason, closed_reason, acknowledged_at, acknowledgement_note, outlet_id, expected_date, payment_terms, notes FROM purchase_orders WHERE workspace_id=$1 AND ($3::bigint IS NULL OR id < $3) ORDER BY id DESC LIMIT $2
 `

@@ -64,6 +64,7 @@ type PurchaseRequestDecisionView struct {
 	RequestVersion int32     `json:"request_version"`
 	Reason         *string   `json:"reason,omitempty"`
 	ActorUserID    int64     `json:"actor_user_id"`
+	ActorName      string    `json:"actor_name"`
 	CreatedAt      time.Time `json:"created_at"`
 }
 
@@ -98,6 +99,7 @@ type PurchaseRequestView struct {
 	Decisions            []PurchaseRequestDecisionView `json:"decisions,omitempty"`
 	// Orders made from this request (detail endpoint only).
 	Orders []PurchaseRequestOrderView `json:"orders,omitempty"`
+	Files  []DocumentFileView         `json:"files,omitempty"`
 }
 
 type PurchaseRequestOrderView struct {
@@ -611,15 +613,30 @@ func purchaseRequestDetail(ctx context.Context, queries *db.Queries, request db.
 			EstimatedUnitPriceMinor: fmt.Sprint(line.EstimatedUnitPriceMinor), EstimatedLineTotalMinor: fmt.Sprint(line.EstimatedLineTotalMinor),
 		})
 	}
-	decisions, err := queries.ListPurchaseRequestDecisions(ctx, db.ListPurchaseRequestDecisionsParams{WorkspaceID: request.WorkspaceID, PurchaseRequestID: request.ID})
+	decisions, err := queries.ListPurchaseRequestDecisionsWithActor(ctx, db.ListPurchaseRequestDecisionsWithActorParams{WorkspaceID: request.WorkspaceID, PurchaseRequestID: request.ID})
 	if err != nil {
 		return PurchaseRequestView{}, err
 	}
 	view.Decisions = make([]PurchaseRequestDecisionView, 0, len(decisions))
 	for _, decision := range decisions {
 		view.Decisions = append(view.Decisions, PurchaseRequestDecisionView{
-			ID: decision.ID, Command: decision.Command, RequestVersion: decision.RequestVersion, Reason: nullableText(decision.Reason), ActorUserID: decision.ActorUserID, CreatedAt: decision.CreatedAt.Time,
+			ID: decision.ID, Command: decision.Command, RequestVersion: decision.RequestVersion, Reason: nullableText(decision.Reason), ActorUserID: decision.ActorUserID, ActorName: decision.ActorName, CreatedAt: decision.CreatedAt.Time,
 		})
+	}
+	files, err := queries.ListDocumentFiles(ctx, db.ListDocumentFilesParams{WorkspaceID: request.WorkspaceID, DocumentType: "purchase_request", DocumentID: request.ID})
+	if err == nil {
+		view.Files = make([]DocumentFileView, 0, len(files))
+		for _, f := range files {
+			view.Files = append(view.Files, DocumentFileView{
+				ID:             f.ID,
+				EvidenceID:     f.EvidenceID,
+				FileName:       f.FileName,
+				MimeType:       f.MimeType,
+				SizeBytes:      f.SizeBytes,
+				CreatedAt:      f.CreatedAt.Time,
+				UploadedByName: f.UploadedByName,
+			})
+		}
 	}
 	return view, nil
 }

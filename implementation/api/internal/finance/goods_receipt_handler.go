@@ -108,6 +108,12 @@ func (h *Handler) createGoodsReceipt(c *gin.Context) {
 			return
 		}
 	}
+	if in.OperationalBill != nil {
+		if !ws.HasPermission("purchases.create_bill") && !ws.HasPermission("purchases.create") {
+			c.JSON(403, gin.H{"error": gin.H{"code": "FORBIDDEN", "message": "Missing purchases.create_bill permission"}})
+			return
+		}
+	}
 	if in.Payment != nil {
 		if !ws.HasPermission("purchases.pay_supplier") && !ws.HasPermission("purchases.create") {
 			c.JSON(403, gin.H{"error": gin.H{"code": "FORBIDDEN", "message": "Missing purchases.pay_supplier permission"}})
@@ -128,6 +134,9 @@ func (h *Handler) createGoodsReceipt(c *gin.Context) {
 	resp := gin.H{"receipt": receipt}
 	if receipt.Bill != nil {
 		resp["bill"] = receipt.Bill
+	}
+	if receipt.OperationalBill != nil {
+		resp["operational_bill"] = receipt.OperationalBill
 	}
 	if receipt.Payment != nil {
 		resp["payment"] = receipt.Payment

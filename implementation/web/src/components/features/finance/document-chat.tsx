@@ -59,43 +59,60 @@ export function DocumentChat({
   partyName,
   senderName,
   unreadCount,
+  fetchMessages,
+  sendMessage,
+  isGuest,
+  label,
 }: {
-  workspaceId: number;
+  workspaceId?: number;
   docType: string;
-  docId: number;
+  docId: number | string;
   partyName: string;
   /** Shown to the other side, e.g. the business name. */
   senderName?: string;
   unreadCount?: number;
+  fetchMessages?: () => Promise<ExternalMessage[]>;
+  sendMessage?: (message: string) => Promise<ExternalMessage | void>;
+  isGuest?: boolean;
+  label?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [seen, setSeen] = useState(() => (typeof window === "undefined" ? 0 : readSeen(docType, docId)));
+  const [seen, setSeen] = useState(() => (typeof window === "undefined" ? 0 : readSeen(docType, Number(docId) || 0)));
   const [text, setText] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const queryKey = [...moneyKeys.workspace(workspaceId), "document-messages", docType, docId];
+  const queryKey = fetchMessages
+    ? ["public-document-messages", docType, docId]
+    : [...moneyKeys.workspace(workspaceId ?? 0), "document-messages", docType, docId];
   const messages = useQuery({
     queryKey,
-    queryFn: () => financeApi.listTeamDocumentMessages(workspaceId, docType, docId),
+    queryFn: () => (fetchMessages ? fetchMessages() : financeApi.listTeamDocumentMessages(workspaceId!, docType, Number(docId))),
     enabled: open,
     refetchInterval: open ? 15_000 : false,
   });
   const list: ExternalMessage[] = messages.data ?? [];
   const lastId = list.length ? Math.max(...list.map((message) => message.id)) : 0;
   const unread = open
-    ? list.filter((message) => message.sender_type !== "team" && message.id > seen).length
+    ? list.filter((message) => (isGuest ? message.sender_type === "team" : message.sender_type !== "team") && message.id > seen).length
     : (unreadCount ?? 0);
 
   // While open, everything shown counts as read, and the newest message stays in view.
   useEffect(() => {
-    if (!open) return;
-    if (lastId) writeSeen(docType, docId, lastId);
+    if (!open || !lastId) return;
+    if (workspaceId && typeof docId === "number") {
+      void financeApi.markDocumentMessagesRead(workspaceId, docType, docId, lastId).catch(() => {});
+    } else {
+      writeSeen(docType, Number(docId) || 0, lastId);
+    }
     endRef.current?.scrollIntoView({ block: "end" });
-  }, [open, lastId, docType, docId]);
+  }, [open, lastId, workspaceId, docType, docId]);
 
   const send = useMutation({
-    mutationFn: (message: string) => financeApi.postTeamDocumentMessage(workspaceId, docType, docId, message, senderName),
+    mutationFn: (message: string) =>
+      sendMessage
+        ? sendMessage(message)
+        : financeApi.postTeamDocumentMessage(workspaceId!, docType, Number(docId), message, senderName),
     onSuccess: () => {
       setText("");
       void messages.refetch();
@@ -131,18 +148,38 @@ export function DocumentChat({
     else groups.push({ day, items: [message] });
   }
 
+  const isMine = (message: ExternalMessage) => {
+    if (isGuest) {
+      return message.sender_type === "guest";
+    }
+    return message.sender_type === "team";
+  };
+
   return (
     <>
       <span className="relative inline-flex">
-        <button
-          type="button"
-          aria-label={unread ? `Messages, ${unread} unread` : "Messages"}
-          title="Messages"
-          onClick={() => setOpen(true)}
-          className="grid size-10 cursor-pointer place-items-center rounded-full border border-border bg-surface text-foreground transition-colors hover:bg-surface-secondary"
-        >
-          <ChatCircleDots size={19} weight="duotone" aria-hidden="true" />
-        </button>
+        {label ? (
+          <button
+            type="button"
+            aria-label={unread ? `${label}, ${unread} unread` : label}
+            title={label}
+            onClick={() => setOpen(true)}
+            className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-surface px-3 text-[13px] font-medium text-foreground transition-colors hover:bg-surface-secondary"
+          >
+            <ChatCircleDots size={17} weight="duotone" aria-hidden="true" />
+            <span>{label}</span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            aria-label={unread ? `Messages, ${unread} unread` : "Messages"}
+            title="Messages"
+            onClick={() => setOpen(true)}
+            className="grid size-10 cursor-pointer place-items-center rounded-full border border-border bg-surface text-foreground transition-colors hover:bg-surface-secondary"
+          >
+            <ChatCircleDots size={19} weight="duotone" aria-hidden="true" />
+          </button>
+        )}
         {unread ? (
           <span aria-hidden="true" className="pointer-events-none absolute -top-1 -right-1 grid h-5 min-w-5 place-items-center rounded-full bg-danger px-1 text-[11px] font-bold text-white ring-2 ring-background">
             {unread > 9 ? "9+" : unread}
@@ -208,7 +245,7 @@ export function DocumentChat({
               <div key={group.day} className="space-y-2">
                 <p className="text-center text-[11px] font-semibold text-muted">{group.day}</p>
                 {group.items.map((message) => {
-                  const mine = message.sender_type === "team";
+                  const mine = isMine(message);
                   return (
                     <div key={message.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
                       <div className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-[14px] ${mine ? "rounded-br-md bg-primary text-primary-foreground" : "rounded-bl-md bg-surface-secondary text-foreground"}`}>

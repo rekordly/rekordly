@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -801,4 +802,110 @@ func ginMap(pairs ...any) map[string]any {
 		}
 	}
 	return m
+}
+
+type AttachDocumentFileInput struct {
+	EvidenceID     int64  `json:"evidence_id,omitempty"`
+	AssetID        string `json:"asset_id,omitempty"`
+	FileName       string `json:"file_name,omitempty"`
+	MimeType       string `json:"mime_type,omitempty"`
+	SizeBytes      int64  `json:"size_bytes,omitempty"`
+	IdempotencyKey string `json:"idempotency_key,omitempty"`
+}
+
+func (s *Service) AttachDocumentFile(ctx context.Context, workspaceID, userID int64, docType string, docID int64, in AttachDocumentFileInput) (DocumentFileView, error) {
+	if !isAllowedDocumentType(docType) {
+		return DocumentFileView{}, errors.New("unsupported document type")
+	}
+	if docID <= 0 {
+		return DocumentFileView{}, errors.New("invalid document ID")
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return DocumentFileView{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := s.queries.WithTx(tx)
+
+	var evidenceID int64
+	var fileName string
+	var mimeType string
+	var sizeBytes int64
+
+	if in.EvidenceID > 0 {
+		// Existing asset in same workspace
+		asset, err := q.GetEvidenceAssetByID(ctx, db.GetEvidenceAssetByIDParams{
+			WorkspaceID: workspaceID,
+			ID:          in.EvidenceID,
+		})
+		if err != nil {
+			return DocumentFileView{}, fmt.Errorf("evidence asset not found in workspace: %w", err)
+		}
+		evidenceID = asset.ID
+		fileName = asset.OriginalFileName
+		mimeType = asset.MimeType
+		sizeBytes = asset.ByteSize
+	} else if strings.TrimSpace(in.AssetID) != "" {
+		assetID := strings.TrimSpace(in.AssetID)
+		if err := validateEvidenceIntent(in.FileName, in.MimeType, in.SizeBytes); err != nil {
+			return DocumentFileView{}, err
+		}
+		if s.evidenceUploader != nil {
+			verified, err := s.evidenceUploader.Verify(ctx, assetID)
+			if err != nil {
+				return DocumentFileView{}, err
+			}
+			if verified.Bytes != in.SizeBytes || verified.MimeType != strings.ToLower(strings.TrimSpace(in.MimeType)) {
+				return DocumentFileView{}, ErrEvidenceAsset
+			}
+		}
+
+		asset, err := q.CreateDocumentEvidenceAsset(ctx, db.CreateDocumentEvidenceAssetParams{
+			WorkspaceID:      workspaceID,
+			UploadedByUserID: pgtype.Int8{Int64: userID, Valid: true},
+			StorageProvider:  "cloudinary",
+			AssetID:          assetID,
+			DeliveryType:     "authenticated",
+			OriginalFileName: filepath.Base(in.FileName),
+			ByteSize:         in.SizeBytes,
+			MimeType:         strings.ToLower(strings.TrimSpace(in.MimeType)),
+			Sha256Hash:       pgtype.Text{},
+			Status:           "verified",
+		})
+		if err != nil {
+			return DocumentFileView{}, fmt.Errorf("create document evidence asset: %w", err)
+		}
+		evidenceID = asset.ID
+		fileName = asset.OriginalFileName
+		mimeType = asset.MimeType
+		sizeBytes = asset.ByteSize
+	} else {
+		return DocumentFileView{}, errors.New("either evidence_id or asset_id is required")
+	}
+
+	row, err := q.InsertDocumentFile(ctx, db.InsertDocumentFileParams{
+		WorkspaceID:     workspaceID,
+		DocumentType:    docType,
+		DocumentID:      docID,
+		EvidenceAssetID: evidenceID,
+		CreatedByUserID: userID,
+	})
+	if err != nil {
+		return DocumentFileView{}, fmt.Errorf("link document file: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return DocumentFileView{}, fmt.Errorf("commit attach document file: %w", err)
+	}
+
+	return DocumentFileView{
+		ID:             row.ID,
+		EvidenceID:     evidenceID,
+		FileName:       fileName,
+		MimeType:       mimeType,
+		SizeBytes:      sizeBytes,
+		CreatedAt:      row.CreatedAt.Time,
+		UploadedByName: "You",
+	}, nil
 }

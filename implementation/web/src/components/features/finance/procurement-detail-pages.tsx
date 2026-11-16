@@ -51,6 +51,7 @@ import { financeApi, formatMinorAmount, moneyKeys } from "@/lib/money";
 import type { PurchaseOrder } from "@/types/finance";
 
 import { DocumentChat } from "./document-chat";
+import { DocumentFilesTab } from "./document-files-tab";
 import {
   ActivityCard,
   daysUntil,
@@ -143,7 +144,7 @@ function PurchaseRequestDetailContent({ workspaceId, id }: WorkspaceInfo & { id:
     ...(req.decisions ?? []).map((decision) => ({
       key: `d-${decision.id}`,
       title: DECISION_TITLE[decision.command] ?? capitalise(decision.command.replace(/_/g, " ")),
-      subtitle: decision.reason ?? undefined,
+      subtitle: [decision.actor_name ? `by ${decision.actor_name}` : "", decision.reason].filter(Boolean).join(" · ") || undefined,
       date: decision.created_at,
       tone: (decision.command === "reject" || decision.command === "cancel" ? "danger" : "primary") as ActivityItem["tone"],
     })),
@@ -403,7 +404,7 @@ function PurchaseOrderDetailContent({ workspaceId, id }: WorkspaceInfo & { id: n
     ...(order.events ?? []).map((event) => ({
       key: `e-${event.id}`,
       title: PO_EVENT[event.event_type] ?? capitalise(event.event_type.replace(/_/g, " ")),
-      subtitle: event.note ?? undefined,
+      subtitle: [event.actor_name ? `by ${event.actor_name}` : "", event.note].filter(Boolean).join(" · ") || undefined,
       date: event.created_at,
       tone: (event.event_type === "cancelled" ? "danger" : "primary") as ActivityItem["tone"],
     })),
@@ -584,6 +585,20 @@ function PurchaseOrderDetailContent({ workspaceId, id }: WorkspaceInfo & { id: n
                   </div>
                 ) : null}
               </>
+            ),
+          },
+          {
+            key: "files",
+            label: "Files",
+            count: order.files?.length,
+            content: (
+              <DocumentFilesTab
+                workspaceId={workspaceId}
+                docType="purchase_order"
+                docId={order.id}
+                files={order.files ?? []}
+                onChanged={() => void orderQuery.refetch()}
+              />
             ),
           },
         ]}
@@ -797,6 +812,20 @@ function GoodsReceiptDetailContent({ workspaceId, currency, id }: WorkspaceInfo 
               />
             ),
           },
+          {
+            key: "files",
+            label: "Files",
+            count: receipt.files?.length,
+            content: (
+              <DocumentFilesTab
+                workspaceId={workspaceId}
+                docType="goods_receipt"
+                docId={receipt.id}
+                files={receipt.files ?? []}
+                onChanged={() => void receiptQuery.refetch()}
+              />
+            ),
+          },
         ]}
       />
       <ActivityCard items={activity} empty={`Received on ${formatDate(receipt.received_on)}.`} />
@@ -913,6 +942,24 @@ function SupplierBillDetailContent({ workspaceId, currency, id }: WorkspaceInfo 
     }),
   ];
 
+  const activity: ActivityItem[] = [
+    ...(bill.events ?? []).map((event) => ({
+      key: `e-${event.id}`,
+      title: capitalise(event.event_type.replace(/_/g, " ")),
+      subtitle: [event.actor_name ? `by ${event.actor_name}` : "", event.note].filter(Boolean).join(" · ") || undefined,
+      date: event.created_at,
+      tone: (event.event_type === "rejected" || event.event_type === "disputed" ? "danger" : "primary") as ActivityItem["tone"],
+    })),
+    ...(bill.payments ?? []).map((pmt) => ({
+      key: `p-${pmt.id}`,
+      title: `Payment recorded${pmt.reference ? ` · ${pmt.reference}` : ""}`,
+      subtitle: pmt.account_name ? `via ${pmt.account_name}` : undefined,
+      date: pmt.payment_date,
+      amount: money(pmt.amount_minor),
+      tone: "primary" as ActivityItem["tone"],
+    })),
+  ].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+
   return (
     <DocumentShell
       back={back}
@@ -978,7 +1025,20 @@ function SupplierBillDetailContent({ workspaceId, currency, id }: WorkspaceInfo 
                 rows={bill.lines ?? []}
                 rowKey={(line) => line.id}
                 columns={[
-                  { key: "item", label: "Item", render: (line) => <span className="font-semibold">{line.description}</span> },
+                  {
+                    key: "item",
+                    label: "Item",
+                    render: (line) => (
+                      <div>
+                        <span className="font-semibold">{line.description}</span>
+                        {line.variance_minor && line.variance_minor !== "0" ? (
+                          <div className="text-[11px] text-warning">
+                            {BigInt(line.variance_minor) > 0 ? "+" : ""}{money(line.variance_minor)} vs expected ({money(line.expected_unit_cost_minor)})
+                          </div>
+                        ) : null}
+                      </div>
+                    ),
+                  },
                   { key: "qty", label: "Quantity", align: "right", render: (line) => trimQty(line.quantity) },
                   { key: "cost", label: "Unit cost", align: "right", render: (line) => money(line.unit_cost_minor) },
                   { key: "discount", label: "Discount", align: "right", render: (line) => (line.discount_minor && line.discount_minor !== "0" ? `−${money(line.discount_minor)}` : <span className="text-muted">—</span>) },
@@ -989,8 +1049,46 @@ function SupplierBillDetailContent({ workspaceId, currency, id }: WorkspaceInfo 
               />
             ),
           },
+          {
+            key: "payments",
+            label: "Payments",
+            count: bill.payments?.length,
+            content: (
+              <ItemsTable
+                rows={bill.payments ?? []}
+                rowKey={(p) => p.id}
+                empty="No payments recorded."
+                columns={[
+                  { key: "date", label: "Payment date", render: (p) => formatDate(p.payment_date) },
+                  { key: "account", label: "Account", render: (p) => p.account_name || "—" },
+                  { key: "ref", label: "Reference", render: (p) => p.reference || "—" },
+                  { key: "amount", label: "Amount", align: "right", render: (p) => <span className="font-semibold">{money(p.amount_minor)}</span> },
+                ]}
+                card={(p) => ({
+                  title: money(p.amount_minor),
+                  sub: `${formatDate(p.payment_date)}${p.account_name ? ` · ${p.account_name}` : ""}`,
+                  amount: p.reference || undefined,
+                })}
+              />
+            ),
+          },
+          {
+            key: "files",
+            label: "Files",
+            count: bill.files?.length,
+            content: (
+              <DocumentFilesTab
+                workspaceId={workspaceId}
+                docType="supplier_bill"
+                docId={bill.id}
+                files={bill.files ?? []}
+                onChanged={() => void billQuery.refetch()}
+              />
+            ),
+          },
         ]}
       />
+      <ActivityCard items={activity} />
 
       <PaymentDrawer
         workspaceId={workspaceId}
@@ -1107,6 +1205,20 @@ function PurchaseDetailContent({ workspaceId, currency, id }: WorkspaceInfo & { 
                   amount: <span className="text-primary">{money(payment.total_amount_minor)}</span>,
                 }))}
                 empty="No payments yet."
+              />
+            ),
+          },
+          {
+            key: "files",
+            label: "Files",
+            count: purchaseQuery.data.files?.length,
+            content: (
+              <DocumentFilesTab
+                workspaceId={workspaceId}
+                docType="purchase"
+                docId={purchase.id}
+                files={purchaseQuery.data.files ?? []}
+                onChanged={() => void purchaseQuery.refetch()}
               />
             ),
           },

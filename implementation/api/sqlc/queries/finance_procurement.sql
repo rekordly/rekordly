@@ -95,6 +95,15 @@ FROM purchase_request_decisions
 WHERE workspace_id = $1 AND purchase_request_id = $2
 ORDER BY id ASC;
 
+-- name: ListPurchaseRequestDecisionsWithActor :many
+SELECT
+    d.id, d.workspace_id, d.purchase_request_id, d.command, d.request_version, d.reason, d.actor_user_id, d.created_at,
+    COALESCE(NULLIF(u.display_name, ''), 'Team')::text AS actor_name
+FROM purchase_request_decisions d
+LEFT JOIN users u ON u.id = d.actor_user_id
+WHERE d.workspace_id = $1 AND d.purchase_request_id = $2
+ORDER BY d.id ASC;
+
 -- name: CountUnreadDocumentMessages :one
 SELECT count(*)::bigint AS unread_count
 FROM external_messages m
@@ -118,3 +127,22 @@ ON CONFLICT (workspace_id, user_id, document_type, document_id)
 DO UPDATE SET
   last_read_message_id = GREATEST(document_message_reads.last_read_message_id, EXCLUDED.last_read_message_id),
   updated_at = now();
+
+-- name: InsertDocumentFile :one
+INSERT INTO document_files (workspace_id, document_type, document_id, evidence_asset_id, created_by_user_id)
+VALUES (@workspace_id, @document_type, @document_id, @evidence_asset_id, @created_by_user_id)
+RETURNING *;
+
+-- name: DeleteDocumentFile :execrows
+DELETE FROM document_files
+WHERE workspace_id = @workspace_id AND document_type = @document_type AND document_id = @document_id AND id = @id;
+
+-- name: ListDocumentFiles :many
+SELECT
+    df.id, df.evidence_asset_id AS evidence_id, ea.original_file_name AS file_name, ea.mime_type, ea.byte_size AS size_bytes, df.created_at,
+    COALESCE(NULLIF(u.display_name, ''), 'Team')::text AS uploaded_by_name
+FROM document_files df
+JOIN evidence_assets ea ON ea.id = df.evidence_asset_id AND ea.workspace_id = df.workspace_id
+LEFT JOIN users u ON u.id = df.created_by_user_id
+WHERE df.workspace_id = @workspace_id AND df.document_type = @document_type AND df.document_id = @document_id
+ORDER BY df.created_at DESC, df.id DESC;

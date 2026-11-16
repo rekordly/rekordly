@@ -271,6 +271,31 @@ func (q *Queries) CreatePurchaseRequestLine(ctx context.Context, arg CreatePurch
 	return id, err
 }
 
+const deleteDocumentFile = `-- name: DeleteDocumentFile :execrows
+DELETE FROM document_files
+WHERE workspace_id = $1 AND document_type = $2 AND document_id = $3 AND id = $4
+`
+
+type DeleteDocumentFileParams struct {
+	WorkspaceID  int64  `json:"workspace_id"`
+	DocumentType string `json:"document_type"`
+	DocumentID   int64  `json:"document_id"`
+	ID           int64  `json:"id"`
+}
+
+func (q *Queries) DeleteDocumentFile(ctx context.Context, arg DeleteDocumentFileParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteDocumentFile,
+		arg.WorkspaceID,
+		arg.DocumentType,
+		arg.DocumentID,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getPurchaseRequestByID = `-- name: GetPurchaseRequestByID :one
 SELECT id, workspace_id, supplier_id, status, version, needed_by, reason, reference, currency, currency_exponent, estimated_total_minor, idempotency_key, created_by_user_id, submitted_by_user_id, submitted_at, approved_by_user_id, approved_at, created_at, updated_at, priority, latest_decision_reason, outlet_id FROM purchase_requests
 WHERE id = $1 AND workspace_id = $2
@@ -474,6 +499,96 @@ func (q *Queries) GetPurchaseRequestLines(ctx context.Context, arg GetPurchaseRe
 	return items, nil
 }
 
+const insertDocumentFile = `-- name: InsertDocumentFile :one
+INSERT INTO document_files (workspace_id, document_type, document_id, evidence_asset_id, created_by_user_id)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, workspace_id, document_type, document_id, evidence_asset_id, created_by_user_id, created_at
+`
+
+type InsertDocumentFileParams struct {
+	WorkspaceID     int64  `json:"workspace_id"`
+	DocumentType    string `json:"document_type"`
+	DocumentID      int64  `json:"document_id"`
+	EvidenceAssetID int64  `json:"evidence_asset_id"`
+	CreatedByUserID int64  `json:"created_by_user_id"`
+}
+
+func (q *Queries) InsertDocumentFile(ctx context.Context, arg InsertDocumentFileParams) (DocumentFile, error) {
+	row := q.db.QueryRow(ctx, insertDocumentFile,
+		arg.WorkspaceID,
+		arg.DocumentType,
+		arg.DocumentID,
+		arg.EvidenceAssetID,
+		arg.CreatedByUserID,
+	)
+	var i DocumentFile
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.DocumentType,
+		&i.DocumentID,
+		&i.EvidenceAssetID,
+		&i.CreatedByUserID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const listDocumentFiles = `-- name: ListDocumentFiles :many
+SELECT
+    df.id, df.evidence_asset_id AS evidence_id, ea.original_file_name AS file_name, ea.mime_type, ea.byte_size AS size_bytes, df.created_at,
+    COALESCE(NULLIF(u.display_name, ''), 'Team')::text AS uploaded_by_name
+FROM document_files df
+JOIN evidence_assets ea ON ea.id = df.evidence_asset_id AND ea.workspace_id = df.workspace_id
+LEFT JOIN users u ON u.id = df.created_by_user_id
+WHERE df.workspace_id = $1 AND df.document_type = $2 AND df.document_id = $3
+ORDER BY df.created_at DESC, df.id DESC
+`
+
+type ListDocumentFilesParams struct {
+	WorkspaceID  int64  `json:"workspace_id"`
+	DocumentType string `json:"document_type"`
+	DocumentID   int64  `json:"document_id"`
+}
+
+type ListDocumentFilesRow struct {
+	ID             int64              `json:"id"`
+	EvidenceID     int64              `json:"evidence_id"`
+	FileName       string             `json:"file_name"`
+	MimeType       string             `json:"mime_type"`
+	SizeBytes      int64              `json:"size_bytes"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UploadedByName string             `json:"uploaded_by_name"`
+}
+
+func (q *Queries) ListDocumentFiles(ctx context.Context, arg ListDocumentFilesParams) ([]ListDocumentFilesRow, error) {
+	rows, err := q.db.Query(ctx, listDocumentFiles, arg.WorkspaceID, arg.DocumentType, arg.DocumentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListDocumentFilesRow{}
+	for rows.Next() {
+		var i ListDocumentFilesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.EvidenceID,
+			&i.FileName,
+			&i.MimeType,
+			&i.SizeBytes,
+			&i.CreatedAt,
+			&i.UploadedByName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPurchaseRequestDecisions = `-- name: ListPurchaseRequestDecisions :many
 SELECT id, workspace_id, purchase_request_id, command, request_version, reason, actor_user_id, created_at
 FROM purchase_request_decisions
@@ -504,6 +619,63 @@ func (q *Queries) ListPurchaseRequestDecisions(ctx context.Context, arg ListPurc
 			&i.Reason,
 			&i.ActorUserID,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPurchaseRequestDecisionsWithActor = `-- name: ListPurchaseRequestDecisionsWithActor :many
+SELECT
+    d.id, d.workspace_id, d.purchase_request_id, d.command, d.request_version, d.reason, d.actor_user_id, d.created_at,
+    COALESCE(NULLIF(u.display_name, ''), 'Team')::text AS actor_name
+FROM purchase_request_decisions d
+LEFT JOIN users u ON u.id = d.actor_user_id
+WHERE d.workspace_id = $1 AND d.purchase_request_id = $2
+ORDER BY d.id ASC
+`
+
+type ListPurchaseRequestDecisionsWithActorParams struct {
+	WorkspaceID       int64 `json:"workspace_id"`
+	PurchaseRequestID int64 `json:"purchase_request_id"`
+}
+
+type ListPurchaseRequestDecisionsWithActorRow struct {
+	ID                int64              `json:"id"`
+	WorkspaceID       int64              `json:"workspace_id"`
+	PurchaseRequestID int64              `json:"purchase_request_id"`
+	Command           string             `json:"command"`
+	RequestVersion    int32              `json:"request_version"`
+	Reason            pgtype.Text        `json:"reason"`
+	ActorUserID       int64              `json:"actor_user_id"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	ActorName         string             `json:"actor_name"`
+}
+
+func (q *Queries) ListPurchaseRequestDecisionsWithActor(ctx context.Context, arg ListPurchaseRequestDecisionsWithActorParams) ([]ListPurchaseRequestDecisionsWithActorRow, error) {
+	rows, err := q.db.Query(ctx, listPurchaseRequestDecisionsWithActor, arg.WorkspaceID, arg.PurchaseRequestID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPurchaseRequestDecisionsWithActorRow{}
+	for rows.Next() {
+		var i ListPurchaseRequestDecisionsWithActorRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.PurchaseRequestID,
+			&i.Command,
+			&i.RequestVersion,
+			&i.Reason,
+			&i.ActorUserID,
+			&i.CreatedAt,
+			&i.ActorName,
 		); err != nil {
 			return nil, err
 		}

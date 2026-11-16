@@ -232,6 +232,7 @@ export interface PurchaseRequest {
     request_version: number;
     reason?: string | null;
     actor_user_id: number;
+    actor_name?: string;
     created_at: string;
   }>;
   /** Orders made from this request (detail endpoint only). */
@@ -280,6 +281,7 @@ export interface PurchaseOrderEvent {
   order_version: number;
   note?: string | null;
   actor_user_id: number;
+  actor_name?: string;
   created_at: string;
 }
 export interface PurchaseOrderVersion {
@@ -320,6 +322,7 @@ export interface PurchaseOrder {
   receipts?: PurchaseOrderReceipt[];
   bills?: PurchaseOrderBill[];
   paid_minor?: string;
+  files?: DocumentFileView[];
 }
 
 export interface ReceiptOptionLine {
@@ -382,6 +385,7 @@ export interface GoodsReceipt {
   service_accepted?: boolean;
   lines?: GoodsReceiptLine[];
   history?: GoodsReceiptHistoryEvent[];
+  files?: DocumentFileView[];
 }
 export interface SupplierBillLine {
   id: number;
@@ -393,6 +397,33 @@ export interface SupplierBillLine {
   discount_minor: string;
   tax_amount_minor: string;
   line_total_minor: string;
+  expected_unit_cost_minor?: string;
+  variance_minor?: string;
+}
+export interface DocumentFileView {
+  id: number;
+  evidence_id: number;
+  file_name: string;
+  mime_type: string;
+  size_bytes: number;
+  created_at: string;
+  uploaded_by_name: string;
+}
+export interface SupplierBillPayment {
+  id: number;
+  payment_date: string;
+  amount_minor: string;
+  reference?: string | null;
+  account_name?: string | null;
+}
+export interface SupplierBillEvent {
+  id: number;
+  event_type: string;
+  bill_version: number;
+  note?: string | null;
+  actor_user_id: number;
+  actor_name: string;
+  created_at: string;
 }
 export interface SupplierBill {
   id: number;
@@ -422,6 +453,9 @@ export interface SupplierBill {
   dispute_reason?: string | null;
   reversal_reason?: string | null;
   lines?: SupplierBillLine[];
+  payments?: SupplierBillPayment[];
+  events?: SupplierBillEvent[];
+  files?: DocumentFileView[];
 }
 export interface SupplierAdvance {
   id: number;

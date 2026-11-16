@@ -33,6 +33,15 @@ SELECT * FROM purchase_order_events
 WHERE workspace_id=$1 AND purchase_order_id=$2
 ORDER BY id ASC;
 
+-- name: ListPurchaseOrderEventsWithActor :many
+SELECT
+    e.*,
+    COALESCE(NULLIF(u.display_name, ''), 'Team')::text AS actor_name
+FROM purchase_order_events e
+LEFT JOIN users u ON u.id = e.actor_user_id
+WHERE e.workspace_id = $1 AND e.purchase_order_id = $2
+ORDER BY e.id ASC;
+
 -- name: ResolvePurchaseOrder :one
 UPDATE purchase_orders
 SET status=$4,

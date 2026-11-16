@@ -1003,6 +1003,7 @@ type EvidenceAsset struct {
 	RetentionUntil   pgtype.Timestamptz `json:"retention_until"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	Purpose          string             `json:"purpose"`
 }
 
 type ExportRequest struct {

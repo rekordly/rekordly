@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/shopspring/decimal"
 )
 
 const approveSupplierBill = `-- name: ApproveSupplierBill :one
@@ -431,6 +432,211 @@ func (q *Queries) GetThreeWayMatchTotals(ctx context.Context, arg GetThreeWayMat
 	var i GetThreeWayMatchTotalsRow
 	err := row.Scan(&i.OrderedMinor, &i.ReceivedMinor, &i.BilledMinor)
 	return i, err
+}
+
+const insertSupplierBillEvent = `-- name: InsertSupplierBillEvent :exec
+INSERT INTO supplier_bill_events (workspace_id, supplier_bill_id, event_type, bill_version, note, actor_user_id)
+VALUES ($1, $2, $3, $4, $5, $6)
+`
+
+type InsertSupplierBillEventParams struct {
+	WorkspaceID    int64       `json:"workspace_id"`
+	SupplierBillID int64       `json:"supplier_bill_id"`
+	EventType      string      `json:"event_type"`
+	BillVersion    int32       `json:"bill_version"`
+	Note           pgtype.Text `json:"note"`
+	ActorUserID    int64       `json:"actor_user_id"`
+}
+
+func (q *Queries) InsertSupplierBillEvent(ctx context.Context, arg InsertSupplierBillEventParams) error {
+	_, err := q.db.Exec(ctx, insertSupplierBillEvent,
+		arg.WorkspaceID,
+		arg.SupplierBillID,
+		arg.EventType,
+		arg.BillVersion,
+		arg.Note,
+		arg.ActorUserID,
+	)
+	return err
+}
+
+const listSupplierBillEvents = `-- name: ListSupplierBillEvents :many
+SELECT
+    e.id, e.workspace_id, e.supplier_bill_id, e.event_type, e.bill_version, e.note, e.created_at,
+    COALESCE(NULLIF(u.display_name, ''), 'Team')::text AS actor_name
+FROM supplier_bill_events e
+JOIN users u ON u.id = e.actor_user_id
+WHERE e.workspace_id = $1 AND e.supplier_bill_id = $2
+ORDER BY e.created_at DESC, e.id DESC
+`
+
+type ListSupplierBillEventsParams struct {
+	WorkspaceID    int64 `json:"workspace_id"`
+	SupplierBillID int64 `json:"supplier_bill_id"`
+}
+
+type ListSupplierBillEventsRow struct {
+	ID             int64              `json:"id"`
+	WorkspaceID    int64              `json:"workspace_id"`
+	SupplierBillID int64              `json:"supplier_bill_id"`
+	EventType      string             `json:"event_type"`
+	BillVersion    int32              `json:"bill_version"`
+	Note           pgtype.Text        `json:"note"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	ActorName      string             `json:"actor_name"`
+}
+
+func (q *Queries) ListSupplierBillEvents(ctx context.Context, arg ListSupplierBillEventsParams) ([]ListSupplierBillEventsRow, error) {
+	rows, err := q.db.Query(ctx, listSupplierBillEvents, arg.WorkspaceID, arg.SupplierBillID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListSupplierBillEventsRow{}
+	for rows.Next() {
+		var i ListSupplierBillEventsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.SupplierBillID,
+			&i.EventType,
+			&i.BillVersion,
+			&i.Note,
+			&i.CreatedAt,
+			&i.ActorName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSupplierBillLinesWithVariance = `-- name: ListSupplierBillLinesWithVariance :many
+SELECT
+    sbl.id, sbl.workspace_id, sbl.supplier_bill_id, sbl.goods_receipt_line_id, sbl.purchase_order_line_id,
+    sbl.description, sbl.quantity, sbl.unit_cost_minor, sbl.discount_minor, sbl.tax_amount_minor, sbl.line_total_minor, sbl.created_at,
+    COALESCE(grl.unit_cost_minor, pol.expected_unit_cost_minor, sbl.unit_cost_minor)::bigint AS expected_unit_cost_minor,
+    (sbl.unit_cost_minor - COALESCE(grl.unit_cost_minor, pol.expected_unit_cost_minor, sbl.unit_cost_minor))::bigint AS variance_minor
+FROM supplier_bill_lines sbl
+LEFT JOIN goods_receipt_lines grl ON grl.id = sbl.goods_receipt_line_id AND grl.workspace_id = sbl.workspace_id
+LEFT JOIN purchase_order_lines pol ON pol.id = sbl.purchase_order_line_id AND pol.workspace_id = sbl.workspace_id
+WHERE sbl.workspace_id = $1 AND sbl.supplier_bill_id = $2
+ORDER BY sbl.id ASC
+`
+
+type ListSupplierBillLinesWithVarianceParams struct {
+	WorkspaceID    int64 `json:"workspace_id"`
+	SupplierBillID int64 `json:"supplier_bill_id"`
+}
+
+type ListSupplierBillLinesWithVarianceRow struct {
+	ID                    int64              `json:"id"`
+	WorkspaceID           int64              `json:"workspace_id"`
+	SupplierBillID        int64              `json:"supplier_bill_id"`
+	GoodsReceiptLineID    pgtype.Int8        `json:"goods_receipt_line_id"`
+	PurchaseOrderLineID   pgtype.Int8        `json:"purchase_order_line_id"`
+	Description           string             `json:"description"`
+	Quantity              decimal.Decimal    `json:"quantity"`
+	UnitCostMinor         int64              `json:"unit_cost_minor"`
+	DiscountMinor         int64              `json:"discount_minor"`
+	TaxAmountMinor        int64              `json:"tax_amount_minor"`
+	LineTotalMinor        int64              `json:"line_total_minor"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	ExpectedUnitCostMinor int64              `json:"expected_unit_cost_minor"`
+	VarianceMinor         int64              `json:"variance_minor"`
+}
+
+func (q *Queries) ListSupplierBillLinesWithVariance(ctx context.Context, arg ListSupplierBillLinesWithVarianceParams) ([]ListSupplierBillLinesWithVarianceRow, error) {
+	rows, err := q.db.Query(ctx, listSupplierBillLinesWithVariance, arg.WorkspaceID, arg.SupplierBillID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListSupplierBillLinesWithVarianceRow{}
+	for rows.Next() {
+		var i ListSupplierBillLinesWithVarianceRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.SupplierBillID,
+			&i.GoodsReceiptLineID,
+			&i.PurchaseOrderLineID,
+			&i.Description,
+			&i.Quantity,
+			&i.UnitCostMinor,
+			&i.DiscountMinor,
+			&i.TaxAmountMinor,
+			&i.LineTotalMinor,
+			&i.CreatedAt,
+			&i.ExpectedUnitCostMinor,
+			&i.VarianceMinor,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSupplierBillPayments = `-- name: ListSupplierBillPayments :many
+SELECT
+    p.id, p.payment_date, p.total_amount_minor AS amount_minor,
+    COALESCE(p.reference, '')::text AS reference,
+    COALESCE(ma.name, '')::text AS account_name
+FROM payments p
+LEFT JOIN payment_legs pl ON pl.payment_id = p.id AND pl.workspace_id = p.workspace_id
+LEFT JOIN money_accounts ma ON ma.id = pl.money_account_id AND ma.workspace_id = pl.workspace_id
+WHERE p.workspace_id = $1
+  AND p.linked_record_type = 'supplier_bill'
+  AND p.linked_record_id = $2
+  AND p.status = 'posted'
+ORDER BY p.payment_date DESC, p.id DESC
+`
+
+type ListSupplierBillPaymentsParams struct {
+	WorkspaceID    int64       `json:"workspace_id"`
+	SupplierBillID pgtype.Int8 `json:"supplier_bill_id"`
+}
+
+type ListSupplierBillPaymentsRow struct {
+	ID          int64       `json:"id"`
+	PaymentDate pgtype.Date `json:"payment_date"`
+	AmountMinor int64       `json:"amount_minor"`
+	Reference   string      `json:"reference"`
+	AccountName string      `json:"account_name"`
+}
+
+func (q *Queries) ListSupplierBillPayments(ctx context.Context, arg ListSupplierBillPaymentsParams) ([]ListSupplierBillPaymentsRow, error) {
+	rows, err := q.db.Query(ctx, listSupplierBillPayments, arg.WorkspaceID, arg.SupplierBillID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListSupplierBillPaymentsRow{}
+	for rows.Next() {
+		var i ListSupplierBillPaymentsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PaymentDate,
+			&i.AmountMinor,
+			&i.Reference,
+			&i.AccountName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listSupplierBills = `-- name: ListSupplierBills :many

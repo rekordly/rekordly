@@ -18,23 +18,34 @@ import (
 // Goods receipts are the first procurement posting: they record what was
 // accepted, create stock movements for stock-tracked products, and accrue GRNI.
 // A supplier bill is intentionally a later, separate Accounts Payable event.
+type ReceiptOperationalBillInput struct {
+	SupplierID            int64  `json:"supplier_id"`
+	OutletID              *int64 `json:"outlet_id,omitempty"`
+	SupplierInvoiceNumber string `json:"supplier_invoice_number"`
+	BillDate              string `json:"bill_date"`
+	Amount                string `json:"amount"`
+	Currency              string `json:"currency"`
+	Description           string `json:"description"`
+}
+
 type CreateGoodsReceiptInput struct {
-	PurchaseOrderID   int64                   `json:"purchase_order_id"`
-	SupplierID        int64                   `json:"supplier_id"`
-	Reason            string                  `json:"reason"`
-	Currency          string                  `json:"currency"`
-	LocationID        int64                   `json:"location_id"`
-	ReceiptReference  string                  `json:"receipt_reference"`
-	DeliveryReference string                  `json:"delivery_reference"`
-	ServiceAccepted   bool                    `json:"service_accepted"`
-	LandedCost        string                  `json:"landed_cost"`
-	ReceivedOn        string                  `json:"received_on" binding:"required"`
-	Lines             []GoodsReceiptLineInput `json:"lines" binding:"required"`
-	IssueOrder        bool                    `json:"issue_order"`
-	CanApprovePO      bool                    `json:"-"`
-	Bill              *ReceiptBillInput       `json:"bill,omitempty"`
-	Payment           *ReceiptPaymentInput    `json:"payment,omitempty"`
-	IdempotencyKey    string                  `json:"idempotency_key"`
+	PurchaseOrderID   int64                         `json:"purchase_order_id"`
+	SupplierID        int64                         `json:"supplier_id"`
+	Reason            string                        `json:"reason"`
+	Currency          string                        `json:"currency"`
+	LocationID        int64                         `json:"location_id"`
+	ReceiptReference  string                        `json:"receipt_reference"`
+	DeliveryReference string                        `json:"delivery_reference"`
+	ServiceAccepted   bool                          `json:"service_accepted"`
+	LandedCost        string                        `json:"landed_cost"`
+	ReceivedOn        string                        `json:"received_on" binding:"required"`
+	Lines             []GoodsReceiptLineInput       `json:"lines" binding:"required"`
+	IssueOrder        bool                          `json:"issue_order"`
+	CanApprovePO      bool                          `json:"-"`
+	Bill              *ReceiptBillInput             `json:"bill,omitempty"`
+	Payment           *ReceiptPaymentInput          `json:"payment,omitempty"`
+	OperationalBill   *ReceiptOperationalBillInput  `json:"operational_bill,omitempty"`
+	IdempotencyKey    string                        `json:"idempotency_key"`
 }
 
 type GoodsReceiptLineInput struct {
@@ -75,7 +86,9 @@ type GoodsReceiptView struct {
 	DeliveryReference   *string               `json:"delivery_reference,omitempty"`
 	ServiceAccepted     bool                  `json:"service_accepted"`
 	Bill                *SupplierBillView     `json:"bill,omitempty"`
+	OperationalBill     *SupplierBillView     `json:"operational_bill,omitempty"`
 	Payment             *PaymentDetail        `json:"payment,omitempty"`
+	Files               []DocumentFileView    `json:"files,omitempty"`
 }
 
 type GoodsReceiptLineView struct {
@@ -940,6 +953,53 @@ func (s *Service) CreateGoodsReceipt(ctx context.Context, ws, user int64, in Cre
 		}
 	}
 
+	var operationalBillView *SupplierBillView
+	if in.OperationalBill != nil && strings.TrimSpace(in.OperationalBill.Amount) != "" && strings.TrimSpace(in.OperationalBill.Amount) != "0" {
+		opSupID := in.OperationalBill.SupplierID
+		if opSupID <= 0 && receipt.SupplierID.Valid {
+			opSupID = receipt.SupplierID.Int64
+		}
+		var opOutlet *int64
+		if in.OperationalBill.OutletID != nil && *in.OperationalBill.OutletID > 0 {
+			opOutlet = in.OperationalBill.OutletID
+		} else if receipt.LocationID.Valid {
+			opOutlet = &receipt.LocationID.Int64
+		}
+		opInv := strings.TrimSpace(in.OperationalBill.SupplierInvoiceNumber)
+		if opInv == "" {
+			opInv = fmt.Sprintf("EXP-%d-%d", receipt.ID, time.Now().UnixNano()%10000)
+		}
+		opDate := strings.TrimSpace(in.OperationalBill.BillDate)
+		if opDate == "" {
+			opDate = in.ReceivedOn
+		}
+		opCurr := strings.TrimSpace(in.OperationalBill.Currency)
+		if opCurr == "" {
+			opCurr = currency
+		}
+		opDesc := strings.TrimSpace(in.OperationalBill.Description)
+		if opDesc == "" {
+			opDesc = "Procurement operational costs"
+		}
+		opBill, _, opErr := s.createDirectExpenseBillTx(ctx, q, ws, user, CreateSupplierBillInput{
+			SupplierID:            opSupID,
+			OutletID:              opOutlet,
+			SupplierInvoiceNumber: opInv,
+			BillDate:              opDate,
+			Amount:                in.OperationalBill.Amount,
+			Currency:              opCurr,
+			BillType:              "direct_expense",
+			Description:           opDesc,
+		}, key+":op-cost")
+		if opErr != nil {
+			return GoodsReceiptView{}, opErr
+		}
+		obv, err := billDetailView(ctx, q, opBill)
+		if err == nil {
+			operationalBillView = &obv
+		}
+	}
+
 	if err = tx.Commit(ctx); err != nil {
 		return GoodsReceiptView{}, err
 	}
@@ -959,6 +1019,7 @@ func (s *Service) CreateGoodsReceipt(ctx context.Context, ws, user int64, in Cre
 		DeliveryReference:   nullableText(receipt.DeliveryReference),
 		ServiceAccepted:     receipt.ServiceAccepted,
 		Bill:                billView,
+		OperationalBill:     operationalBillView,
 		Payment:             paymentDetail,
 	}
 	return grView, nil
@@ -1081,6 +1142,23 @@ func (s *Service) GetGoodsReceipt(ctx context.Context, ws, id int64) (GoodsRecei
 		}
 	}
 
+	var filesView []DocumentFileView
+	files, err := s.queries.ListDocumentFiles(ctx, db.ListDocumentFilesParams{WorkspaceID: ws, DocumentType: "goods_receipt", DocumentID: row.ID})
+	if err == nil {
+		filesView = make([]DocumentFileView, 0, len(files))
+		for _, f := range files {
+			filesView = append(filesView, DocumentFileView{
+				ID:             f.ID,
+				EvidenceID:     f.EvidenceID,
+				FileName:       f.FileName,
+				MimeType:       f.MimeType,
+				SizeBytes:      f.SizeBytes,
+				CreatedAt:      f.CreatedAt.Time,
+				UploadedByName: f.UploadedByName,
+			})
+		}
+	}
+
 	return GoodsReceiptDetailView{
 		GoodsReceiptView: GoodsReceiptView{
 			ID:                row.ID,
@@ -1105,6 +1183,7 @@ func (s *Service) GetGoodsReceipt(ctx context.Context, ws, id int64) (GoodsRecei
 			LandedCostMinor:   fmt.Sprint(row.LandedCostMinor),
 			DeliveryReference: nullableText(row.DeliveryReference),
 			ServiceAccepted:   row.ServiceAccepted,
+			Files:             filesView,
 		},
 		ReceiptReference: nullableText(row.ReceiptReference),
 		Lines:            lines,

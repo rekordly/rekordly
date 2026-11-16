@@ -93,46 +93,77 @@ type ApplySupplierCreditToBillInput struct {
 }
 
 type SupplierBillLineView struct {
-	ID                  int64  `json:"id"`
-	GoodsReceiptLineID  *int64 `json:"goods_receipt_line_id,omitempty"`
-	PurchaseOrderLineID *int64 `json:"purchase_order_line_id,omitempty"`
-	Description         string `json:"description"`
-	Quantity            string `json:"quantity"`
-	UnitCostMinor       string `json:"unit_cost_minor"`
-	DiscountMinor       string `json:"discount_minor"`
-	TaxAmountMinor      string `json:"tax_amount_minor"`
-	LineTotalMinor      string `json:"line_total_minor"`
+	ID                    int64  `json:"id"`
+	GoodsReceiptLineID    *int64 `json:"goods_receipt_line_id,omitempty"`
+	PurchaseOrderLineID   *int64 `json:"purchase_order_line_id,omitempty"`
+	Description           string `json:"description"`
+	Quantity              string `json:"quantity"`
+	UnitCostMinor         string `json:"unit_cost_minor"`
+	DiscountMinor         string `json:"discount_minor"`
+	TaxAmountMinor        string `json:"tax_amount_minor"`
+	LineTotalMinor        string `json:"line_total_minor"`
+	ExpectedUnitCostMinor string `json:"expected_unit_cost_minor"`
+	VarianceMinor         string `json:"variance_minor"`
+}
+
+type SupplierBillPaymentView struct {
+	ID          int64  `json:"id"`
+	PaymentDate string `json:"payment_date"`
+	AmountMinor string `json:"amount_minor"`
+	Reference   string `json:"reference"`
+	AccountName string `json:"account_name"`
+}
+
+type SupplierBillEventView struct {
+	ID        int64     `json:"id"`
+	EventType string    `json:"event_type"`
+	Note      *string   `json:"note,omitempty"`
+	ActorName string    `json:"actor_name"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type DocumentFileView struct {
+	ID             int64     `json:"id"`
+	EvidenceID     int64     `json:"evidence_id"`
+	FileName       string    `json:"file_name"`
+	MimeType       string    `json:"mime_type"`
+	SizeBytes      int64     `json:"size_bytes"`
+	CreatedAt      time.Time `json:"created_at"`
+	UploadedByName string    `json:"uploaded_by_name"`
 }
 
 type SupplierBillView struct {
-	ID                    int64                  `json:"id"`
-	GoodsReceiptID        int64                  `json:"goods_receipt_id"`
-	SupplierID            int64                  `json:"supplier_id"`
-	Supplier              *DocumentSupplierView  `json:"supplier,omitempty"`
-	SupplierName          string                 `json:"supplier_name,omitempty"`
-	OutletID              *int64                 `json:"outlet_id,omitempty"`
-	SupplierInvoiceNumber string                 `json:"supplier_invoice_number"`
-	BillDate              string                 `json:"bill_date"`
-	Status                string                 `json:"status"`
-	Version               int32                  `json:"version"`
-	Currency              string                 `json:"currency"`
-	CurrencyExponent      int32                  `json:"currency_exponent"`
-	TotalMinor            string                 `json:"total_minor"`
-	OutstandingMinor      string                 `json:"outstanding_minor"`
-	TaxAmountMinor        string                 `json:"tax_amount_minor"`
-	DiscountMinor         string                 `json:"discount_minor"`
-	VarianceMinor         string                 `json:"variance_minor"`
-	CreditedMinor         string                 `json:"credited_minor"`
-	MatchStatus           string                 `json:"match_status"`
-	DisputeReason         *string                `json:"dispute_reason,omitempty"`
-	ReversalReason        *string                `json:"reversal_reason,omitempty"`
-	GoodsReceiptLinked    bool                   `json:"goods_receipt_linked"`
-	BillType              string                 `json:"bill_type"`
-	DueDate               *string                `json:"due_date,omitempty"`
-	Overdue               bool                   `json:"overdue"`
-	ApprovedAt            *string                `json:"approved_at,omitempty"`
-	Lines                 []SupplierBillLineView `json:"lines,omitempty"`
-	Payment               *PaymentDetail         `json:"payment,omitempty"`
+	ID                    int64                     `json:"id"`
+	GoodsReceiptID        int64                     `json:"goods_receipt_id"`
+	SupplierID            int64                     `json:"supplier_id"`
+	Supplier              *DocumentSupplierView     `json:"supplier,omitempty"`
+	SupplierName          string                    `json:"supplier_name,omitempty"`
+	OutletID              *int64                    `json:"outlet_id,omitempty"`
+	SupplierInvoiceNumber string                    `json:"supplier_invoice_number"`
+	BillDate              string                    `json:"bill_date"`
+	Status                string                    `json:"status"`
+	Version               int32                     `json:"version"`
+	Currency              string                    `json:"currency"`
+	CurrencyExponent      int32                     `json:"currency_exponent"`
+	TotalMinor            string                    `json:"total_minor"`
+	OutstandingMinor      string                    `json:"outstanding_minor"`
+	TaxAmountMinor        string                    `json:"tax_amount_minor"`
+	DiscountMinor         string                    `json:"discount_minor"`
+	VarianceMinor         string                    `json:"variance_minor"`
+	CreditedMinor         string                    `json:"credited_minor"`
+	MatchStatus           string                    `json:"match_status"`
+	DisputeReason         *string                   `json:"dispute_reason,omitempty"`
+	ReversalReason        *string                   `json:"reversal_reason,omitempty"`
+	GoodsReceiptLinked    bool                      `json:"goods_receipt_linked"`
+	BillType              string                    `json:"bill_type"`
+	DueDate               *string                   `json:"due_date,omitempty"`
+	Overdue               bool                      `json:"overdue"`
+	ApprovedAt            *string                   `json:"approved_at,omitempty"`
+	Lines                 []SupplierBillLineView    `json:"lines,omitempty"`
+	Payments              []SupplierBillPaymentView `json:"payments,omitempty"`
+	Events                []SupplierBillEventView   `json:"events,omitempty"`
+	Files                 []DocumentFileView        `json:"files,omitempty"`
+	Payment               *PaymentDetail            `json:"payment,omitempty"`
 }
 
 type SupplierBillMatch struct {
@@ -208,20 +239,63 @@ func billDetailView(ctx context.Context, q *db.Queries, b db.SupplierBill) (Supp
 			view.SupplierName = c.Name
 		}
 	}
-	lines, err := q.ListSupplierBillLines(ctx, db.ListSupplierBillLinesParams{WorkspaceID: b.WorkspaceID, SupplierBillID: b.ID})
+	lines, err := q.ListSupplierBillLinesWithVariance(ctx, db.ListSupplierBillLinesWithVarianceParams{WorkspaceID: b.WorkspaceID, SupplierBillID: b.ID})
 	if err == nil && len(lines) > 0 {
 		view.Lines = make([]SupplierBillLineView, 0, len(lines))
 		for _, l := range lines {
 			view.Lines = append(view.Lines, SupplierBillLineView{
-				ID:                  l.ID,
-				GoodsReceiptLineID:  nullableInt8(l.GoodsReceiptLineID),
-				PurchaseOrderLineID: nullableInt8(l.PurchaseOrderLineID),
-				Description:         l.Description,
-				Quantity:            l.Quantity.String(),
-				UnitCostMinor:       fmt.Sprint(l.UnitCostMinor),
-				DiscountMinor:       fmt.Sprint(l.DiscountMinor),
-				TaxAmountMinor:      fmt.Sprint(l.TaxAmountMinor),
-				LineTotalMinor:      fmt.Sprint(l.LineTotalMinor),
+				ID:                    l.ID,
+				GoodsReceiptLineID:    nullableInt8(l.GoodsReceiptLineID),
+				PurchaseOrderLineID:   nullableInt8(l.PurchaseOrderLineID),
+				Description:           l.Description,
+				Quantity:              l.Quantity.String(),
+				UnitCostMinor:         fmt.Sprint(l.UnitCostMinor),
+				DiscountMinor:         fmt.Sprint(l.DiscountMinor),
+				TaxAmountMinor:        fmt.Sprint(l.TaxAmountMinor),
+				LineTotalMinor:        fmt.Sprint(l.LineTotalMinor),
+				ExpectedUnitCostMinor: fmt.Sprint(l.ExpectedUnitCostMinor),
+				VarianceMinor:         fmt.Sprint(l.VarianceMinor),
+			})
+		}
+	}
+	payments, err := q.ListSupplierBillPayments(ctx, db.ListSupplierBillPaymentsParams{WorkspaceID: b.WorkspaceID, SupplierBillID: pgtype.Int8{Int64: b.ID, Valid: true}})
+	if err == nil {
+		view.Payments = make([]SupplierBillPaymentView, 0, len(payments))
+		for _, p := range payments {
+			view.Payments = append(view.Payments, SupplierBillPaymentView{
+				ID:          p.ID,
+				PaymentDate: p.PaymentDate.Time.Format("2006-01-02"),
+				AmountMinor: fmt.Sprint(p.AmountMinor),
+				Reference:   p.Reference,
+				AccountName: p.AccountName,
+			})
+		}
+	}
+	events, err := q.ListSupplierBillEvents(ctx, db.ListSupplierBillEventsParams{WorkspaceID: b.WorkspaceID, SupplierBillID: b.ID})
+	if err == nil {
+		view.Events = make([]SupplierBillEventView, 0, len(events))
+		for _, e := range events {
+			view.Events = append(view.Events, SupplierBillEventView{
+				ID:        e.ID,
+				EventType: e.EventType,
+				Note:      nullableText(e.Note),
+				ActorName: e.ActorName,
+				CreatedAt: e.CreatedAt.Time,
+			})
+		}
+	}
+	files, err := q.ListDocumentFiles(ctx, db.ListDocumentFilesParams{WorkspaceID: b.WorkspaceID, DocumentType: "supplier_bill", DocumentID: b.ID})
+	if err == nil {
+		view.Files = make([]DocumentFileView, 0, len(files))
+		for _, f := range files {
+			view.Files = append(view.Files, DocumentFileView{
+				ID:             f.ID,
+				EvidenceID:     f.EvidenceID,
+				FileName:       f.FileName,
+				MimeType:       f.MimeType,
+				SizeBytes:      f.SizeBytes,
+				CreatedAt:      f.CreatedAt.Time,
+				UploadedByName: f.UploadedByName,
 			})
 		}
 	}
@@ -490,6 +564,14 @@ func (s *Service) CreateSupplierBill(ctx context.Context, ws, user int64, in Cre
 		if err != nil {
 			return SupplierBillView{}, err
 		}
+		_ = q.InsertSupplierBillEvent(ctx, db.InsertSupplierBillEventParams{
+			WorkspaceID:    ws,
+			SupplierBillID: b.ID,
+			EventType:      "created",
+			BillVersion:    b.Version,
+			Note:           optionalPgText("Bill created"),
+			ActorUserID:    user,
+		})
 		for _, pl := range prepared {
 			if _, err := q.CreateSupplierBillLine(ctx, db.CreateSupplierBillLineParams{
 				WorkspaceID:         ws,
@@ -556,6 +638,18 @@ func (s *Service) CreateSupplierBill(ctx context.Context, ws, user int64, in Cre
 			if latestBill, err := q.GetSupplierBill(ctx, db.GetSupplierBillParams{WorkspaceID: ws, ID: b.ID}); err == nil {
 				b = latestBill
 			}
+			payEventType := "part_paid"
+			if b.Status == "paid" {
+				payEventType = "paid"
+			}
+			_ = q.InsertSupplierBillEvent(ctx, db.InsertSupplierBillEventParams{
+				WorkspaceID:    ws,
+				SupplierBillID: b.ID,
+				EventType:      payEventType,
+				BillVersion:    b.Version,
+				Note:           optionalPgText("Payment recorded"),
+				ActorUserID:    user,
+			})
 		}
 
 		view, err := billDetailView(ctx, q, b)
@@ -616,10 +710,6 @@ func (s *Service) CreateSupplierBill(ctx context.Context, ws, user int64, in Cre
 	if accountClass != "expense" && accountClass != "asset" {
 		return SupplierBillView{}, errors.New("invalid expense account class")
 	}
-	var outletID pgtype.Int8
-	if in.OutletID != nil && *in.OutletID > 0 {
-		outletID = pgtype.Int8{Int64: *in.OutletID, Valid: true}
-	}
 
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -627,6 +717,70 @@ func (s *Service) CreateSupplierBill(ctx context.Context, ws, user int64, in Cre
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := s.queries.WithTx(tx)
+
+	b, pmtDetail, err := s.createDirectExpenseBillTx(ctx, q, ws, user, in, key)
+	if err != nil {
+		return SupplierBillView{}, err
+	}
+
+	view, err := billDetailView(ctx, q, b)
+	if err != nil {
+		return SupplierBillView{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return SupplierBillView{}, err
+	}
+	view.Payment = pmtDetail
+	return view, nil
+}
+
+func (s *Service) createDirectExpenseBillTx(ctx context.Context, q *db.Queries, ws, user int64, in CreateSupplierBillInput, key string) (db.SupplierBill, *PaymentDetail, error) {
+	invoice := strings.TrimSpace(in.SupplierInvoiceNumber)
+	if invoice == "" {
+		return db.SupplierBill{}, nil, errors.New("supplier invoice number is required")
+	}
+	date, dErr := time.Parse("2006-01-02", in.BillDate)
+	if dErr != nil {
+		return db.SupplierBill{}, nil, errors.New("bill date must be YYYY-MM-DD")
+	}
+	var due pgtype.Date
+	if strings.TrimSpace(in.DueDate) != "" {
+		if dv, de := time.Parse("2006-01-02", strings.TrimSpace(in.DueDate)); de == nil {
+			due = pgtype.Date{Time: dv, Valid: true}
+		}
+	}
+	if !due.Valid {
+		due = pgtype.Date{Time: date, Valid: true}
+	}
+	currency := strings.ToUpper(strings.TrimSpace(in.Currency))
+	if len(currency) != 3 {
+		return db.SupplierBill{}, nil, ErrInvalidCurrency
+	}
+	exponent := CurrencyExponent(currency)
+	amount, amountErr := ParseMajorToMinor(in.Amount, exponent)
+	if amountErr != nil || amount <= 0 {
+		return db.SupplierBill{}, nil, errors.New("bill amount must be positive")
+	}
+	taxMinor, _ := parseOptionalNonNegativeMajor(in.TaxAmount, exponent)
+	discMinor, _ := parseOptionalNonNegativeMajor(in.Discount, exponent)
+	billType := strings.TrimSpace(in.BillType)
+	if billType == "" {
+		billType = "direct_expense"
+	}
+	if billType != "direct_expense" && billType != "direct_service" {
+		return db.SupplierBill{}, nil, errors.New("invalid direct bill type")
+	}
+	accountClass := strings.TrimSpace(in.ExpenseAccountClass)
+	if accountClass == "" {
+		accountClass = "expense"
+	}
+	if accountClass != "expense" && accountClass != "asset" {
+		return db.SupplierBill{}, nil, errors.New("invalid expense account class")
+	}
+	var outletID pgtype.Int8
+	if in.OutletID != nil && *in.OutletID > 0 {
+		outletID = pgtype.Int8{Int64: *in.OutletID, Valid: true}
+	}
 
 	b, e := q.CreateSupplierBillWithDetails(ctx, db.CreateSupplierBillWithDetailsParams{
 		WorkspaceID:           ws,
@@ -648,8 +802,16 @@ func (s *Service) CreateSupplierBill(ctx context.Context, ws, user int64, in Cre
 		CreatedByUserID:       user,
 	})
 	if e != nil {
-		return SupplierBillView{}, e
+		return db.SupplierBill{}, nil, e
 	}
+	_ = q.InsertSupplierBillEvent(ctx, db.InsertSupplierBillEventParams{
+		WorkspaceID:    ws,
+		SupplierBillID: b.ID,
+		EventType:      "created",
+		BillVersion:    b.Version,
+		Note:           optionalPgText("Bill created"),
+		ActorUserID:    user,
+	})
 
 	for _, line := range in.Lines {
 		qty, qErr := decimal.NewFromString(line.Quantity)
@@ -670,7 +832,7 @@ func (s *Service) CreateSupplierBill(ctx context.Context, ws, user int64, in Cre
 			TaxAmountMinor: tTax,
 			LineTotalMinor: lTotal,
 		}); err != nil {
-			return SupplierBillView{}, err
+			return db.SupplierBill{}, nil, err
 		}
 	}
 
@@ -678,14 +840,14 @@ func (s *Service) CreateSupplierBill(ctx context.Context, ws, user int64, in Cre
 	if in.Approve {
 		approved, appErr := s.approveSupplierBillTx(ctx, q, ws, user, b, true, key+":approve")
 		if appErr != nil {
-			return SupplierBillView{}, appErr
+			return db.SupplierBill{}, nil, appErr
 		}
 		b = approved
 	}
 
 	if in.Payment != nil {
 		if !in.Approve {
-			return SupplierBillView{}, errors.New("bill must be approved to record payment")
+			return db.SupplierBill{}, nil, errors.New("bill must be approved to record payment")
 		}
 		legs := in.Payment.PaymentLegs
 		if len(legs) == 0 && in.Payment.AccountID > 0 {
@@ -708,20 +870,12 @@ func (s *Service) CreateSupplierBill(ctx context.Context, ws, user int64, in Cre
 			IdempotencyKey:   key + ":payment",
 		})
 		if pmtErr != nil {
-			return SupplierBillView{}, pmtErr
+			return db.SupplierBill{}, nil, pmtErr
 		}
 		pmtDetail = &pmt
 	}
 
-	view, err := billDetailView(ctx, q, b)
-	if err != nil {
-		return SupplierBillView{}, err
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return SupplierBillView{}, err
-	}
-	view.Payment = pmtDetail
-	return view, nil
+	return b, pmtDetail, nil
 }
 
 func withinVarianceTolerance(varianceMinor, baseMinor int64, toleranceBps int32) bool {
@@ -814,6 +968,16 @@ func (s *Service) approveSupplierBillTx(ctx context.Context, q *db.Queries, ws, 
 	if key != "" {
 		_ = q.CreateSupplierBillCommand(ctx, db.CreateSupplierBillCommandParams{WorkspaceID: ws, SupplierBillID: b.ID, Command: "approve", ExpectedVersion: b.Version, IdempotencyKey: key, ActorUserID: user})
 	}
+	if err := q.InsertSupplierBillEvent(ctx, db.InsertSupplierBillEventParams{
+		WorkspaceID:    ws,
+		SupplierBillID: b.ID,
+		EventType:      "approved",
+		BillVersion:    updated.Version,
+		Note:           optionalPgText("Bill approved"),
+		ActorUserID:    user,
+	}); err != nil {
+		return db.SupplierBill{}, fmt.Errorf("insert bill approved event: %w", err)
+	}
 	return updated, nil
 }
 
@@ -887,6 +1051,16 @@ func (s *Service) createSupplierBillForReceiptTx(ctx context.Context, q *db.Quer
 	})
 	if err != nil {
 		return db.SupplierBill{}, err
+	}
+	if err := q.InsertSupplierBillEvent(ctx, db.InsertSupplierBillEventParams{
+		WorkspaceID:    ws,
+		SupplierBillID: b.ID,
+		EventType:      "created",
+		BillVersion:    b.Version,
+		Note:           optionalPgText("Bill created from receipt"),
+		ActorUserID:    user,
+	}); err != nil {
+		return db.SupplierBill{}, fmt.Errorf("insert bill created event: %w", err)
 	}
 	for _, pl := range prepared {
 		if _, err := q.CreateSupplierBillLine(ctx, db.CreateSupplierBillLineParams{
@@ -1172,6 +1346,14 @@ func (s *Service) TransitionSupplierBill(ctx context.Context, ws, user, id int64
 	}); e != nil {
 		return SupplierBillView{}, e
 	}
+	_ = q.InsertSupplierBillEvent(ctx, db.InsertSupplierBillEventParams{
+		WorkspaceID:    ws,
+		SupplierBillID: id,
+		EventType:      command,
+		BillVersion:    updated.Version,
+		Note:           optionalPgText(reason),
+		ActorUserID:    user,
+	})
 	view, err := billDetailView(ctx, q, updated)
 	if err != nil {
 		return SupplierBillView{}, err

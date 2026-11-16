@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  ChatCircleDots,
   CheckCircle,
   Handshake,
   PaperPlaneTilt,
@@ -13,6 +12,8 @@ import { toast } from "@heroui/react";
 import { useRouter } from "next/navigation";
 import { use, useEffect, useMemo, useState } from "react";
 
+import { DocumentChat } from "@/components/features/finance/document-chat";
+import { ItemsTable } from "@/components/features/finance/document-page";
 import { StatusBadge } from "@/components/features/finance/shared";
 import { toMinor } from "@/components/pickers";
 import { Alert } from "@/components/ui/alert";
@@ -113,12 +114,7 @@ export default function PublicPurchaseOrderPage({ params }: PageProps) {
     action: "acknowledged" | "declined" | "change_requested";
   }>({ isOpen: false, action: "acknowledged" });
   const [modalNote, setModalNote] = useState("");
-
-  // Chat drawer state
-  const [isChatOpen, setIsChatOpen] = useState(false);
   const [senderName, setSenderName] = useState("");
-  const [msgText, setMsgText] = useState("");
-  const [sendingMsg, setSendingMsg] = useState(false);
 
   // Claim link state
   const [claiming, setClaiming] = useState(false);
@@ -275,25 +271,6 @@ export default function PublicPurchaseOrderPage({ params }: PageProps) {
     }
   };
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!senderName.trim() || !msgText.trim()) return;
-    setSendingMsg(true);
-    try {
-      const created = await financeApi.postPublicMessage("purchase_order", token, {
-        sender_name: senderName.trim(),
-        message: msgText.trim(),
-      });
-      setMessages((prev) => [...prev, created]);
-      setMsgText("");
-      toast.success("Message sent to buyer");
-    } catch (err: unknown) {
-      toast.danger(err instanceof Error ? err.message : "Failed to send message");
-    } finally {
-      setSendingMsg(false);
-    }
-  };
-
   const handleClaim = async () => {
     setClaiming(true);
     try {
@@ -339,12 +316,20 @@ export default function PublicPurchaseOrderPage({ params }: PageProps) {
           description={`Purchase order from ${share.workspace_name || "Merchant"}`}
           actions={
             <div className="flex items-center gap-2 print:hidden">
-              <AppButton
-                size="sm"
-                variant="secondary"
-                startContent={<ChatCircleDots size={16} />}
-                label={messages.length > 0 ? `Messages (${messages.length})` : "Messages"}
-                onPress={() => setIsChatOpen(true)}
+              <DocumentChat
+                docType="purchase_order"
+                docId={token}
+                partyName={share.workspace_name || "Merchant"}
+                senderName={share.supplier_name || "Supplier"}
+                fetchMessages={() => financeApi.listPublicMessages("purchase_order", token)}
+                sendMessage={(msg) =>
+                  financeApi.postPublicMessage("purchase_order", token, {
+                    sender_name: share.supplier_name || "Supplier",
+                    message: msg,
+                  })
+                }
+                isGuest
+                label="Messages"
               />
               <AppButton
                 size="sm"
@@ -409,72 +394,102 @@ export default function PublicPurchaseOrderPage({ params }: PageProps) {
                 ) : undefined
               }
             >
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-[13px]">
-                  <thead className="border-b border-separator text-[11px] font-medium text-muted uppercase">
-                    <tr>
-                      <th className="py-2.5 pr-3">Item</th>
-                      <th className="py-2.5 px-3">Qty</th>
-                      <th className="py-2.5 px-3">Unit price</th>
-                      <th className="py-2.5 pl-3 text-right">Line total</th>
-                      {canEditPrices ? <th className="py-2.5 pl-3 text-right print:hidden">Action</th> : null}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-separator">
-                    {editableLines.map((line, idx) => {
-                      const rowTotal = lineMinorTotal(line.quantity, line.unitCostMajor);
-                      const qtyChanged = Number(line.quantity) !== Number(line.originalQty);
-                      const priceChanged =
-                        toMinor(line.unitCostMajor).toString() !== line.originalUnitCostMinor;
-                      const changed = qtyChanged || priceChanged;
-
-                      return (
-                        <tr key={line.id} className="group">
-                          <td className="py-3 pr-3 font-medium text-foreground">
-                            <div>{line.description}</div>
-                            {changed ? (
-                              <span className="inline-block mt-0.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
-                                Updated
-                              </span>
-                            ) : null}
-                          </td>
-                          <td className="py-3 px-3 tabular">
-                            <span className="font-semibold text-foreground">{line.quantity}</span>{" "}
-                            <span className="text-muted">{line.unitName}</span>
-                            {qtyChanged ? (
-                              <div className="text-[11px] text-muted line-through">Req: {line.originalQty}</div>
-                            ) : null}
-                          </td>
-                          <td className="py-3 px-3 tabular">
-                            <span className="font-semibold text-foreground">
-                              {showMoney(toMinor(line.unitCostMajor))}
-                            </span>
-                            {priceChanged ? (
-                              <div className="text-[11px] text-muted line-through">
-                                Req: {showMoney(line.originalUnitCostMinor)}
-                              </div>
-                            ) : null}
-                          </td>
-                          <td className="py-3 pl-3 text-right font-bold tabular text-foreground">
-                            {showMoney(rowTotal)}
-                          </td>
-                          {canEditPrices ? (
-                            <td className="py-3 pl-3 text-right print:hidden">
-                              <AppButton
-                                size="sm"
-                                variant="ghost"
-                                startContent={<PencilSimple size={14} />}
-                                label="Edit"
-                                onPress={() => openEditLine(idx)}
-                              />
-                            </td>
-                          ) : null}
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              <ItemsTable
+                rows={editableLines}
+                rowKey={(line) => line.id}
+                columns={[
+                  {
+                    key: "item",
+                    label: "Item",
+                    render: (line) => (
+                      <div>
+                        <span className="font-semibold text-foreground">{line.description}</span>
+                        {toMinor(line.unitCostMajor).toString() !== line.originalUnitCostMinor || Number(line.quantity) !== Number(line.originalQty) ? (
+                          <span className="ml-2 inline-block rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                            Updated
+                          </span>
+                        ) : null}
+                      </div>
+                    ),
+                  },
+                  {
+                    key: "qty",
+                    label: "Quantity",
+                    align: "right",
+                    render: (line) => (
+                      <>
+                        <span className="font-semibold">{line.quantity}</span> <span className="text-muted">{line.unitName}</span>
+                        {Number(line.quantity) !== Number(line.originalQty) ? (
+                          <span className="block text-[11px] text-muted line-through">Req: {line.originalQty}</span>
+                        ) : null}
+                      </>
+                    ),
+                  },
+                  {
+                    key: "price",
+                    label: "Unit price",
+                    align: "right",
+                    render: (line) => (
+                      <>
+                        <span className="font-semibold">{showMoney(toMinor(line.unitCostMajor))}</span>
+                        {toMinor(line.unitCostMajor).toString() !== line.originalUnitCostMinor ? (
+                          <span className="block text-[11px] text-muted line-through">{showMoney(line.originalUnitCostMinor)}</span>
+                        ) : null}
+                      </>
+                    ),
+                  },
+                  {
+                    key: "total",
+                    label: "Line total",
+                    align: "right",
+                    render: (line) => <span className="font-semibold">{showMoney(lineMinorTotal(line.quantity, line.unitCostMajor))}</span>,
+                  },
+                  ...(canEditPrices
+                    ? [
+                        {
+                          key: "action",
+                          label: "",
+                          align: "right" as const,
+                          render: (line: EditableLine) => {
+                            const idx = editableLines.findIndex((l) => l.id === line.id);
+                            return (
+                              <button
+                                type="button"
+                                aria-label={`Edit ${line.description}`}
+                                onClick={() => openEditLine(idx)}
+                                className="-my-1 grid size-8 shrink-0 cursor-pointer place-items-center rounded-full text-muted transition-colors hover:bg-surface-secondary hover:text-foreground"
+                              >
+                                <PencilSimple size={15} aria-hidden="true" />
+                              </button>
+                            );
+                          },
+                        },
+                      ]
+                    : []),
+                ]}
+                card={(line) => {
+                  const idx = editableLines.findIndex((l) => l.id === line.id);
+                  return {
+                    title: line.description,
+                    sub: `${line.quantity} ${line.unitName} × ${showMoney(toMinor(line.unitCostMajor))}`,
+                    amount: showMoney(lineMinorTotal(line.quantity, line.unitCostMajor)),
+                    action: canEditPrices ? (
+                      <button
+                        type="button"
+                        aria-label={`Edit ${line.description}`}
+                        onClick={() => openEditLine(idx)}
+                        className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-full text-muted hover:bg-surface-secondary"
+                      >
+                        <PencilSimple size={15} aria-hidden="true" />
+                      </button>
+                    ) : undefined,
+                  };
+                }}
+                total={{
+                  label: hasPriceChanges ? "Updated total" : "Order total",
+                  amount: showMoney(hasPriceChanges ? quotedTotalMinor : po.total_minor),
+                }}
+              />
 
               {/* Dynamic Action Buttons */}
               {canEditPrices ? (
@@ -692,76 +707,6 @@ export default function PublicPurchaseOrderPage({ params }: PageProps) {
             />
           </div>
         </AppModal>
-
-        {/* Chat Drawer / Bottomsheet */}
-        <SideSheet
-          isOpen={isChatOpen}
-          onClose={() => setIsChatOpen(false)}
-          title="Messages"
-          description={`Conversation with ${share.workspace_name || "Buyer"}`}
-        >
-          <div className="flex flex-col h-full min-h-[440px] justify-between gap-4">
-            <div className="flex-1 overflow-y-auto space-y-3 pr-1 max-h-[50vh]">
-              {messages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center text-muted">
-                  <ChatCircleDots size={36} className="mb-2 opacity-50" />
-                  <p className="text-[14px] font-medium text-foreground">No messages yet</p>
-                  <p className="text-[12px] max-w-[240px] mt-1">Send delivery updates or questions to the buyer.</p>
-                </div>
-              ) : (
-                messages.map((m) => {
-                  const isMe = m.sender_name.toLowerCase() === senderName.trim().toLowerCase();
-                  return (
-                    <div
-                      key={m.id}
-                      className={`flex flex-col max-w-[85%] rounded-2xl p-3 text-[13px] ${
-                        isMe
-                          ? "ml-auto bg-primary text-white rounded-br-xs"
-                          : "mr-auto bg-surface-secondary border border-separator text-foreground rounded-bl-xs"
-                      }`}
-                    >
-                      <div
-                        className={`flex items-center justify-between gap-2 text-[11px] mb-1 ${
-                          isMe ? "text-white/80" : "text-muted"
-                        }`}
-                      >
-                        <span className="font-semibold">{m.sender_name}</span>
-                        <span>{formatDate(m.created_at)}</span>
-                      </div>
-                      <p className="whitespace-pre-wrap leading-relaxed">{m.message}</p>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-
-            <form onSubmit={handleSendMessage} className="space-y-2.5 pt-3 border-t border-separator">
-              <AppInput
-                label="Your name"
-                placeholder="Supplier / contact name"
-                value={senderName}
-                onChange={(e) => setSenderName(e.target.value)}
-                isRequired
-              />
-              <AppTextarea
-                label="Message"
-                placeholder="Type a message to the buyer..."
-                value={msgText}
-                onChange={(e) => setMsgText(e.target.value)}
-                rows={2}
-                isRequired
-              />
-              <div className="flex justify-end pt-1">
-                <AppButton
-                  type="submit"
-                  startContent={<PaperPlaneTilt size={15} />}
-                  label="Send message"
-                  isLoading={sendingMsg}
-                />
-              </div>
-            </form>
-          </div>
-        </SideSheet>
       </Page>
     </div>
   );

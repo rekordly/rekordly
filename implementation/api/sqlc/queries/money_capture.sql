@@ -147,6 +147,14 @@ INSERT INTO evidence_assets (
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 RETURNING *;
 
+-- name: CreateDocumentEvidenceAsset :one
+INSERT INTO evidence_assets (
+    workspace_id, uploaded_by_user_id, storage_provider,
+    asset_id, delivery_type, original_file_name, byte_size, mime_type, sha256_hash,
+    status, purpose
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'document')
+RETURNING *;
+
 -- name: ListEvidenceAssetsByDraftID :many
 SELECT * FROM evidence_assets
 WHERE workspace_id = $1 AND draft_id = $2 AND status <> 'deleted'
@@ -160,6 +168,10 @@ ORDER BY id ASC;
 -- name: GetVerifiedEvidenceAssetByID :one
 SELECT * FROM evidence_assets
 WHERE workspace_id = $1 AND id = $2 AND status = 'verified';
+
+-- name: GetEvidenceAssetByID :one
+SELECT * FROM evidence_assets
+WHERE workspace_id = $1 AND id = $2 AND status <> 'deleted';
 
 -- name: AttachEvidenceAssetsToMoneyRecord :execrows
 UPDATE evidence_assets

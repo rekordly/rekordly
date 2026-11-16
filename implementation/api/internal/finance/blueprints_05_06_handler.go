@@ -32,6 +32,9 @@ func (h *Handler) RegisterBlueprintsCompletionRoutes(protected *gin.RouterGroup)
 	protected.POST("/payment-evidences/:evidenceId/review", h.reviewExternalPaymentEvidence)
 	protected.GET("/documents/:docType/:id/messages", h.listTeamDocumentMessages)
 	protected.POST("/documents/:docType/:id/messages", h.postTeamDocumentMessage)
+	protected.POST("/documents/:docType/:id/messages/read", h.markDocumentMessagesRead)
+	protected.POST("/documents/:docType/:id/files", h.attachDocumentFile)
+	protected.DELETE("/documents/:docType/:id/files/:fileId", h.removeDocumentFile)
 	protected.POST("/external-links/claim", h.claimExternalPartyLink)
 	protected.GET("/external-links", h.listMyExternalPartyLinks)
 
@@ -301,9 +304,23 @@ func (h *Handler) postPublicDocumentMessage(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"data": gin.H{"message": msg}})
 }
 
+func isAllowedDocumentType(docType string) bool {
+	switch docType {
+	case "purchase_order", "invoice", "supplier_bill", "goods_receipt", "purchase":
+		return true
+	default:
+		return false
+	}
+}
+
 func (h *Handler) listTeamDocumentMessages(c *gin.Context) {
 	wsCtx, ok := requirePermission(c, "contacts.view", "invoices.view", "purchases.view")
 	if !ok {
+		return
+	}
+	docType := c.Param("docType")
+	if !isAllowedDocumentType(docType) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_DOC_TYPE", "message": "Unsupported document type"}})
 		return
 	}
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
@@ -313,19 +330,30 @@ func (h *Handler) listTeamDocumentMessages(c *gin.Context) {
 	}
 	msgs, err := h.service.queries.ListExternalMessagesForDoc(c.Request.Context(), db.ListExternalMessagesForDocParams{
 		WorkspaceID:  wsCtx.WorkspaceID,
-		DocumentType: c.Param("docType"),
+		DocumentType: docType,
 		DocumentID:   id,
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": err.Error()}})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": gin.H{"messages": msgs}})
+	unreadCount, _ := h.service.queries.CountUnreadDocumentMessages(c.Request.Context(), db.CountUnreadDocumentMessagesParams{
+		WorkspaceID:  wsCtx.WorkspaceID,
+		DocumentType: docType,
+		DocumentID:   id,
+		UserID:       wsCtx.UserID,
+	})
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"messages": msgs, "unread_count": unreadCount}})
 }
 
 func (h *Handler) postTeamDocumentMessage(c *gin.Context) {
 	wsCtx, ok := requirePermission(c, "contacts.manage", "invoices.create", "purchases.create")
 	if !ok {
+		return
+	}
+	docType := c.Param("docType")
+	if !isAllowedDocumentType(docType) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_DOC_TYPE", "message": "Unsupported document type"}})
 		return
 	}
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
@@ -343,11 +371,15 @@ func (h *Handler) postTeamDocumentMessage(c *gin.Context) {
 	}
 	sender := strings.TrimSpace(in.SenderName)
 	if sender == "" {
-		sender = "Team"
+		if ws, err := h.service.queries.GetWorkspaceProfile(c.Request.Context(), wsCtx.WorkspaceID); err == nil && ws.Name != "" {
+			sender = ws.Name
+		} else {
+			sender = "Team"
+		}
 	}
 	msg, err := h.service.queries.CreateExternalMessage(c.Request.Context(), db.CreateExternalMessageParams{
 		WorkspaceID:  wsCtx.WorkspaceID,
-		DocumentType: c.Param("docType"),
+		DocumentType: docType,
 		DocumentID:   id,
 		SenderType:   "team",
 		SenderName:   sender,
@@ -358,6 +390,106 @@ func (h *Handler) postTeamDocumentMessage(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusCreated, gin.H{"data": gin.H{"message": msg}})
+}
+
+func (h *Handler) markDocumentMessagesRead(c *gin.Context) {
+	wsCtx, ok := requirePermission(c, "contacts.view", "invoices.view", "purchases.view")
+	if !ok {
+		return
+	}
+	docType := c.Param("docType")
+	if !isAllowedDocumentType(docType) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_DOC_TYPE", "message": "Unsupported document type"}})
+		return
+	}
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_ID", "message": "Invalid document ID"}})
+		return
+	}
+	var in struct {
+		LastReadMessageID int64 `json:"last_read_message_id"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": err.Error()}})
+		return
+	}
+	if err := h.service.queries.UpsertDocumentMessageRead(c.Request.Context(), db.UpsertDocumentMessageReadParams{
+		WorkspaceID:       wsCtx.WorkspaceID,
+		UserID:            wsCtx.UserID,
+		DocumentType:      docType,
+		DocumentID:        id,
+		LastReadMessageID: in.LastReadMessageID,
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": err.Error()}})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"success": true}})
+}
+
+func (h *Handler) attachDocumentFile(c *gin.Context) {
+	wsCtx, ok := requirePermission(c, "contacts.manage", "invoices.create", "purchases.create")
+	if !ok {
+		return
+	}
+	docType := c.Param("docType")
+	if !isAllowedDocumentType(docType) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_DOC_TYPE", "message": "Unsupported document type"}})
+		return
+	}
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_ID", "message": "Invalid document ID"}})
+		return
+	}
+	var in AttachDocumentFileInput
+	if err := c.ShouldBindJSON(&in); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": err.Error()}})
+		return
+	}
+	fileView, err := h.service.AttachDocumentFile(c.Request.Context(), wsCtx.WorkspaceID, wsCtx.UserID, docType, id, in)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "ATTACH_FAILED", "message": err.Error()}})
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"data": gin.H{"file": fileView}})
+}
+
+func (h *Handler) removeDocumentFile(c *gin.Context) {
+	wsCtx, ok := requirePermission(c, "contacts.manage", "invoices.create", "purchases.create")
+	if !ok {
+		return
+	}
+	docType := c.Param("docType")
+	if !isAllowedDocumentType(docType) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_DOC_TYPE", "message": "Unsupported document type"}})
+		return
+	}
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_ID", "message": "Invalid document ID"}})
+		return
+	}
+	fileID, err := strconv.ParseInt(c.Param("fileId"), 10, 64)
+	if err != nil || fileID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_ID", "message": "Invalid file ID"}})
+		return
+	}
+	rows, err := h.service.queries.DeleteDocumentFile(c.Request.Context(), db.DeleteDocumentFileParams{
+		WorkspaceID:  wsCtx.WorkspaceID,
+		DocumentType: docType,
+		DocumentID:   id,
+		ID:           fileID,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": err.Error()}})
+		return
+	}
+	if rows == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "Document file not found"}})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"success": true}})
 }
 
 func (h *Handler) claimExternalPartyLink(c *gin.Context) {

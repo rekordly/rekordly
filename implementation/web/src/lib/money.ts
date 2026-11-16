@@ -31,6 +31,7 @@ import type {
   EstimateDetail,
   DebitNote,
   DebitNoteDetail,
+  DocumentFileView,
   DocumentVersion,
   ExternalMessage,
   ExternalPartyLink,
@@ -599,7 +600,7 @@ export const financeApi = {
   createPurchase: (workspaceId: number, body: unknown, key: string) =>
     scopedPost<{ purchase: Purchase; items?: Array<{ id: number; description: string; quantity: string; unit_price_minor: number; line_total_minor: number }>; payments?: PaymentDetail[] }>(workspaceId, "/api/v1/purchases", body, key),
   getPurchase: (workspaceId: number, id: number) =>
-    scopedGet<{ purchase: Purchase; items?: Array<{ id: number; description: string; quantity: string; unit_price_minor: number; line_total_minor: number }>; payments?: PaymentDetail[] }>(workspaceId, `/api/v1/purchases/${id}`),
+    scopedGet<{ purchase: Purchase; items?: Array<{ id: number; description: string; quantity: string; unit_price_minor: number; line_total_minor: number }>; payments?: PaymentDetail[]; files?: DocumentFileView[] }>(workspaceId, `/api/v1/purchases/${id}`),
   createPayment: (workspaceId: number, body: unknown, key: string) =>
     scopedPost<PaymentDetail>(workspaceId, "/api/v1/payments", body, key),
   getPayment: (workspaceId: number, id: number) =>
@@ -802,11 +803,19 @@ export const financeApi = {
   reviewPaymentEvidence: (workspaceId: number, evidenceId: number, status: "approved" | "rejected", note?: string) =>
     scopedPost<{ evidence: ExternalPaymentEvidence }>(workspaceId, `/api/v1/payment-evidences/${evidenceId}/review`, { status, note }),
   listTeamDocumentMessages: (workspaceId: number, docType: string, id: number) =>
-    scopedGet<{ messages: ExternalMessage[] }>(workspaceId, `/api/v1/documents/${docType}/${id}/messages`).then((r) => r.messages ?? []),
+    scopedGet<{ messages: ExternalMessage[]; unread_count?: number }>(workspaceId, `/api/v1/documents/${docType}/${id}/messages`).then((r) => r.messages ?? []),
   postTeamDocumentMessage: (workspaceId: number, docType: string, id: number, message: string, senderName?: string) =>
     scopedPost<{ message: ExternalMessage }>(workspaceId, `/api/v1/documents/${docType}/${id}/messages`, { message, sender_name: senderName }).then(
       (r) => r.message,
     ),
+  markDocumentMessagesRead: (workspaceId: number, docType: string, id: number, lastReadMessageId: number) =>
+    scopedPost<{ success: boolean }>(workspaceId, `/api/v1/documents/${docType}/${id}/messages/read`, { last_read_message_id: lastReadMessageId }),
+  attachDocumentFile: (workspaceId: number, docType: string, id: number, evidenceId: number, key?: string) =>
+    scopedPost<{ file: any }>(workspaceId, `/api/v1/documents/${docType}/${id}/files`, { evidence_id: evidenceId, idempotency_key: key }).then((r) => r.file),
+  removeDocumentFile: (workspaceId: number, docType: string, id: number, fileId: number) =>
+    apiClient.delete(`/api/v1/documents/${docType}/${id}/files/${fileId}`, { headers: workspaceHeaders(workspaceId) }),
+  getInventoryOverview: (workspaceId: number) =>
+    scopedGet<{ products: any[]; outlets: any[]; balances: any[] }>(workspaceId, "/api/v1/inventory/overview"),
 
   claimExternalPartyLink: (documentType: string, token: string) =>
     apiClient

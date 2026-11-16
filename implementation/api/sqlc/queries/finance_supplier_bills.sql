@@ -28,3 +28,42 @@ WHERE workspace_id = $1
   AND status NOT IN ('rejected', 'voided', 'reversed')
 ORDER BY id DESC
 LIMIT 1;
+
+-- name: ListSupplierBillLinesWithVariance :many
+SELECT
+    sbl.id, sbl.workspace_id, sbl.supplier_bill_id, sbl.goods_receipt_line_id, sbl.purchase_order_line_id,
+    sbl.description, sbl.quantity, sbl.unit_cost_minor, sbl.discount_minor, sbl.tax_amount_minor, sbl.line_total_minor, sbl.created_at,
+    COALESCE(grl.unit_cost_minor, pol.expected_unit_cost_minor, sbl.unit_cost_minor)::bigint AS expected_unit_cost_minor,
+    (sbl.unit_cost_minor - COALESCE(grl.unit_cost_minor, pol.expected_unit_cost_minor, sbl.unit_cost_minor))::bigint AS variance_minor
+FROM supplier_bill_lines sbl
+LEFT JOIN goods_receipt_lines grl ON grl.id = sbl.goods_receipt_line_id AND grl.workspace_id = sbl.workspace_id
+LEFT JOIN purchase_order_lines pol ON pol.id = sbl.purchase_order_line_id AND pol.workspace_id = sbl.workspace_id
+WHERE sbl.workspace_id = @workspace_id AND sbl.supplier_bill_id = @supplier_bill_id
+ORDER BY sbl.id ASC;
+
+-- name: ListSupplierBillPayments :many
+SELECT
+    p.id, p.payment_date, p.total_amount_minor AS amount_minor,
+    COALESCE(p.reference, '')::text AS reference,
+    COALESCE(ma.name, '')::text AS account_name
+FROM payments p
+LEFT JOIN payment_legs pl ON pl.payment_id = p.id AND pl.workspace_id = p.workspace_id
+LEFT JOIN money_accounts ma ON ma.id = pl.money_account_id AND ma.workspace_id = pl.workspace_id
+WHERE p.workspace_id = @workspace_id
+  AND p.linked_record_type = 'supplier_bill'
+  AND p.linked_record_id = @supplier_bill_id
+  AND p.status = 'posted'
+ORDER BY p.payment_date DESC, p.id DESC;
+
+-- name: InsertSupplierBillEvent :exec
+INSERT INTO supplier_bill_events (workspace_id, supplier_bill_id, event_type, bill_version, note, actor_user_id)
+VALUES (@workspace_id, @supplier_bill_id, @event_type, @bill_version, sqlc.narg('note'), @actor_user_id);
+
+-- name: ListSupplierBillEvents :many
+SELECT
+    e.id, e.workspace_id, e.supplier_bill_id, e.event_type, e.bill_version, e.note, e.created_at,
+    COALESCE(NULLIF(u.display_name, ''), 'Team')::text AS actor_name
+FROM supplier_bill_events e
+JOIN users u ON u.id = e.actor_user_id
+WHERE e.workspace_id = @workspace_id AND e.supplier_bill_id = @supplier_bill_id
+ORDER BY e.created_at DESC, e.id DESC;
