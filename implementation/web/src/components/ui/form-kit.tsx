@@ -24,6 +24,7 @@ export function FormPage({
   back,
   aside,
   actions,
+  pinActions = false,
   children,
 }: {
   title: string;
@@ -33,10 +34,12 @@ export function FormPage({
   aside?: ReactNode;
   /** The sticky action bar contents, usually Cancel / Save draft / Save. */
   actions: ReactNode;
+  /** Fill the available page height and keep actions at the viewport bottom. */
+  pinActions?: boolean;
   children: ReactNode;
 }) {
   return (
-    <div className="animate-fade-up mx-auto w-full max-w-[1120px]">
+    <div className={`animate-fade-up mx-auto w-full max-w-[1120px] ${pinActions ? "-mb-10 flex min-h-[calc(100dvh-5rem)] flex-col lg:min-h-[calc(100dvh-1.5rem)]" : ""}`}>
       <div className="pt-2">
         {back ? (
           <Link href={back.href} className="mb-2 inline-flex items-center gap-1.5 text-[13px] font-medium text-muted transition-colors hover:text-foreground">
@@ -54,8 +57,9 @@ export function FormPage({
       </div>
 
       {/* Sticks to the bottom of the scrolling page, so it never covers the sidebar. */}
-      <div className="sticky bottom-0 z-20 -mx-4 mt-6 -mb-10 border-t border-border bg-background/90 px-4 py-3 backdrop-blur-xl sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
-        <div className="flex w-full items-center justify-end gap-2">{actions}</div>
+      {pinActions ? <div aria-hidden="true" className="min-h-6 flex-1" /> : null}
+      <div className={`sticky bottom-0 z-20 -mx-4 border-t border-border px-4 py-3 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 ${pinActions ? "bg-surface" : "mt-6 -mb-10 bg-background/90 backdrop-blur-xl"}`}>
+        <div className="flex w-full flex-wrap items-center justify-end gap-2">{actions}</div>
       </div>
     </div>
   );

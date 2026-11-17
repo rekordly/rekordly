@@ -5,13 +5,15 @@ import { useState, type MouseEvent } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { UploadSimple, PaintBrush } from "@phosphor-icons/react";
+import { UploadSimple, PaintBrush, PencilSimple, Plus, Trash } from "@phosphor-icons/react";
 import { WorkspaceGate, useFinanceAction } from "@/components/features/finance/shared";
 import { AppButton } from "@/components/ui/app-button";
 import { AppInput } from "@/components/ui/app-input";
 import { AppSelect } from "@/components/ui/app-select";
 import { AppTextarea } from "@/components/ui/app-textarea";
 import { AppSwitch } from "@/components/ui/app-switch";
+import { RichTextEditor } from "@/components/ui/rich-text-editor";
+import { SideSheet } from "@/components/ui/side-sheet";
 import { Page, PageHeader, StatusPill } from "@/components/ui/page";
 import { FormPage, FormSection, StepNav } from "@/components/ui/form-kit";
 import { financeApi, moneyKeys } from "@/lib/money";
@@ -21,8 +23,14 @@ import type { StorefrontDesign, PublicStorefrontProjection } from "@/types/finan
 import { EssentialStoreFooter, StoreServiceCards } from "./essential-store-footer";
 
 type Draft = { theme_key: "simple"; name: string; brand: BrandSettings; sections: StoreSection[] };
+type FaqItem = { question: string; answer: string };
 const steps = ["Banner", "Catalogue", "Store sections", "Preview & publish"];
 const labels: Record<string, string> = { announcement: "Top banner message", about: "About us page", contact: "Contact information & WhatsApp", faq: "Frequently asked questions" };
+
+function readFaqItems(section: StoreSection): FaqItem[] {
+  if (!Array.isArray(section.content.items)) return [];
+  return section.content.items.filter((item): item is FaqItem => Boolean(item && typeof item.question === "string" && typeof item.answer === "string")).slice(0, 10).map((item) => ({ ...item }));
+}
 
 function draftFrom(design: StorefrontDesign): Draft {
   const current = (design.draft_sections ?? []).map((section) => { if (section.type !== "hero") return section; const content = { ...section.content }; delete content.product_id; return { ...section, content }; });
@@ -50,9 +58,11 @@ function Content({ workspaceId }: { workspaceId: number }) {
   const [step, setStep] = useState(0);
   const [uploadError, setUploadError] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [faqItems, setFaqItems] = useState<FaqItem[] | null>(null);
   const draft = edited ?? (query.data ? draftFrom(query.data) : null);
   const save = useFinanceAction(workspaceId, async () => {
     if (!draft || !query.data) throw new Error("Wait for the template to load.");
+    if (Array.from(String(draft.sections.find((section) => section.type === "about")?.content.body || "")).length > 3000) throw new Error("About your store is too long. Shorten the content before saving.");
     const saved = await financeApi.saveStorefrontDesignDraft(workspaceId, { ...draft, expected_version: query.data.version, idempotency_key: crypto.randomUUID() });
     client.setQueryData(key, saved);
     setEdited(draftFrom(saved));
@@ -84,7 +94,7 @@ function Content({ workspaceId }: { workspaceId: number }) {
   const hero = draft.sections.find((item) => item.type === "hero")!;
   const products = draft.sections.find((item) => item.type === "product_grid")!;
   const aside = <section className="space-y-3 rounded-2xl border border-border bg-surface p-5"><StatusPill tone="neutral">Essential · Free</StatusPill><h2 className="font-semibold">Your store template</h2><p className="text-sm leading-6 text-muted">A banner, a catalogue with categories at the side, and separate product and customer information pages.</p><Link href="/store/information" className="block text-sm text-primary">Edit brand colours & fonts →</Link><p className="text-xs leading-5 text-muted">Uses your primary and secondary colours. A colour you leave unset uses Essential’s default.</p></section>;
-  return <FormPage title="Customise Essential" description="Save a private draft, preview it, then publish when it is ready." back={{ href: "/store/templates", label: "Templates" }} aside={step === 3 ? undefined : aside} actions={<>
+  return <FormPage pinActions title="Customise Essential" description="Save a private draft, preview it, then publish when it is ready." back={{ href: "/store/templates", label: "Templates" }} aside={step === 3 ? undefined : aside} actions={<>
     <AppButton variant="ghost" label="Back" isDisabled={step === 0} onPress={() => setStep(step - 1)} />
     <AppButton variant="secondary" label="Save draft" isLoading={save.isPending} isDisabled={uploading || publish.isPending} onPress={() => save.mutate(undefined)} />
     {step < 3 ? <AppButton label="Continue" onPress={() => setStep(step + 1)} /> : <><AppButton variant="secondary" label="Refresh saved preview" isDisabled={save.isPending || publish.isPending} onPress={() => save.mutate(undefined)} /><AppButton label="Publish" isLoading={publish.isPending} isDisabled={save.isPending || uploading} onPress={() => publish.mutate(undefined)} /></>}
@@ -97,7 +107,38 @@ function Content({ workspaceId }: { workspaceId: number }) {
       {uploadError ? <p role="alert" className="text-sm text-danger">{uploadError}</p> : null}
     </FormSection> : null}
     {step === 1 ? <FormSection title="Product listing" description="Categories appear beside your products on desktop and in a filter menu on phones."><AppSwitch label="Display products" isSelected={products.enabled} onChange={(enabled) => toggle("product_grid", enabled)} /><AppSelect label="Product listing" selectedKey={String(products.content.source || "new")} options={[{ key: "new", label: "All published products" }, { key: "featured", label: "Featured products" }, { key: "collection", label: "One collection" }]} onSelectionChange={(value) => patch("product_grid", { source: value })} />{products.content.source === "collection" ? <AppSelect label="Collection" options={(preview.data?.storefront.collections ?? []).map((item) => ({ key: String(item.id), label: item.name }))} selectedKey={String(products.content.collection_id || "")} onSelectionChange={(value) => patch("product_grid", { collection_id: Number(value) })} /> : null}<p className="text-sm text-muted">Every product opens its own page. Product options are chosen before adding an item to the cart.</p></FormSection> : null}
-    {step === 2 ? <>{draft.sections.filter((item) => labels[item.type]).map((section) => <FormSection key={section.id} title={labels[section.type]}><AppSwitch label={`Display ${labels[section.type].toLowerCase()}`} isSelected={section.enabled} onChange={(enabled) => toggle(section.type, enabled)} />{section.enabled && section.type === "about" ? <><AppInput label="Heading" maxLength={80} value={String(section.content.heading || "About us")} onChange={(event) => patch("about", { heading: event.target.value })} /><AppTextarea label="About your store" rows={5} maxLength={3000} value={String(section.content.body || "")} onChange={(event) => patch("about", { body: event.target.value })} /></> : null}{section.enabled && section.type === "announcement" ? <AppInput label="Message" maxLength={120} value={String(section.content.text || "")} onChange={(event) => patch("announcement", { text: event.target.value })} /> : null}{section.type === "contact" ? <p className="text-sm text-muted">Uses the contact information and WhatsApp number in your store settings.</p> : null}{section.enabled && section.type === "faq" ? <p className="text-sm text-muted">Questions already saved with your store are displayed on the About page.</p> : null}</FormSection>)}<FormSection title="Policies"><p className="text-sm text-muted">Delivery, returns, privacy and terms have their own pages. Edit their content in <Link className="text-primary" href="/store/settings">Store settings</Link>.</p></FormSection></> : null}
+    {step === 2 ? <FormSection title="Store sections">
+      <div className="divide-y divide-border">
+        {draft.sections.filter((section) => labels[section.type]).map((section) => <div key={section.id} className="space-y-4 py-5 first:pt-0">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-sm font-medium">{labels[section.type]}</span>
+            <div className="flex shrink-0 items-center gap-3">
+              {section.type === "faq" && section.enabled ? <AppButton size="sm" variant="secondary" startContent={<PencilSimple />} label="Edit FAQ" onPress={() => setFaqItems(readFaqItems(section))} /> : null}
+              <AppSwitch aria-label={"Display " + labels[section.type]} isSelected={section.enabled} onChange={(enabled) => toggle(section.type, enabled)} />
+            </div>
+          </div>
+          {section.enabled && section.type === "about" ? <>
+            <AppInput label="Heading" maxLength={80} value={String(section.content.heading || "About us")} onChange={(event) => patch("about", { heading: event.target.value })} />
+            <RichTextEditor label="About your store" value={String(section.content.body || "")} onChange={(body) => patch("about", { body })} />
+          </> : null}
+          {section.enabled && section.type === "announcement" ? <AppInput label="Message" maxLength={120} value={String(section.content.text || "")} onChange={(event) => patch("announcement", { text: event.target.value })} /> : null}
+        </div>)}
+        <div className="flex items-center justify-between gap-3 pt-5"><span className="text-sm font-medium">Policies</span><Link className="text-sm font-medium text-primary" href="/store/settings">Edit policies</Link></div>
+      </div>
+    </FormSection> : null}
+    <SideSheet isOpen={faqItems !== null} onClose={() => setFaqItems(null)} title="Frequently asked questions" footer={<>
+      <AppButton variant="ghost" label="Cancel" onPress={() => setFaqItems(null)} />
+      <AppButton label="Done" isDisabled={faqItems?.some((item) => !item.question.trim() || !item.answer.trim()) ?? false} onPress={() => { if (faqItems) patch("faq", { items: faqItems.map((item) => ({ question: item.question.trim(), answer: item.answer.trim() })) }); setFaqItems(null); }} />
+    </>}>
+      <div className="space-y-5">
+        {(faqItems ?? []).map((item, index) => <section key={index} className="space-y-3 rounded-xl border border-border p-4">
+          <div className="flex items-center justify-between"><h3 className="text-sm font-medium">Question {index + 1}</h3><AppButton isIconOnly size="sm" variant="ghost" aria-label={"Remove question " + (index + 1)} startContent={<Trash />} onPress={() => setFaqItems((current) => current?.filter((_, i) => i !== index) ?? null)} /></div>
+          <AppInput label="Question" isRequired maxLength={240} value={item.question} onChange={(event) => setFaqItems((current) => current?.map((row, i) => i === index ? { ...row, question: event.target.value } : row) ?? null)} />
+          <AppTextarea label="Answer" isRequired rows={4} maxLength={1500} value={item.answer} onChange={(event) => setFaqItems((current) => current?.map((row, i) => i === index ? { ...row, answer: event.target.value } : row) ?? null)} />
+        </section>)}
+        <AppButton variant="secondary" startContent={<Plus />} label="Add question" isDisabled={(faqItems?.length ?? 0) >= 10} onPress={() => setFaqItems((current) => [...(current ?? []), { question: "", answer: "" }])} />
+      </div>
+    </SideSheet>
     {step === 3 ? <FormSection title="Private preview" description="This preview is available only within your signed-in workspace. Publishing is a separate action.">{preview.isPending ? <p>Loading your catalogue…</p> : preview.data ? <StorePreview data={preview.data.storefront} draft={draft} /> : <p role="alert" className="text-sm text-danger">Could not load the private preview. Save your draft and try again.</p>}</FormSection> : null}
   </FormPage>;
 }

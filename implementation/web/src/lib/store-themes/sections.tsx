@@ -1,5 +1,6 @@
 import Image from "next/image";
 import type { ReactNode } from "react";
+import { RichText } from "@/components/ui/rich-text-editor";
 
 import { formatMinorAmount } from "@/lib/money";
 import type { StoreSection, ThemeRendererProps, ThemeSectionManifest, ThemeStoreData } from "./types";
@@ -103,9 +104,9 @@ export function CollectionsSection({ section, data, onSectionClick: onClick, pre
 export function AboutSection({ section, onSectionClick: onClick, preview }: { section: StoreSection } & Pick<ThemeRendererProps, "onSectionClick" | "preview">) {
   const body = text(section, "body");
   if (!body && !text(section, "image")) return null;
-  return <Frame section={section} preview={preview} onClick={onClick}><div id="about" className="grid gap-6 py-8 md:grid-cols-2 md:items-center">
+  return <Frame section={section} preview={preview} onClick={onClick}><div id="about" className={`grid gap-6 py-8 ${text(section, "image") ? "md:grid-cols-2 md:items-center" : ""}`}>
     {text(section, "image") ? <div className="relative aspect-[4/3] overflow-hidden rounded-2xl"><Image src={text(section, "image")} alt="" fill sizes="(max-width: 768px) 100vw, 50vw" className="object-cover" unoptimized /></div> : null}
-    <div className="space-y-3"><h2 className="font-[family-name:var(--store-heading-font)] text-xl font-bold sm:text-2xl">{text(section, "heading", "About us")}</h2><p className="whitespace-pre-wrap text-sm leading-7 text-[var(--store-muted)]">{body}</p></div>
+    <div className="space-y-3"><h2 className="font-[family-name:var(--store-heading-font)] text-xl font-bold sm:text-2xl">{text(section, "heading", "About us")}</h2><RichText html={body} className="leading-7 text-[var(--store-muted)]" /></div>
   </div></Frame>;
 }
 
