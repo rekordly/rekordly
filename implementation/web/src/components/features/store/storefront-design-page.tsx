@@ -5,15 +5,14 @@ import { useState, type MouseEvent } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { UploadSimple, PaintBrush, PencilSimple, Plus, Trash } from "@phosphor-icons/react";
+import { UploadSimple, PaintBrush, PencilSimple } from "@phosphor-icons/react";
 import { WorkspaceGate, useFinanceAction } from "@/components/features/finance/shared";
 import { AppButton } from "@/components/ui/app-button";
 import { AppInput } from "@/components/ui/app-input";
 import { AppSelect } from "@/components/ui/app-select";
-import { AppTextarea } from "@/components/ui/app-textarea";
 import { AppSwitch } from "@/components/ui/app-switch";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
-import { SideSheet } from "@/components/ui/side-sheet";
+import { StoreFaqDrawer, type StoreFaqItem as FaqItem } from "./store-faq-drawer";
 import { Page, PageHeader, StatusPill } from "@/components/ui/page";
 import { FormPage, FormSection, StepNav } from "@/components/ui/form-kit";
 import { financeApi, moneyKeys } from "@/lib/money";
@@ -23,7 +22,6 @@ import type { StorefrontDesign, PublicStorefrontProjection } from "@/types/finan
 import { EssentialStoreFooter, StoreServiceCards } from "./essential-store-footer";
 
 type Draft = { theme_key: "simple"; name: string; brand: BrandSettings; sections: StoreSection[] };
-type FaqItem = { question: string; answer: string };
 const steps = ["Banner", "Catalogue", "Store sections", "Preview & publish"];
 const labels: Record<string, string> = { announcement: "Top banner message", about: "About us page", contact: "Contact information & WhatsApp", faq: "Frequently asked questions" };
 
@@ -126,19 +124,7 @@ function Content({ workspaceId }: { workspaceId: number }) {
         <div className="flex items-center justify-between gap-3 pt-5"><span className="text-sm font-medium">Policies</span><Link className="text-sm font-medium text-primary" href="/store/settings">Edit policies</Link></div>
       </div>
     </FormSection> : null}
-    <SideSheet isOpen={faqItems !== null} onClose={() => setFaqItems(null)} title="Frequently asked questions" footer={<>
-      <AppButton variant="ghost" label="Cancel" onPress={() => setFaqItems(null)} />
-      <AppButton label="Done" isDisabled={faqItems?.some((item) => !item.question.trim() || !item.answer.trim()) ?? false} onPress={() => { if (faqItems) patch("faq", { items: faqItems.map((item) => ({ question: item.question.trim(), answer: item.answer.trim() })) }); setFaqItems(null); }} />
-    </>}>
-      <div className="space-y-5">
-        {(faqItems ?? []).map((item, index) => <section key={index} className="space-y-3 rounded-xl border border-border p-4">
-          <div className="flex items-center justify-between"><h3 className="text-sm font-medium">Question {index + 1}</h3><AppButton isIconOnly size="sm" variant="ghost" aria-label={"Remove question " + (index + 1)} startContent={<Trash />} onPress={() => setFaqItems((current) => current?.filter((_, i) => i !== index) ?? null)} /></div>
-          <AppInput label="Question" isRequired maxLength={240} value={item.question} onChange={(event) => setFaqItems((current) => current?.map((row, i) => i === index ? { ...row, question: event.target.value } : row) ?? null)} />
-          <AppTextarea label="Answer" isRequired rows={4} maxLength={1500} value={item.answer} onChange={(event) => setFaqItems((current) => current?.map((row, i) => i === index ? { ...row, answer: event.target.value } : row) ?? null)} />
-        </section>)}
-        <AppButton variant="secondary" startContent={<Plus />} label="Add question" isDisabled={(faqItems?.length ?? 0) >= 10} onPress={() => setFaqItems((current) => [...(current ?? []), { question: "", answer: "" }])} />
-      </div>
-    </SideSheet>
+    {faqItems !== null ? <StoreFaqDrawer items={faqItems} onClose={() => setFaqItems(null)} onDone={(items) => { patch("faq", { items }); setFaqItems(null); }} /> : null}
     {step === 3 ? <FormSection title="Private preview" description="This preview is available only within your signed-in workspace. Publishing is a separate action.">{preview.isPending ? <p>Loading your catalogue…</p> : preview.data ? <StorePreview data={preview.data.storefront} draft={draft} /> : <p role="alert" className="text-sm text-danger">Could not load the private preview. Save your draft and try again.</p>}</FormSection> : null}
   </FormPage>;
 }
