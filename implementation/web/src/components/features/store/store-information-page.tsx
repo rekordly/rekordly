@@ -10,11 +10,13 @@ import { useFinanceAction, WorkspaceGate, type WorkspaceInfo } from "@/component
 import { AppButton } from "@/components/ui/app-button";
 import { AppInput } from "@/components/ui/app-input";
 import { AppSelect } from "@/components/ui/app-select";
-import { AppTextarea } from "@/components/ui/app-textarea";
 import { FormPage, FormSection, StepNav } from "@/components/ui/form-kit";
 import { Page, PageHeader } from "@/components/ui/page";
 import { financeApi, moneyKeys } from "@/lib/money";
 import { uploadProductImage } from "@/lib/products";
+import { StoreBrandFields } from "./store-brand-fields";
+import type { BrandSettings } from "@/lib/store-themes";
+import { parseStoreAddress, displayStoreAddress } from "@/lib/store-address";
 
 type StoreInfoDraft = {
   store_name: string;
@@ -62,16 +64,7 @@ function safeTimezone(value: string) {
 }
 
 function parseAddress(address?: string | null) {
-  const result = { address: "", state: "", city: "", zip_code: "" };
-  if (!address) return result;
-  for (const part of address.split("\n")) {
-    const match = part.match(/^(State|City|Zip Code):\s*(.*)$/i);
-    if (!match) { result.address = result.address ? `${result.address}\n${part}` : part; continue; }
-    if (match[1].toLowerCase() === "state") result.state = match[2];
-    if (match[1].toLowerCase() === "city") result.city = match[2];
-    if (match[1].toLowerCase() === "zip code") result.zip_code = match[2];
-  }
-  return result;
+  return parseStoreAddress(address);
 }
 
 function formattedAddress(form: StoreInfoDraft) {
@@ -85,6 +78,10 @@ function StoreInformationContent({ workspaceId }: WorkspaceInfo) {
   const overview = overviewQuery.data;
   const storefront = overview?.storefront;
   const workspace = workspaceQuery.data;
+  const designQuery = useQuery({ queryKey: [...moneyKeys.workspace(workspaceId), "storefront-design"], queryFn: () => financeApi.getStorefrontDesign(workspaceId), enabled: Boolean(storefront), retry: false });
+  const [brand, setBrand] = useState<BrandSettings>({ palette: "green", font_style: "modern" });
+  const [brandInitialized, setBrandInitialized] = useState(false);
+  useEffect(() => { if (designQuery.data && !brandInitialized) { setBrand(designQuery.data.published_brand); setBrandInitialized(true); } }, [designQuery.data, brandInitialized]);
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<StoreInfoDraft>({ store_name: "", business_name: "", timezone: "Africa/Lagos", sector: "", tagline: "", description: "", currency: "NGN", phone: "", address: "", country: "NG", state: "", city: "", zip_code: "", logo_url: "" });
   const [initialized, setInitialized] = useState(false);
@@ -101,7 +98,7 @@ function StoreInformationContent({ workspaceId }: WorkspaceInfo) {
       timezone: safeTimezone(workspace.timezone || "Africa/Lagos"),
       sector: workspace.business_type ?? "",
       tagline: storefront?.settings.tagline ?? "",
-      description: storefront?.settings.description ?? "",
+      description: (storefront?.settings.description ?? "").slice(0, 180),
       currency: storefront?.currency ?? workspace.base_currency ?? "NGN",
       phone: storefront?.settings.contact_phone ?? workspace.contact_phone ?? "",
       address: location.address,
@@ -116,12 +113,13 @@ function StoreInformationContent({ workspaceId }: WorkspaceInfo) {
 
   const save = useFinanceAction(workspaceId, async () => {
     if (!workspace) throw new Error("Workspace information is unavailable.");
+    if (storefront && !brandInitialized) throw new Error("Wait for your store’s brand settings to load before saving.");
     const cleanForm: StoreInfoDraft = {
       ...form,
       store_name: sanitizeText(form.store_name, 120).trim(),
       business_name: sanitizeText(form.business_name, 120).trim(),
       tagline: sanitizeText(form.tagline, 160).trim(),
-      description: sanitizeText(form.description, 2000).trim(),
+      description: sanitizeText(form.description, 180).trim(),
       phone: form.phone.replace(/[^0-9+()\-\s]/g, "").slice(0, 40).trim(),
       address: sanitizeText(form.address, 300).trim(),
       city: sanitizeText(form.city, 120).trim(),
@@ -151,6 +149,7 @@ function StoreInformationContent({ workspaceId }: WorkspaceInfo) {
       card: "shoppers", idempotency_key: crypto.randomUUID(), tagline: cleanForm.tagline,
       description: cleanForm.description, logo_url: cleanForm.logo_url,
     });
+    await financeApi.updateStorefrontSettings(workspaceId, { card: "brand", idempotency_key: crypto.randomUUID(), brand });
     return true;
   }, { success: "Store information saved", onDone: async () => {
     await Promise.all([
@@ -162,7 +161,7 @@ function StoreInformationContent({ workspaceId }: WorkspaceInfo) {
   } });
 
   const update = (key: keyof StoreInfoDraft, value: string) => {
-    const limits: Partial<Record<keyof StoreInfoDraft, number>> = { store_name: 120, business_name: 120, tagline: 160, description: 2000, phone: 40, address: 300, city: 120, zip_code: 24 };
+    const limits: Partial<Record<keyof StoreInfoDraft, number>> = { store_name: 120, business_name: 120, tagline: 160, description: 180, phone: 40, address: 300, city: 120, zip_code: 24 };
     const cleanValue = key === "phone" ? value.replace(/[^0-9+()\-\s]/g, "").slice(0, 40) : limits[key] ? sanitizeText(value, limits[key]!) : value;
     setForm((current) => ({ ...current, [key]: cleanValue }));
   };
@@ -192,7 +191,7 @@ function StoreInformationContent({ workspaceId }: WorkspaceInfo) {
         {uploadError ? <p role="alert" className="text-sm text-danger">{uploadError}</p> : null}
         <div className="grid gap-4 md:grid-cols-2"><AppInput label="Store name" value={form.store_name} onChange={(event) => update("store_name", event.target.value)} maxLength={120} isRequired placeholder="Your public store name" /><AppInput label="Business name (optional)" value={form.business_name} onChange={(event) => update("business_name", event.target.value)} maxLength={120} /><AppSelect label="Business timezone (optional)" options={timezoneOptions.map((timezone) => ({ key: timezone, label: timezone }))} selectedKey={form.timezone} onSelectionChange={(value) => update("timezone", value)} description="Used in reports, notifications, delivery dates and checkout." /><AppSelect label="Business sector" placeholder="Choose a sector" isRequired options={SECTORS.map((sector) => ({ key: sector, label: sector }))} selectedKey={form.sector || undefined} onSelectionChange={(value) => update("sector", value)} /></div>
     </FormSection> : null}
-    {step === 1 ? <FormSection title="Your brand" description="Introduce your business to shoppers."><AppInput label="Store tagline (optional)" value={form.tagline} onChange={(event) => update("tagline", event.target.value)} maxLength={160} description={`${form.tagline.length}/160 characters`} placeholder="Your business slogan" /><AppTextarea label="Store description (optional)" value={form.description} onChange={(event) => update("description", event.target.value)} maxLength={2000} description={`${form.description.length}/2,000 characters`} rows={5} placeholder="Describe your products and what makes your business special." /></FormSection> : null}
+    {step === 1 ? <FormSection title="Your brand" description="Introduce your business to shoppers."><AppInput label="Store tagline (optional)" value={form.tagline} onChange={(event) => update("tagline", event.target.value)} maxLength={160} description={`${form.tagline.length}/160 characters`} placeholder="Your business slogan" /><AppInput label="Short store description (optional)" value={form.description} onChange={(event) => update("description", event.target.value)} maxLength={180} description={`${form.description.length}/180 characters`} placeholder="Describe your store in one sentence." /><StoreBrandFields brand={brand} onChange={setBrand} /></FormSection> : null}
     {step === 2 ? <FormSection title="Contact & location" description="Shoppers use this information to contact your business and understand where it is based."><div className="grid gap-4 md:grid-cols-2"><AppSelect label="Store currency" isRequired isDisabled={Boolean(storefront)} options={CURRENCIES.map((currency) => ({ key: currency, label: currency }))} selectedKey={form.currency} onSelectionChange={(value) => update("currency", value)} description={storefront ? "Currency is fixed after the store is created." : undefined} /><AppInput label="Contact phone" value={form.phone} onChange={(event) => update("phone", event.target.value)} maxLength={40} isRequired placeholder="+234…" /><div className="md:col-span-2"><AppInput label="Address (optional)" value={form.address} onChange={(event) => update("address", event.target.value)} maxLength={300} placeholder="Street address" /></div><AppSelect label="Country" isRequired options={COUNTRIES.map((country) => ({ key: country.code, label: country.name }))} selectedKey={form.country || undefined} onSelectionChange={(value) => { update("country", value); update("state", ""); }} /><AppSelect label="State" placeholder={stateOptions.length ? "Choose a state" : "Choose a country first"} isDisabled={!stateOptions.length} isRequired options={availableStates.map((state) => ({ key: state, label: state }))} selectedKey={form.state || undefined} onSelectionChange={(value) => update("state", value)} /><AppInput label="City" value={form.city} onChange={(event) => update("city", event.target.value)} maxLength={120} isRequired /><AppInput label="Zip code (optional)" value={form.zip_code} onChange={(event) => update("zip_code", event.target.value)} maxLength={24} /></div></FormSection> : null}
     {step === 3 ? <FormSection title="Review your storefront" description="Review the expanded storefront preview before saving."><ExpandedStorePreview form={form} /></FormSection> : null}
   </FormPage>;
@@ -209,7 +208,7 @@ function StoreInformationPreview({ form }: { form: StoreInfoDraft }) {
         <div><p className="font-medium">Business</p><p className="mt-0.5 text-muted">{form.business_name || "Business name"} · {form.sector || "Choose a sector"}</p></div>
         {form.description ? <p className="line-clamp-3 text-muted">{form.description}</p> : null}
         <div><p className="font-medium">Contact</p><p className="mt-0.5 text-muted">{form.phone || "Contact phone"}</p></div>
-        <div><p className="font-medium">Location</p><p className="mt-0.5 whitespace-pre-line text-muted">{[form.address, form.city, form.state, form.zip_code, countryName(form.country)].filter(Boolean).join(", ") || "Store address"}</p></div>
+        <div><p className="font-medium">Location</p><p className="mt-0.5 whitespace-pre-line text-muted">{displayStoreAddress(formattedAddress(form)) || "Store address"}</p></div>
         <p className="border-t border-border pt-3 text-muted">Currency · {form.currency}</p>
       </div>
     </div>

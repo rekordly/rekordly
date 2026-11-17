@@ -217,6 +217,9 @@ type StorefrontSettingsView struct {
 	DefaultDeliveryFeeMinor string            `json:"default_delivery_fee_minor"`
 	FreeDeliveryThresholdMinor *string        `json:"free_delivery_threshold_minor,omitempty"`
 	DeliveryAreas           []StorefrontDeliveryAreaView `json:"delivery_areas"`
+	MetaPixelID             string            `json:"meta_pixel_id,omitempty"`
+	TikTokPixelID           string            `json:"tiktok_pixel_id,omitempty"`
+	GoogleAnalyticsID       string            `json:"google_analytics_id,omitempty"`
 	CheckoutRequireEmail    bool              `json:"checkout_require_email"`
 	CheckoutRequirePhone    bool              `json:"checkout_require_phone"`
 	AutoShowNewProducts     bool              `json:"auto_show_new_products"`
@@ -288,6 +291,7 @@ type UpdateStorefrontSettingsInput struct {
 	LogoURL              string            `json:"logo_url"`
 	BannerURL            string            `json:"banner_url"`
 	PrimaryColor         string            `json:"primary_color"`
+ Brand *StorefrontBrand `json:"brand"`
 	AccentColor          string            `json:"accent_color"`
 	BackgroundColor      string            `json:"background_color"`
 	TextColor            string            `json:"text_color"`
@@ -304,6 +308,9 @@ type UpdateStorefrontSettingsInput struct {
 	DefaultDeliveryFee   string            `json:"default_delivery_fee"`
 	FreeDeliveryThreshold *string          `json:"free_delivery_threshold"`
 	DeliveryAreas        []StorefrontDeliveryAreaInput `json:"delivery_areas"`
+	MetaPixelID          string            `json:"meta_pixel_id"`
+	TikTokPixelID        string            `json:"tiktok_pixel_id"`
+	GoogleAnalyticsID    string            `json:"google_analytics_id"`
 	CheckoutRequireEmail *bool             `json:"checkout_require_email"`
 	CheckoutRequirePhone *bool             `json:"checkout_require_phone"`
 	ReturnPolicy         string            `json:"return_policy"`
@@ -385,6 +392,9 @@ func (s *Service) buildStorefrontView(ctx context.Context, sf db.Storefront) (St
 		return StorefrontView{}, err
 	}
 	settings := settingsToView(st)
+	if err := s.pool.QueryRow(ctx, `SELECT meta_pixel_id, tiktok_pixel_id, google_analytics_id FROM storefront_settings WHERE workspace_id=$1 AND storefront_id=$2`, sf.WorkspaceID, sf.ID).Scan(&settings.MetaPixelID, &settings.TikTokPixelID, &settings.GoogleAnalyticsID); err != nil {
+		return StorefrontView{}, err
+	}
 	for _, area := range areas {
 		settings.DeliveryAreas = append(settings.DeliveryAreas, StorefrontDeliveryAreaView{ID: area.ID, Name: area.Name, FeeMinor: fmt.Sprint(area.FeeMinor), Description: area.Description, Position: area.Position, IsActive: area.IsActive})
 	}
@@ -549,6 +559,18 @@ func (s *Service) UpdateStorefrontSettings(ctx context.Context, ws int64, in Upd
 		}
 		nextTheme = pgtype.Text{String: t, Valid: true}
 	}
+	metaPixelID := strings.TrimSpace(in.MetaPixelID)
+	tiktokPixelID := strings.TrimSpace(in.TikTokPixelID)
+	googleAnalyticsID := strings.ToUpper(strings.TrimSpace(in.GoogleAnalyticsID))
+	if metaPixelID != "" && !regexp.MustCompile(`^[0-9]{5,30}$`).MatchString(metaPixelID) {
+		return StorefrontView{}, errors.New("enter a valid Meta Pixel ID")
+	}
+	if tiktokPixelID != "" && !regexp.MustCompile(`^[A-Za-z0-9_-]{8,64}$`).MatchString(tiktokPixelID) {
+		return StorefrontView{}, errors.New("enter a valid TikTok Pixel ID")
+	}
+	if googleAnalyticsID != "" && !regexp.MustCompile(`^G-[A-Z0-9]{6,16}$`).MatchString(googleAnalyticsID) {
+		return StorefrontView{}, errors.New("enter a valid Google Analytics measurement ID")
+	}
 	var nextOutlet pgtype.Int8
 	if in.DefaultOutletID != nil && *in.DefaultOutletID > 0 {
 		if _, err := inventoryLocationFor(ctx, s.queries, ws, *in.DefaultOutletID); err != nil {
@@ -652,11 +674,17 @@ func (s *Service) UpdateStorefrontSettings(ctx context.Context, ws int64, in Upd
 	if err != nil {
 		return StorefrontView{}, err
 	}
+ if in.Brand != nil {
+  if err := validateStoreBrand(in.Brand); err != nil { return StorefrontView{}, err }
+  brandPatch, err := json.Marshal(map[string]any{"colors": in.Brand.Colors, "heading_font": in.Brand.HeadingFont, "body_font": in.Brand.BodyFont})
+  if err != nil { return StorefrontView{}, err }
+  if _, err := tx.Exec(ctx, `UPDATE storefront_settings SET brand=COALESCE(brand,'{}'::jsonb) || $3::jsonb, draft_brand=COALESCE(draft_brand,'{}'::jsonb) || $3::jsonb, version=version+1 WHERE workspace_id=$1 AND storefront_id=$2`, ws, sf.ID, brandPatch); err != nil { return StorefrontView{}, err }
+ }
 	if _, err := q.UpdateStorefrontSettings(ctx, db.UpdateStorefrontSettingsParams{
 		StorefrontID:            sf.ID,
 		WorkspaceID:             ws,
 		Tagline:                 optionalPgText(sanitizePublicText(in.Tagline, 200)),
-		Description:             optionalPgText(sanitizePublicText(in.Description, 2000)),
+		Description:             optionalPgText(sanitizePublicText(in.Description, 180)),
 		LogoUrl:                 optionalPgText(sanitizeURLOrCloudinary(in.LogoURL)),
 		BannerUrl:               optionalPgText(sanitizeURLOrCloudinary(in.BannerURL)),
 		PrimaryColor:            pColor,
@@ -703,6 +731,9 @@ func (s *Service) UpdateStorefrontSettings(ctx context.Context, ws int64, in Upd
 		if err := q.UpdateStorefrontFreeDeliveryThreshold(ctx, db.UpdateStorefrontFreeDeliveryThresholdParams{WorkspaceID: ws, StorefrontID: sf.ID, FreeDeliveryThresholdMinor: threshold}); err != nil {
 			return StorefrontView{}, err
 		}
+	}
+	if _, err := tx.Exec(ctx, `UPDATE storefront_settings SET meta_pixel_id=$3, tiktok_pixel_id=$4, google_analytics_id=$5, updated_at=now() WHERE workspace_id=$1 AND storefront_id=$2`, ws, sf.ID, metaPixelID, tiktokPixelID, googleAnalyticsID); err != nil {
+		return StorefrontView{}, err
 	}
 	if in.DeliveryAreas != nil {
 		if len(in.DeliveryAreas) > 20 {

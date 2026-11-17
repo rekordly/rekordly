@@ -101,7 +101,7 @@ func (q *Queries) GetStorefrontCatalogueMutation(ctx context.Context, arg GetSto
 }
 
 const listStorefrontProductCards = `-- name: ListStorefrontProductCards :many
-SELECT p.id, p.name, (p.image_urls->>0)::text AS image_url,
+SELECT p.id, p.name, COALESCE(p.image_urls->>0, '')::text AS image_url,
        COALESCE((SELECT MIN(pv.selling_price_minor) FROM product_variants pv
                  WHERE pv.workspace_id = p.workspace_id AND pv.product_id = p.id AND pv.is_active AND pv.archived_at IS NULL), 0)::bigint AS price_minor,
        (SELECT COUNT(*)::bigint FROM product_variants pv

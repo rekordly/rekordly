@@ -2,7 +2,7 @@ import Image from "next/image";
 import type { ReactNode } from "react";
 
 import { formatMinorAmount } from "@/lib/money";
-import type { StoreSection, ThemeRendererProps, ThemeSectionManifest } from "./types";
+import type { StoreSection, ThemeRendererProps, ThemeSectionManifest, ThemeStoreData } from "./types";
 
 const text = (section: StoreSection, key: string, fallback = "") => {
   const value = section.content[key];
@@ -35,16 +35,27 @@ export function AnnouncementSection({ section, onSectionClick: onClick, preview 
   return <Frame section={section} preview={preview} onClick={onClick}><div className="px-4 py-2 text-center text-sm font-medium text-white" style={{ background: "var(--store-primary)" }}>{link ? <a href={hrefFor(link)}>{message}</a> : message}</div></Frame>;
 }
 
-export function HeroSection({ section, boutique, onSectionClick: onClick, preview }: { section: StoreSection; boutique?: boolean } & Pick<ThemeRendererProps, "onSectionClick" | "preview">) {
-  const heading = text(section, "heading");
-  const image = text(section, "image");
+export function HeroSection({ section, boutique, essential, store, brandLogoUrl, onSectionClick: onClick, preview }: { section: StoreSection; boutique?: boolean; essential?: boolean; store?: ThemeStoreData; brandLogoUrl?: string | null } & Pick<ThemeRendererProps, "onSectionClick" | "preview">) {
+  const configuredHeading = text(section, "heading");
+  const heading = essential
+    ? store?.tagline?.trim() || (configuredHeading && !/^welcome(?:\s+to\s+.*)?$/i.test(configuredHeading.trim()) ? configuredHeading : "Find something you’ll love.")
+    : configuredHeading;
+  const configuredSubheading = text(section, "subheading");
+  const subheading = essential && store?.description ? store.description : configuredSubheading;
+  const image = text(section, "image") || (essential ? store?.banner_url || "" : "");
   return <Frame section={section} preview={preview} onClick={onClick}>
-    <div className={`relative isolate overflow-hidden bg-[var(--store-surface)] ${boutique ? "min-h-[360px] sm:min-h-[470px]" : "min-h-[240px] sm:min-h-[320px]"}`}>
+    <div className={`relative isolate overflow-hidden bg-[var(--store-surface)] ${essential ? "min-h-[340px] rounded-3xl sm:min-h-[440px]" : boutique ? "min-h-[360px] sm:min-h-[470px]" : "min-h-[240px] sm:min-h-[320px]"}`} style={!image && essential ? { background: "linear-gradient(110deg, #F2F6F3 0%, #E5EFE8 100%)" } : undefined}>
       {image ? <Image src={image} alt="" fill sizes="100vw" className="-z-10 object-cover" unoptimized /> : null}
-      <div className={`flex min-h-[inherit] flex-col justify-center gap-3 px-6 py-12 ${image ? "bg-black/35 text-white" : ""} ${boutique ? "items-center text-center" : "items-start"}`}>
-        {heading ? <h1 className="max-w-3xl font-[family-name:var(--store-heading-font)] text-3xl font-bold tracking-tight sm:text-5xl">{heading}</h1> : null}
-        {text(section, "subheading") ? <p className="max-w-2xl text-base opacity-90 sm:text-lg">{text(section, "subheading")}</p> : null}
-        {text(section, "button_label") ? <a href="#products" className="mt-2 inline-flex rounded-full px-5 py-3 text-sm font-semibold text-white" style={{ background: "var(--store-primary)" }}>{text(section, "button_label")}</a> : null}
+      <div className={`${essential && !image ? "grid min-h-[inherit] items-center gap-8 px-7 py-10 sm:grid-cols-[1.1fr_0.9fr] sm:px-12" : `flex min-h-[inherit] flex-col justify-center gap-4 px-7 py-12 sm:px-12 ${image ? "bg-black/35 text-white" : ""} ${boutique ? "items-center text-center" : "items-start"}`}`}>
+        <div className="flex flex-col items-start gap-4">
+          {essential && !image ? <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--store-primary)]">Welcome to {store?.name || "the store"}</p> : null}
+          {heading ? <h1 className={`max-w-3xl font-[family-name:var(--store-heading-font)] font-bold tracking-tight ${essential ? "text-4xl sm:text-6xl" : "text-3xl sm:text-5xl"}`}>{heading}</h1> : null}
+          {subheading ? <p className="max-w-2xl text-base opacity-90 sm:text-lg">{subheading}</p> : null}
+          {text(section, "button_label") ? <a href={essential ? `/s/${store?.slug || ""}/shop` : "#products"} className="mt-2 inline-flex rounded-full px-6 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90" style={{ background: "var(--store-primary)" }}>{text(section, "button_label")}</a> : null}
+        </div>
+        {essential && !image ? <div className="grid h-48 place-items-center overflow-hidden rounded-3xl bg-white/45 sm:h-64">
+          {brandLogoUrl ? <Image src={brandLogoUrl} alt={store?.name ? `${store.name} logo` : "Store logo"} width={160} height={160} unoptimized className="size-36 rounded-full object-cover sm:size-40" /> : <div className="grid size-24 place-items-center rounded-full bg-white/70 text-3xl font-semibold text-[var(--store-primary)]">{store?.name?.slice(0, 1).toUpperCase() || "S"}</div>}
+        </div> : null}
       </div>
     </div>
   </Frame>;
@@ -92,7 +103,7 @@ export function CollectionsSection({ section, data, onSectionClick: onClick, pre
 export function AboutSection({ section, onSectionClick: onClick, preview }: { section: StoreSection } & Pick<ThemeRendererProps, "onSectionClick" | "preview">) {
   const body = text(section, "body");
   if (!body && !text(section, "image")) return null;
-  return <Frame section={section} preview={preview} onClick={onClick}><div className="grid gap-6 py-8 md:grid-cols-2 md:items-center">
+  return <Frame section={section} preview={preview} onClick={onClick}><div id="about" className="grid gap-6 py-8 md:grid-cols-2 md:items-center">
     {text(section, "image") ? <div className="relative aspect-[4/3] overflow-hidden rounded-2xl"><Image src={text(section, "image")} alt="" fill sizes="(max-width: 768px) 100vw, 50vw" className="object-cover" unoptimized /></div> : null}
     <div className="space-y-3"><h2 className="font-[family-name:var(--store-heading-font)] text-xl font-bold sm:text-2xl">{text(section, "heading", "About us")}</h2><p className="whitespace-pre-wrap text-sm leading-7 text-[var(--store-muted)]">{body}</p></div>
   </div></Frame>;

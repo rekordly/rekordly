@@ -1529,7 +1529,7 @@ WITH views AS (
       AND s.sale_date >= $3
     GROUP BY si.product_id
 )
-SELECT p.id AS product_id, p.name,
+SELECT p.id AS product_id, p.name, p.kind,
   COALESCE(views.product_views, 0)::bigint AS product_views,
   COALESCE(sales_by_product.orders, 0)::bigint AS orders,
   COALESCE(sales_by_product.sales_minor, 0)::bigint AS sales_minor
@@ -1553,6 +1553,7 @@ type GetStorefrontOverviewTopProductsParams struct {
 type GetStorefrontOverviewTopProductsRow struct {
 	ProductID    int64  `json:"product_id"`
 	Name         string `json:"name"`
+	Kind         string `json:"kind"`
 	ProductViews int64  `json:"product_views"`
 	Orders       int64  `json:"orders"`
 	SalesMinor   int64  `json:"sales_minor"`
@@ -1570,6 +1571,7 @@ func (q *Queries) GetStorefrontOverviewTopProducts(ctx context.Context, arg GetS
 		if err := rows.Scan(
 			&i.ProductID,
 			&i.Name,
+			&i.Kind,
 			&i.ProductViews,
 			&i.Orders,
 			&i.SalesMinor,

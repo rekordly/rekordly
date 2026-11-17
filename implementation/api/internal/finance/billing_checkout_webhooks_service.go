@@ -411,6 +411,21 @@ func (s *Service) activateCheckoutIntent(ctx context.Context, intent db.Checkout
 	if err != nil {
 		return db.CheckoutIntent{}, err
 	}
+	if strings.HasPrefix(plan.AddonType, "storefront_theme_") {
+		themeKey := strings.TrimPrefix(plan.AddonType, "storefront_theme_")
+		if themeKey != "bold" && themeKey != "market" && themeKey != "studio" {
+			return db.CheckoutIntent{}, ErrPlanVersionUnavailable
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO storefront_theme_purchases (workspace_id, storefront_id, theme_key, plan_version_id, billing_transaction_id)
+			SELECT bs.workspace_id, sf.id, $2, $3, $4
+			FROM billing_subjects bs
+			JOIN storefronts sf ON sf.workspace_id = bs.workspace_id
+			WHERE bs.id = $1
+			ON CONFLICT (workspace_id, theme_key) DO NOTHING`, sub.BillingSubjectID, themeKey, plan.ID, btx.ID); err != nil {
+			return db.CheckoutIntent{}, err
+		}
+	}
 
 	docNum := fmt.Sprintf("RK-RCPT-%d-%d", intent.BillingSubjectID, btx.ID)
 	_, _ = qtx.CreateBillingDocument(ctx, db.CreateBillingDocumentParams{

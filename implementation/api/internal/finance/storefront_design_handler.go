@@ -15,6 +15,22 @@ func (h *Handler) registerStorefrontDesignRoutes(g *gin.RouterGroup) {
 	g.GET("/storefront/design/preview-data", h.getStorefrontDesignPreview)
 }
 
+func (h *Handler) createStorefrontThemeCheckout(c *gin.Context) {
+	ws, ok := businessPermission(c, "storefront.publish")
+	if !ok {
+		return
+	}
+	if _, ok := businessPermission(c, "billing.purchase_addon"); !ok {
+		return
+	}
+	intent, err := h.service.CreateStorefrontThemeCheckout(c.Request.Context(), ws.WorkspaceID, ws.UserID, c.Param("themeKey"), c.GetHeader("Idempotency-Key"))
+	if err != nil {
+		h.storefrontError(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"data": gin.H{"checkout_intent": intent}})
+}
+
 func (h *Handler) getStorefrontDesign(c *gin.Context) {
 	ws, ok := businessPermission(c, "storefront.view", "storefront.manage_appearance")
 	if !ok {

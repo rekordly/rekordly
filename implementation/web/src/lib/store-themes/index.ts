@@ -1,4 +1,5 @@
 import { boutiqueTheme } from "./boutique/manifest";
+import { boldTheme, marketTheme, studioTheme } from "./paid-manifests";
 import { simpleTheme } from "./simple/manifest";
 import { PALETTES, paletteFromColor, resolvePalette } from "./palettes";
 import { FONT_STYLES } from "./font-styles";
@@ -7,6 +8,9 @@ import type { ThemeKey, ThemeManifest, StoreSection, ThemeSettings } from "./typ
 export const STORE_THEMES: Record<ThemeKey, ThemeManifest> = {
   simple: simpleTheme,
   boutique: boutiqueTheme,
+  bold: boldTheme,
+  market: marketTheme,
+  studio: studioTheme,
 };
 
 export { PALETTES, FONT_STYLES, paletteFromColor, resolvePalette };
@@ -16,7 +20,7 @@ export function createDefaultSections(theme: ThemeKey, storeName: string): Store
   const safeName = storeName.trim() || "our store";
   const keys = STORE_THEMES[theme].defaultSections;
   const content: Record<string, Record<string, unknown>> = {
-    hero: { heading: `Welcome to ${safeName}`, subheading: "Quality products, delivered to you", button_label: "Shop now" },
+    hero: { heading: theme === "simple" ? "Shop" : `Welcome to ${safeName}`, subheading: "Explore our collection", button_label: "Shop now" },
     product_grid: { title: "Shop our products", source: "new", limit: 12 },
     collections: { collection_ids: [] },
     about: { heading: `About ${safeName}`, body: "Tell shoppers a little about your business." },

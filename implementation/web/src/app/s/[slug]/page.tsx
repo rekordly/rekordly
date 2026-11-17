@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 
 import { PublicStorefrontClient } from "@/components/features/store/public-storefront-client";
+import { API_BASE_URL } from "@/lib/api";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
-  const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+  const apiBase = API_BASE_URL;
   try {
     const res = await fetch(`${apiBase}/api/v1/public/storefronts/${encodeURIComponent(slug)}`, {
       next: { revalidate: 30 },

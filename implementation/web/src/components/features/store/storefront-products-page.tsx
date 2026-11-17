@@ -1,11 +1,13 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { Eye, Package, Star, WarningCircle } from "@phosphor-icons/react";
 
 import { AppButton } from "@/components/ui/app-button";
 import { AppSwitch } from "@/components/ui/app-switch";
 import { DataView } from "@/components/ui/data-view";
+import { KpiCard } from "@/components/ui/cards";
 import { Page, PageHeader } from "@/components/ui/page";
 import { WorkspaceGate } from "@/components/features/finance/shared";
 import { financeApi, formatMinorAmount, moneyKeys } from "@/lib/money";
@@ -16,6 +18,10 @@ function ProductsContent({ workspaceId, currency }: { workspaceId: number; curre
   const [filter, setFilter] = useState("");
   const [collectionId, setCollectionId] = useState(0);
   const [selected, setSelected] = useState<number[]>([]);
+  const handleSelectionChange = useCallback((ids: (string | number)[]) => {
+    const next = ids.map(Number);
+    setSelected((current) => current.length === next.length && current.every((id, index) => id === next[index]) ? current : next);
+  }, []);
   const client = useQueryClient();
   const key = [...moneyKeys.workspace(workspaceId), "storefront-products", filter, collectionId];
   const query = useQuery({ queryKey: key, queryFn: () => financeApi.listStorefrontProductCards(workspaceId, { filter, collection_id: collectionId || undefined }) });
@@ -24,11 +30,21 @@ function ProductsContent({ workspaceId, currency }: { workspaceId: number; curre
     onSuccess: () => { void client.invalidateQueries({ queryKey: [...moneyKeys.workspace(workspaceId), "storefront-products"] }); },
   });
   const rows = query.data?.products ?? [];
+  const visibleCount = rows.filter((row) => row.show_on_store).length;
+  const featuredCount = rows.filter((row) => row.is_featured).length;
+  const outOfStockCount = rows.filter((row) => !row.in_stock).length;
   const update = async (row: StorefrontProductCard, field: "show_on_store" | "is_featured", value: boolean) => {
     await financeApi.changeStorefrontProduct(workspaceId, row.id, { [field]: value, idempotency_key: createIdempotencyKey("store-product") });
     await client.invalidateQueries({ queryKey: [...moneyKeys.workspace(workspaceId), "storefront-products"] });
   };
   return <Page><PageHeader title="Store products" description="Choose which products shoppers can see." />
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <KpiCard icon={Package} tone="accent" label="Products in view" value={rows.length.toLocaleString()} hint="Loaded for these filters" loading={query.isLoading} />
+      <KpiCard icon={Eye} label="Visible on store" value={visibleCount.toLocaleString()} hint="Customers can browse" loading={query.isLoading} />
+      <KpiCard icon={Star} label="Featured" value={featuredCount.toLocaleString()} hint="Highlighted in your shop" loading={query.isLoading} />
+      <KpiCard icon={WarningCircle} label="Out of stock" value={outOfStockCount.toLocaleString()} hint="Based on available inventory" loading={query.isLoading} />
+    </div>
+    <p className="-mt-5 text-[12px] text-muted">These counts update with your selected filters and the products currently loaded.</p>
     <DataView title="Store products" rows={rows} rowKey={(r) => r.id}
       columns={[
         { key: "name", label: "Product", render: (r) => <span className="font-medium">{r.name}</span>, sortValue: (r) => r.name },
@@ -42,7 +58,7 @@ function ProductsContent({ workspaceId, currency }: { workspaceId: number; curre
       renderCard={(r) => <article className="flex items-center gap-3 p-3"><div className="min-w-0 flex-1"><div className="truncate font-semibold">{r.name}</div><div className="text-sm text-muted">{formatMinorAmount(r.price_minor, currency, 2)} · {r.in_stock ? "In stock" : "Out of stock"}</div><div className="mt-1 text-xs text-muted">{(query.data?.collections ?? []).filter((collection) => r.collection_ids.includes(collection.id)).map((collection) => collection.name).join(", ") || "No collection"}</div><div className="mt-3 flex flex-wrap gap-5"><AppSwitch isSelected={r.show_on_store} onChange={(v) => void update(r, "show_on_store", v)} label="On store" /><AppSwitch isSelected={r.is_featured} onChange={(v) => void update(r, "is_featured", v)} label="Featured" /></div></div></article>}
       isLoading={query.isLoading} isError={query.isError} empty={<p className="p-6 text-sm text-muted">Products you add to your catalogue will appear here.</p>}
       filters={<div className="flex flex-wrap gap-2"><select value={filter} onChange={(e) => setFilter(e.target.value)} className="h-9 rounded-lg border border-border bg-surface px-2 text-sm"><option value="">All products</option><option value="on">On store</option><option value="hidden">Hidden</option><option value="out_of_stock">Out of stock</option></select><select value={collectionId || ""} onChange={(e) => setCollectionId(Number(e.target.value) || 0)} className="h-9 rounded-lg border border-border bg-surface px-2 text-sm"><option value="">All collections</option>{(query.data?.collections ?? []).map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}</select></div>}
-      onSelectionChange={(ids) => setSelected(ids.map(Number))}
+      onSelectionChange={handleSelectionChange}
       toolbarActions={selected.length ? <div className="flex flex-wrap gap-2"><AppButton label="Show on store" onPress={() => mutation.mutate({ product_ids: selected, show_on_store: true })} /><AppButton label="Hide" onPress={() => mutation.mutate({ product_ids: selected, show_on_store: false })} /><AppButton label="Feature" onPress={() => mutation.mutate({ product_ids: selected, is_featured: true })} /></div> : null}
     />
   </Page>;

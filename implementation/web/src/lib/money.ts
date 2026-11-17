@@ -1,7 +1,7 @@
 // Money stays a string in the browser. The Go API is the only place that does
 // arithmetic; this file only moves decimal strings and formats minor units.
 
-import { apiClient, workspaceHeaders } from "./api.ts";
+import { API_BASE_URL, apiClient, workspaceHeaders } from "./api.ts";
 import { buildQueryString } from "./utils.ts";
 import type {
   BankLine,
@@ -869,6 +869,8 @@ export const financeApi = {
     scopedPost<{ storefront: Storefront }>(workspaceId, "/api/v1/storefront", body).then((r) => r.storefront),
   updateStorefrontSettings: (workspaceId: number, body: unknown) =>
     scopedPatch<{ storefront: Storefront }>(workspaceId, "/api/v1/storefront/settings", body).then((r) => r.storefront),
+  createStorefrontThemeCheckout: (workspaceId: number, themeKey: string, idempotencyKey: string) =>
+    scopedPost<{ checkout_intent: import("@/types/billing").CheckoutIntent }>(workspaceId, `/api/v1/storefront/themes/${encodeURIComponent(themeKey)}/checkout-intents`, {}, idempotencyKey).then((r) => r.checkout_intent),
   getStorefrontDesign: (workspaceId: number) =>
     scopedGet<{ design: StorefrontDesign }>(workspaceId, "/api/v1/storefront/design").then((r) => r.design),
   saveStorefrontDesignDraft: (workspaceId: number, body: unknown) =>
@@ -935,7 +937,7 @@ export const financeApi = {
   returnStorefrontOrder: (workspaceId: number, id: number, body: { reason: string; lines?: { order_line_id: number; quantity: string }[] }) =>
     scopedPost<{ order: MerchantOrder }>(workspaceId, `/api/v1/orders/${id}/commands/return`, body).then((r) => r.order),
   exportMerchantOrdersCsv: async (workspaceId: number) => {
-    const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+    const base = API_BASE_URL;
     const res = await fetch(`${base}/api/v1/orders/export`, {
       credentials: "include",
       headers: workspaceHeaders(workspaceId),

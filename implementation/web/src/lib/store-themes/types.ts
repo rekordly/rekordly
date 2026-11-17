@@ -1,6 +1,6 @@
 import type { ComponentType, ReactNode } from "react";
 
-export type ThemeKey = "simple" | "boutique";
+export type ThemeKey = "simple" | "boutique" | "bold" | "market" | "studio";
 export type PaletteKey = "green" | "ink" | "ocean" | "sunset" | "rose" | "earth" | "custom";
 export type FontStyleKey = "modern" | "classic" | "friendly";
 export type SectionType = "announcement" | "hero" | "product_grid" | "collections" | "about" | "faq" | "contact";
@@ -16,6 +16,9 @@ export interface ThemePalette {
 }
 
 export interface BrandSettings {
+  colors?: string[];
+  heading_font?: FontStyleKey;
+  body_font?: FontStyleKey;
   logo_url?: string;
   palette: PaletteKey;
   custom_color?: string;
@@ -47,7 +50,7 @@ export interface ThemeManifest {
   name: string;
   description: string;
   bestFor: readonly string[];
-  price: "free" | { minor: string };
+  price: "free" | { minor: string } | "billing_catalog";
   palettes: readonly PaletteKey[];
   fontStyles: readonly FontStyleKey[];
   sections: Partial<Record<SectionType, ThemeSectionManifest>>;
@@ -73,14 +76,19 @@ export interface ThemeProduct {
 export interface ThemeCollection {
   id: number;
   name: string;
+  slug?: string;
   image_url?: string | null;
 }
 
 export interface ThemeStoreData {
   name: string;
   slug: string;
+  tagline?: string | null;
+  description?: string | null;
   logo_url?: string | null;
+  banner_url?: string | null;
   phone?: string | null;
+  email?: string | null;
   whatsapp_number?: string | null;
   address?: string | null;
   business_hours?: Record<string, string>;
@@ -97,5 +105,8 @@ export interface ThemeRendererProps {
   renderProduct?: (product: ThemeProduct, variants?: ThemeProduct[]) => ReactNode;
   productTools?: ReactNode;
   headerAction?: ReactNode;
+  selectCollection?: (slug: string) => void;
+  page?: "home" | "shop" | "about" | "policies" | "privacy" | "returns" | "terms" | "delivery" | "cart" | "collection" | "product";
+  collectionSlug?: string;
 }
 

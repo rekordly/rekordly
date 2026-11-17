@@ -26,6 +26,9 @@ type StorefrontProductCard struct {
 func (s *Service) ListStorefrontProductCards(ctx context.Context, ws int64, filter string, before int64, limit int, collectionID int64) ([]StorefrontProductCard, []StorefrontCollectionView, int64, error) {
 	sf, err := s.queries.GetStorefrontByWorkspace(ctx, ws)
 	if errors.Is(err, pgx.ErrNoRows) {
+		// A workspace can open the catalogue before creating its storefront.
+		// Keep this list usable as an empty state instead of querying collections
+		// for a storefront that does not exist.
 		return []StorefrontProductCard{}, []StorefrontCollectionView{}, 0, nil
 	}
 	if err != nil {

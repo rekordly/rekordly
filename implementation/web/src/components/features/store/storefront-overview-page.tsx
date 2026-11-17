@@ -78,7 +78,7 @@ function OverviewDashboard({ overview, period, setPeriod, link, copied, copyLink
     comparisonLabel: "on the previous day",
   })), [overview.daily, overview.currency, overview.currency_exponent]);
   const peakCandidate = overview.daily.reduce<StorefrontOverview["daily"][number] | undefined>((peak, day) => !peak || BigInt(day.sales_minor) > BigInt(peak.sales_minor) ? day : peak, undefined);
-  const peakDay = peakCandidate && BigInt(peakCandidate.sales_minor) > 0n ? peakCandidate : undefined;
+  const peakDay = peakCandidate && BigInt(peakCandidate.sales_minor) > BigInt(0) ? peakCandidate : undefined;
   const peakShare = peakDay && Number(overview.sales_minor) > 0 ? Number(peakDay.sales_minor) / Number(overview.sales_minor) : 0;
 
   return <Page>
@@ -87,7 +87,7 @@ function OverviewDashboard({ overview, period, setPeriod, link, copied, copyLink
       { key: "open", label: "Open store", icon: <ArrowSquareOut size={16} />, disabled: !link, onClick: () => { if (link) window.open(link, "_blank", "noopener,noreferrer"); } },
       { key: "share", label: copied ? "Link copied" : "Share store link", icon: <ShareNetwork size={16} />, disabled: !link, onClick: shareLink },
       { key: "copy", label: "Copy store link", icon: <Copy size={16} />, disabled: !link, onClick: copyLink },
-      { key: "design", label: "Templates", icon: <PencilSimple size={16} />, href: "/store/design" },
+      { key: "design", label: "Templates", icon: <PencilSimple size={16} />, href: "/store/templates" },
       { key: "products", label: "Store products", icon: <Package size={16} />, href: "/store/products" },
       { key: "settings", label: "Advanced store settings", icon: <Storefront size={16} />, href: "/store/settings" },
     ]} /></>} />

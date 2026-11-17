@@ -2,6 +2,8 @@
 // cookies here are just presence hints, and the Go API authorises every request.
 import { NextResponse, type NextRequest } from "next/server";
 
+import { resolveApiBaseUrl } from "@/lib/api";
+
 const SESSION_MARKER_COOKIE = "rekordly_signed_in";
 const LOGIN_ROUTE = "/login";
 const PUBLIC_ROUTES = new Set([
@@ -35,7 +37,7 @@ async function resolveStorefrontSlugFromHost(hostHeader: string | null): Promise
 
   // Custom domain lookup via backend public projection endpoint
   try {
-    const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+    const apiBase = resolveApiBaseUrl();
     const res = await fetch(`${apiBase}/api/v1/public/storefronts/by-host?host=${encodeURIComponent(host)}`, {
       signal: AbortSignal.timeout(1500),
       cache: "no-store",
@@ -51,7 +53,7 @@ async function resolveStorefrontSlugFromHost(hostHeader: string | null): Promise
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
-  if (pathname === "/" || pathname.startsWith("/products/")) {
+  if (pathname === "/" || /^\/(shop|about|cart|policies|delivery|privacy|returns|terms|collections|products)(\/|$)/.test(pathname)) {
     const slug = await resolveStorefrontSlugFromHost(request.headers.get("host"));
     if (slug) {
       const targetPath = `/s/${encodeURIComponent(slug)}${pathname === "/" ? "" : pathname}${search}`;

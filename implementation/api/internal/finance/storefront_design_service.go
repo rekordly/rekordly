@@ -20,8 +20,12 @@ import (
 )
 
 var ErrStorefrontDesignVersionConflict = errors.New("store design changed. Reload the page and try again")
+var ErrStorefrontThemePurchaseRequired = errors.New("purchase this theme before publishing")
 
 type StorefrontBrand struct {
+ Colors []string `json:"colors,omitempty"`
+ HeadingFont string `json:"heading_font,omitempty"`
+ BodyFont string `json:"body_font,omitempty"`
 	LogoURL         string             `json:"logo_url,omitempty"`
 	Palette         string             `json:"palette"`
 	CustomColor     string             `json:"custom_color,omitempty"`
@@ -60,10 +64,14 @@ type StorefrontDesignCommandInput struct {
 }
 
 type StorefrontDesignThemeOption struct {
-	Key   string `json:"key"`
-	Name  string `json:"name"`
-	Price string `json:"price"`
-	Owned bool   `json:"owned"`
+	Key           string `json:"key"`
+	Name          string `json:"name"`
+	Price         string `json:"price"`
+	PriceMinor    string `json:"price_minor,omitempty"`
+	Currency      string `json:"currency,omitempty"`
+	PlanVersionID int64  `json:"plan_version_id,omitempty"`
+	Purchasable   bool   `json:"purchasable"`
+	Owned         bool   `json:"owned"`
 }
 
 type StorefrontDesignView struct {
@@ -87,6 +95,9 @@ type StorefrontDesignView struct {
 var storefrontThemeFields = map[string]map[string]bool{
 	"simple":   {"announcement": true, "hero": true, "product_grid": true, "collections": true, "about": true, "faq": true, "contact": true},
 	"boutique": {"announcement": true, "hero": true, "product_grid": true, "collections": true, "about": true, "faq": true, "contact": true},
+	"bold":     {"announcement": true, "hero": true, "product_grid": true, "collections": true, "about": true, "faq": true, "contact": true},
+	"market":   {"announcement": true, "hero": true, "product_grid": true, "collections": true, "about": true, "faq": true, "contact": true},
+	"studio":   {"announcement": true, "hero": true, "product_grid": true, "collections": true, "about": true, "faq": true, "contact": true},
 }
 
 func normalizeStorefrontTheme(theme string) (string, error) {
@@ -95,6 +106,8 @@ func normalizeStorefrontTheme(theme string) (string, error) {
 		return "simple", nil
 	case "editorial", "boutique":
 		return "boutique", nil
+	case "bold", "market", "studio":
+		return strings.ToLower(strings.TrimSpace(theme)), nil
 	default:
 		return "", errors.New("choose a supported store theme")
 	}
@@ -102,7 +115,7 @@ func normalizeStorefrontTheme(theme string) (string, error) {
 
 var storefrontSectionFields = map[string]map[string]bool{
 	"announcement": {"text": true, "link": true},
-	"hero":         {"image": true, "heading": true, "subheading": true, "button_label": true},
+	"hero":         {"image": true, "heading": true, "subheading": true, "button_label": true, "product_id": true},
 	"product_grid": {"title": true, "source": true, "collection_id": true, "limit": true},
 	"collections":  {"collection_ids": true},
 	"about":        {"heading": true, "body": true, "image": true},
@@ -194,6 +207,7 @@ func validateStorefrontDesign(in StorefrontDesignInput) (StorefrontDesignInput, 
 		in.Brand.CustomColor = strings.ToUpper(in.Brand.CustomColor)
 	}
 	in.Brand.ResolvedPalette = nil
+ if err := validateStoreBrand(&in.Brand); err != nil { return in, nil, nil, err }
 	logo, err := validateStoreImage(in.Brand.LogoURL)
 	if err != nil {
 		return in, nil, nil, err
@@ -229,6 +243,10 @@ func validateStorefrontDesign(in StorefrontDesignInput) (StorefrontDesignInput, 
 				return in, nil, nil, err
 			}
 		case "hero":
+   if productID, ok := section.Content["product_id"]; ok && productID != nil {
+    value, numeric := productID.(float64)
+    if !numeric || value < 1 || value != float64(int64(value)) { return in, nil, nil, errors.New("choose a valid featured product") }
+   }
 			for key, max := range map[string]int{"heading": 80, "subheading": 180, "button_label": 28} {
 				if _, err := storefrontSectionText(section.Content, key, max); err != nil {
 					return in, nil, nil, err
@@ -318,15 +336,76 @@ func (s *Service) storefrontDesignView(ctx context.Context, ws int64) (Storefron
 	_ = json.Unmarshal(row.DraftBrand, &draftBrand)
 	_ = json.Unmarshal(row.DraftSections, &draftSections)
 	hasChanges := row.Name != row.DraftName.String || row.PublishedThemeKey != row.DraftThemeKey || !jsonValueEqual(publishedBrand, draftBrand) || !jsonValueEqual(publishedSections, draftSections)
+	themes, err := s.storefrontThemeOptions(ctx, ws)
+	if err != nil {
+		return StorefrontDesignView{}, err
+	}
 	return StorefrontDesignView{
 		Name: row.Name, DraftName: row.DraftName.String, Slug: row.Slug, Link: "https://" + row.Slug + ".rekordly.com",
 		Status: row.Status, Version: row.DesignVersion, PublishedThemeKey: row.PublishedThemeKey,
 		PublishedBrand: json.RawMessage(row.Brand), PublishedSections: json.RawMessage(row.Sections),
 		DraftThemeKey: row.DraftThemeKey, DraftBrand: json.RawMessage(row.DraftBrand), DraftSections: json.RawMessage(row.DraftSections),
 		Contact:               contact,
-		AvailableThemes:       []StorefrontDesignThemeOption{{Key: "simple", Name: "Simple", Price: "free", Owned: true}, {Key: "boutique", Name: "Boutique", Price: "free", Owned: true}},
+		AvailableThemes:       themes,
 		HasUnpublishedChanges: hasChanges,
 	}, nil
+}
+
+func (s *Service) storefrontThemeOptions(ctx context.Context, workspaceID int64) ([]StorefrontDesignThemeOption, error) {
+	themes := []StorefrontDesignThemeOption{
+		{Key: "simple", Name: "Simple", Price: "Free", Purchasable: true, Owned: true},
+		{Key: "boutique", Name: "Boutique", Price: "Free", Purchasable: true, Owned: true},
+		{Key: "bold", Name: "Bold", Price: "Billing price not configured", Owned: false},
+		{Key: "market", Name: "Market", Price: "Billing price not configured", Owned: false},
+		{Key: "studio", Name: "Studio", Price: "Billing price not configured", Owned: false},
+	}
+	for i := range themes {
+		if themes[i].Owned {
+			continue
+		}
+		var owned bool
+		if err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM storefront_theme_purchases WHERE workspace_id=$1 AND theme_key=$2)`, workspaceID, themes[i].Key).Scan(&owned); err != nil {
+			return nil, err
+		}
+		themes[i].Owned = owned
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, addon_type, currency, price_minor
+		FROM plan_versions
+		WHERE is_addon AND addon_type IN ('storefront_theme_bold', 'storefront_theme_market', 'storefront_theme_studio')
+		  AND billing_interval='once' AND is_available AND price_minor > 0
+		  AND (effective_to IS NULL OR effective_to > now())
+		ORDER BY id DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	planByTheme := map[string]StorefrontDesignThemeOption{}
+	for rows.Next() {
+		var id, minor int64
+		var addonType, currency string
+		if err := rows.Scan(&id, &addonType, &currency, &minor); err != nil {
+			return nil, err
+		}
+		key := strings.TrimPrefix(addonType, "storefront_theme_")
+		if _, exists := planByTheme[key]; exists {
+			continue
+		}
+		planByTheme[key] = StorefrontDesignThemeOption{PlanVersionID: id, PriceMinor: fmt.Sprint(minor), Currency: currency, Price: "one-off", Purchasable: true}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for i := range themes {
+		if plan, ok := planByTheme[themes[i].Key]; ok {
+			themes[i].PlanVersionID = plan.PlanVersionID
+			themes[i].PriceMinor = plan.PriceMinor
+			themes[i].Currency = plan.Currency
+			themes[i].Purchasable = true
+			themes[i].Price = plan.Price
+		}
+	}
+	return themes, nil
 }
 
 func jsonValueEqual(a, b any) bool {
@@ -553,6 +632,15 @@ func (s *Service) PublishStorefrontDesign(ctx context.Context, ws, user int64, i
 	}
 	if state.Status == "disabled" || state.Status == "grace" {
 		return StorefrontDesignView{}, ErrStorefrontEntitlementLocked
+	}
+	if state.DraftThemeKey != "simple" && state.DraftThemeKey != "boutique" {
+		var owned bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM storefront_theme_purchases WHERE workspace_id=$1 AND theme_key=$2)`, ws, state.DraftThemeKey).Scan(&owned); err != nil {
+			return StorefrontDesignView{}, err
+		}
+		if !owned {
+			return StorefrontDesignView{}, ErrStorefrontThemePurchaseRequired
+		}
 	}
 	if _, err := q.PublishStorefrontDesignDraft(ctx, db.PublishStorefrontDesignDraftParams{WorkspaceID: ws, StorefrontID: state.StorefrontID, ExpectedVersion: input.ExpectedVersion}); errors.Is(err, pgx.ErrNoRows) {
 		return StorefrontDesignView{}, ErrStorefrontDesignVersionConflict

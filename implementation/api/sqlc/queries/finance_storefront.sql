@@ -507,7 +507,7 @@ WITH views AS (
       AND s.sale_date >= $3
     GROUP BY si.product_id
 )
-SELECT p.id AS product_id, p.name,
+SELECT p.id AS product_id, p.name, p.kind,
   COALESCE(views.product_views, 0)::bigint AS product_views,
   COALESCE(sales_by_product.orders, 0)::bigint AS orders,
   COALESCE(sales_by_product.sales_minor, 0)::bigint AS sales_minor

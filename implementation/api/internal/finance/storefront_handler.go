@@ -36,6 +36,7 @@ func (h *Handler) RegisterStorefrontRoutes(g *gin.RouterGroup) {
 	g.POST("/storefront/domains/:domainId/commands/disconnect", h.disconnectCustomDomain)
 	g.GET("/storefront/analytics", h.getStorefrontAnalytics)
 	g.GET("/storefront/overview", h.getStorefrontOverview)
+	g.POST("/storefront/themes/:themeKey/checkout-intents", h.createStorefrontThemeCheckout)
 }
 
 func (h *Handler) storefrontError(c *gin.Context, err error) {
@@ -57,6 +58,8 @@ func (h *Handler) storefrontError(c *gin.Context, err error) {
 		status, code = http.StatusConflict, "ORDER_VERSION_CONFLICT"
 	case errors.Is(err, ErrStorefrontDesignVersionConflict):
 		status, code = http.StatusConflict, "STOREFRONT_DESIGN_VERSION_CONFLICT"
+	case errors.Is(err, ErrStorefrontThemePurchaseRequired):
+		status, code = http.StatusPaymentRequired, "STOREFRONT_THEME_PURCHASE_REQUIRED"
 	case errors.Is(err, ErrDuplicateIdempotent):
 		status, code = http.StatusConflict, "IDEMPOTENCY_KEY_REUSED"
 	case errors.Is(err, ErrOrderAlreadyHandled):
@@ -128,6 +131,7 @@ func (h *Handler) updateStorefrontSettings(c *gin.Context) {
 		return
 	}
 	cardFields := map[string]map[string]bool{
+  "brand": {"brand": true},
 		"details":  {"name": true, "slug": true, "contact_phone": true, "contact_email": true, "whatsapp_number": true, "address": true, "business_hours": true},
 		"delivery": {"delivery_methods": true, "delivery_guidance": true, "default_delivery_fee": true, "delivery_areas": true, "free_delivery_threshold": true},
 		"payments": {"checkout_require_email": true, "checkout_require_phone": true, "reservation_ttl_hours": true},

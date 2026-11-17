@@ -1304,7 +1304,7 @@ export interface Storefront {
   name: string;
   slug: string;
   status: "draft" | "published" | "unpublished" | "suspended" | "grace" | "disabled";
-  theme_key: "simple" | "boutique" | "classic" | "modern" | "editorial" | "minimal";
+  theme_key: "simple" | "boutique" | "bold" | "market" | "studio" | "classic" | "modern" | "editorial" | "minimal";
   version: number;
   default_outlet_id?: number | null;
   currency: string;
@@ -1323,14 +1323,14 @@ export interface StorefrontDesign {
   link: string;
   status: Storefront["status"];
   version: number;
-  published_theme_key: "simple" | "boutique";
+  published_theme_key: import("@/lib/store-themes/types").ThemeKey;
   published_brand: import("@/lib/store-themes/types").BrandSettings;
   published_sections: import("@/lib/store-themes/types").StoreSection[];
-  draft_theme_key: "simple" | "boutique";
+  draft_theme_key: import("@/lib/store-themes/types").ThemeKey;
   draft_brand: import("@/lib/store-themes/types").BrandSettings;
   draft_sections: import("@/lib/store-themes/types").StoreSection[];
   contact: { phone?: string | null; email?: string | null; whatsapp_number?: string | null; address?: string | null; business_hours?: Record<string, string> };
-  available_themes: { key: "simple" | "boutique"; name: string; price: string; owned: boolean }[];
+  available_themes: { key: import("@/lib/store-themes/types").ThemeKey; name: string; price: string; price_minor?: string; currency?: string; plan_version_id?: number; purchasable: boolean; owned: boolean }[];
   has_unpublished_changes: boolean;
 }
 
@@ -1421,7 +1421,7 @@ export interface StorefrontOverview {
   daily: { date: string; page_views: number; visitors: number; product_views: number; add_to_carts: number; checkouts_started: number; checkouts_submitted: number; paid_orders: number; sales_minor: string }[];
   funnel: Record<string, number>;
   referrers: { referrer_class: string; visits: number }[];
-  top_products: { product_id: number; name: string; product_views: number; orders: number; sales_minor: string }[];
+  top_products: { product_id: number; name: string; kind: "service" | "non_stock" | "stock_tracked"; product_views: number; orders: number; sales_minor: string }[];
   needs_action: { to_confirm: number; to_pack: number; to_deliver: number };
 }
 
