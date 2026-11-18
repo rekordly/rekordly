@@ -13,6 +13,7 @@ import { Drawer } from "@heroui/react";
 import { ArrowLeft, CaretDown, Check, MagnifyingGlass, Plus, X, type Icon as PhosphorIcon } from "@phosphor-icons/react";
 import Link from "next/link";
 import { useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
+import { ListAddRow } from "./list-rows";
 
 /* -------------------------------------------------------------------------- */
 /* Layout                                                                      */
@@ -375,16 +376,7 @@ export function PickerDrawer({
                     />
                   </label>
                   {renderCreate && createLabel ? (
-                    <button
-                      type="button"
-                      onClick={() => setCreating(true)}
-                      className="flex w-full cursor-pointer items-center gap-3 rounded-xl border border-dashed border-primary/40 bg-primary-soft/40 px-3 py-2.5 text-left text-[14px] font-semibold text-primary-soft-foreground transition-colors hover:bg-primary-soft"
-                    >
-                      <span className="grid size-8 place-items-center rounded-lg bg-primary text-white">
-                        <Plus size={16} weight="bold" aria-hidden="true" />
-                      </span>
-                      {search.trim() ? `${createLabel} “${search.trim()}”` : createLabel}
-                    </button>
+                    <ListAddRow label={search.trim() ? `${createLabel} “${search.trim()}”` : createLabel} onPress={() => setCreating(true)} />
                   ) : null}
                 </div>
                 <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 pb-5">

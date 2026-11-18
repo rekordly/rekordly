@@ -3,6 +3,8 @@ import type { ComponentType, ReactNode } from "react";
 export type ThemeKey = "simple" | "boutique" | "bold" | "market" | "studio";
 export type PaletteKey = "green" | "ink" | "ocean" | "sunset" | "rose" | "earth" | "custom";
 export type FontStyleKey = "modern" | "classic" | "friendly";
+/** Any font a store can choose for headings or body text (see font-styles.ts). */
+export type BrandFontKey = FontStyleKey | "poppins" | "dm_sans" | "manrope" | "outfit" | "space_grotesk" | "playfair" | "lora" | "cormorant" | "dm_serif";
 export type SectionType = "announcement" | "hero" | "product_grid" | "collections" | "about" | "faq" | "contact";
 export type SectionSource = "new" | "best_sellers" | "featured" | "collection";
 
@@ -17,9 +19,11 @@ export interface ThemePalette {
 
 export interface BrandSettings {
   colors?: string[];
-  heading_font?: FontStyleKey;
-  body_font?: FontStyleKey;
+  heading_font?: BrandFontKey;
+  body_font?: BrandFontKey;
   logo_url?: string;
+  /** Browser tab icon. Empty uses the logo. */
+  favicon_url?: string;
   palette: PaletteKey;
   custom_color?: string;
   font_style: FontStyleKey;
@@ -105,6 +109,9 @@ export interface ThemeRendererProps {
   renderProduct?: (product: ThemeProduct, variants?: ThemeProduct[]) => ReactNode;
   productTools?: ReactNode;
   headerAction?: ReactNode;
+  /** Items in the shopper's cart, shown on the header cart button. */
+  cartCount?: number;
+  onCartClick?: () => void;
   selectCollection?: (slug: string) => void;
   page?: "home" | "shop" | "about" | "policies" | "privacy" | "returns" | "terms" | "delivery" | "cart" | "collection" | "product";
   collectionSlug?: string;

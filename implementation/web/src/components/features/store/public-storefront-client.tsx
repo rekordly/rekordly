@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle, MagnifyingGlass, ShoppingBag, ShoppingCart, Trash, Warning } from "@phosphor-icons/react";
+import { CheckCircle, MagnifyingGlass, ShoppingBag, Trash, Warning } from "@phosphor-icons/react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Image from "next/image";
 import Link from "next/link";
@@ -17,6 +17,7 @@ import type { GuestCheckoutConfirmation, PublicStorefrontProduct, ValidatedCart 
 import { EssentialStoreFooter, StoreServiceCards } from "./essential-store-footer";
 import { EssentialProductDetail } from "./essential-product-detail";
 import { resolveStoreBrand } from "@/lib/store-themes/brand";
+import { STORE_WRAP } from "@/lib/store-themes/layout";
 
 type CartDraftLine = {
   storefront_product_id: number;
@@ -304,7 +305,8 @@ export function PublicStorefrontClient({ slug, page = "home", collectionSlug, pr
         productTools={productTools}
         selectCollection={setSelectedCol}
         renderProduct={renderProduct}
-        headerAction={<Link href={`/s/${encodeURIComponent(slug)}/cart`} onClick={trackCartVisit} className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2.5 text-sm font-semibold text-[var(--store-primary)]"><ShoppingCart weight="duotone" />Cart ({totalCount})</Link>}
+        cartCount={totalCount}
+        onCartClick={trackCartVisit}
       />
 
       {page === "product" ? (() => { const product = sf.products.find((item) => item.id === productID); return product ? <EssentialProductDetail key={product.id} slug={slug} product={product} products={sf.products} /> : <div className="mx-auto max-w-4xl px-5 py-16"><h1 className="text-2xl">Product unavailable</h1><Link href={`/s/${slug}/shop`} className="mt-4 block text-sm underline">Back to shop</Link></div>; })() : null}
@@ -354,7 +356,7 @@ export function PublicStorefrontClient({ slug, page = "home", collectionSlug, pr
       /> : null}
 
       {['home', 'shop', 'collection'].includes(page) ? <StoreServiceCards slug={sf.slug} delivery={sf.delivery_guidance} returns={sf.return_policy} support={sf.contact_email ? 'mailto:' + sf.contact_email : sf.contact_phone ? 'tel:' + sf.contact_phone : undefined} /> : null}
-      <EssentialStoreFooter store={{ name: sf.name, slug: sf.slug, description: sf.description, tagline: sf.tagline, phone: sf.contact_phone, email: sf.contact_email, whatsapp_number: sf.whatsapp_number, address: sf.address, products: [], collections: sf.collections }} brand={resolvedBrand} showContact={sections.find((section) => section.type === 'contact')?.enabled !== false} />
+      <EssentialStoreFooter store={{ name: sf.name, slug: sf.slug, logo_url: brand.logo_url ?? sf.logo_url, description: sf.description, tagline: sf.tagline, phone: sf.contact_phone, email: sf.contact_email, whatsapp_number: sf.whatsapp_number, address: sf.address, products: [], collections: sf.collections }} brand={resolvedBrand} showContact={sections.find((section) => section.type === 'contact')?.enabled !== false} />
 
       <FormDrawer
         isOpen={Boolean(activeProductGroup)}
@@ -448,7 +450,7 @@ type StorePolicy = { key: string; title: string; body?: string | null };
 function PolicyPage({ page, policies }: { page: "policies" | "privacy" | "returns" | "terms" | "delivery"; policies: StorePolicy[] }) {
   const visible = policies.filter((policy) => Boolean(policy.body) && (page === "policies" || policy.key === page));
   const title = page === "policies" ? "Policies & help" : page === "returns" ? "Returns & refunds" : page === "terms" ? "Terms of service" : page === "privacy" ? "Privacy" : "Delivery";
-  return <main className="mx-auto max-w-5xl space-y-5 px-4 py-10 sm:px-8">
+  return <main className="mx-auto w-full max-w-3xl space-y-5 px-5 py-12 sm:px-8 sm:py-16">
     <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Store information</p><h1 className="mt-2 text-3xl font-bold">{title}</h1><p className="mt-2 text-sm text-muted">Information provided by this store for its customers.</p></div>
     {visible.length ? visible.map((policy) => <section key={policy.key} className="rounded-2xl border border-black/10 bg-white p-6"><h2 className="font-semibold">{policy.title}</h2><p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-muted">{policy.body}</p></section>) : <section className="rounded-2xl border border-black/10 bg-white p-6 text-sm leading-7 text-muted">This store has not published this information yet. Contact the store directly if you need help.</section>}
   </main>;
@@ -456,7 +458,7 @@ function PolicyPage({ page, policies }: { page: "policies" | "privacy" | "return
 
 function PublicCartPage(props: PublicCartPageProps) {
   const subtotal = props.cart.reduce((total, line) => total + BigInt(line.price_minor) * BigInt(line.quantity), BigInt(0)).toString();
-  return <main className="mx-auto max-w-6xl px-4 py-10 sm:px-8">
+  return <main className={`${STORE_WRAP} py-12 sm:py-16`}>
     <div className="mb-8"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">{props.storeName}</p><h1 className="mt-2 text-3xl font-bold">Your cart</h1><p className="mt-2 text-sm text-muted">Review your items and send an order request to the store.</p></div>
     {props.confirmedOrder ? <section className="max-w-2xl rounded-2xl border border-success/30 bg-success/5 p-6">
       <div className="flex items-center gap-2 font-semibold"><CheckCircle size={20} className="text-success" />Order request received</div>

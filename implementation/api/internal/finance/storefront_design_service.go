@@ -27,6 +27,7 @@ type StorefrontBrand struct {
  HeadingFont string `json:"heading_font,omitempty"`
  BodyFont string `json:"body_font,omitempty"`
 	LogoURL         string             `json:"logo_url,omitempty"`
+	FaviconURL      string             `json:"favicon_url,omitempty"`
 	Palette         string             `json:"palette"`
 	CustomColor     string             `json:"custom_color,omitempty"`
 	FontStyle       string             `json:"font_style"`

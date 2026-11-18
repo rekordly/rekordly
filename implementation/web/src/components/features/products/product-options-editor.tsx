@@ -12,7 +12,7 @@
 //   3. Review    — what will be saved, then Confirm.
 
 import { Drawer } from "@heroui/react";
-import { ArrowLeft, CaretRight, PencilSimple, Plus, Trash, X } from "@phosphor-icons/react";
+import { ArrowLeft, CaretRight, Plus, Trash, X } from "@phosphor-icons/react";
 import { useMemo, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from "react";
 
 import { AppButton } from "@/components/ui/app-button";
@@ -20,6 +20,7 @@ import { AppInput } from "@/components/ui/app-input";
 import { AppSwitch } from "@/components/ui/app-switch";
 import { FormSection } from "@/components/ui/form-kit";
 import { MoneyInput } from "@/components/ui/money-input";
+import { ListAddRow, ListItemRow, ListRowIconButton } from "@/components/ui/list-rows";
 import { Segmented } from "@/components/ui/page";
 import { formatMinorAmount } from "@/lib/money";
 import type { ProductDetail, SaveOptionsPayload } from "@/types/products";
@@ -194,7 +195,7 @@ function TextBox({ value, onChange, placeholder, prefix, inputMode = "text", aut
 /* Step 1: one option being added or edited                                    */
 /* -------------------------------------------------------------------------- */
 
-function OptionForm({ initial, otherNames, onDone, onCancel, canCancel }: { initial: OptionDraft; otherNames: Set<string>; onDone: (option: OptionDraft) => void; onCancel: () => void; canCancel: boolean }) {
+function OptionForm({ formId, initial, otherNames, onDone }: { formId: string; initial: OptionDraft; otherNames: Set<string>; onDone: (option: OptionDraft) => void }) {
   const [option, setOption] = useState<OptionDraft>(initial);
   const [entry, setEntry] = useState("");
   const [error, setError] = useState("");
@@ -235,7 +236,14 @@ function OptionForm({ initial, otherNames, onDone, onCancel, canCancel }: { init
   };
 
   return (
-    <div className="animate-fade-up space-y-4">
+    <form
+      id={formId}
+      className="animate-fade-up space-y-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        done();
+      }}
+    >
       <Field label="Option name">
         <TextBox value={option.name} autoFocus={!option.name} placeholder="e.g. Size or Colour" onChange={(name) => { setOption({ ...option, name }); setError(""); }} />
       </Field>
@@ -302,12 +310,7 @@ function OptionForm({ initial, otherNames, onDone, onCancel, canCancel }: { init
       ) : null}
 
       {error ? <p className="animate-fade-up text-[12px] font-medium text-danger">{error}</p> : null}
-
-      <div className="flex justify-end gap-2">
-        {canCancel ? <AppButton size="sm" variant="ghost" label="Cancel" onPress={onCancel} /> : null}
-        <AppButton size="sm" label="Done" onPress={done} />
-      </div>
-    </div>
+    </form>
   );
 }
 
@@ -317,12 +320,11 @@ function OptionForm({ initial, otherNames, onDone, onCancel, canCancel }: { init
 
 type PriceDraft = Pick<VariantDraft, "selling_price" | "cost_price" | "compare_at_price" | "sku" | "barcode">;
 
-function PriceScreen({ name, draft, onDraft, defaults, currency }: { name: string; draft: PriceDraft; onDraft: (draft: PriceDraft) => void; defaults: VariantDraft; currency: string }) {
+function PriceScreen({ draft, onDraft, defaults, currency }: { draft: PriceDraft; onDraft: (draft: PriceDraft) => void; defaults: VariantDraft; currency: string }) {
   const set = (key: keyof PriceDraft, value: string) => onDraft({ ...draft, [key]: value });
   const same = (value: string) => (value ? `Empty uses the product’s ${formatMinorAmount(toMinor(value).toString(), currency, EXPONENT)}` : undefined);
   return (
     <div className="animate-fade-up space-y-4">
-      <p className="text-[13px] text-muted">Leave a box empty to use the product’s own price and cost for {name}.</p>
       <MoneyInput label="Selling price" autoFocus currency={currency} exponent={EXPONENT} value={draft.selling_price} placeholder={defaults.selling_price || "0.00"} onValueChange={(value) => set("selling_price", value)} description={same(defaults.selling_price)} />
       <MoneyInput label="Cost price" currency={currency} exponent={EXPONENT} value={draft.cost_price} placeholder={defaults.cost_price || "0.00"} onValueChange={(value) => set("cost_price", value)} description={same(defaults.cost_price)} />
       <MoneyInput label="Compare-at price" currency={currency} exponent={EXPONENT} value={draft.compare_at_price} placeholder={defaults.compare_at_price || "Optional"} onValueChange={(value) => set("compare_at_price", value)} description="Shown crossed out next to the price." />
@@ -431,7 +433,10 @@ function VariantsDrawer({
     setPricing(null);
   };
 
-  const title = pricing ? comboName(pricing) : initialOptionsList.length ? "Edit variants" : "Add variants";
+  const optionFormId = "variant-option-form";
+  const editingExisting = Boolean(editing && options.some((item) => item.key === editing.key));
+  const title = pricing ? comboName(pricing) : editing ? (editingExisting ? `Edit ${editing.name}` : "Add option") : initialOptionsList.length ? "Edit variants" : "Add variants";
+  const back = pricing ? () => setPricing(null) : editing && options.length ? () => setEditing(null) : null;
 
   return (
     <Drawer>
@@ -444,8 +449,8 @@ function VariantsDrawer({
             <div className="shrink-0 px-5 pt-5">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-2">
-                  {pricing ? (
-                    <button type="button" aria-label="Back to variants" onClick={() => setPricing(null)} className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-full text-muted hover:bg-surface-secondary hover:text-foreground">
+                  {back ? (
+                    <button type="button" aria-label="Back" onClick={back} className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-full text-muted hover:bg-surface-secondary hover:text-foreground">
                       <ArrowLeft size={16} aria-hidden="true" />
                     </button>
                   ) : null}
@@ -455,7 +460,7 @@ function VariantsDrawer({
                   <X size={18} aria-hidden="true" />
                 </button>
               </div>
-              {!pricing ? (
+              {!pricing && !editing ? (
                 <div className="mt-3 flex items-center gap-2">
                   {STEPS.map((label, index) => (
                     <span key={label} className="flex items-center gap-2">
@@ -465,77 +470,42 @@ function VariantsDrawer({
                     </span>
                   ))}
                 </div>
-              ) : (
-                <p className="mt-1 text-[13px] text-muted">Its own price, cost and codes.</p>
-              )}
+              ) : null}
             </div>
 
             {/* Body */}
             <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
               {pricing ? (
-                <PriceScreen name={comboName(pricing)} draft={priceDraft} onDraft={setPriceDraft} defaults={defaults} currency={currency} />
+                <PriceScreen draft={priceDraft} onDraft={setPriceDraft} defaults={defaults} currency={currency} />
+              ) : step === 1 && editing ? (
+                <OptionForm
+                  key={editing.key}
+                  formId={optionFormId}
+                  initial={editing}
+                  otherNames={new Set(options.filter((item) => item.key !== editing.key).map((item) => item.name.trim().toLowerCase()))}
+                  onDone={(option) => {
+                    setOptions(options.some((item) => item.key === option.key) ? options.map((item) => (item.key === option.key ? option : item)) : [...options, option]);
+                    setEditing(null);
+                    setError("");
+                  }}
+                />
               ) : step === 1 ? (
-                <div className="space-y-4">
-                  <p className="text-[13px] text-muted">What can a customer choose? Up to three, like Colour and Size.</p>
-                  {options.length ? (
-                    <ul className="divide-y divide-separator border-y border-separator">
-                      {options.map((option, index) =>
-                        editing?.key === option.key ? null : (
-                          <li key={option.key} className="flex items-center gap-3 py-3">
-                            <span className="min-w-0 flex-1">
-                              <span className="block text-[14px] font-semibold">{option.name}</span>
-                              <span className="block truncate text-[13px] text-muted">{option.values.map((value) => value.value).join(", ")}</span>
-                            </span>
-                            <button type="button" aria-label={`Edit ${option.name}`} onClick={() => setEditing(option)} className="grid size-9 cursor-pointer place-items-center rounded-lg text-muted hover:bg-surface-secondary hover:text-foreground">
-                              <PencilSimple size={16} aria-hidden="true" />
-                            </button>
-                            <button
-                              type="button"
-                              aria-label={`Delete ${option.name}`}
-                              onClick={() => setOptions(options.filter((_, at) => at !== index))}
-                              className="grid size-9 cursor-pointer place-items-center rounded-lg text-muted hover:bg-danger/10 hover:text-danger"
-                            >
-                              <Trash size={16} aria-hidden="true" />
-                            </button>
-                          </li>
-                        ),
-                      )}
-                    </ul>
-                  ) : null}
-
-                  {editing ? (
-                    <OptionForm
-                      key={editing.key}
-                      initial={editing}
-                      canCancel={options.length > 0}
-                      otherNames={new Set(options.filter((item) => item.key !== editing.key).map((item) => item.name.trim().toLowerCase()))}
-                      onCancel={() => setEditing(null)}
-                      onDone={(option) => {
-                        setOptions(options.some((item) => item.key === option.key) ? options.map((item) => (item.key === option.key ? option : item)) : [...options, option]);
-                        setEditing(null);
-                        setError("");
-                      }}
-                    />
-                  ) : options.length < MAX_OPTIONS ? (
-                    <button type="button" onClick={() => setEditing({ key: newKey(), name: "", values: [] })} className="inline-flex cursor-pointer items-center gap-1.5 text-[14px] font-semibold text-primary hover:underline">
-                      <Plus size={15} weight="bold" aria-hidden="true" />
-                      {options.length ? "Add another option" : "Add an option"}
-                    </button>
-                  ) : null}
-
-                  {matrix.length > 0 && !editing ? (
-                    <p className="text-[13px] text-muted">
-                      That makes <span className="font-semibold text-foreground">{matrix.length}</span> variant{matrix.length === 1 ? "" : "s"}. You choose which ones you sell next.
-                    </p>
-                  ) : null}
+                <div className="space-y-3">
+                  <ListAddRow label="Add option" isDisabled={options.length >= MAX_OPTIONS} onPress={() => setEditing({ key: newKey(), name: "", values: [] })} />
+                  <ul className="space-y-1">
+                    {options.map((option, index) => (
+                      <ListItemRow
+                        key={option.key}
+                        title={option.name}
+                        description={option.values.map((value) => value.value).join(", ")}
+                        onPress={() => setEditing(option)}
+                        trailing={<ListRowIconButton label={`Delete ${option.name}`} tone="danger" icon={<Trash size={16} aria-hidden="true" />} onPress={() => setOptions(options.filter((_, at) => at !== index))} />}
+                      />
+                    ))}
+                  </ul>
                 </div>
               ) : step === 2 ? (
                 <div className="space-y-4">
-                  <p className="text-[13px] text-muted">
-                    Turn off what you don’t sell{showStock ? " and enter how many you have of each" : ""}.
-                    {defaults.selling_price ? ` All sell at ${money(defaults.selling_price)} unless you set a different price.` : ""}
-                  </p>
-
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     {options.length > 1 ? (
                       <Segmented size="sm" aria-label="Group variants by" options={options.map((option, index) => ({ key: String(index), label: `By ${option.name}` }))} value={String(groupIndex)} onChange={(value) => setGroupBy(Number(value))} />
@@ -657,8 +627,6 @@ function VariantsDrawer({
                       );
                     })}
                   </ul>
-                  {isEdit ? <p className="text-[12px] text-muted">A variant with stock or past sales is kept and archived if you removed its value.</p> : null}
-                  <p className="text-[12px] text-muted">These are saved when you save the product.</p>
                 </div>
               )}
 
@@ -672,8 +640,14 @@ function VariantsDrawer({
                   <AppButton variant="ghost" label="Cancel" className="max-sm:flex-1" onPress={() => setPricing(null)} />
                   <AppButton label="Confirm" className="max-sm:flex-[2]" onPress={confirmPrice} />
                 </>
+              ) : step === 1 && editing ? (
+                <>
+                  <AppButton variant="ghost" label="Cancel" className="max-sm:flex-1" onPress={() => (options.length ? setEditing(null) : onClose())} />
+                  <AppButton type="submit" form={optionFormId} label="Done" className="max-sm:flex-[2]" />
+                </>
               ) : (
                 <>
+                  {step === 1 && matrix.length ? <span className="mr-auto text-[13px] text-muted tabular">{matrix.length} variant{matrix.length === 1 ? "" : "s"}</span> : null}
                   <AppButton variant="ghost" label={step === 1 ? "Cancel" : "Back"} className="max-sm:flex-1" onPress={() => (step === 1 ? onClose() : (setError(""), setStep(step - 1)))} />
                   {step < 3 ? (
                     <AppButton label="Next" className="max-sm:flex-[2]" onPress={next} />

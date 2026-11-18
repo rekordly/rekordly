@@ -9,6 +9,8 @@ export interface AppComboBoxOption {
   label: string;
   description?: string;
   icon?: React.ReactNode;
+  /** Style for the option's label, e.g. its own font for a font picker. */
+  labelStyle?: React.CSSProperties;
 }
 
 export interface AppComboBoxProps {
@@ -145,7 +147,7 @@ export function AppComboBox({
                 <div className="flex items-center gap-2 min-w-0">
                   {opt.icon}
                   <div className="flex flex-col min-w-0">
-                    <span className="truncate">{opt.label}</span>
+                    <span className="truncate" style={opt.labelStyle}>{opt.label}</span>
                     {opt.description && (
                       <span className="text-[10px] text-muted truncate">{opt.description}</span>
                     )}

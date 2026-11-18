@@ -82,7 +82,7 @@ function OverviewDashboard({ overview, period, setPeriod, link, copied, copyLink
   const peakShare = peakDay && Number(overview.sales_minor) > 0 ? Number(peakDay.sales_minor) / Number(overview.sales_minor) : 0;
 
   return <Page>
-    <PageHeader title="Store overview" description="Your online sales and shoppers at a glance." badge={<StatusPill tone={sf.status === "published" ? "success" : "neutral"}>{sf.status === "published" ? "Live" : sf.status === "draft" ? "Draft" : "Unpublished"}</StatusPill>} actions={<><Link href="/store/information"><AppButton startContent={<PencilSimple size={17} />} label="Store information" /></Link><AppRowActions ariaLabel="Store actions" size="md" className="border border-border bg-surface" items={[
+    <PageHeader title="Store overview" badge={<StatusPill tone={sf.status === "published" ? "success" : "neutral"}>{sf.status === "published" ? "Live" : sf.status === "draft" ? "Draft" : "Unpublished"}</StatusPill>} actions={<><Link href="/store/information"><AppButton startContent={<PencilSimple size={17} />} label="Store information" /></Link><AppRowActions ariaLabel="Store actions" size="md" className="border border-border bg-surface" items={[
       { key: "publish", label: sf.status === "published" ? "Unpublish store" : "Publish store", icon: <Storefront size={16} />, disabled: publishing, onClick: publish },
       { key: "open", label: "Open store", icon: <ArrowSquareOut size={16} />, disabled: !link, onClick: () => { if (link) window.open(link, "_blank", "noopener,noreferrer"); } },
       { key: "share", label: copied ? "Link copied" : "Share store link", icon: <ShareNetwork size={16} />, disabled: !link, onClick: shareLink },

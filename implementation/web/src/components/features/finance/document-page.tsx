@@ -184,16 +184,16 @@ export function StatusTimeline({ steps, title = "Status" }: { steps: DocumentSte
 /* Summary: big amount, paid bar, then label/value rows                        */
 /* -------------------------------------------------------------------------- */
 
-export function DetailsPanel({ title = "Details", children }: { title?: string; children: ReactNode }) {
+export function DetailsPanel({ title = "Details", action, children }: { title?: string; action?: ReactNode; children: ReactNode }) {
   return (
     <section className="animate-fade-up rounded-2xl border border-border bg-surface px-5 pt-4 pb-2">
-      <h2 className="text-[15px] font-semibold">{title}</h2>
+      <div className="flex items-center justify-between gap-3"><h2 className="text-[15px] font-semibold">{title}</h2>{action}</div>
       <dl className="mt-1">{children}</dl>
     </section>
   );
 }
 
-export function SummaryRow({ label, children }: { label: string; children: ReactNode }) {
+export function SummaryRow({ label, children }: { label: ReactNode; children: ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-3 border-b border-separator py-2.5 text-[13px] last:border-b-0">
       <dt className="shrink-0 text-muted">{label}</dt>

@@ -1,7 +1,6 @@
 "use client";
 
-// 8. Cash flow: income vs expenses over time. Two figures in a box on top,
-// two lines below, and a tooltip with the month's figures and the change from the month before.
+// 8. Cash flow: two headline figures, two trend lines, and a tooltip with the period's values.
 // Values only position the lines; the amounts people read arrive formatted.
 
 import { ArrowDownLeft, ArrowUpRight, type Icon as PhosphorIcon } from "@phosphor-icons/react";
@@ -16,6 +15,7 @@ export interface CashFlowPoint {
   expense: number;
   incomeDisplay: string;
   expenseDisplay: string;
+  comparisonLabel?: string;
 }
 
 export interface CashFlowCardProps {
@@ -23,6 +23,8 @@ export interface CashFlowCardProps {
   icon?: PhosphorIcon;
   income: { label?: string; value: ReactNode };
   expenses: { label?: string; value: ReactNode };
+  incomeIcon?: PhosphorIcon;
+  expensesIcon?: PhosphorIcon;
   data: CashFlowPoint[];
   /** Short axis labels, e.g. ₦5k. */
   formatAxis?: (value: number) => string;
@@ -31,6 +33,8 @@ export interface CashFlowCardProps {
   className?: string;
   height?: number;
   empty?: ReactNode;
+  /** Give the two series independent hidden axes when their units differ. */
+  independentScales?: boolean;
 }
 
 function percentChange(now: number, before: number): number | null {
@@ -57,6 +61,8 @@ export function CashFlowCard({
   icon,
   income,
   expenses,
+  incomeIcon = ArrowDownLeft,
+  expensesIcon = ArrowUpRight,
   data,
   formatAxis,
   action,
@@ -64,6 +70,7 @@ export function CashFlowCard({
   className,
   height = 240,
   empty = "Your income and expenses will chart here.",
+  independentScales = false,
 }: CashFlowCardProps) {
   const id = useId().replace(/:/g, "");
   if (loading) return <CardSkeleton className={className} lines={6} />;
@@ -74,9 +81,9 @@ export function CashFlowCard({
       <CardHeader icon={icon} title={title} action={action} />
 
       <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl border border-border p-3 sm:p-4">
-        <Figure icon={ArrowDownLeft} tile="bg-primary-soft text-primary-soft-foreground" label={income.label ?? "Income"} value={income.value} />
+        <Figure icon={incomeIcon} tile="bg-primary-soft text-primary-soft-foreground" label={income.label ?? "Income"} value={income.value} />
         <div className="border-l border-border pl-3 sm:pl-4">
-          <Figure icon={ArrowUpRight} tile="bg-foreground text-background" label={expenses.label ?? "Expenses"} value={expenses.value} />
+          <Figure icon={expensesIcon} tile="bg-foreground text-background" label={expenses.label ?? "Expenses"} value={expenses.value} />
         </div>
       </div>
 
@@ -91,8 +98,9 @@ export function CashFlowCard({
                 </linearGradient>
               </defs>
               <CartesianGrid vertical horizontal={false} stroke="var(--separator)" strokeDasharray="4 4" />
-              <XAxis dataKey="label" axisLine={false} tickLine={false} fontSize={11} stroke="var(--muted)" />
-              <YAxis axisLine={false} tickLine={false} fontSize={11} width={44} stroke="var(--muted)" tickFormatter={formatAxis} />
+              <XAxis dataKey="label" axisLine={false} tickLine={false} fontSize={11} stroke="var(--muted)" interval="preserveStartEnd" />
+              <YAxis yAxisId={0} hide={independentScales} axisLine={!independentScales} tickLine={!independentScales} fontSize={11} width={independentScales ? 0 : 44} stroke="var(--muted)" tickFormatter={formatAxis} domain={independentScales ? ["dataMin", "auto"] : undefined} />
+              {independentScales ? <YAxis yAxisId={1} orientation="right" hide domain={["dataMin", "auto"]} /> : null}
               <Tooltip
                 cursor={{ stroke: "var(--primary)", strokeDasharray: "4 4" }}
                 content={({ active, payload }) => {
@@ -114,15 +122,16 @@ export function CashFlowCard({
                         ) : null}
                       </p>
                       <p className="mt-0.5 text-[12px] text-muted">
-                        {before ? `Compared to ${before.incomeDisplay} last month` : "First month in view"}
+                        {before ? `Compared to ${before.incomeDisplay} ${point.comparisonLabel ?? "last month"}` : "First point in view"}
                       </p>
+                      {point.expenseDisplay ? <p className="mt-1 text-[12px] text-muted">{expenses.label ?? "Expenses"}: <span className="font-semibold text-foreground">{point.expenseDisplay}</span></p> : null}
                     </div>
                   );
                 }}
               />
-              <Area type="monotone" dataKey="income" stroke="none" fill={`url(#income-${id})`} />
-              <Line type="monotone" dataKey="income" name="Income" stroke="var(--primary)" strokeWidth={2.5} dot={false} activeDot={{ r: 5, fill: "var(--primary)", stroke: "var(--surface)", strokeWidth: 2 }} />
-              <Line type="monotone" dataKey="expense" name="Expenses" stroke="var(--foreground)" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: "var(--foreground)", stroke: "var(--surface)", strokeWidth: 2 }} />
+              <Area type="monotone" dataKey="income" yAxisId={0} stroke="none" fill={`url(#income-${id})`} />
+              <Line type="monotone" dataKey="income" yAxisId={0} name={income.label ?? "Income"} stroke="var(--primary)" strokeWidth={2.5} dot={false} activeDot={{ r: 5, fill: "var(--primary)", stroke: "var(--surface)", strokeWidth: 2 }} />
+              <Line type="monotone" dataKey="expense" yAxisId={independentScales ? 1 : 0} name={expenses.label ?? "Expenses"} stroke="var(--foreground)" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: "var(--foreground)", stroke: "var(--surface)", strokeWidth: 2 }} />
             </ComposedChart>
           </ResponsiveContainer>
         </div>

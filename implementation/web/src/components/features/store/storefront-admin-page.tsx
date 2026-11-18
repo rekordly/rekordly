@@ -161,21 +161,21 @@ function StorefrontAdminContent({ workspaceId, currency, initialTab = "overview"
   return (
     <Page>
       <PageHeader
-        title={sf.name}
-        description={`Slug: ${sf.slug} · Theme: ${sf.theme_key} · Currency: ${sf.currency}`}
+        title={initialTab === "orders" ? "Orders" : sf.name}
+        badge={<StatusPill tone={sf.status === "published" ? "success" : "neutral"}>{sf.status === "published" ? "Live" : "Unpublished"}</StatusPill>}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {sf.status === "published" ? (
-              <Link href={`/s/${sf.slug}`} target="_blank" className="inline-flex items-center gap-1.5 rounded-xl border border-default bg-surface px-3 py-2 text-xs font-medium text-foreground hover:bg-default">
-                <LinkSimple size={15} />
-                Open public shop
+              <Link href={`/s/${sf.slug}`} target="_blank" className="inline-flex h-10 items-center gap-2 rounded-full border border-border bg-surface px-4 text-[14px] font-medium hover:bg-surface-secondary">
+                <LinkSimple size={16} />
+                Open store
               </Link>
             ) : null}
             {canPublish ? (
               sf.status === "published" ? (
                 <AppButton variant="secondary" label="Unpublish" isLoading={unpublishAction.isPending} onPress={() => unpublishAction.mutate(undefined)} />
               ) : (
-                <AppButton variant="primary" startContent={<CheckCircle weight="duotone" />} label="Publish storefront" isLoading={publishAction.isPending} onPress={() => publishAction.mutate(undefined)} />
+                <AppButton variant="primary" startContent={<CheckCircle weight="duotone" />} label="Publish store" isLoading={publishAction.isPending} onPress={() => publishAction.mutate(undefined)} />
               )
             ) : null}
           </div>

@@ -32,3 +32,10 @@
 
 ## 3. End-to-End Procurement Flow (Next Review)
 - [ ] Complete end-to-end integration across Purchase Requests $\rightarrow$ Purchase Orders $\rightarrow$ Goods Receipts / Procurement $\rightarrow$ Supplier Bills.
+
+---
+
+## 4. Store: Point of sale (POS)
+- [ ] **POS for in-person selling**: a fast checkout screen (Store → Orders → "Open POS") that sells from the same catalogue and stock as the online store: search or scan a product, pick the variant, take payment (cash, transfer, card), print or share a receipt, and record it as a Sale with `source = pos`.
+- [ ] Works on a phone or tablet, tolerates going offline (queues sales and syncs later), and is per outlet (stock comes from the chosen outlet).
+- [ ] Shift open/close with a cash count, and a daily POS summary in Reports.

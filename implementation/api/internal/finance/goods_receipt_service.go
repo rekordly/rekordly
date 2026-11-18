@@ -29,23 +29,23 @@ type ReceiptOperationalBillInput struct {
 }
 
 type CreateGoodsReceiptInput struct {
-	PurchaseOrderID   int64                         `json:"purchase_order_id"`
-	SupplierID        int64                         `json:"supplier_id"`
-	Reason            string                        `json:"reason"`
-	Currency          string                        `json:"currency"`
-	LocationID        int64                         `json:"location_id"`
-	ReceiptReference  string                        `json:"receipt_reference"`
-	DeliveryReference string                        `json:"delivery_reference"`
-	ServiceAccepted   bool                          `json:"service_accepted"`
-	LandedCost        string                        `json:"landed_cost"`
-	ReceivedOn        string                        `json:"received_on" binding:"required"`
-	Lines             []GoodsReceiptLineInput       `json:"lines" binding:"required"`
-	IssueOrder        bool                          `json:"issue_order"`
-	CanApprovePO      bool                          `json:"-"`
-	Bill              *ReceiptBillInput             `json:"bill,omitempty"`
-	Payment           *ReceiptPaymentInput          `json:"payment,omitempty"`
-	OperationalBill   *ReceiptOperationalBillInput  `json:"operational_bill,omitempty"`
-	IdempotencyKey    string                        `json:"idempotency_key"`
+	PurchaseOrderID   int64                        `json:"purchase_order_id"`
+	SupplierID        int64                        `json:"supplier_id"`
+	Reason            string                       `json:"reason"`
+	Currency          string                       `json:"currency"`
+	LocationID        int64                        `json:"location_id"`
+	ReceiptReference  string                       `json:"receipt_reference"`
+	DeliveryReference string                       `json:"delivery_reference"`
+	ServiceAccepted   bool                         `json:"service_accepted"`
+	LandedCost        string                       `json:"landed_cost"`
+	ReceivedOn        string                       `json:"received_on" binding:"required"`
+	Lines             []GoodsReceiptLineInput      `json:"lines" binding:"required"`
+	IssueOrder        bool                         `json:"issue_order"`
+	CanApprovePO      bool                         `json:"-"`
+	Bill              *ReceiptBillInput            `json:"bill,omitempty"`
+	Payment           *ReceiptPaymentInput         `json:"payment,omitempty"`
+	OperationalBill   *ReceiptOperationalBillInput `json:"operational_bill,omitempty"`
+	IdempotencyKey    string                       `json:"idempotency_key"`
 }
 
 type GoodsReceiptLineInput struct {

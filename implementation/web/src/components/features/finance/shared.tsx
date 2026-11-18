@@ -200,6 +200,18 @@ export function StatusBadge({ status }: { status: string }) {
   return <StatusPill tone={STATUS_TONES[status] ?? "neutral"}>{capitalise(status.replace(/_/g, " "))}</StatusPill>;
 }
 
+const PRODUCT_KIND_META = {
+  service: { label: "Service", tone: "brand" },
+  non_stock: { label: "Non-stock", tone: "warning" },
+  stock_tracked: { label: "Stock-tracked", tone: "success" },
+} as const;
+
+/** Reusable type pill for catalogue summaries, styled alongside status badges. */
+export function TypeBadge({ type }: { type: string }) {
+  const meta = PRODUCT_KIND_META[type as keyof typeof PRODUCT_KIND_META] ?? { label: capitalise(type.replace(/_/g, " ")), tone: "neutral" as const };
+  return <StatusPill tone={meta.tone}>{meta.label}</StatusPill>;
+}
+
 export function money(amount: MinorAmount, record: { currency: string; currency_exponent: number }): string {
   return formatMinorAmount(amount, record.currency, record.currency_exponent);
 }

@@ -37,6 +37,5 @@ export function PublicProductActions({ slug, productID, priceMinor, unavailable 
   return <div className="space-y-2 pt-2">
     <AppButton className="w-full" size="lg" isLoading={isAdding} isDisabled={unavailable} label={unavailable ? "Out of stock" : "Add to cart"} onPress={addToCart} />
     {error ? <p role="alert" className="text-sm text-danger">{error}</p> : null}
-    <p className="text-center text-xs text-muted">No online payment is charged at this stage.</p>
   </div>;
 }

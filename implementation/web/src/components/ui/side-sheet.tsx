@@ -9,7 +9,7 @@
 //   </SideSheet>
 
 import { Drawer } from "@heroui/react";
-import { X } from "@phosphor-icons/react";
+import { ArrowLeft, X } from "@phosphor-icons/react";
 import { useSyncExternalStore, type ReactNode } from "react";
 
 const wideQuery = "(min-width: 768px)";
@@ -32,6 +32,7 @@ export function SideSheet({
   footer,
   children,
   width = "max-w-[520px]",
+  onBack,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -40,6 +41,8 @@ export function SideSheet({
   footer?: ReactNode;
   children: ReactNode;
   width?: string;
+  /** Shows a back arrow before the title, for a form opened from a list inside the sheet. */
+  onBack?: () => void;
 }) {
   const wide = useIsWide();
   if (!isOpen) return null;
@@ -50,9 +53,16 @@ export function SideSheet({
           <Drawer.Dialog className={`flex flex-col overflow-x-hidden bg-overlay p-0 ${wide ? `animate-drawer-in h-full w-full ${width}` : "animate-sheet-up max-h-[92dvh] w-full rounded-t-3xl"}`}>
             {!wide ? <span aria-hidden="true" className="mx-auto mt-2.5 h-1.5 w-10 shrink-0 rounded-full bg-default" /> : null}
             <div className="flex shrink-0 items-start justify-between gap-3 px-5 pt-5">
-              <div className="min-w-0">
-                <Drawer.Heading className="truncate text-[18px] font-bold tracking-[-0.02em]">{title}</Drawer.Heading>
-                {description ? <p className="mt-0.5 text-[13px] text-muted">{description}</p> : null}
+              <div className="flex min-w-0 items-center gap-2">
+                {onBack ? (
+                  <button type="button" aria-label="Back to list" onClick={onBack} className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-full text-muted hover:bg-surface-secondary hover:text-foreground">
+                    <ArrowLeft size={16} aria-hidden="true" />
+                  </button>
+                ) : null}
+                <div className="min-w-0">
+                  <Drawer.Heading className="truncate text-[18px] font-bold tracking-[-0.02em]">{title}</Drawer.Heading>
+                  {description ? <p className="mt-0.5 text-[13px] text-muted">{description}</p> : null}
+                </div>
               </div>
               <button type="button" aria-label="Close" onClick={onClose} className="-mt-1 grid size-9 shrink-0 cursor-pointer place-items-center rounded-full text-muted transition-colors hover:bg-surface-secondary hover:text-foreground">
                 <X size={18} aria-hidden="true" />
