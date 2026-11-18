@@ -20,9 +20,9 @@ import { formatDate } from "@/lib/format";
 import { financeApi, moneyKeys } from "@/lib/money";
 import type { ExternalMessage } from "@/types/finance";
 
-const seenKey = (docType: string, docId: number) => `rekordly:seen:${docType}:${docId}`;
+const seenKey = (docType: string, docId: number | string) => `rekordly:seen:${docType}:${docId}`;
 
-function readSeen(docType: string, docId: number) {
+function readSeen(docType: string, docId: number | string) {
   try {
     return Number(window.localStorage.getItem(seenKey(docType, docId)) || 0);
   } catch {
@@ -30,7 +30,7 @@ function readSeen(docType: string, docId: number) {
   }
 }
 
-function writeSeen(docType: string, docId: number, id: number) {
+function writeSeen(docType: string, docId: number | string, id: number) {
   try {
     window.localStorage.setItem(seenKey(docType, docId), String(id));
   } catch {
@@ -77,12 +77,13 @@ export function DocumentChat({
   label?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [seen, setSeen] = useState(() => (typeof window === "undefined" ? 0 : readSeen(docType, Number(docId) || 0)));
+  const [seen, setSeen] = useState(() => (typeof window === "undefined" ? 0 : readSeen(docType, docId)));
   const [text, setText] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const queryKey = fetchMessages
+  const customMessages = Boolean(fetchMessages);
+  const queryKey = fetchMessages && !workspaceId
     ? ["public-document-messages", docType, docId]
     : [...moneyKeys.workspace(workspaceId ?? 0), "document-messages", docType, docId];
   const messages = useQuery({
@@ -100,13 +101,13 @@ export function DocumentChat({
   // While open, everything shown counts as read, and the newest message stays in view.
   useEffect(() => {
     if (!open || !lastId) return;
-    if (workspaceId && typeof docId === "number") {
+    if (workspaceId && typeof docId === "number" && !customMessages) {
       void financeApi.markDocumentMessagesRead(workspaceId, docType, docId, lastId).catch(() => {});
     } else {
-      writeSeen(docType, Number(docId) || 0, lastId);
+      writeSeen(docType, docId, lastId);
     }
     endRef.current?.scrollIntoView({ block: "end" });
-  }, [open, lastId, workspaceId, docType, docId]);
+  }, [open, lastId, workspaceId, docType, docId, customMessages]);
 
   const send = useMutation({
     mutationFn: (message: string) =>

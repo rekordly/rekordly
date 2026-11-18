@@ -836,6 +836,10 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 		return GuestCheckoutConfirmation{}, err
 	}
 
+	if err := linkMatchingOrderCustomer(ctx, tx, proj.internalWS, order.ID, custEmail, custPhone); err != nil {
+		return GuestCheckoutConfirmation{}, err
+	}
+
 	createdLines := make([]db.StorefrontOrderLine, 0, len(calc.Lines))
 	for _, cl := range calc.Lines {
 		row, ok := prodMap[cl.StorefrontProductID]

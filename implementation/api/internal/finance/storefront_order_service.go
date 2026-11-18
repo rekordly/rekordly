@@ -448,6 +448,12 @@ func (s *Service) ConfirmStorefrontOrder(ctx context.Context, ws, user, orderID 
 		return MerchantOrderView{}, ErrOrderAlreadyHandled
 	}
 
+	if !o.CustomerID.Valid {
+		if err := linkMatchingOrderCustomer(ctx, tx, ws, o.ID, o.CustomerEmail.String, o.CustomerPhone.String); err != nil {
+			return MerchantOrderView{}, err
+		}
+	}
+
 	targetOutletID := in.OutletID
 	if targetOutletID <= 0 && o.OutletID.Valid {
 		targetOutletID = o.OutletID.Int64

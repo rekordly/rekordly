@@ -20,6 +20,8 @@ import { EssentialStoreFooter, StoreServiceCards } from "./essential-store-foote
 import { EssentialProductDetail } from "./essential-product-detail";
 import { resolveStoreBrand } from "@/lib/store-themes/brand";
 import { STORE_WRAP } from "@/lib/store-themes/layout";
+import { SideSheet } from "@/components/ui/side-sheet";
+import { useRouter } from "next/navigation";
 
 type CartDraftLine = {
   storefront_product_id: number;
@@ -43,6 +45,10 @@ function availabilityLabel(p: PublicStorefrontProduct): { text: string; tone: "s
 }
 
 export function PublicStorefrontClient({ slug, page = "home", collectionSlug, productID }: { slug: string; page?: "home" | "shop" | "about" | "policies" | "privacy" | "returns" | "terms" | "delivery" | "cart" | "collection" | "product"; productID?: number; collectionSlug?: string }) {
+  const router = useRouter();
+  const [cartOpen, setCartOpen] = useState(false);
+  const [cartNavigationError, setCartNavigationError] = useState("");
+  const [openingFullCart, setOpeningFullCart] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [selectedCol, setSelectedCol] = useState(collectionSlug ?? "");
   const [cart, setCart] = useState<CartDraftLine[]>([]);
@@ -256,6 +262,7 @@ export function PublicStorefrontClient({ slug, page = "home", collectionSlug, pr
   };
 
   const trackCartVisit = () => {
+    setCartOpen(true);
     void financeApi.trackPublicCheckoutStarted(slug).catch(() => {});
     if (cart.length > 0) validateCartMutation.mutate(cart);
   };
@@ -310,6 +317,20 @@ export function PublicStorefrontClient({ slug, page = "home", collectionSlug, pr
         cartCount={totalCount}
         onCartClick={trackCartVisit}
       />
+
+      <SideSheet isOpen={cartOpen} onClose={() => setCartOpen(false)} title={`Your cart (${totalCount})`} footer={<div className="w-full space-y-4">
+        {cart.length ? <div className="flex justify-between text-sm"><span>Subtotal</span><strong>{formatMinorAmount(cart.reduce((sum, line) => sum + BigInt(line.price_minor) * BigInt(line.quantity), BigInt(0)).toString(), sf.currency, sf.currency_exponent)}</strong></div> : null}
+        {cartNavigationError ? <p role="alert" className="text-sm text-danger">{cartNavigationError}</p> : null}
+        <div className="flex justify-end gap-2"><AppButton variant="ghost" label="Continue shopping" onPress={() => setCartOpen(false)} /><AppButton label="View full cart" isLoading={openingFullCart} onPress={async () => {
+          if (openingFullCart) return;
+          setOpeningFullCart(true); setCartNavigationError("");
+          try { if (cart.length) await syncCartMutation.mutateAsync(cart); setCartOpen(false); router.push(`/s/${encodeURIComponent(slug)}/cart`); }
+          catch (cause) { setCartNavigationError(cause instanceof Error ? cause.message : "Could not open your cart."); }
+          finally { setOpeningFullCart(false); }
+        }} /></div>
+      </div>}>
+        {cart.length ? <ul className="divide-y divide-border">{cart.map((line) => <li key={line.storefront_product_id} className="flex items-start justify-between gap-4 py-4"><div className="min-w-0"><p className="text-sm font-medium">{line.title}</p>{line.variant_name ? <p className="mt-1 text-xs text-muted">{line.variant_name}</p> : null}<p className="mt-2 text-xs text-muted">Quantity: {line.quantity}</p></div><span className="shrink-0 text-sm font-semibold">{formatMinorAmount((BigInt(line.price_minor) * BigInt(line.quantity)).toString(), sf.currency, sf.currency_exponent)}</span></li>)}</ul> : <div className="py-10 text-center"><ShoppingBag size={36} className="mx-auto text-muted" /><p className="mt-4 text-sm font-medium">Your cart is empty</p></div>}
+      </SideSheet>
 
       {page === "product" ? (() => { const product = sf.products.find((item) => item.id === productID); return product ? <EssentialProductDetail key={product.id} slug={slug} product={product} products={sf.products} /> : <div className="mx-auto max-w-4xl px-5 py-16"><h1 className="text-2xl">Product unavailable</h1><Link href={`/s/${slug}/shop`} className="mt-4 block text-sm underline">Back to shop</Link></div>; })() : null}
 

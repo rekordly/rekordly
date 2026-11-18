@@ -157,10 +157,17 @@ export function SimpleStoreRenderer(props: ThemeRendererProps) {
               <MagnifyingGlass size={18} aria-hidden="true" />
             </button>
             {props.headerAction ?? (
-              <a href={`${base}/cart`} onClick={onCartClick} aria-label={`Cart, ${cartCount} items`} className={`relative grid size-10 place-items-center rounded-full transition-colors ${chip}`}>
+              onCartClick ? (
+              <button type="button" onClick={onCartClick} aria-label={`Cart, ${cartCount} items`} className={`relative grid size-10 place-items-center rounded-full transition-colors ${chip}`}>
+                <ShoppingBag size={18} aria-hidden="true" />
+                {cartCount ? <span className="absolute -top-0.5 -right-0.5 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-white px-1 text-[10px] font-bold text-[#1C211E]">{cartCount > 99 ? "99+" : cartCount}</span> : null}
+              </button>
+              ) : (
+              <a href={`${base}/cart`} aria-label={`Cart, ${cartCount} items`} className={`relative grid size-10 place-items-center rounded-full transition-colors ${chip}`}>
                 <ShoppingBag size={18} aria-hidden="true" />
                 {cartCount ? <span className="absolute -top-0.5 -right-0.5 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-white px-1 text-[10px] font-bold text-[#1C211E]">{cartCount > 99 ? "99+" : cartCount}</span> : null}
               </a>
+              )
             )}
             <button type="button" aria-label={menuOpen ? "Close menu" : "Open menu"} onClick={() => setMenuOpen(!menuOpen)} className={`grid size-10 cursor-pointer place-items-center rounded-full transition-colors md:hidden ${chip}`}>
               {menuOpen ? <X size={18} aria-hidden="true" /> : <List size={18} aria-hidden="true" />}

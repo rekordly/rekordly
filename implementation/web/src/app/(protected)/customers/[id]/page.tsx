@@ -17,6 +17,7 @@ import {
   Wallet,
   WhatsappLogo,
 } from "@phosphor-icons/react";
+import { CustomerStoreOrders } from "@/components/features/store/customer-store-orders";
 import { AppButton } from "@/components/ui/app-button";
 import { FormDrawer } from "@/components/ui/form-drawer";
 import { Page, PageHeader } from "@/components/ui/page";
@@ -466,6 +467,8 @@ function CustomerDetailContent({ workspaceId, currency: wsCurrency, customerId }
           )}
         </div>
       </div>
+
+      <CustomerStoreOrders workspaceId={workspaceId} customer={customer} />
 
       {/* EDIT CUSTOMER DRAWER */}
       <FormDrawer

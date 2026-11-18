@@ -1,14 +1,17 @@
 "use client";
 
-import { CheckCircle, PaperPlaneTilt, ShoppingBag, Trash, Warning, Receipt, Package, Truck, CreditCard, Phone, EnvelopeSimple, MapPin, ChatCircleDots } from "@phosphor-icons/react";
+import { CheckCircle, ShoppingBag, Warning, Receipt, Package, Truck, CreditCard, Phone, EnvelopeSimple, MapPin } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
 
 import { AppButton } from "@/components/ui/app-button";
-import { AppInput } from "@/components/ui/app-input";
+import { DocumentChat } from "@/components/features/finance/document-chat";
+import { OrderReasonModal } from "./order-reason-modal";
+import { toast } from "@heroui/react";
+import type { ExternalMessage } from "@/types/finance";
 import { StatusPill } from "@/components/ui/page";
-import { DocumentShell, StatusTimeline, ItemsTable } from "@/components/features/finance/document-page";
+import { DocumentActions, DocumentShell, StatusTimeline, ItemsTable } from "@/components/features/finance/document-page";
 import { CardFrame, CardHeader, KpiCard, SummaryRowsCard } from "@/components/ui/cards";
 import { orderLabel, orderProgress } from "@/lib/store-order-display";
 import { formatDate } from "@/lib/format";
@@ -16,9 +19,7 @@ import { financeApi, formatMinorAmount } from "@/lib/money";
 
 export function PublicOrderStatusClient({ token }: { token: string }) {
   const qc = useQueryClient();
-  const [message, setMessage] = useState("");
-  const [cancelReason, setCancelReason] = useState("");
-  const [returnReason, setReturnReason] = useState("");
+  const [action, setAction] = useState<"cancel" | "return" | null>(null);
   const [actionError, setActionError] = useState("");
 
   const orderQuery = useQuery({
@@ -38,20 +39,10 @@ export function PublicOrderStatusClient({ token }: { token: string }) {
     onError: (err: Error) => setActionError(err.message),
   });
 
-  const msgMutation = useMutation({
-    mutationFn: (msg: string) => financeApi.postPublicOrderMessage(token, msg),
-    onSuccess: () => {
-      setMessage("");
-      setActionError("");
-      void invalidate();
-    },
-    onError: (err: Error) => setActionError(err.message),
-  });
-
   const cancelMutation = useMutation({
     mutationFn: (reason: string) => financeApi.cancelPublicOrder(token, reason),
     onSuccess: () => {
-      setCancelReason("");
+      toast.success("Order request cancelled");
       setActionError("");
       void invalidate();
     },
@@ -61,7 +52,7 @@ export function PublicOrderStatusClient({ token }: { token: string }) {
   const returnMutation = useMutation({
     mutationFn: (reason: string) => financeApi.requestPublicOrderReturn(token, reason),
     onSuccess: () => {
-      setReturnReason("");
+      toast.success("Return request sent");
       setActionError("");
       void invalidate();
     },
@@ -84,9 +75,16 @@ export function PublicOrderStatusClient({ token }: { token: string }) {
   const order = orderQuery.data;
   const canCancelBeforeConfirm = ["request_received", "needs_review", "quote_changes_requested"].includes(order.commercial_status);
 
+  const loadMessages = async (): Promise<ExternalMessage[]> => {
+    const fresh = await financeApi.getPublicOrderStatus(token);
+    return fresh.events.map((event, index) => ({ id: index + 1, document_type: 'storefront_order', document_id: 0, sender_type: event.actor_type === 'customer' ? 'guest' : 'team', sender_name: event.actor_type === 'customer' ? 'You' : order.storefront_name, message: event.message || orderLabel(event.event_type), created_at: event.created_at }));
+  };
   const money = (minor: string) => formatMinorAmount(minor, order.currency, order.currency_exponent);
   return <main className="min-h-screen bg-background px-4 py-8 sm:px-8"><div className="mx-auto max-w-7xl">
-    <DocumentShell back={{ href: '/s/' + order.storefront_slug + '/shop', label: order.storefront_name }} title={order.order_reference} subtitle={'Placed ' + formatDate(order.created_at)} status={<StatusPill tone={['confirmed', 'completed'].includes(order.commercial_status) ? 'success' : 'neutral'}>{orderLabel(order.commercial_status)}</StatusPill>}
+    <DocumentShell stickyColumns actions={<DocumentActions primary={<DocumentChat docType="storefront_order" docId={token} partyName={order.storefront_name} isGuest label="Messages" fetchMessages={loadMessages} sendMessage={async (message) => { await financeApi.postPublicOrderMessage(token, message); await invalidate(); }} />} more={[
+      canCancelBeforeConfirm && { key: "cancel", label: "Cancel order request", danger: true, onClick: () => setAction("cancel") },
+      ["fulfilled", "partially_fulfilled"].includes(order.fulfilment_status) && { key: "return", label: "Request a return", onClick: () => setAction("return") },
+    ]} />} back={{ href: '/s/' + order.storefront_slug + '/shop', label: order.storefront_name }} title={order.order_reference} subtitle={'Placed ' + formatDate(order.created_at)} status={<StatusPill tone={['confirmed', 'completed'].includes(order.commercial_status) ? 'success' : 'neutral'}>{orderLabel(order.commercial_status)}</StatusPill>}
       kpis={<><KpiCard tone="accent" icon={Receipt} label="Order total" value={money(order.total_minor)} hint="Including delivery" /><KpiCard icon={Package} label="Items" value={String(order.lines.length)} hint="Products in your order" /><KpiCard icon={Truck} label="Delivery" value={orderLabel(order.fulfilment_status)} hint={orderLabel(order.delivery_method)} /><KpiCard icon={CreditCard} label="Payment" value={orderLabel(order.payment_status)} hint={order.payment_arrangement || 'Contact the store for payment details'} /></>}
       banner={<>{order.requires_customer_ack ? <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-warning bg-warning/10 p-5"><div className="min-w-0 flex-1"><h2 className="flex items-center gap-2 font-semibold"><Warning size={20} />Please review your updated order</h2><p className="mt-2 text-sm">{order.latest_change_summary || 'The store has updated your order details.'}</p></div><AppButton label="Accept updated details" isLoading={ackMutation.isPending} startContent={<CheckCircle />} onPress={() => ackMutation.mutate(order.version)} /></div> : null}{actionError ? <p role="alert" className="text-sm text-danger">{actionError}</p> : null}</>}
       aside={<>
@@ -94,15 +92,11 @@ export function PublicOrderStatusClient({ token }: { token: string }) {
         <StatusTimeline title="Order progress" steps={orderProgress(order)} />
         <SummaryRowsCard title={order.storefront_name} subtitle="Contact & delivery" rows={[{ icon: Phone, label: 'Phone', value: order.merchant_phone ? <a href={'tel:' + order.merchant_phone}>{order.merchant_phone}</a> : 'Not provided' }, { icon: EnvelopeSimple, label: 'Email', value: <span className="block max-w-48 break-all text-right">{order.merchant_email || 'Not provided'}</span> }, { icon: Truck, label: 'Method', value: orderLabel(order.delivery_method) }, { icon: MapPin, label: 'Address', value: <span className="block max-w-48 whitespace-normal text-right">{order.delivery_address || 'Arrange with the store'}</span> }]} />
         {order.linked_invoice_share_token ? <Link href={'/public/invoices/' + order.linked_invoice_share_token} className="block rounded-full border border-border bg-surface px-5 py-3 text-center text-sm font-medium">View invoice</Link> : null}
-        {canCancelBeforeConfirm ? <CardFrame><details><summary className="cursor-pointer text-sm font-medium">Cancel order request</summary><div className="mt-4 space-y-3"><AppInput label="Reason (optional)" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} /><AppButton variant="tertiary" startContent={<Trash />} label="Cancel request" isLoading={cancelMutation.isPending} onPress={() => cancelMutation.mutate(cancelReason)} /></div></details></CardFrame> : null}
-        {['fulfilled', 'partially_fulfilled'].includes(order.fulfilment_status) ? <CardFrame><details><summary className="cursor-pointer text-sm font-medium">Request a return</summary><div className="mt-4 space-y-3"><AppInput label="Reason for return" value={returnReason} onChange={(event) => setReturnReason(event.target.value)} /><AppButton variant="secondary" label="Request return" isLoading={returnMutation.isPending} onPress={() => returnMutation.mutate(returnReason)} /></div></details></CardFrame> : null}
+
       </>}>
       <CardFrame><CardHeader title="Your items" icon={Package} /><div className="mt-4"><ItemsTable rows={order.lines.map((line, index) => ({ ...line, row_id: index }))} rowKey={(line) => line.row_id} columns={[{ key: 'item', label: 'Item', render: (line) => <div><p className="font-medium">{line.title}</p>{line.variant_name ? <p className="mt-1 text-xs text-muted">{line.variant_name}</p> : null}</div> }, { key: 'quantity', label: 'Requested', align: 'right', render: (line) => Number(line.requested_quantity) }, { key: 'confirmed', label: 'Confirmed', align: 'right', render: (line) => Number(line.confirmed_quantity) }, { key: 'delivered', label: 'Delivered', align: 'right', render: (line) => Number(line.fulfilled_quantity) }, { key: 'total', label: 'Total', align: 'right', render: (line) => money(line.line_total_minor) }]} card={(line) => ({ title: line.title, sub: 'Requested ' + Number(line.requested_quantity) + ' · Delivered ' + Number(line.fulfilled_quantity), amount: money(line.line_total_minor) })} total={{ label: 'Order total', amount: money(order.total_minor) }} /></div></CardFrame>
       {order.decline_or_cancel_reason ? <CardFrame><CardHeader title="Order update" icon={Receipt} /><p className="mt-3 text-sm text-muted">{order.decline_or_cancel_reason}</p></CardFrame> : null}
-      <CardFrame><CardHeader title="Messages & updates" icon={ChatCircleDots} />
-        <ol className="mt-5 max-h-[420px] space-y-4 overflow-y-auto">{order.events.map((event, index) => <li key={index} className="rounded-xl bg-surface-secondary p-4"><div className="flex items-center justify-between gap-3 text-xs"><strong>{event.actor_type === 'customer' ? 'You' : event.actor_type === 'system' ? 'Order update' : order.storefront_name}</strong><time className="text-muted">{formatDate(event.created_at)}</time></div><p className="mt-2 whitespace-pre-wrap text-sm leading-6">{event.message || orderLabel(event.event_type)}</p></li>)}</ol>
-        <form className="mt-5 flex items-end gap-2 border-t border-border pt-4" onSubmit={(event) => { event.preventDefault(); if (message.trim()) msgMutation.mutate(message.trim()); }}><div className="min-w-0 flex-1"><AppInput label="Message the store" placeholder="Ask about your order…" maxLength={2000} value={message} onChange={(event) => setMessage(event.target.value)} /></div><AppButton type="submit" startContent={<PaperPlaneTilt />} label="Send" isDisabled={!message.trim()} isLoading={msgMutation.isPending} /></form>
-      </CardFrame>
     </DocumentShell>
+    {action ? <OrderReasonModal key={action} title={action === "cancel" ? "Cancel order request" : "Request a return"} confirmLabel={action === "cancel" ? "Cancel request" : "Send return request"} danger={action === "cancel"} required={action === "return"} onClose={() => setAction(null)} onSubmit={async (reason) => { if (action === "cancel") await cancelMutation.mutateAsync(reason); else await returnMutation.mutateAsync(reason); }} /> : null}
   </div></main>;
 }

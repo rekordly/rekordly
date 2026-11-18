@@ -13,7 +13,7 @@
 
 import { ArrowLeft, ArrowRight, Check, Package, Receipt, ShoppingCart, ClipboardText, HandCoins, ArrowUUpLeft, FileText } from "@phosphor-icons/react";
 import Link from "next/link";
-import { Children, Fragment, isValidElement, useState, type ReactElement, type ReactNode } from "react";
+import { Children, Fragment, isValidElement, useState, useEffect, useRef, type ReactElement, type ReactNode, type CSSProperties } from "react";
 
 import { Alert } from "@/components/ui/alert";
 import { AppRowActions, type ActionMenuItem } from "@/components/ui/app-row-actions";
@@ -34,6 +34,7 @@ export function DocumentShell({
   kpis,
   banner,
   aside,
+  stickyColumns = false,
   children,
 }: {
   back: { href: string; label: string };
@@ -45,6 +46,7 @@ export function DocumentShell({
   kpis?: ReactNode;
   banner?: ReactNode;
   aside: ReactNode;
+  stickyColumns?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -68,11 +70,28 @@ export function DocumentShell({
       {kpis ? <KpiRow className="lg:grid-cols-4">{Children.toArray(isValidElement(kpis) && kpis.type === Fragment ? (kpis as ReactElement<{ children: ReactNode }>).props.children : kpis)}</KpiRow> : null}
       {banner}
       <div className="grid items-start gap-5 lg:grid-cols-12">
-        <div className="min-w-0 space-y-5 lg:col-span-8">{children}</div>
-        <div className="min-w-0 space-y-5 lg:col-span-4">{aside}</div>
+        <DocumentColumn sticky={stickyColumns} className="lg:col-span-8">{children}</DocumentColumn>
+        <DocumentColumn sticky={stickyColumns} className="lg:col-span-4">{aside}</DocumentColumn>
       </div>
     </Page>
   );
+}
+
+function DocumentColumn({ children, sticky, className }: { children: ReactNode; sticky: boolean; className: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [top, setTop] = useState(24);
+  useEffect(() => {
+    if (!sticky || !ref.current) return;
+    const column = ref.current;
+    // Tall columns scroll until their bottom is visible; shorter ones stay in view.
+    const update = () => setTop(Math.min(24, window.innerHeight - column.getBoundingClientRect().height - 24));
+    const observer = new ResizeObserver(update);
+    observer.observe(column);
+    window.addEventListener("resize", update);
+    update();
+    return () => { observer.disconnect(); window.removeEventListener("resize", update); };
+  }, [sticky]);
+  return <div ref={ref} className={`min-w-0 space-y-5 ${className} ${sticky ? "lg:sticky lg:top-[var(--document-column-top)]" : ""}`} style={{ "--document-column-top": `${top}px` } as CSSProperties}>{children}</div>;
 }
 
 /** One primary button, everything else behind the three-dot menu. */
