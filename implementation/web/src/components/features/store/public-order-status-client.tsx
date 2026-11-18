@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle, PaperPlaneTilt, ShoppingBag, Trash, Warning } from "@phosphor-icons/react";
+import { CheckCircle, PaperPlaneTilt, ShoppingBag, Trash, Warning, Receipt, Package, Truck, CreditCard, Phone, EnvelopeSimple, MapPin, ChatCircleDots } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
@@ -8,6 +8,9 @@ import { useState } from "react";
 import { AppButton } from "@/components/ui/app-button";
 import { AppInput } from "@/components/ui/app-input";
 import { StatusPill } from "@/components/ui/page";
+import { DocumentShell, StatusTimeline, ItemsTable } from "@/components/features/finance/document-page";
+import { CardFrame, CardHeader, KpiCard, SummaryRowsCard } from "@/components/ui/cards";
+import { orderLabel, orderProgress } from "@/lib/store-order-display";
 import { formatDate } from "@/lib/format";
 import { financeApi, formatMinorAmount } from "@/lib/money";
 
@@ -21,6 +24,7 @@ export function PublicOrderStatusClient({ token }: { token: string }) {
   const orderQuery = useQuery({
     queryKey: ["public-order-status", token],
     queryFn: () => financeApi.getPublicOrderStatus(token),
+    refetchInterval: 30_000,
   });
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["public-order-status", token] });
@@ -80,115 +84,25 @@ export function PublicOrderStatusClient({ token }: { token: string }) {
   const order = orderQuery.data;
   const canCancelBeforeConfirm = ["request_received", "needs_review", "quote_changes_requested"].includes(order.commercial_status);
 
-  return (
-    <main className="min-h-screen bg-background px-4 py-8">
-      <div className="mx-auto max-w-2xl space-y-6">
-        <div className="rounded-2xl border border-default bg-surface p-5 space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <p className="text-xs text-muted">{order.storefront_name}</p>
-              <h1 className="text-xl font-bold text-foreground">{order.order_reference}</h1>
-            </div>
-            <Link href={`/s/${order.storefront_slug}`} className="text-xs font-medium text-primary underline">
-              Back to storefront
-            </Link>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <StatusPill tone={order.commercial_status === "confirmed" || order.commercial_status === "completed" ? "success" : "neutral"}>
-              Order: {order.commercial_status}
-            </StatusPill>
-            <StatusPill tone="neutral">Fulfilment: {order.fulfilment_status}</StatusPill>
-            <StatusPill tone="neutral">Payment: {order.payment_status}</StatusPill>
-          </div>
-          {order.payment_arrangement ? <p className="text-xs text-foreground">Payment arrangement: {order.payment_arrangement}</p> : null}
-          {order.linked_invoice_share_token ? (
-            <Link href={`/public/invoices/${order.linked_invoice_share_token}`} className="inline-block text-xs font-semibold text-primary underline">
-              View shared invoice
-            </Link>
-          ) : null}
-        </div>
-
-        {order.requires_customer_ack ? (
-          <div className="rounded-2xl border border-warning bg-warning/10 p-4 space-y-3">
-            <div className="flex items-start gap-2 text-sm font-semibold text-foreground">
-              <Warning size={18} className="shrink-0 mt-0.5" />
-              <span>Merchant updated your order terms (v{order.version})</span>
-            </div>
-            {order.latest_change_summary ? <p className="text-xs text-foreground">{order.latest_change_summary}</p> : null}
-            <AppButton
-              size="sm"
-              variant="primary"
-              startContent={<CheckCircle weight="duotone" />}
-              label="Acknowledge updated terms"
-              isLoading={ackMutation.isPending}
-              onPress={() => ackMutation.mutate(order.version)}
-            />
-          </div>
-        ) : null}
-
-        {actionError ? <p className="text-xs font-medium text-danger">{actionError}</p> : null}
-
-        <div className="rounded-2xl border border-default bg-surface p-5 space-y-3">
-          <h2 className="text-sm font-semibold text-foreground">Items</h2>
-          {order.lines.map((l, idx) => (
-            <div key={idx} className="flex justify-between gap-3 text-xs border-b border-default pb-2 last:border-0">
-              <div>
-                <p className="font-semibold text-foreground">{l.title}</p>
-                <p className="text-muted">Confirmed: {l.confirmed_quantity} {l.unit_name} · Fulfilled: {l.fulfilled_quantity}</p>
-              </div>
-              <span className="tabular font-semibold">{formatMinorAmount(l.line_total_minor, order.currency, order.currency_exponent)}</span>
-            </div>
-          ))}
-          <div className="flex justify-between text-xs pt-1">
-            <span className="text-muted">Delivery ({order.delivery_method})</span>
-            <span className="tabular">{formatMinorAmount(order.delivery_fee_minor, order.currency, order.currency_exponent)}</span>
-          </div>
-          <div className="flex justify-between text-sm font-bold">
-            <span>Total</span>
-            <span className="tabular">{formatMinorAmount(order.total_minor, order.currency, order.currency_exponent)}</span>
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-default bg-surface p-5 space-y-3">
-          <h2 className="text-sm font-semibold text-foreground">Messages & Updates</h2>
-          <div className="space-y-2 text-xs">
-            {order.events.map((ev, i) => (
-              <div key={i} className="flex justify-between gap-2 border-b border-default pb-1.5 last:border-0">
-                <span><strong>{ev.actor_type}:</strong> {ev.message || ev.event_type}</span>
-                <span className="text-muted shrink-0">{formatDate(ev.created_at)}</span>
-              </div>
-            ))}
-          </div>
-          <form
-            className="flex gap-2 pt-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (message.trim()) msgMutation.mutate(message.trim());
-            }}
-          >
-            <AppInput placeholder="Ask the merchant a question…" value={message} onChange={(e) => setMessage(e.target.value)} />
-            <AppButton type="submit" size="sm" variant="secondary" startContent={<PaperPlaneTilt />} label="Send" isLoading={msgMutation.isPending} />
-          </form>
-        </div>
-
-        {canCancelBeforeConfirm ? (
-          <div className="rounded-2xl border border-default bg-surface p-4 flex flex-wrap items-end gap-2">
-            <div className="flex-1 min-w-[200px]">
-              <AppInput label="Cancel order request" placeholder="Optional reason" value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} />
-            </div>
-            <AppButton size="sm" variant="tertiary" startContent={<Trash />} label="Cancel request" isLoading={cancelMutation.isPending} onPress={() => cancelMutation.mutate(cancelReason)} />
-          </div>
-        ) : null}
-
-        {["fulfilled", "partially_fulfilled"].includes(order.fulfilment_status) ? (
-          <div className="rounded-2xl border border-default bg-surface p-4 flex flex-wrap items-end gap-2">
-            <div className="flex-1 min-w-[200px]">
-              <AppInput label="Request a return" placeholder="Reason for return (damaged, wrong item, etc.)" value={returnReason} onChange={(e) => setReturnReason(e.target.value)} />
-            </div>
-            <AppButton size="sm" variant="secondary" label="Request return" isLoading={returnMutation.isPending} onPress={() => returnMutation.mutate(returnReason)} />
-          </div>
-        ) : null}
-      </div>
-    </main>
-  );
+  const money = (minor: string) => formatMinorAmount(minor, order.currency, order.currency_exponent);
+  return <main className="min-h-screen bg-background px-4 py-8 sm:px-8"><div className="mx-auto max-w-7xl">
+    <DocumentShell back={{ href: '/s/' + order.storefront_slug + '/shop', label: order.storefront_name }} title={order.order_reference} subtitle={'Placed ' + formatDate(order.created_at)} status={<StatusPill tone={['confirmed', 'completed'].includes(order.commercial_status) ? 'success' : 'neutral'}>{orderLabel(order.commercial_status)}</StatusPill>}
+      kpis={<><KpiCard tone="accent" icon={Receipt} label="Order total" value={money(order.total_minor)} hint="Including delivery" /><KpiCard icon={Package} label="Items" value={String(order.lines.length)} hint="Products in your order" /><KpiCard icon={Truck} label="Delivery" value={orderLabel(order.fulfilment_status)} hint={orderLabel(order.delivery_method)} /><KpiCard icon={CreditCard} label="Payment" value={orderLabel(order.payment_status)} hint={order.payment_arrangement || 'Contact the store for payment details'} /></>}
+      banner={<>{order.requires_customer_ack ? <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-warning bg-warning/10 p-5"><div className="min-w-0 flex-1"><h2 className="flex items-center gap-2 font-semibold"><Warning size={20} />Please review your updated order</h2><p className="mt-2 text-sm">{order.latest_change_summary || 'The store has updated your order details.'}</p></div><AppButton label="Accept updated details" isLoading={ackMutation.isPending} startContent={<CheckCircle />} onPress={() => ackMutation.mutate(order.version)} /></div> : null}{actionError ? <p role="alert" className="text-sm text-danger">{actionError}</p> : null}</>}
+      aside={<>
+        <SummaryRowsCard tone="ink" title="Your order" leading={<Receipt size={21} />} headline={{ label: 'Estimated order total', value: money(order.total_minor) }} rows={[{ icon: Package, label: 'Subtotal', value: money(order.subtotal_minor) }, { icon: Truck, label: 'Delivery', value: money(order.delivery_fee_minor) }, { icon: CreditCard, label: 'Payment', value: orderLabel(order.payment_status) }]} />
+        <StatusTimeline title="Order progress" steps={orderProgress(order)} />
+        <SummaryRowsCard title={order.storefront_name} subtitle="Contact & delivery" rows={[{ icon: Phone, label: 'Phone', value: order.merchant_phone ? <a href={'tel:' + order.merchant_phone}>{order.merchant_phone}</a> : 'Not provided' }, { icon: EnvelopeSimple, label: 'Email', value: <span className="block max-w-48 break-all text-right">{order.merchant_email || 'Not provided'}</span> }, { icon: Truck, label: 'Method', value: orderLabel(order.delivery_method) }, { icon: MapPin, label: 'Address', value: <span className="block max-w-48 whitespace-normal text-right">{order.delivery_address || 'Arrange with the store'}</span> }]} />
+        {order.linked_invoice_share_token ? <Link href={'/public/invoices/' + order.linked_invoice_share_token} className="block rounded-full border border-border bg-surface px-5 py-3 text-center text-sm font-medium">View invoice</Link> : null}
+        {canCancelBeforeConfirm ? <CardFrame><details><summary className="cursor-pointer text-sm font-medium">Cancel order request</summary><div className="mt-4 space-y-3"><AppInput label="Reason (optional)" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} /><AppButton variant="tertiary" startContent={<Trash />} label="Cancel request" isLoading={cancelMutation.isPending} onPress={() => cancelMutation.mutate(cancelReason)} /></div></details></CardFrame> : null}
+        {['fulfilled', 'partially_fulfilled'].includes(order.fulfilment_status) ? <CardFrame><details><summary className="cursor-pointer text-sm font-medium">Request a return</summary><div className="mt-4 space-y-3"><AppInput label="Reason for return" value={returnReason} onChange={(event) => setReturnReason(event.target.value)} /><AppButton variant="secondary" label="Request return" isLoading={returnMutation.isPending} onPress={() => returnMutation.mutate(returnReason)} /></div></details></CardFrame> : null}
+      </>}>
+      <CardFrame><CardHeader title="Your items" icon={Package} /><div className="mt-4"><ItemsTable rows={order.lines.map((line, index) => ({ ...line, row_id: index }))} rowKey={(line) => line.row_id} columns={[{ key: 'item', label: 'Item', render: (line) => <div><p className="font-medium">{line.title}</p>{line.variant_name ? <p className="mt-1 text-xs text-muted">{line.variant_name}</p> : null}</div> }, { key: 'quantity', label: 'Requested', align: 'right', render: (line) => Number(line.requested_quantity) }, { key: 'confirmed', label: 'Confirmed', align: 'right', render: (line) => Number(line.confirmed_quantity) }, { key: 'delivered', label: 'Delivered', align: 'right', render: (line) => Number(line.fulfilled_quantity) }, { key: 'total', label: 'Total', align: 'right', render: (line) => money(line.line_total_minor) }]} card={(line) => ({ title: line.title, sub: 'Requested ' + Number(line.requested_quantity) + ' · Delivered ' + Number(line.fulfilled_quantity), amount: money(line.line_total_minor) })} total={{ label: 'Order total', amount: money(order.total_minor) }} /></div></CardFrame>
+      {order.decline_or_cancel_reason ? <CardFrame><CardHeader title="Order update" icon={Receipt} /><p className="mt-3 text-sm text-muted">{order.decline_or_cancel_reason}</p></CardFrame> : null}
+      <CardFrame><CardHeader title="Messages & updates" icon={ChatCircleDots} />
+        <ol className="mt-5 max-h-[420px] space-y-4 overflow-y-auto">{order.events.map((event, index) => <li key={index} className="rounded-xl bg-surface-secondary p-4"><div className="flex items-center justify-between gap-3 text-xs"><strong>{event.actor_type === 'customer' ? 'You' : event.actor_type === 'system' ? 'Order update' : order.storefront_name}</strong><time className="text-muted">{formatDate(event.created_at)}</time></div><p className="mt-2 whitespace-pre-wrap text-sm leading-6">{event.message || orderLabel(event.event_type)}</p></li>)}</ol>
+        <form className="mt-5 flex items-end gap-2 border-t border-border pt-4" onSubmit={(event) => { event.preventDefault(); if (message.trim()) msgMutation.mutate(message.trim()); }}><div className="min-w-0 flex-1"><AppInput label="Message the store" placeholder="Ask about your order…" maxLength={2000} value={message} onChange={(event) => setMessage(event.target.value)} /></div><AppButton type="submit" startContent={<PaperPlaneTilt />} label="Send" isDisabled={!message.trim()} isLoading={msgMutation.isPending} /></form>
+      </CardFrame>
+    </DocumentShell>
+  </div></main>;
 }

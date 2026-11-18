@@ -136,16 +136,18 @@ export function ChoiceCards<T extends string>({
   options,
   value,
   onChange,
+  layout = "grid",
 }: {
   label?: string;
   options: Choice<T>[];
   value: T;
   onChange: (value: T) => void;
+  layout?: "grid" | "list";
 }) {
   return (
     <div role="radiogroup" aria-label={label} className="space-y-1.5">
       {label ? <p className="text-[13px] font-medium">{label}</p> : null}
-      <div className={`grid gap-2 ${options.length === 2 ? "grid-cols-2" : "grid-cols-1 sm:grid-cols-3"}`}>
+      <div className={`grid gap-2 ${layout === "list" ? "grid-cols-1" : options.length === 2 ? "grid-cols-2" : "grid-cols-1 sm:grid-cols-3"}`}>
         {options.map((option) => {
           const active = option.key === value;
           const OptionIcon = option.icon;
@@ -156,7 +158,7 @@ export function ChoiceCards<T extends string>({
               role="radio"
               aria-checked={active}
               onClick={() => onChange(option.key)}
-              className={`relative flex cursor-pointer items-start gap-3 ${options.length > 2 ? "sm:flex-col sm:gap-2.5" : ""} rounded-xl border p-3.5 text-left transition-all duration-150 active:scale-[0.98] ${
+              className={`relative flex cursor-pointer items-start gap-3 ${layout === "grid" && options.length > 2 ? "sm:flex-col sm:gap-2.5" : ""} rounded-xl border p-3.5 text-left transition-all duration-150 active:scale-[0.98] ${
                 active ? "border-primary bg-primary-soft/60 ring-4 ring-primary/10" : "border-border bg-surface hover:border-field-border-hover"
               }`}
             >
@@ -165,7 +167,7 @@ export function ChoiceCards<T extends string>({
                   <OptionIcon size={16} weight={active ? "fill" : "regular"} aria-hidden="true" />
                 </span>
               ) : null}
-              <span className="min-w-0">
+              <span className="min-w-0 pr-5">
                 <span className="block text-[14px] font-semibold">{option.label}</span>
                 {option.description ? <span className="mt-0.5 block text-[12px] text-muted">{option.description}</span> : null}
               </span>

@@ -19,6 +19,9 @@ import { useTheme } from "next-themes";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { financeApi, moneyKeys } from "@/lib/money";
+import { hasWorkspacePermission } from "@/stores/workspace-store";
 
 import { getInitials } from "@/components/ui/user-avatar";
 import { signOut } from "@/components/providers/session-provider";
@@ -35,7 +38,7 @@ const ROW = "flex h-9 w-full cursor-pointer items-center rounded-lg text-[13px] 
 const ROW_IDLE = "text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-foreground";
 const ROW_ACTIVE = "bg-sidebar-active font-semibold text-sidebar-active-foreground";
 /** Collapsed rail: every control is the same centred square. */
-const RAIL_BUTTON = "mx-auto grid size-10 cursor-pointer place-items-center rounded-lg transition-colors";
+const RAIL_BUTTON = "relative mx-auto grid size-10 cursor-pointer place-items-center rounded-lg transition-colors";
 
 function CountPill({ count }: { count: number }) {
   if (count <= 0) return null;
@@ -73,10 +76,11 @@ function NavRow({
         href={item.href}
         onClick={onNavigate}
         aria-current={isActive ? "page" : undefined}
-        aria-label={collapsed ? item.label : undefined}
+        aria-label={collapsed ? `${item.label}${badge ? `, ${badge} orders needing attention` : ""}` : undefined}
         className={`${collapsed ? RAIL_BUTTON : `${ROW} gap-2.5 px-2.5`} ${isActive ? ROW_ACTIVE : ROW_IDLE}`}
       >
         <ItemIcon size={18} weight={isActive ? "fill" : "regular"} className="shrink-0" aria-hidden="true" />
+        {collapsed && badge > 0 ? <span className="absolute right-0.5 top-0.5 size-2 rounded-full bg-secondary ring-2 ring-sidebar" /> : null}
         {!collapsed ? (
           <>
             <span className="flex-1 truncate">{item.label}</span>
@@ -107,6 +111,7 @@ function NavRow({
       >
         <ItemIcon size={18} weight={childActive ? "fill" : "regular"} className="shrink-0" aria-hidden="true" />
         <span className="flex-1 truncate text-left">{item.label}</span>
+        <CountPill count={badge} />
         <CaretRight
           size={14}
           className={`shrink-0 text-sidebar-label transition-transform duration-200 ${expanded ? "rotate-90" : ""}`}
@@ -125,7 +130,8 @@ function NavRow({
                   aria-current={isActive ? "page" : undefined}
                   className={`flex h-8 items-center rounded-lg px-2.5 text-[12.5px] transition-colors ${isActive ? ROW_ACTIVE : ROW_IDLE}`}
                 >
-                  <span className="truncate">{child.label}</span>
+                  <span className="flex-1 truncate">{child.label}</span>
+                  {child.href === "/store/orders" || child.href === "/sales" ? <CountPill count={badge} /> : null}
                 </Link>
               </li>
             );
@@ -146,6 +152,16 @@ function SidebarContent({ collapsed, onNavigate, onClose }: { collapsed: boolean
   const openMoneyRecord = useUIStore((state) => state.openMoneyRecord);
   const setCommandMenuOpen = useUIStore((state) => state.setCommandMenuOpen);
   const { groups, scope, accountLinks } = useNavigation();
+  const workspaceId = scope.active?.id ?? 0;
+  const pendingOrders = useQuery({
+    queryKey: [...moneyKeys.workspace(workspaceId), "storefront-orders"],
+    queryFn: () => financeApi.listMerchantOrders(workspaceId),
+    enabled: scope.mode === "business" && workspaceId > 0 && hasWorkspacePermission(scope, "orders.view"),
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+    retry: false,
+  });
+  const pendingOrderCount = (pendingOrders.data ?? []).filter((order) => ["request_received", "needs_review", "quote_changes_requested"].includes(order.commercial_status)).length;
   const initials = getInitials(user?.display_name) || "R";
   const activeHref = activeHrefFor(groups, pathname);
   const isDark = resolvedTheme === "dark";
@@ -219,7 +235,7 @@ function SidebarContent({ collapsed, onNavigate, onClose }: { collapsed: boolean
                       activeHref={activeHref}
                       collapsed={collapsed}
                       onNavigate={onNavigate}
-                      badge={0}
+                      badge={item.href === "/sales" || item.href === "/store" ? pendingOrderCount : 0}
                     />
                   </li>
                 ))}

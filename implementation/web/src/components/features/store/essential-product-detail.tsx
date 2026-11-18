@@ -12,10 +12,13 @@ import { STORE_SURFACE, STORE_WRAP } from "@/lib/store-themes/layout";
 import type { PublicStorefrontProduct } from "@/types/finance";
 
 import { PublicProductActions } from "./public-product-actions";
+import { ChoiceCards } from "@/components/ui/form-kit";
 
-export function EssentialProductDetail({ slug, product, products }: { slug: string; product: PublicStorefrontProduct; products: PublicStorefrontProduct[] }) {
+export function EssentialProductDetail({ slug, product: initialProduct, products }: { slug: string; product: PublicStorefrontProduct; products: PublicStorefrontProduct[] }) {
   const [image, setImage] = useState(0);
-  const variants = products.filter((item) => item.product_id === product.product_id);
+  const [selectedID, setSelectedID] = useState(initialProduct.id);
+  const variants = products.filter((item) => item.product_id === initialProduct.product_id);
+  const product = variants.find((item) => item.id === selectedID) ?? initialProduct;
   const soldOut = product.availability_state === "out_of_stock";
   const stock =
     product.availability_state === "low_stock" && product.available_quantity
@@ -72,21 +75,15 @@ export function EssentialProductDetail({ slug, product, products }: { slug: stri
           {variants.length > 1 ? (
             <div>
               <h2 className="mb-2.5 text-[12px] font-semibold tracking-[0.14em] text-[#6E736D] uppercase">Options</h2>
-              <div className="flex flex-wrap gap-2">
-                {variants.map((variant) => (
-                  <Link
-                    key={variant.id}
-                    href={`/s/${slug}/products/${variant.id}`}
-                    className={`rounded-full border px-4 py-2 text-[14px] transition-colors ${variant.id === product.id ? "border-[var(--store-primary)] font-semibold" : "border-black/15 hover:border-black/40"} ${variant.availability_state === "out_of_stock" ? "opacity-50" : ""}`}
-                  >
-                    {variant.variant_name || variant.title}
-                  </Link>
-                ))}
-              </div>
+              <ChoiceCards value={String(product.id)} options={variants.map((variant) => ({ key: String(variant.id), label: variant.variant_name || variant.title, description: variant.availability_state === "out_of_stock" ? "Sold out" : formatMinorAmount(variant.price_minor, variant.currency, variant.currency_exponent) }))} onChange={(value) => {
+                setSelectedID(Number(value));
+                setImage(0);
+                window.history.replaceState(null, "", `/s/${encodeURIComponent(slug)}/products/${value}`);
+              }} />
             </div>
           ) : null}
 
-          <PublicProductActions slug={slug} productID={product.id} priceMinor={product.price_minor} unavailable={soldOut} />
+          <PublicProductActions key={product.id} slug={slug} productID={product.id} priceMinor={product.price_minor} unavailable={soldOut} />
 
           <div className="divide-y divide-black/10 border-y border-black/10">
             {product.description ? (

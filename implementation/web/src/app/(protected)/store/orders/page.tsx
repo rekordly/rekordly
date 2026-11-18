@@ -1,5 +1,5 @@
-import { StorefrontAdminPage } from "@/components/features/store/storefront-admin-page";
+import { StorefrontOrdersPage } from "@/components/features/store/storefront-orders-page";
 
 export default function StoreOrdersPage() {
-  return <StorefrontAdminPage initialTab="orders" />;
+  return <StorefrontOrdersPage />;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle, MagnifyingGlass, ShoppingBag, Trash, Warning } from "@phosphor-icons/react";
+import { CheckCircle, MagnifyingGlass, ShoppingBag, Trash, Warning, Storefront, Truck, Handshake } from "@phosphor-icons/react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Image from "next/image";
 import Link from "next/link";
@@ -8,6 +8,8 @@ import { useEffect, useState } from "react";
 
 import { AppButton } from "@/components/ui/app-button";
 import { AppInput } from "@/components/ui/app-input";
+import { AppSelect } from "@/components/ui/app-select";
+import { ChoiceCards } from "@/components/ui/form-kit";
 import { FormDrawer } from "@/components/ui/form-drawer";
 import { StatusPill } from "@/components/ui/page";
 import { createIdempotencyKey } from "@/lib/utils";
@@ -483,8 +485,8 @@ function PublicCartPage(props: PublicCartPageProps) {
         <h2 className="text-lg font-semibold">Contact & delivery</h2>
         <AppInput label="Your name" isRequired value={props.customerName} onChange={(event) => props.setCustomerName(event.target.value)} placeholder="Your name" />
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2"><AppInput label="Phone / WhatsApp" isRequired={props.requirePhone} value={props.customerPhone} onChange={(event) => props.setCustomerPhone(event.target.value)} placeholder="+234…" /><AppInput label="Email" isRequired={props.requireEmail} value={props.customerEmail} onChange={(event) => props.setCustomerEmail(event.target.value)} placeholder="you@example.com" /></div>
-        <div className="flex flex-wrap gap-2">{props.deliveryMethods.map((method) => <AppButton key={method} size="sm" variant={props.deliveryMethod === method ? "primary" : "secondary"} label={method.replaceAll("_", " ")} onPress={() => props.setDeliveryMethod(method)} />)}</div>
-        {props.deliveryMethod === "merchant_delivery" && props.deliveryAreas.length ? <label className="block space-y-1 text-sm font-medium">Delivery area<select className="h-10 w-full rounded-xl border border-border bg-surface px-3 text-sm" value={props.deliveryAreaId} onChange={(event) => props.setDeliveryAreaId(event.target.value)}><option value="">Choose an area</option>{props.deliveryAreas.map((area) => <option key={area.id} value={area.id}>{area.name} · {formatMinorAmount(area.fee_minor, props.currency, props.currencyExponent)}</option>)}</select></label> : null}
+        <ChoiceCards layout="list" label="How would you like to receive your order?" value={props.deliveryMethod} onChange={props.setDeliveryMethod} options={props.deliveryMethods.map((method) => ({ key: method, label: method === "pickup" ? "Pickup" : method === "merchant_delivery" ? "Store delivery" : "Arrange my delivery", description: method === "pickup" ? "Collect from the store" : method === "merchant_delivery" ? "Have the store deliver to you" : "Use your own courier", icon: method === "pickup" ? Storefront : method === "merchant_delivery" ? Truck : Handshake }))} />
+        {props.deliveryMethod === "merchant_delivery" && props.deliveryAreas.length ? <AppSelect label="Delivery area" placeholder="Choose a delivery area" isRequired selectedKey={props.deliveryAreaId || undefined} onSelectionChange={props.setDeliveryAreaId} options={props.deliveryAreas.map((area) => ({ key: String(area.id), label: area.name, description: formatMinorAmount(area.fee_minor, props.currency, props.currencyExponent) }))} /> : null}
         {props.deliveryMethod === "merchant_delivery" ? <AppInput label="Delivery address" isRequired value={props.deliveryAddress} onChange={(event) => props.setDeliveryAddress(event.target.value)} placeholder="Street address and landmark" /> : null}
         {props.freeDeliveryThreshold && props.deliveryMethod === "merchant_delivery" ? <p className="text-xs text-muted">Free delivery over {formatMinorAmount(props.freeDeliveryThreshold, props.currency, props.currencyExponent)}.</p> : null}
         <AppInput label="Note for the store (optional)" value={props.customerNote} onChange={(event) => props.setCustomerNote(event.target.value)} placeholder="Preferred delivery or pickup time" />
