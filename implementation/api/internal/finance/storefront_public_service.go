@@ -1351,6 +1351,7 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 		attemptRef := fmt.Sprintf("att_%s_%d", orderRef, time.Now().UnixNano()%1000000)
 		if payMethod == "virtual_account" {
 			va, vaErr := chosenProvider.CreateOrderVirtualAccount(ctx, payments.OrderPaymentRequest{
+				OrderID:                   order.ID,
 				Reference:                 attemptRef,
 				AmountMinor:               finalTotal,
 				Currency:                  proj.Currency,
@@ -1392,6 +1393,7 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 			}
 		} else if payMethod == "card" {
 			cardRes, cErr := chosenProvider.InitializeCardCheckout(ctx, payments.OrderPaymentRequest{
+				OrderID:                   order.ID,
 				Reference:                 attemptRef,
 				AmountMinor:               finalTotal,
 				Currency:                  proj.Currency,

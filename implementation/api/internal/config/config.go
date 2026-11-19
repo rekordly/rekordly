@@ -147,6 +147,10 @@ func Load() (Config, error) {
 		WorkerLeaseSeconds:        v.GetInt("WORKER_LEASE_SECONDS"),
 	}
 
+	if strings.TrimSpace(cfg.PaystackWebhookSecret) == "" {
+		cfg.PaystackWebhookSecret = cfg.PaystackSecretKey
+	}
+
 	if cfg.DatabaseURL == "" {
 		return Config{}, fmt.Errorf("DATABASE_URL is required")
 	}
@@ -216,8 +220,8 @@ func validateProductionConfig(cfg Config) error {
 		return fmt.Errorf("production requires RESEND_API_KEY and EMAIL_WEBHOOK_SECRET")
 	}
 	if cfg.CommercialMode != "" && cfg.CommercialMode != "controlled_beta" {
-		if cfg.PaystackSecretKey == "" || cfg.PaystackWebhookSecret == "" {
-			return fmt.Errorf("paid commercial mode requires PAYSTACK_SECRET_KEY and PAYSTACK_WEBHOOK_SECRET")
+		if cfg.PaystackSecretKey == "" {
+			return fmt.Errorf("paid commercial mode requires PAYSTACK_SECRET_KEY")
 		}
 	}
 	return nil

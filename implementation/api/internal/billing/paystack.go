@@ -1,18 +1,14 @@
 package billing
 
 import (
-	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/sha512"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
-	"strings"
+	"net/url"
 	"time"
+
+	"github.com/rekordly/rekordly-api/internal/paystack"
 )
 
 var (
@@ -63,67 +59,30 @@ type PaymentProvider interface {
 }
 
 type PaystackProvider struct {
-	secretKey     string
-	webhookSecret string
-	baseURL       string
-	httpClient    *http.Client
+	client *paystack.Client
 }
 
+// NewPaystackProvider creates a Paystack billing provider backed by the shared Paystack client.
+// webhookSecret is accepted only as a deprecated fallback if secretKey is empty.
 func NewPaystackProvider(secretKey, webhookSecret, baseURL string, timeout time.Duration) *PaystackProvider {
-	if strings.TrimSpace(baseURL) == "" {
-		baseURL = "https://api.paystack.co"
-	}
-	if strings.TrimSpace(webhookSecret) == "" {
-		webhookSecret = secretKey
-	}
-	if timeout <= 0 {
-		timeout = 15 * time.Second
-	}
 	return &PaystackProvider{
-		secretKey:     strings.TrimSpace(secretKey),
-		webhookSecret: strings.TrimSpace(webhookSecret),
-		baseURL:       strings.TrimRight(strings.TrimSpace(baseURL), "/"),
-		httpClient:    &http.Client{Timeout: timeout},
+		client: paystack.NewClient(secretKey, webhookSecret, baseURL, timeout),
 	}
 }
 
 func (p *PaystackProvider) IsConfigured() bool {
-	return p.secretKey != ""
+	return p != nil && p.client.IsConfigured()
 }
 
 func (p *PaystackProvider) VerifyWebhookSignature(rawBody []byte, signatureHeader string) bool {
-	if p.webhookSecret == "" || strings.TrimSpace(signatureHeader) == "" {
+	if p == nil || p.client == nil {
 		return false
 	}
-	mac := hmac.New(sha512.New, []byte(p.webhookSecret))
-	_, _ = mac.Write(rawBody)
-	expected := hex.EncodeToString(mac.Sum(nil))
-	return hmac.Equal([]byte(strings.ToLower(strings.TrimSpace(signatureHeader))), []byte(strings.ToLower(expected)))
+	return p.client.VerifySignature(rawBody, signatureHeader)
 }
 
 func (p *PaystackProvider) InitializeCheckout(ctx context.Context, req InitializeCheckoutRequest) (InitializeCheckoutResponse, error) {
 	if !p.IsConfigured() {
-		return InitializeCheckoutResponse{}, ErrProviderUnavailable
-	}
-	bodyBytes, err := json.Marshal(req)
-	if err != nil {
-		return InitializeCheckoutResponse{}, err
-	}
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, p.baseURL+"/transaction/initialize", bytes.NewReader(bodyBytes))
-	if err != nil {
-		return InitializeCheckoutResponse{}, err
-	}
-	httpReq.Header.Set("Authorization", "Bearer "+p.secretKey)
-	httpReq.Header.Set("Content-Type", "application/json")
-
-	resp, err := p.httpClient.Do(httpReq)
-	if err != nil {
-		return InitializeCheckoutResponse{}, ErrProviderUnavailable
-	}
-	defer resp.Body.Close()
-
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, 128*1024))
-	if err != nil || resp.StatusCode >= 500 {
 		return InitializeCheckoutResponse{}, ErrProviderUnavailable
 	}
 	var env struct {
@@ -131,8 +90,15 @@ func (p *PaystackProvider) InitializeCheckout(ctx context.Context, req Initializ
 		Message string                     `json:"message"`
 		Data    InitializeCheckoutResponse `json:"data"`
 	}
-	if err := json.Unmarshal(raw, &env); err != nil || !env.Status {
-		return InitializeCheckoutResponse{}, fmt.Errorf("paystack initialize failed: %s", env.Message)
+	if _, err := p.client.DoJSON(ctx, http.MethodPost, "/transaction/initialize", req, &env); err != nil {
+		if errors.Is(err, paystack.ErrUnavailable) {
+			return InitializeCheckoutResponse{}, ErrProviderUnavailable
+		}
+		var apiErr *paystack.APIError
+		if errors.As(err, &apiErr) {
+			return InitializeCheckoutResponse{}, fmt.Errorf("paystack initialize failed: %s", apiErr.Message)
+		}
+		return InitializeCheckoutResponse{}, err
 	}
 	return env.Data, nil
 }
@@ -141,56 +107,26 @@ func (p *PaystackProvider) VerifyTransaction(ctx context.Context, reference stri
 	if !p.IsConfigured() {
 		return VerifyTransactionResponse{}, ErrProviderUnavailable
 	}
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, p.baseURL+"/transaction/verify/"+reference, nil)
-	if err != nil {
-		return VerifyTransactionResponse{}, err
-	}
-	httpReq.Header.Set("Authorization", "Bearer "+p.secretKey)
-
-	resp, err := p.httpClient.Do(httpReq)
-	if err != nil {
-		return VerifyTransactionResponse{}, ErrProviderUnavailable
-	}
-	defer resp.Body.Close()
-
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, 128*1024))
-	if err != nil || resp.StatusCode >= 500 {
-		return VerifyTransactionResponse{}, ErrProviderUnavailable
-	}
 	var env struct {
 		Status  bool                      `json:"status"`
 		Message string                    `json:"message"`
 		Data    VerifyTransactionResponse `json:"data"`
 	}
-	if err := json.Unmarshal(raw, &env); err != nil || !env.Status {
-		return VerifyTransactionResponse{}, fmt.Errorf("paystack verify failed: %s", env.Message)
+	if _, err := p.client.DoJSON(ctx, http.MethodGet, "/transaction/verify/"+url.PathEscape(reference), nil, &env); err != nil {
+		if errors.Is(err, paystack.ErrUnavailable) {
+			return VerifyTransactionResponse{}, ErrProviderUnavailable
+		}
+		var apiErr *paystack.APIError
+		if errors.As(err, &apiErr) {
+			return VerifyTransactionResponse{}, fmt.Errorf("paystack verify failed: %s", apiErr.Message)
+		}
+		return VerifyTransactionResponse{}, err
 	}
 	return env.Data, nil
 }
 
 func (p *PaystackProvider) RefundTransaction(ctx context.Context, req RefundRequest) (RefundResponse, error) {
 	if !p.IsConfigured() {
-		return RefundResponse{}, ErrProviderUnavailable
-	}
-	bodyBytes, err := json.Marshal(req)
-	if err != nil {
-		return RefundResponse{}, err
-	}
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, p.baseURL+"/refund", bytes.NewReader(bodyBytes))
-	if err != nil {
-		return RefundResponse{}, err
-	}
-	httpReq.Header.Set("Authorization", "Bearer "+p.secretKey)
-	httpReq.Header.Set("Content-Type", "application/json")
-
-	resp, err := p.httpClient.Do(httpReq)
-	if err != nil {
-		return RefundResponse{}, ErrProviderUnavailable
-	}
-	defer resp.Body.Close()
-
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, 128*1024))
-	if err != nil || resp.StatusCode >= 500 {
 		return RefundResponse{}, ErrProviderUnavailable
 	}
 	var env struct {
@@ -200,7 +136,7 @@ func (p *PaystackProvider) RefundTransaction(ctx context.Context, req RefundRequ
 			Status string `json:"status"`
 		} `json:"data"`
 	}
-	if err := json.Unmarshal(raw, &env); err != nil || !env.Status {
+	if _, err := p.client.DoJSON(ctx, http.MethodPost, "/refund", req, &env); err != nil {
 		return RefundResponse{}, ErrProviderUnavailable
 	}
 	return RefundResponse{RefundRef: fmt.Sprintf("%v", env.Data.ID), Status: env.Data.Status}, nil

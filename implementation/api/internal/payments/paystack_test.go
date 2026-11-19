@@ -158,10 +158,11 @@ func TestPaystackProvider(t *testing.T) {
 	require.Equal(t, int64(500000), pr.AmountMinor)
 	require.Equal(t, int64(7500), pr.FeeMinor)
 
-	// VerifyWebhook
+	// VerifyWebhook signs with PAYSTACK_SECRET_KEY (deprecated webhookSecret does NOT match when secretKey is set)
 	webhookPayload := []byte(`{
 		"event": "charge.success",
 		"data": {
+			"id": 98765,
 			"reference": "ref123",
 			"amount": 500000,
 			"fees": 7500,
@@ -170,7 +171,7 @@ func TestPaystackProvider(t *testing.T) {
 			"channel": "bank_transfer"
 		}
 	}`)
-	mac := hmac.New(sha512.New, []byte(webhookSecret))
+	mac := hmac.New(sha512.New, []byte(secretKey))
 	_, _ = mac.Write(webhookPayload)
 	sig := hex.EncodeToString(mac.Sum(nil))
 
@@ -180,10 +181,19 @@ func TestPaystackProvider(t *testing.T) {
 	ev, err := provider.VerifyWebhook(webhookPayload, headers)
 	require.NoError(t, err)
 	require.Equal(t, "charge.success", ev.Type)
+	require.Equal(t, "98765", ev.ProviderEventID)
 	require.Equal(t, "ref123", ev.Reference)
 	require.Equal(t, "paid", ev.Status)
 	require.Equal(t, int64(500000), ev.AmountMinor)
 	require.Equal(t, int64(7500), ev.FeeMinor)
+
+	// Signature generated with old separate webhookSecret must fail when secretKey differs
+	oldMac := hmac.New(sha512.New, []byte(webhookSecret))
+	_, _ = oldMac.Write(webhookPayload)
+	oldHeaders := http.Header{}
+	oldHeaders.Set("x-paystack-signature", hex.EncodeToString(oldMac.Sum(nil)))
+	_, err = provider.VerifyWebhook(webhookPayload, oldHeaders)
+	require.ErrorIs(t, err, ErrInvalidWebhookSig)
 
 	// Bad signature
 	badHeaders := http.Header{}

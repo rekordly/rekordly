@@ -16,6 +16,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/rekordly/rekordly-api/internal/billing"
 	"github.com/rekordly/rekordly-api/internal/crypto"
 	"github.com/rekordly/rekordly-api/internal/db"
 	"github.com/rekordly/rekordly-api/internal/finance"
@@ -360,11 +361,13 @@ func TestStorefrontPaymentWebhookAndOrderPaidLedgerPosting(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Setup webhook router
+	// Setup unified webhook router (Paystack unified on /webhooks/paystack, Squad on /webhooks/payments/squad)
 	gin.SetMode(gin.TestMode)
 	h := finance.NewHandler(svc, nil)
 	r := gin.New()
-	h.RegisterStorefrontPaymentWebhookRoutes(r.Group("/api/v1"))
+	v1 := r.Group("/api/v1")
+	h.RegisterBlueprint13Routes(v1, v1)
+	h.RegisterStorefrontPaymentWebhookRoutes(v1)
 
 	// Webhook Payload
 	whPayload := map[string]any{
@@ -379,15 +382,22 @@ func TestStorefrontPaymentWebhookAndOrderPaidLedgerPosting(t *testing.T) {
 	bodyBytes, _ := json.Marshal(whPayload)
 	sig := signMockWebhook(bodyBytes)
 
+	// Old duplicate storefront Paystack URL must be removed (404)
+	oldReq := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/payments/paystack", bytes.NewReader(bodyBytes))
+	oldReq.Header.Set("x-paystack-signature", sig)
+	oldRec := httptest.NewRecorder()
+	r.ServeHTTP(oldRec, oldReq)
+	require.Equal(t, http.StatusNotFound, oldRec.Code)
+
 	// 1. Send webhook with invalid signature -> 401
-	badReq := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/payments/paystack", bytes.NewReader(bodyBytes))
+	badReq := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/paystack", bytes.NewReader(bodyBytes))
 	badReq.Header.Set("x-paystack-signature", "wrong_signature")
 	badRec := httptest.NewRecorder()
 	r.ServeHTTP(badRec, badReq)
 	require.Equal(t, http.StatusUnauthorized, badRec.Code)
 
 	// 2. Send valid webhook -> 200
-	goodReq := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/payments/paystack", bytes.NewReader(bodyBytes))
+	goodReq := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/paystack", bytes.NewReader(bodyBytes))
 	goodReq.Header.Set("x-paystack-signature", sig)
 	goodRec := httptest.NewRecorder()
 	r.ServeHTTP(goodRec, goodReq)
@@ -431,7 +441,7 @@ func TestStorefrontPaymentWebhookAndOrderPaidLedgerPosting(t *testing.T) {
 	require.Equal(t, totalDebits, totalCredits, "every money write must balance the ledger")
 
 	// 5. Idempotent webhook replay -> 200 without duplicate sale or ledger postings
-	replayReq := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/payments/paystack", bytes.NewReader(bodyBytes))
+	replayReq := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/paystack", bytes.NewReader(bodyBytes))
 	replayReq.Header.Set("x-paystack-signature", sig)
 	replayRec := httptest.NewRecorder()
 	r.ServeHTTP(replayRec, replayReq)
@@ -788,7 +798,9 @@ func TestLatePaymentWebhookReHoldStockOrNeedsAttention(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	h := finance.NewHandler(svc, nil)
 	r := gin.New()
-	h.RegisterStorefrontPaymentWebhookRoutes(r.Group("/api/v1"))
+	v1 := r.Group("/api/v1")
+	h.RegisterBlueprint13Routes(v1, v1)
+	h.RegisterStorefrontPaymentWebhookRoutes(v1)
 
 	whPayloadA := map[string]any{
 		"event": "charge.success",
@@ -800,7 +812,7 @@ func TestLatePaymentWebhookReHoldStockOrNeedsAttention(t *testing.T) {
 		},
 	}
 	bodyBytesA, _ := json.Marshal(whPayloadA)
-	reqA := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/payments/paystack", bytes.NewReader(bodyBytesA))
+	reqA := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/paystack", bytes.NewReader(bodyBytesA))
 	reqA.Header.Set("x-paystack-signature", signMockWebhook(bodyBytesA))
 	recA := httptest.NewRecorder()
 	r.ServeHTTP(recA, reqA)
@@ -879,7 +891,7 @@ func TestLatePaymentWebhookReHoldStockOrNeedsAttention(t *testing.T) {
 		},
 	}
 	bodyBytesB, _ := json.Marshal(whPayloadB)
-	reqB := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/payments/paystack", bytes.NewReader(bodyBytesB))
+	reqB := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/paystack", bytes.NewReader(bodyBytesB))
 	reqB.Header.Set("x-paystack-signature", signMockWebhook(bodyBytesB))
 	recB := httptest.NewRecorder()
 	r.ServeHTTP(recB, reqB)
@@ -1144,6 +1156,7 @@ func TestStorefrontSquadProviderWebhookAndUnsupportedMethodHiding(t *testing.T) 
 	router := gin.New()
 	handler := finance.NewHandler(svc, nil)
 	v1 := router.Group("/api/v1")
+	handler.RegisterBlueprint13Routes(v1, v1)
 	handler.RegisterPublicStorefrontRoutes(v1)
 
 	outlet, err := svc.CreateOutlet(ctx, ws, user, finance.CreateOutletInput{
@@ -1391,6 +1404,7 @@ func TestStorefrontShipbubbleRatesBookingAndWebhook(t *testing.T) {
 	router := gin.New()
 	handler := finance.NewHandler(svc, nil)
 	v1 := router.Group("/api/v1")
+	handler.RegisterBlueprint13Routes(v1, v1)
 	handler.RegisterPublicStorefrontRoutes(v1)
 
 	outlet, err := svc.CreateOutlet(ctx, ws, user, finance.CreateOutletInput{
@@ -1558,7 +1572,7 @@ func TestStorefrontShipbubbleRatesBookingAndWebhook(t *testing.T) {
 	`, ws, conf.OrderReference).Scan(&orderID, &attemptRef, &attemptAmt))
 
 	payPayload := []byte(fmt.Sprintf(`{"event":"charge.success","data":{"reference":"%s","amount":%d,"fees":1000,"status":"success"}}`, attemptRef, attemptAmt))
-	reqPay := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/payments/paystack", bytes.NewReader(payPayload))
+	reqPay := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/paystack", bytes.NewReader(payPayload))
 	reqPay.Header.Set("x-paystack-signature", signMockWebhook(payPayload))
 	wPay := httptest.NewRecorder()
 	router.ServeHTTP(wPay, reqPay)
@@ -1630,3 +1644,237 @@ func TestStorefrontShipbubbleRatesBookingAndWebhook(t *testing.T) {
 
 func sfBoolPtr(b bool) *bool    { return &b }
 func sfStrPtr(s string) *string { return &s }
+
+func TestUnifiedPaystackWebhookAndOrderCommandRoutes(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	ws, user := createTestWorkspace(t, pool, "a1-unified-ps")
+	wsOther, otherUser := createTestWorkspace(t, pool, "a1-other-ps")
+
+	secretKey := "sk_test_unified_paystack_secret_key"
+	deprecatedWH := "whsec_deprecated_different_secret"
+	var sawStorefrontMetaVA, sawStorefrontMetaCard, sawSubscriptionMeta bool
+
+	psMock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "Bearer "+secretKey, r.Header.Get("Authorization"))
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/charge":
+			if meta, ok := body["metadata"].(map[string]any); ok && meta["kind"] == "storefront_order" {
+				sawStorefrontMetaVA = true
+			}
+			_, _ = w.Write([]byte(`{"status":true,"message":"Charge attempted","data":{"status":"pay_offline","authorization":{"account_number":"9900112233","bank":"Wema Bank","account_name":"Rekordly","account_expires_at":"2026-12-31T23:59:59Z"}}}`))
+		case "/transaction/initialize":
+			if meta, ok := body["metadata"].(map[string]any); ok {
+				if meta["kind"] == "storefront_order" {
+					sawStorefrontMetaCard = true
+				} else if meta["kind"] == "subscription" {
+					sawSubscriptionMeta = true
+				}
+			}
+			ref, _ := body["reference"].(string)
+			_, _ = w.Write([]byte(fmt.Sprintf(`{"status":true,"message":"OK","data":{"authorization_url":"https://checkout.paystack.test/%s","access_code":"acc_1","reference":%q}}`, ref, ref)))
+		case "/subaccount":
+			_, _ = w.Write([]byte(`{"status":true,"message":"OK","data":{"subaccount_code":"SUB_UNI_1","id":44}}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer psMock.Close()
+
+	billProv := billing.NewPaystackProvider(secretKey, deprecatedWH, psMock.URL, 5*time.Second)
+	sfProv := payments.NewPaystackProvider(secretKey, deprecatedWH, psMock.URL, 5*time.Second)
+	shipMock := &mockShippingClient{trackingNumber: fmt.Sprintf("TRK-A3-%d", time.Now().UnixNano())}
+
+	svc := finance.NewService(
+		pool,
+		finance.WithPaymentProvider(billProv),
+		finance.WithStorefrontPaymentProvider(sfProv),
+		finance.WithShippingClient(shipMock),
+	)
+
+	_, err := svc.SetCommercialMode(ctx, "public_paid", user)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, `UPDATE commercial_mode_config SET mode = 'controlled_beta' WHERE id = 1`)
+	})
+
+	// Setup billing subscription checkout intent
+	subj, _, err := svc.ResolveSubjectForWorkspace(ctx, ws)
+	require.NoError(t, err)
+	plans, err := svc.ListPlans(ctx, "business", nil)
+	require.NoError(t, err)
+	var paidPlanID int64
+	for _, p := range plans {
+		if p.PriceMinor > 0 && p.IsAvailable {
+			paidPlanID = p.ID
+			break
+		}
+	}
+	require.NotZero(t, paidPlanID)
+	intent, err := svc.CreateCheckoutIntent(ctx, subj.ID, user, fmt.Sprintf("uni-sub-%d", time.Now().UnixNano()), finance.CreateCheckoutInput{
+		PlanVersionID: paidPlanID,
+	})
+	require.NoError(t, err)
+	require.True(t, sawSubscriptionMeta, "billing checkout must tag metadata.kind = subscription")
+
+	// Setup storefront order + payout account + card & VA attempts
+	outlet, err := svc.CreateOutlet(ctx, ws, user, finance.CreateOutletInput{
+		Name: "Main", LocationType: "outlet", Address: "10 Road, Lagos", IsDefault: true, IsPickupPoint: true,
+	})
+	require.NoError(t, err)
+	item, err := svc.CreateCatalogueItem(ctx, ws, user, finance.CreateCatalogueItemInput{
+		Name: "Unified Test Service", Kind: "non_stock", SellingPrice: "5000", Currency: "NGN", IdempotencyKey: fmt.Sprintf("uni-item-%d", time.Now().UnixNano()),
+	})
+	require.NoError(t, err)
+	vars, err := svc.ListProductVariants(ctx, ws, item.ID)
+	require.NoError(t, err)
+	slug := fmt.Sprintf("uni-store-%d", time.Now().UnixNano()%1000000)
+	_, err = svc.CreateStorefront(ctx, ws, user, finance.CreateStorefrontInput{
+		Name: "Unified Store", Slug: slug, Currency: "NGN", DefaultOutletID: &outlet.ID,
+	})
+	require.NoError(t, err)
+	_, err = svc.UpdateStorefrontSettings(ctx, ws, finance.UpdateStorefrontSettingsInput{
+		ContactPhone:    "+2348011110000",
+		ContactEmail:    "unified@example.com",
+		Address:         "10 Road, Lagos",
+		DeliveryMethods: []string{"pickup"},
+	})
+	require.NoError(t, err)
+	sfProd, err := svc.UpsertStorefrontProduct(ctx, ws, vars[0].ID, finance.PublishCatalogueVariantInput{IsPublished: true})
+	require.NoError(t, err)
+	_, err = svc.SavePayoutAccount(ctx, ws, finance.SavePayoutAccountInput{
+		Provider: "paystack", BankCode: "058", AccountNumber: "0123456789", AccountName: "Unified Biz",
+	})
+	require.NoError(t, err)
+	_, err = svc.UpdateStorefrontPaymentSettings(ctx, ws, finance.UpdateStorefrontPaymentSettingsInput{
+		PaymentBankTransferEnabled:   sfBoolPtr(true),
+		PaymentCardEnabled:           sfBoolPtr(true),
+		PaymentManualTransferEnabled: sfBoolPtr(true),
+	})
+	require.NoError(t, err)
+	_, err = svc.PublishStorefront(ctx, ws, true)
+	require.NoError(t, err)
+	sfProds := []finance.MerchantStorefrontProductView{sfProd}
+
+	// Checkout card -> checks metadata.kind=storefront_order
+	confCard, err := svc.SubmitGuestCheckout(ctx, slug, false, finance.GuestCheckoutInput{
+		ClientKey: "uni-c1", CustomerName: "Buyer Card", CustomerEmail: "card@example.com", CustomerPhone: "+2348011111111",
+		DeliveryMethod: "pickup", PickupPointID: outlet.ID, PaymentMethod: "card", PolicyAcknowledged: true,
+		IdempotencyKey: fmt.Sprintf("uni-card-%d", time.Now().UnixNano()),
+		Lines:          []finance.CartLineInput{{StorefrontProductID: sfProds[0].ID, Quantity: "1"}},
+	})
+	require.NoError(t, err)
+	require.True(t, sawStorefrontMetaCard, "card checkout must tag metadata.kind = storefront_order")
+
+	// Checkout VA -> checks metadata.kind=storefront_order
+	confVA, err := svc.SubmitGuestCheckout(ctx, slug, false, finance.GuestCheckoutInput{
+		ClientKey: "uni-c2", CustomerName: "Buyer VA", CustomerEmail: "va@example.com", CustomerPhone: "+2348011111112",
+		DeliveryMethod: "pickup", PickupPointID: outlet.ID, PaymentMethod: "virtual_account", PolicyAcknowledged: true,
+		IdempotencyKey: fmt.Sprintf("uni-va-%d", time.Now().UnixNano()),
+		Lines:          []finance.CartLineInput{{StorefrontProductID: sfProds[0].ID, Quantity: "1"}},
+	})
+	require.NoError(t, err)
+	require.True(t, sawStorefrontMetaVA, "VA checkout must tag metadata.kind = storefront_order")
+
+	var orderCardID, orderVAID int64
+	var refCard, refVA string
+	var amtCard, amtVA int64
+	require.NoError(t, pool.QueryRow(ctx, `SELECT o.id, a.reference, a.amount_minor FROM storefront_orders o JOIN storefront_payment_attempts a ON a.order_id = o.id WHERE o.workspace_id = $1 AND o.order_reference = $2`, ws, confCard.OrderReference).Scan(&orderCardID, &refCard, &amtCard))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT o.id, a.reference, a.amount_minor FROM storefront_orders o JOIN storefront_payment_attempts a ON a.order_id = o.id WHERE o.workspace_id = $1 AND o.order_reference = $2`, ws, confVA.OrderReference).Scan(&orderVAID, &refVA, &amtVA))
+	_ = item
+
+	signWith := func(key string, body []byte) string {
+		mac := hmac.New(sha512.New, []byte(key))
+		_, _ = mac.Write(body)
+		return hex.EncodeToString(mac.Sum(nil))
+	}
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	var actWS, actUser int64 = ws, user
+	h := finance.NewHandler(svc, func(c *gin.Context) {
+		c.Set(finance.ContextWorkspaceKey, finance.WorkspaceContext{
+			WorkspaceID: actWS,
+			UserID:      actUser,
+			Kind:        "business",
+			Permissions: []string{"orders.fulfil", "storefront.manage_checkout", "orders.confirm", "orders.view"},
+		})
+		c.Next()
+	})
+	h.RegisterRoutes(r.Group("/api/v1"))
+
+	// Old duplicate storefront Paystack webhook must return 404
+	oldReq := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/payments/paystack", bytes.NewReader([]byte(`{}`)))
+	oldW := httptest.NewRecorder()
+	r.ServeHTTP(oldW, oldReq)
+	require.Equal(t, http.StatusNotFound, oldW.Code)
+
+	// Subscription event signed with deprecated webhook secret (not secretKey) MUST be rejected with 401
+	subPayload := []byte(fmt.Sprintf(`{"event":"charge.success","data":{"id":7001,"reference":%q,"amount":%d,"currency":%q,"metadata":{"kind":"subscription"}}}`, intent.Reference, intent.AmountMinor, intent.Currency))
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, `DELETE FROM provider_events WHERE provider = 'paystack' AND provider_ref = $1`, intent.Reference)
+		_, _ = pool.Exec(ctx, `DELETE FROM payment_webhook_events WHERE event_id IN ($1, $2)`, refCard, refVA)
+	})
+	badSigReq := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/paystack", bytes.NewReader(subPayload))
+	badSigReq.Header.Set("x-paystack-signature", signWith(deprecatedWH, subPayload))
+	badSigW := httptest.NewRecorder()
+	r.ServeHTTP(badSigW, badSigReq)
+	require.Equal(t, http.StatusUnauthorized, badSigW.Code, "webhook must verify against PAYSTACK_SECRET_KEY, not deprecated PAYSTACK_WEBHOOK_SECRET")
+
+	// Subscription event signed with PAYSTACK_SECRET_KEY -> activates subscription
+	subReq := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/paystack", bytes.NewReader(subPayload))
+	subReq.Header.Set("x-paystack-signature", signWith(secretKey, subPayload))
+	subW := httptest.NewRecorder()
+	r.ServeHTTP(subW, subReq)
+	require.Equal(t, http.StatusOK, subW.Code, subW.Body.String())
+
+	var intentSt string
+	require.NoError(t, pool.QueryRow(ctx, `SELECT status FROM checkout_intents WHERE id = $1`, intent.ID).Scan(&intentSt))
+	require.Equal(t, "verified", intentSt)
+
+	// Storefront event WITH metadata.kind="storefront_order" on the exact same /webhooks/paystack URL
+	sfMetaPayload := []byte(fmt.Sprintf(`{"event":"charge.success","data":{"id":7002,"reference":%q,"amount":%d,"fees":500,"status":"success","metadata":{"kind":"storefront_order","storefront_order_id":%d}}}`, refCard, amtCard, orderCardID))
+	sfMetaReq := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/paystack", bytes.NewReader(sfMetaPayload))
+	sfMetaReq.Header.Set("x-paystack-signature", signWith(secretKey, sfMetaPayload))
+	sfMetaW := httptest.NewRecorder()
+	r.ServeHTTP(sfMetaW, sfMetaReq)
+	require.Equal(t, http.StatusOK, sfMetaW.Code, sfMetaW.Body.String())
+
+	var payStCard string
+	require.NoError(t, pool.QueryRow(ctx, `SELECT payment_status FROM storefront_orders WHERE id = $1`, orderCardID).Scan(&payStCard))
+	require.Equal(t, "paid", payStCard)
+
+	// Storefront event WITHOUT metadata -> falls back to storefront_payment_attempts first, then billing
+	sfFallbackPayload := []byte(fmt.Sprintf(`{"event":"charge.success","data":{"id":7003,"reference":%q,"amount":%d,"fees":500,"status":"success"}}`, refVA, amtVA))
+	sfFallbackReq := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/paystack", bytes.NewReader(sfFallbackPayload))
+	sfFallbackReq.Header.Set("x-paystack-signature", signWith(secretKey, sfFallbackPayload))
+	sfFallbackW := httptest.NewRecorder()
+	r.ServeHTTP(sfFallbackW, sfFallbackReq)
+	require.Equal(t, http.StatusOK, sfFallbackW.Code, sfFallbackW.Body.String())
+
+	var payStVA string
+	require.NoError(t, pool.QueryRow(ctx, `SELECT payment_status FROM storefront_orders WHERE id = $1`, orderVAID).Scan(&payStVA))
+	require.Equal(t, "paid", payStVA)
+
+	// A3: /orders/:id/commands/retry-courier-booking prefix + old route 404 + workspace isolation
+	oldRetryReq := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/storefront/orders/%d/commands/retry-courier-booking", orderCardID), nil)
+	oldRetryW := httptest.NewRecorder()
+	r.ServeHTTP(oldRetryW, oldRetryReq)
+	require.Equal(t, http.StatusNotFound, oldRetryW.Code)
+
+	actWS, actUser = wsOther, otherUser
+	crossRetryReq := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/orders/%d/commands/retry-courier-booking", orderCardID), nil)
+	crossRetryW := httptest.NewRecorder()
+	r.ServeHTTP(crossRetryW, crossRetryReq)
+	require.Equal(t, http.StatusNotFound, crossRetryW.Code)
+
+	actWS, actUser = ws, user
+	// Owning workspace succeeds on /orders/:id/commands/retry-courier-booking (200 OK)
+	okPrefixReq := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/orders/%d/commands/retry-courier-booking", orderCardID), nil)
+	okPrefixW := httptest.NewRecorder()
+	r.ServeHTTP(okPrefixW, okPrefixReq)
+	require.Equal(t, http.StatusOK, okPrefixW.Code)
+}

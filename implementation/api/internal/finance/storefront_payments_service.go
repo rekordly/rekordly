@@ -424,7 +424,10 @@ func (s *Service) HandlePaymentWebhook(ctx context.Context, providerKey string, 
 	if err != nil {
 		return ErrInvalidWebhookSignature
 	}
+	return s.processStorefrontPaymentEvent(ctx, providerKey, event)
+}
 
+func (s *Service) processStorefrontPaymentEvent(ctx context.Context, providerKey string, event payments.Event) error {
 	attempt, err := s.queries.GetStorefrontPaymentAttemptByReference(ctx, event.Reference)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -458,7 +461,7 @@ func (s *Service) HandlePaymentWebhook(ctx context.Context, providerKey string, 
 		return err
 	}
 
-	if event.Status == "failed" {
+	if event.Status == "failed" || event.Status == "rejected" {
 		_, _ = s.queries.UpdatePaymentAttemptStatus(ctx, db.UpdatePaymentAttemptStatusParams{
 			ID:       attempt.ID,
 			Status:   "rejected",

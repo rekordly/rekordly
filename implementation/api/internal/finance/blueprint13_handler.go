@@ -1,6 +1,7 @@
 package finance
 
 import (
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
@@ -390,10 +391,9 @@ func (h *Handler) paystackWebhook(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST", "message": "unable to read request body"}})
 		return
 	}
-	sig := c.GetHeader("X-Paystack-Signature")
-	outcome, err := h.service.ProcessPaystackWebhook(c.Request.Context(), rawBody, sig)
+	outcome, err := h.service.HandlePaystackWebhook(c.Request.Context(), rawBody, c.Request.Header)
 	if err != nil {
-		if err == billing.ErrInvalidWebhookSig {
+		if errors.Is(err, billing.ErrInvalidWebhookSig) || errors.Is(err, ErrInvalidWebhookSignature) {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": gin.H{"code": "INVALID_SIGNATURE", "message": "invalid webhook signature"}})
 			return
 		}

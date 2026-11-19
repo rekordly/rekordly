@@ -996,7 +996,7 @@ export const financeApi = {
   testStorefrontShipbubbleConnection: (workspaceId: number, apiKey?: string) =>
     scopedPost<{ couriers: import("@/types/finance").ShipbubbleCourierInfo[] }>(workspaceId, "/api/v1/storefront/shipping/shipbubble/test", { api_key: apiKey ?? "" }).then((r) => r.couriers ?? []),
   retryStorefrontCourierBooking: (workspaceId: number, orderId: number) =>
-    scopedPost<{ order: MerchantOrder }>(workspaceId, `/api/v1/storefront/orders/${orderId}/commands/retry-courier-booking`, {}).then((r) => r.order),
+    scopedPost<{ order: MerchantOrder }>(workspaceId, `/api/v1/orders/${orderId}/commands/retry-courier-booking`, {}).then((r) => r.order),
   fetchPublicDeliveryRates: (slug: string, body: { address: string; name?: string; email?: string; phone?: string; lines: Array<{ storefront_product_id: number; quantity: string }> }) =>
     apiClient.post<unknown, import("@/types/finance").PublicDeliveryRatesResponse>(`/api/v1/public/storefronts/${encodeURIComponent(slug)}/delivery-rates`, body),
 

@@ -1,41 +1,28 @@
 package payments
 
 import (
-	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/sha512"
-	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
+
+	"github.com/rekordly/rekordly-api/internal/paystack"
+	"github.com/shopspring/decimal"
 )
 
 type PaystackProvider struct {
-	secretKey     string
-	webhookSecret string
-	baseURL       string
-	httpClient    *http.Client
+	client *paystack.Client
 }
 
+// NewPaystackProvider constructs the storefront Paystack payment provider backed by the shared client.
+// Paystack signs webhooks with PAYSTACK_SECRET_KEY; webhookSecret is kept only as a deprecated fallback if secretKey is empty.
 func NewPaystackProvider(secretKey, webhookSecret, baseURL string, timeout time.Duration) *PaystackProvider {
-	if strings.TrimSpace(baseURL) == "" {
-		baseURL = "https://api.paystack.co"
-	}
-	if strings.TrimSpace(webhookSecret) == "" {
-		webhookSecret = secretKey
-	}
-	if timeout <= 0 {
-		timeout = 15 * time.Second
-	}
 	return &PaystackProvider{
-		secretKey:     strings.TrimSpace(secretKey),
-		webhookSecret: strings.TrimSpace(webhookSecret),
-		baseURL:       strings.TrimRight(strings.TrimSpace(baseURL), "/"),
-		httpClient:    &http.Client{Timeout: timeout},
+		client: paystack.NewClient(secretKey, webhookSecret, baseURL, timeout),
 	}
 }
 
@@ -44,47 +31,28 @@ func (p *PaystackProvider) Key() string {
 }
 
 func (p *PaystackProvider) IsConfigured() bool {
-	return p.secretKey != ""
+	return p != nil && p.client.IsConfigured()
 }
 
-func (p *PaystackProvider) newRequest(ctx context.Context, method, path string, body any) (*http.Request, error) {
-	var bodyReader io.Reader
-	if body != nil {
-		data, err := json.Marshal(body)
-		if err != nil {
-			return nil, fmt.Errorf("marshal request: %w", err)
-		}
-		bodyReader = bytes.NewReader(data)
+func computePaystackCommissionMinor(amountMinor int64, commissionPercent float64) int64 {
+	if amountMinor <= 0 || commissionPercent <= 0 {
+		return 0
 	}
+	return decimal.NewFromInt(amountMinor).
+		Mul(decimal.NewFromFloat(commissionPercent)).
+		Div(decimal.NewFromInt(100)).
+		Round(0).
+		IntPart()
+}
 
-	url := p.baseURL + path
-	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
-	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
+func mapPaystackError(err error) error {
+	if errors.Is(err, paystack.ErrUnavailable) {
+		return ErrProviderUnavailable
 	}
-
-	req.Header.Set("Authorization", "Bearer "+p.secretKey)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "Rekordly-Storefront/2.0")
-	return req, nil
+	return err
 }
 
 func (p *PaystackProvider) ListBanks(ctx context.Context) ([]Bank, error) {
-	req, err := p.newRequest(ctx, http.MethodGet, "/bank?country=nigeria&perPage=100", nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := p.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("list banks: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 500 {
-		return nil, ErrProviderUnavailable
-	}
-
 	var result struct {
 		Status  bool   `json:"status"`
 		Message string `json:"message"`
@@ -94,8 +62,8 @@ func (p *PaystackProvider) ListBanks(ctx context.Context) ([]Bank, error) {
 			Active bool   `json:"active"`
 		} `json:"data"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("decode banks response: %w", err)
+	if _, err := p.client.DoJSON(ctx, http.MethodGet, "/bank?country=nigeria&perPage=100", nil, &result); err != nil {
+		return nil, fmt.Errorf("list banks: %w", mapPaystackError(err))
 	}
 
 	banks := make([]Bank, 0, len(result.Data))
@@ -111,22 +79,7 @@ func (p *PaystackProvider) ListBanks(ctx context.Context) ([]Bank, error) {
 }
 
 func (p *PaystackProvider) ResolveBankAccount(ctx context.Context, bankCode, accountNumber string) (string, error) {
-	path := fmt.Sprintf("/bank/resolve?account_number=%s&bank_code=%s", accountNumber, bankCode)
-	req, err := p.newRequest(ctx, http.MethodGet, path, nil)
-	if err != nil {
-		return "", err
-	}
-
-	resp, err := p.httpClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("resolve bank account: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 500 {
-		return "", ErrProviderUnavailable
-	}
-
+	path := fmt.Sprintf("/bank/resolve?account_number=%s&bank_code=%s", url.QueryEscape(accountNumber), url.QueryEscape(bankCode))
 	var result struct {
 		Status  bool   `json:"status"`
 		Message string `json:"message"`
@@ -135,11 +88,15 @@ func (p *PaystackProvider) ResolveBankAccount(ctx context.Context, bankCode, acc
 			AccountNumber string `json:"account_number"`
 		} `json:"data"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", fmt.Errorf("decode resolve account response: %w", err)
+	if _, err := p.client.DoJSON(ctx, http.MethodGet, path, nil, &result); err != nil {
+		var apiErr *paystack.APIError
+		if errors.As(err, &apiErr) {
+			return "", fmt.Errorf("account resolution failed: %s", apiErr.Message)
+		}
+		return "", fmt.Errorf("resolve bank account: %w", mapPaystackError(err))
 	}
-	if !result.Status || strings.TrimSpace(result.Data.AccountName) == "" {
-		return "", fmt.Errorf("account resolution failed: %s", result.Message)
+	if strings.TrimSpace(result.Data.AccountName) == "" {
+		return "", fmt.Errorf("account resolution failed: empty account name")
 	}
 	return result.Data.AccountName, nil
 }
@@ -152,21 +109,6 @@ func (p *PaystackProvider) CreateSubaccount(ctx context.Context, account Merchan
 		"percentage_charge": 0,
 	}
 
-	req, err := p.newRequest(ctx, http.MethodPost, "/subaccount", payload)
-	if err != nil {
-		return SubaccountRef{}, err
-	}
-
-	resp, err := p.httpClient.Do(req)
-	if err != nil {
-		return SubaccountRef{}, fmt.Errorf("create subaccount: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 500 {
-		return SubaccountRef{}, ErrProviderUnavailable
-	}
-
 	var result struct {
 		Status  bool   `json:"status"`
 		Message string `json:"message"`
@@ -175,11 +117,15 @@ func (p *PaystackProvider) CreateSubaccount(ctx context.Context, account Merchan
 			ID             int64  `json:"id"`
 		} `json:"data"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return SubaccountRef{}, fmt.Errorf("decode subaccount response: %w", err)
+	if _, err := p.client.DoJSON(ctx, http.MethodPost, "/subaccount", payload, &result); err != nil {
+		var apiErr *paystack.APIError
+		if errors.As(err, &apiErr) {
+			return SubaccountRef{}, fmt.Errorf("create subaccount failed: %s", apiErr.Message)
+		}
+		return SubaccountRef{}, fmt.Errorf("create subaccount: %w", mapPaystackError(err))
 	}
-	if !result.Status || result.Data.SubaccountCode == "" {
-		return SubaccountRef{}, fmt.Errorf("create subaccount failed: %s", result.Message)
+	if result.Data.SubaccountCode == "" {
+		return SubaccountRef{}, fmt.Errorf("create subaccount failed: empty subaccount_code")
 	}
 
 	return SubaccountRef{
@@ -194,9 +140,14 @@ func (p *PaystackProvider) CreateOrderVirtualAccount(ctx context.Context, req Or
 		bearer = "account"
 	}
 
-	commissionMinor := int64(0)
-	if req.PlatformCommissionPercent > 0 {
-		commissionMinor = int64(float64(req.AmountMinor) * (req.PlatformCommissionPercent / 100.0))
+	commissionMinor := computePaystackCommissionMinor(req.AmountMinor, req.PlatformCommissionPercent)
+
+	meta := map[string]any{
+		"kind":              "storefront_order",
+		"attempt_reference": req.Reference,
+	}
+	if req.OrderID > 0 {
+		meta["storefront_order_id"] = req.OrderID
 	}
 
 	payload := map[string]any{
@@ -207,21 +158,11 @@ func (p *PaystackProvider) CreateOrderVirtualAccount(ctx context.Context, req Or
 		"subaccount":         req.SubaccountRef,
 		"bearer":             bearer,
 		"transaction_charge": commissionMinor,
+		"metadata":           meta,
 		"bank_transfer": map[string]any{
 			"account_expires_at": req.ExpiresAt.Format(time.RFC3339),
 		},
 	}
-
-	httpReq, err := p.newRequest(ctx, http.MethodPost, "/charge", payload)
-	if err != nil {
-		return VirtualAccount{}, err
-	}
-
-	resp, err := p.httpClient.Do(httpReq)
-	if err != nil {
-		return VirtualAccount{}, fmt.Errorf("charge bank transfer: %w", err)
-	}
-	defer resp.Body.Close()
 
 	var result struct {
 		Status  bool   `json:"status"`
@@ -241,13 +182,12 @@ func (p *PaystackProvider) CreateOrderVirtualAccount(ctx context.Context, req Or
 			} `json:"authorization"`
 		} `json:"data"`
 	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return VirtualAccount{}, fmt.Errorf("decode charge response: %w", err)
-	}
-
-	if !result.Status {
-		return VirtualAccount{}, fmt.Errorf("virtual account creation failed: %s", result.Message)
+	if _, err := p.client.DoJSON(ctx, http.MethodPost, "/charge", payload, &result); err != nil {
+		var apiErr *paystack.APIError
+		if errors.As(err, &apiErr) {
+			return VirtualAccount{}, fmt.Errorf("virtual account creation failed: %s", apiErr.Message)
+		}
+		return VirtualAccount{}, fmt.Errorf("charge bank transfer: %w", mapPaystackError(err))
 	}
 
 	accNum := result.Data.Authorization.AccountNumber
@@ -289,9 +229,14 @@ func (p *PaystackProvider) InitializeCardCheckout(ctx context.Context, req Order
 		bearer = "account"
 	}
 
-	commissionMinor := int64(0)
-	if req.PlatformCommissionPercent > 0 {
-		commissionMinor = int64(float64(req.AmountMinor) * (req.PlatformCommissionPercent / 100.0))
+	commissionMinor := computePaystackCommissionMinor(req.AmountMinor, req.PlatformCommissionPercent)
+
+	meta := map[string]any{
+		"kind":              "storefront_order",
+		"attempt_reference": req.Reference,
+	}
+	if req.OrderID > 0 {
+		meta["storefront_order_id"] = req.OrderID
 	}
 
 	payload := map[string]any{
@@ -303,22 +248,8 @@ func (p *PaystackProvider) InitializeCardCheckout(ctx context.Context, req Order
 		"subaccount":         req.SubaccountRef,
 		"bearer":             bearer,
 		"transaction_charge": commissionMinor,
+		"metadata":           meta,
 		"channels":           []string{"card", "ussd", "bank_transfer"},
-	}
-
-	httpReq, err := p.newRequest(ctx, http.MethodPost, "/transaction/initialize", payload)
-	if err != nil {
-		return CheckoutURL{}, err
-	}
-
-	resp, err := p.httpClient.Do(httpReq)
-	if err != nil {
-		return CheckoutURL{}, fmt.Errorf("initialize checkout: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 500 {
-		return CheckoutURL{}, ErrProviderUnavailable
 	}
 
 	var result struct {
@@ -330,11 +261,15 @@ func (p *PaystackProvider) InitializeCardCheckout(ctx context.Context, req Order
 			Reference        string `json:"reference"`
 		} `json:"data"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return CheckoutURL{}, fmt.Errorf("decode initialize response: %w", err)
+	if _, err := p.client.DoJSON(ctx, http.MethodPost, "/transaction/initialize", payload, &result); err != nil {
+		var apiErr *paystack.APIError
+		if errors.As(err, &apiErr) {
+			return CheckoutURL{}, fmt.Errorf("initialize card checkout failed: %s", apiErr.Message)
+		}
+		return CheckoutURL{}, fmt.Errorf("initialize checkout: %w", mapPaystackError(err))
 	}
-	if !result.Status || result.Data.AuthorizationURL == "" {
-		return CheckoutURL{}, fmt.Errorf("initialize card checkout failed: %s", result.Message)
+	if result.Data.AuthorizationURL == "" {
+		return CheckoutURL{}, fmt.Errorf("initialize card checkout failed: empty authorization_url")
 	}
 
 	return CheckoutURL{
@@ -345,27 +280,28 @@ func (p *PaystackProvider) InitializeCardCheckout(ctx context.Context, req Order
 }
 
 func (p *PaystackProvider) VerifyWebhook(rawBody []byte, headers http.Header) (Event, error) {
-	sig := headers.Get("x-paystack-signature")
-	if strings.TrimSpace(sig) == "" || p.webhookSecret == "" {
+	if p == nil || p.client == nil || !p.client.VerifySignatureHeader(rawBody, headers) {
 		return Event{}, ErrInvalidWebhookSig
 	}
+	return ParsePaystackWebhookEvent(rawBody)
+}
 
-	mac := hmac.New(sha512.New, []byte(p.webhookSecret))
-	_, _ = mac.Write(rawBody)
-	expected := hex.EncodeToString(mac.Sum(nil))
-	if !hmac.Equal([]byte(strings.ToLower(sig)), []byte(strings.ToLower(expected))) {
-		return Event{}, ErrInvalidWebhookSig
-	}
-
+// ParsePaystackWebhookEvent parses a verified Paystack webhook body into a normalized storefront Event.
+func ParsePaystackWebhookEvent(rawBody []byte) (Event, error) {
 	var payload struct {
 		Event string `json:"event"`
 		Data  struct {
+			ID        any    `json:"id"`
 			Reference string `json:"reference"`
 			Amount    int64  `json:"amount"`
 			Fees      int64  `json:"fees"`
 			Status    string `json:"status"`
 			PaidAt    string `json:"paid_at"`
 			Channel   string `json:"channel"`
+			Metadata  struct {
+				Kind             string `json:"kind"`
+				AttemptReference string `json:"attempt_reference"`
+			} `json:"metadata"`
 		} `json:"data"`
 	}
 
@@ -373,59 +309,56 @@ func (p *PaystackProvider) VerifyWebhook(rawBody []byte, headers http.Header) (E
 		return Event{}, fmt.Errorf("unmarshal webhook body: %w", err)
 	}
 
-	paidAt := time.Now()
+	paidAt := time.Now().UTC()
 	if payload.Data.PaidAt != "" {
 		if t, err := time.Parse(time.RFC3339, payload.Data.PaidAt); err == nil {
-			paidAt = t
+			paidAt = t.UTC()
+		}
+	}
+
+	ref := strings.TrimSpace(payload.Data.Reference)
+	if ref == "" {
+		ref = strings.TrimSpace(payload.Data.Metadata.AttemptReference)
+	}
+
+	providerEvtID := ""
+	if payload.Data.ID != nil {
+		if s := strings.TrimSpace(fmt.Sprintf("%v", payload.Data.ID)); s != "" && s != "<nil>" {
+			providerEvtID = s
 		}
 	}
 
 	status := "pending"
-	switch payload.Event {
+	switch strings.ToLower(strings.TrimSpace(payload.Event)) {
 	case "charge.success":
 		status = "paid"
 	case "bank.transfer.rejected":
 		status = "rejected"
+	case "charge.failed", "transfer.failed":
+		status = "failed"
 	default:
-		if payload.Data.Status == "success" {
+		if strings.EqualFold(payload.Data.Status, "success") {
 			status = "paid"
-		} else if payload.Data.Status == "failed" {
+		} else if strings.EqualFold(payload.Data.Status, "failed") {
 			status = "failed"
 		}
 	}
 
 	return Event{
-		Provider:    "paystack",
-		Type:        payload.Event,
-		Reference:   payload.Data.Reference,
-		AmountMinor: payload.Data.Amount,
-		FeeMinor:    payload.Data.Fees,
-		PaidAt:      paidAt,
-		Status:      status,
-		Raw:         rawBody,
+		Provider:        "paystack",
+		ProviderEventID: providerEvtID,
+		Type:            strings.TrimSpace(payload.Event),
+		Reference:       ref,
+		AmountMinor:     payload.Data.Amount,
+		FeeMinor:        payload.Data.Fees,
+		PaidAt:          paidAt,
+		Status:          status,
+		Raw:             rawBody,
 	}, nil
 }
 
 func (p *PaystackProvider) VerifyTransaction(ctx context.Context, reference string) (PaymentResult, error) {
-	path := fmt.Sprintf("/transaction/verify/%s", reference)
-	req, err := p.newRequest(ctx, http.MethodGet, path, nil)
-	if err != nil {
-		return PaymentResult{}, err
-	}
-
-	resp, err := p.httpClient.Do(req)
-	if err != nil {
-		return PaymentResult{}, fmt.Errorf("verify transaction: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusNotFound {
-		return PaymentResult{}, ErrTransactionNotFound
-	}
-	if resp.StatusCode >= 500 {
-		return PaymentResult{}, ErrProviderUnavailable
-	}
-
+	path := fmt.Sprintf("/transaction/verify/%s", url.PathEscape(strings.TrimSpace(reference)))
 	var result struct {
 		Status  bool   `json:"status"`
 		Message string `json:"message"`
@@ -438,17 +371,21 @@ func (p *PaystackProvider) VerifyTransaction(ctx context.Context, reference stri
 			PaidAt    string `json:"paid_at"`
 		} `json:"data"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return PaymentResult{}, fmt.Errorf("decode verify transaction response: %w", err)
-	}
-	if !result.Status {
-		return PaymentResult{}, fmt.Errorf("verify transaction failed: %s", result.Message)
+	if statusCode, err := p.client.DoJSON(ctx, http.MethodGet, path, nil, &result); err != nil {
+		if statusCode == http.StatusNotFound {
+			return PaymentResult{}, ErrTransactionNotFound
+		}
+		var apiErr *paystack.APIError
+		if errors.As(err, &apiErr) {
+			return PaymentResult{}, fmt.Errorf("verify transaction failed: %s", apiErr.Message)
+		}
+		return PaymentResult{}, fmt.Errorf("verify transaction: %w", mapPaystackError(err))
 	}
 
-	paidAt := time.Now()
+	paidAt := time.Now().UTC()
 	if result.Data.PaidAt != "" {
 		if t, err := time.Parse(time.RFC3339, result.Data.PaidAt); err == nil {
-			paidAt = t
+			paidAt = t.UTC()
 		}
 	}
 

@@ -12,7 +12,6 @@ func (h *Handler) registerStorefrontShippingRoutes(g *gin.RouterGroup) {
 	g.GET("/storefront/shipping/shipbubble", h.getStorefrontShipbubbleSettings)
 	g.PATCH("/storefront/shipping/shipbubble", h.updateStorefrontShipbubbleSettings)
 	g.POST("/storefront/shipping/shipbubble/test", h.testStorefrontShipbubbleConnection)
-	g.POST("/storefront/orders/:id/commands/retry-courier-booking", h.retryStorefrontCourierBooking)
 }
 
 func (h *Handler) RegisterStorefrontShippingWebhookRoutes(g *gin.RouterGroup) {

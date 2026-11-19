@@ -25,6 +25,7 @@ func (h *Handler) RegisterStorefrontOrderRoutes(g *gin.RouterGroup) {
 	g.POST("/orders/:id/commands/create-invoice", h.convertOrderToInvoice)
 	g.POST("/orders/:id/commands/messages", h.postMerchantOrderMessage)
 	g.POST("/orders/:id/commands/return", h.returnStorefrontOrder)
+	g.POST("/orders/:id/commands/retry-courier-booking", h.retryStorefrontCourierBooking)
 	g.POST("/orders/commands/expire-reservations", h.expireStaleReservations)
 }
 

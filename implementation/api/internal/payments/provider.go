@@ -34,6 +34,7 @@ type Bank struct {
 }
 
 type OrderPaymentRequest struct {
+	OrderID                   int64     `json:"order_id,omitempty"`
 	AmountMinor               int64     `json:"amount_minor"`
 	Currency                  string    `json:"currency"`
 	Reference                 string    `json:"reference"`
@@ -60,14 +61,15 @@ type CheckoutURL struct {
 }
 
 type Event struct {
-	Provider    string          `json:"provider"`
-	Type        string          `json:"type"` // e.g. "charge.success", "payment.rejected"
-	Reference   string          `json:"reference"`
-	AmountMinor int64           `json:"amount_minor"`
-	FeeMinor    int64           `json:"fee_minor"`
-	PaidAt      time.Time       `json:"paid_at"`
-	Status      string          `json:"status"` // "paid", "failed", "rejected"
-	Raw         json.RawMessage `json:"raw"`
+	Provider        string          `json:"provider"`
+	ProviderEventID string          `json:"provider_event_id,omitempty"`
+	Type            string          `json:"type"` // e.g. "charge.success", "bank.transfer.rejected"
+	Reference       string          `json:"reference"`
+	AmountMinor     int64           `json:"amount_minor"`
+	FeeMinor        int64           `json:"fee_minor"`
+	PaidAt          time.Time       `json:"paid_at"`
+	Status          string          `json:"status"` // "paid", "failed", "rejected"
+	Raw             json.RawMessage `json:"raw"`
 }
 
 type PaymentResult struct {

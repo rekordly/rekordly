@@ -33,6 +33,13 @@ func TestValidateProductionConfig(t *testing.T) {
 	paidMissingPaystack := base
 	paidMissingPaystack.CommercialMode = "live_paid"
 	if err := validateProductionConfig(paidMissingPaystack); err == nil {
-		t.Fatal("expected error when paid mode lacks Paystack secrets")
+		t.Fatal("expected error when paid mode lacks PAYSTACK_SECRET_KEY")
+	}
+
+	paidOnlySecretKey := base
+	paidOnlySecretKey.CommercialMode = "live_paid"
+	paidOnlySecretKey.PaystackSecretKey = "sk_live_test"
+	if err := validateProductionConfig(paidOnlySecretKey); err != nil {
+		t.Fatalf("expected paid mode with only PAYSTACK_SECRET_KEY to be valid, got %v", err)
 	}
 }

@@ -958,7 +958,7 @@ func (s *Service) AttachDocumentFile(ctx context.Context, workspaceID, userID in
 		assetID := strings.TrimSpace(in.AssetID)
 		existingAsset, err := q.GetEvidenceAssetByStorageAndAssetID(ctx, db.GetEvidenceAssetByStorageAndAssetIDParams{
 			StorageProvider: "cloudinary",
-			AssetID:          assetID,
+			AssetID:         assetID,
 		})
 		if err == nil {
 			if existingAsset.WorkspaceID != workspaceID {

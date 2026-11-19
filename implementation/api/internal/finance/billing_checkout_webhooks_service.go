@@ -7,13 +7,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/rekordly/rekordly-api/internal/billing"
 	"github.com/rekordly/rekordly-api/internal/db"
+	"github.com/rekordly/rekordly-api/internal/payments"
 )
 
 type CommercialModeStatus struct {
@@ -167,7 +170,7 @@ func (s *Service) CreateCheckoutIntent(ctx context.Context, subjectID, actorUser
 			Currency:    plan.Currency,
 			Reference:   ref,
 			CallbackURL: in.CallbackURL,
-			Metadata:    map[string]any{"billing_subject_id": subj.ID, "plan_version_id": plan.ID},
+			Metadata:    map[string]any{"kind": "subscription", "billing_subject_id": subj.ID, "plan_version_id": plan.ID},
 		})
 		if pErr != nil {
 			return db.CheckoutIntent{}, pErr
@@ -226,12 +229,94 @@ func (s *Service) VerifyCheckoutIntent(ctx context.Context, intentID int64) (db.
 	return s.activateCheckoutIntent(ctx, intent, ver.Reference, time.Now().UTC())
 }
 
-// ProcessPaystackWebhook validates raw-body HMAC signature, deduplicates event_id, prevents out-of-order regression.
-func (s *Service) ProcessPaystackWebhook(ctx context.Context, rawBody []byte, signatureHeader string) (string, error) {
-	if s.paymentProvider == nil || !s.paymentProvider.VerifyWebhookSignature(rawBody, signatureHeader) {
+// HandlePaystackWebhook verifies the Paystack signature once against PAYSTACK_SECRET_KEY
+// and routes the verified payload to either storefront order payments or Rekordly subscription billing.
+func (s *Service) HandlePaystackWebhook(ctx context.Context, rawBody []byte, headers http.Header) (string, error) {
+	sig := headers.Get("x-paystack-signature")
+	var storefrontEvent *payments.Event
+
+	if s.paymentProvider != nil && s.paymentProvider.IsConfigured() {
+		if !s.paymentProvider.VerifyWebhookSignature(rawBody, sig) {
+			return "", billing.ErrInvalidWebhookSig
+		}
+	} else if sfProv, sfErr := s.getPaymentProvider("paystack"); sfErr == nil && sfProv != nil {
+		ev, vErr := sfProv.VerifyWebhook(rawBody, headers)
+		if vErr != nil {
+			return "", ErrInvalidWebhookSignature
+		}
+		storefrontEvent = &ev
+	} else {
 		return "", billing.ErrInvalidWebhookSig
 	}
 
+	var env struct {
+		Event string `json:"event"`
+		Data  struct {
+			Reference string `json:"reference"`
+			Metadata  struct {
+				Kind             string `json:"kind"`
+				AttemptReference string `json:"attempt_reference"`
+			} `json:"metadata"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rawBody, &env); err != nil || strings.TrimSpace(env.Event) == "" {
+		return "", errors.New("invalid webhook payload")
+	}
+
+	kind := strings.ToLower(strings.TrimSpace(env.Data.Metadata.Kind))
+	ref := strings.TrimSpace(env.Data.Reference)
+	if ref == "" {
+		ref = strings.TrimSpace(env.Data.Metadata.AttemptReference)
+	}
+
+	routeStorefront := false
+	switch kind {
+	case "storefront_order":
+		routeStorefront = true
+	case "subscription":
+		routeStorefront = false
+	default:
+		if ref != "" {
+			if _, err := s.queries.GetStorefrontPaymentAttemptByReference(ctx, ref); err == nil {
+				routeStorefront = true
+			} else if !errors.Is(err, pgx.ErrNoRows) {
+				return "", err
+			}
+		}
+		if !routeStorefront && storefrontEvent != nil && s.paymentProvider == nil {
+			// Storefront-only test/service configuration with an unknown reference
+			routeStorefront = true
+		}
+	}
+
+	if routeStorefront {
+		var ev payments.Event
+		if storefrontEvent != nil {
+			ev = *storefrontEvent
+		} else {
+			parsed, pErr := payments.ParsePaystackWebhookEvent(rawBody)
+			if pErr != nil {
+				return "", pErr
+			}
+			ev = parsed
+		}
+		if err := s.processStorefrontPaymentEvent(ctx, "paystack", ev); err != nil {
+			return "", err
+		}
+		return "storefront_processed", nil
+	}
+
+	return s.processVerifiedPaystackBillingWebhook(ctx, rawBody)
+}
+
+// ProcessPaystackWebhook validates raw-body HMAC signature, deduplicates event_id, prevents out-of-order regression.
+func (s *Service) ProcessPaystackWebhook(ctx context.Context, rawBody []byte, signatureHeader string) (string, error) {
+	headers := http.Header{}
+	headers.Set("X-Paystack-Signature", signatureHeader)
+	return s.HandlePaystackWebhook(ctx, rawBody, headers)
+}
+
+func (s *Service) processVerifiedPaystackBillingWebhook(ctx context.Context, rawBody []byte) (string, error) {
 	var evt struct {
 		Event string `json:"event"`
 		Data  struct {
