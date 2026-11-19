@@ -114,7 +114,7 @@ export function StorefrontDemo({ theme, page, value = "", query = "" }: { theme:
   }
   const sections = createDefaultSections(theme, example.name).map((section) => {
     if (section.type === "hero") return { ...section, content: { heading: example.title, subheading: example.copy, image: "/storefront-demos/media/" + theme + "-hero.webp", button_label: "Explore the shop" } };
-    if (section.type === "about") return { ...section, content: { heading: "About " + example.name, body: "<p>" + example.copy + "</p>" } };
+    if (section.type === "about") return { ...section, content: { heading: "About " + example.name, body: "<p>" + example.copy + "</p>", image: "/storefront-demos/media/" + theme + "-hero.webp" } };
     return section.type === "announcement" ? { ...section, enabled: false } : section;
   });
   const original = store.products.find((item) => item.id === Number(value));

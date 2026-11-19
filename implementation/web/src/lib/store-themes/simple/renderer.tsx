@@ -13,7 +13,7 @@ import { formatMinorAmount } from "@/lib/money";
 
 import { resolveStoreBrand } from "../brand";
 import { readableOn, STORE_SURFACE, STORE_WRAP } from "../layout";
-import { AboutSection, AnnouncementSection, FaqSection } from "../sections";
+import { AnnouncementSection, StoreAboutPage } from "../sections";
 import type { ThemeProduct, ThemeRendererProps } from "../types";
 
 const PAGE_SIZE = 12;
@@ -267,16 +267,7 @@ export function SimpleStoreRenderer(props: ThemeRendererProps) {
         </main>
       ) : null}
 
-      {page === "about" ? (
-        <main className={`${STORE_WRAP} max-w-3xl py-14 sm:py-20`}>
-          <h1 className="mb-8 text-4xl font-semibold tracking-tight sm:text-5xl" style={headingStyle}>About {store.name}</h1>
-          {sections
-            .filter((section) => section.enabled && ["about", "faq"].includes(section.type))
-            .map((section) =>
-              section.type === "about" ? <AboutSection key={section.id} section={section} preview={preview} onSectionClick={onSectionClick} /> : <FaqSection key={section.id} section={section} preview={preview} onSectionClick={onSectionClick} />,
-            )}
-        </main>
-      ) : null}
+      {page === "about" ? <StoreAboutPage store={store} sections={sections} className={STORE_WRAP} preview={preview} onSectionClick={onSectionClick} /> : null}
 
       {searchOpen ? (
         <div role="dialog" aria-modal="true" aria-label="Search the store" className="fixed inset-0 z-50 bg-black/40 backdrop-blur-[2px]" onClick={() => setSearchOpen(false)}>

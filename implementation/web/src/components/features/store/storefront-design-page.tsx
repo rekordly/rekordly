@@ -360,7 +360,7 @@ function Content({ workspaceId, template }: { workspaceId: number; template?: Se
                     <>
                       <AppInput label="Heading" maxLength={80} value={String(section.content.heading || "About us")} onChange={(event) => patch("about", { heading: event.target.value })} />
                       <RichTextEditor label={theme === "studio" ? "Brand story" : "About your store"} value={String(section.content.body || "")} onChange={(body) => patch("about", { body })} />
-                      {theme === "studio" ? <ImageField label="Story image" src={String(section.content.image || "")} uploading={uploading === "story"} onUpload={(file) => void upload("story", file)} /> : null}
+                      <ImageField label="About image (optional)" src={String(section.content.image || "")} uploading={uploading === "story"} onUpload={(file) => void upload("story", file)} />
                     </>
                   ) : null}
                   {section.enabled && section.type === "announcement" ? <AppInput label="Message" maxLength={120} value={String(section.content.text || "")} onChange={(event) => patch("announcement", { text: event.target.value })} /> : null}

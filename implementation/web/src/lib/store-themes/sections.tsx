@@ -110,6 +110,25 @@ export function AboutSection({ section, onSectionClick: onClick, preview }: { se
   </div></Frame>;
 }
 
+export function StoreAboutPage({ store, sections, preview, onSectionClick, className }: Pick<ThemeRendererProps, "store" | "sections" | "preview" | "onSectionClick"> & { className: string }) {
+  const story = sections.find((section) => section.enabled && section.type === "about");
+  const image = story ? text(story, "image") : "";
+  const title = story ? text(story, "heading").trim() : "";
+  const body = story ? text(story, "body") : "";
+  return <main className={className + " py-12 sm:py-16"}>
+    <div className="grid items-start gap-8 lg:grid-cols-12 lg:gap-12">
+      <div className="min-w-0 space-y-6 lg:col-span-8">
+        <h1 className="break-words font-[family-name:var(--store-heading-font)] text-4xl font-semibold tracking-tight sm:text-5xl">{title || "About " + store.name}</h1>
+        {body ? <RichText html={body} className="break-words leading-8 text-[var(--store-muted,var(--muted))]" /> : null}
+        {sections.filter((section) => section.enabled && section.type === "faq").map((section) => <FaqSection key={section.id} section={section} preview={preview} onSectionClick={onSectionClick} />)}
+      </div>
+      {image ? <aside className="relative aspect-[4/3] overflow-hidden rounded-2xl bg-surface-secondary lg:sticky lg:top-36 lg:col-span-4">
+        <Image src={image} alt="" fill unoptimized sizes="(min-width: 1024px) 33vw, 100vw" className="object-cover" />
+      </aside> : null}
+    </div>
+  </main>;
+}
+
 export function FaqSection({ section, onSectionClick: onClick, preview }: { section: StoreSection } & Pick<ThemeRendererProps, "onSectionClick" | "preview">) {
   const raw = section.content.items;
   const items = Array.isArray(raw) ? raw.filter((item): item is { question: string; answer: string } => Boolean(item && typeof item === "object" && "question" in item && "answer" in item)).slice(0, 10) : [];

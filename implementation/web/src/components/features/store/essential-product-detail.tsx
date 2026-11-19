@@ -118,7 +118,7 @@ export function EssentialProductDetail({ slug, product: initialProduct, products
       </div>
       {related.size ? <section className="mt-14 space-y-6 border-t border-border pt-9" aria-labelledby="related-products">
         <h2 id="related-products" className="text-2xl font-semibold" style={{ fontFamily: "var(--store-heading-font)" }}>Related products</h2>
-        <PremiumGrid store={{ slug, name: "", collections: [], products }} products={Array.from(related.values()).slice(0, 4)} compact={market} />
+        <PremiumGrid store={{ slug, name: "", collections: [], products }} products={Array.from(related.values()).slice(0, 4)} compact={market} cartQuantities={cartQuantities} onCartClick={onViewCart} />
       </section> : null}
     </main>
   );
