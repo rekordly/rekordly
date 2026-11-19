@@ -242,6 +242,7 @@ type UpdateVariantInput struct {
 	SellingPrice *string `json:"selling_price"`
 	CostPrice    *string `json:"cost_price"`
 	IsActive     *bool   `json:"is_active"`
+	WeightGrams  *int32  `json:"weight_grams"`
 }
 
 type VariantView struct {
@@ -259,6 +260,7 @@ type VariantView struct {
 	IsActive            bool              `json:"is_active"`
 	ArchivedAt          *time.Time        `json:"archived_at,omitempty"`
 	QuantityOnHand      string            `json:"quantity_on_hand"`
+	WeightGrams         *int32            `json:"weight_grams,omitempty"`
 	OptionValues        map[string]string `json:"option_values,omitempty"`
 }
 
@@ -543,6 +545,7 @@ func (s *Service) ListProductVariants(ctx context.Context, workspaceID, productI
 			IsActive:            v.IsActive,
 			ArchivedAt:          timePtr(v.ArchivedAt),
 			QuantityOnHand:      stock.String(),
+			WeightGrams:         int32Ptr(v.WeightGrams),
 			OptionValues:        optValsByVariant[v.ID],
 		})
 	}
@@ -637,6 +640,18 @@ func (s *Service) UpdateProductVariant(ctx context.Context, workspaceID, product
 		}
 		return VariantView{}, err
 	}
+	var wgPtr = int32Ptr(updated.WeightGrams)
+	if in.WeightGrams != nil {
+		wg := pgtype.Int4{Int32: *in.WeightGrams, Valid: *in.WeightGrams > 0}
+		if wErr := s.queries.UpdateProductVariantWeightGrams(ctx, db.UpdateProductVariantWeightGramsParams{
+			WorkspaceID: workspaceID,
+			ID:          updated.ID,
+			WeightGrams: wg,
+		}); wErr != nil {
+			return VariantView{}, wErr
+		}
+		wgPtr = int32Ptr(wg)
+	}
 
 	return VariantView{
 		ID:                updated.ID,
@@ -650,5 +665,6 @@ func (s *Service) UpdateProductVariant(ctx context.Context, workspaceID, product
 		CurrencyExponent:  updated.CurrencyExponent,
 		IsDefault:         updated.IsDefault,
 		IsActive:          updated.IsActive,
+		WeightGrams:       wgPtr,
 	}, nil
 }

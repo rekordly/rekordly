@@ -31,6 +31,7 @@ type SaveOptionVariantInput struct {
 	SKU             string   `json:"sku"`
 	Barcode         string   `json:"barcode"`
 	IsActive        bool     `json:"is_active"`
+	WeightGrams     *int32   `json:"weight_grams,omitempty"`
 	OpeningStock    string   `json:"opening_stock,omitempty"`
 	OpeningUnitCost string   `json:"opening_unit_cost,omitempty"`
 	OutletID        int64    `json:"outlet_id,omitempty"`
@@ -369,6 +370,16 @@ func (s *Service) saveProductOptionsTx(ctx context.Context, q *db.Queries, works
 			kept[variant.ID] = true
 		}
 		variantMap[position] = variant.ID
+		if input.WeightGrams != nil {
+			wg := pgtype.Int4{Int32: *input.WeightGrams, Valid: *input.WeightGrams > 0}
+			if err := q.UpdateProductVariantWeightGrams(ctx, db.UpdateProductVariantWeightGramsParams{
+				WorkspaceID: workspaceID,
+				ID:          variant.ID,
+				WeightGrams: wg,
+			}); err != nil {
+				return nil, err
+			}
+		}
 		for _, id := range ids {
 			if err := q.BindVariantOptionValue(ctx, db.BindVariantOptionValueParams{WorkspaceID: workspaceID, VariantID: variant.ID, OptionValueID: id}); err != nil {
 				return nil, err

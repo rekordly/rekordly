@@ -59,6 +59,7 @@ interface FormState {
   shortDescription: string;
   longDescription: string;
   showOnStore: boolean | null;
+  weightGrams: string;
 }
 
 type Errors = Partial<Record<"name" | "price" | "compareAt" | "openingStock" | "shortDescription", string>>;
@@ -90,6 +91,7 @@ function fromDetail(detail?: ProductDetail): FormState {
     shortDescription: product?.short_description ?? "",
     longDescription: product?.long_description ?? "",
     showOnStore: product ? product.show_on_store : null,
+    weightGrams: product?.weight_grams ? String(product.weight_grams) : "",
   };
 }
 
@@ -220,6 +222,7 @@ function ProductForm({ workspaceId, currency, detail }: WorkspaceInfo & { detail
     compare_at_price: form.compareAt || undefined,
     sku: form.sku.trim() || undefined,
     barcode: form.barcode.trim() || undefined,
+    weight_grams: form.weightGrams.trim() ? Number(form.weightGrams) : undefined,
     currency,
     outlet_ids: form.outletIds,
     collection_ids: form.collectionIds,
@@ -391,6 +394,7 @@ function ProductForm({ workspaceId, currency, detail }: WorkspaceInfo & { detail
               <AppInput label="SKU" placeholder="Leave blank to create one" value={form.sku} onChange={(event) => set("sku", event.target.value.toUpperCase())} description="We create a code like ANKSHI-0012 if you leave this empty." />
               <AppInput label="Barcode" placeholder="Optional" value={form.barcode} onChange={(event) => set("barcode", event.target.value)} startContent={<Barcode />} />
             </FormGrid>
+            <AppInput label="Weight (grams, optional)" inputMode="numeric" placeholder="e.g. 500" value={form.weightGrams} onChange={(event) => set("weightGrams", event.target.value.replace(/\D/g, ""))} description="Used to calculate live courier shipping rates." />
           </FormSection>
         </div>
       ) : null}

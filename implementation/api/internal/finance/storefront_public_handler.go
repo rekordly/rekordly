@@ -12,9 +12,11 @@ import (
 
 func (h *Handler) RegisterPublicStorefrontRoutes(g *gin.RouterGroup) {
 	h.RegisterStorefrontPaymentWebhookRoutes(g)
+	h.RegisterStorefrontShippingWebhookRoutes(g)
 	g.GET("/public/storefronts/by-host", h.getPublicStorefrontByHost)
 	g.GET("/public/storefronts/:slug", h.getPublicStorefront)
 	g.GET("/public/storefronts/:slug/products/:productId", h.getPublicStorefrontProduct)
+	g.POST("/public/storefronts/:slug/delivery-rates", h.getPublicDeliveryRates)
 	g.POST("/public/storefronts/:slug/carts/validate", h.validatePublicCart)
 	g.GET("/public/storefronts/:slug/carts/:token", h.getPublicCart)
 	g.POST("/public/storefronts/:slug/carts", h.upsertPublicCart)

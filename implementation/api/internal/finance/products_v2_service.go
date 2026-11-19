@@ -48,6 +48,7 @@ type ProductSummary struct {
 	CurrencyExponent    int32      `json:"currency_exponent"`
 	QuantityOnHand      string     `json:"quantity_on_hand"`
 	VariantCount        int64      `json:"variant_count"`
+	WeightGrams         *int32     `json:"weight_grams,omitempty"`
 	CollectionIDs       []int64    `json:"collection_ids"`
 	ArchivedAt          *time.Time `json:"archived_at,omitempty"`
 	CreatedAt           time.Time  `json:"created_at"`
@@ -107,6 +108,7 @@ type SaveProductInput struct {
 	OpeningStock     string                   `json:"opening_stock"`
 	OpeningUnitCost  string                   `json:"opening_unit_cost"`
 	OpeningOutletID  int64                    `json:"opening_outlet_id"`
+	WeightGrams      *int32                   `json:"weight_grams,omitempty"`
 	Options          []SaveOptionInput        `json:"options"`
 	Variants         []SaveOptionVariantInput `json:"variants"`
 	IdempotencyKey   string                   `json:"idempotency_key"`
@@ -373,6 +375,13 @@ func int64Ptr(v pgtype.Int8) *int64 {
 	return &v.Int64
 }
 
+func int32Ptr(v pgtype.Int4) *int32 {
+	if !v.Valid {
+		return nil
+	}
+	return &v.Int32
+}
+
 func timePtr(v pgtype.Timestamptz) *time.Time {
 	if !v.Valid {
 		return nil
@@ -481,10 +490,34 @@ func (s *Service) productSummary(ctx context.Context, q *db.Queries, workspaceID
 	}
 	for _, row := range rows {
 		if row.ID == product.ID {
-			return productSummaryFromRow(row), nil
+			out := productSummaryFromRow(row)
+			out.WeightGrams = int32Ptr(product.WeightGrams)
+			return out, nil
 		}
 	}
 	return ProductSummary{}, ErrProductNotFound
+}
+
+func applyProductWeightTx(ctx context.Context, qtx *db.Queries, workspaceID, productID, variantID int64, weightGrams *int32) error {
+	if weightGrams == nil {
+		return nil
+	}
+	wg := pgtype.Int4{Int32: *weightGrams, Valid: *weightGrams > 0}
+	if err := qtx.UpdateProductWeightGrams(ctx, db.UpdateProductWeightGramsParams{
+		WorkspaceID: workspaceID,
+		ID:          productID,
+		WeightGrams: wg,
+	}); err != nil {
+		return err
+	}
+	if variantID > 0 {
+		return qtx.UpdateProductVariantWeightGrams(ctx, db.UpdateProductVariantWeightGramsParams{
+			WorkspaceID: workspaceID,
+			ID:          variantID,
+			WeightGrams: wg,
+		})
+	}
+	return nil
 }
 
 func (s *Service) GetProduct(ctx context.Context, workspaceID, productID int64) (ProductDetail, error) {
@@ -658,6 +691,9 @@ func (s *Service) CreateProductV2(ctx context.Context, workspaceID, userID int64
 			return ProductDetail{}, err
 		}
 	}
+	if err := applyProductWeightTx(ctx, qtx, workspaceID, product.ID, variant.ID, in.WeightGrams); err != nil {
+		return ProductDetail{}, fmt.Errorf("save product weight: %w", err)
+	}
 	if err := setProductLinks(ctx, qtx, workspaceID, product.ID, in.OutletIDs, in.CollectionIDs); err != nil {
 		return ProductDetail{}, err
 	}
@@ -810,6 +846,9 @@ func (s *Service) UpdateProductV2(ctx context.Context, workspaceID, userID, prod
 		WorkspaceID: workspaceID, ID: current.DefaultVariantID,
 	}); err != nil {
 		return ProductDetail{}, fmt.Errorf("update product pricing: %w", err)
+	}
+	if err := applyProductWeightTx(ctx, qtx, workspaceID, productID, current.DefaultVariantID, in.WeightGrams); err != nil {
+		return ProductDetail{}, fmt.Errorf("update product weight: %w", err)
 	}
 	if in.OutletIDs != nil || in.CollectionIDs != nil {
 		if err := setProductLinks(ctx, qtx, workspaceID, productID, in.OutletIDs, in.CollectionIDs); err != nil {

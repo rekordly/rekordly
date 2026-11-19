@@ -13,6 +13,7 @@ import (
 func (h *Handler) RegisterStorefrontRoutes(g *gin.RouterGroup) {
 	h.registerStorefrontDesignRoutes(g)
 	h.registerStorefrontPaymentRoutes(g)
+	h.registerStorefrontShippingRoutes(g)
 	g.POST("/storefront", h.createStorefront)
 	g.GET("/storefront", h.getMerchantStorefront)
 	g.GET("/storefront/settings", h.getMerchantStorefront)

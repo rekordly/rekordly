@@ -988,6 +988,17 @@ export const financeApi = {
     scopedPost<{ payout_account: import("@/types/finance").MerchantPayoutAccountView }>(workspaceId, "/api/v1/storefront/payments/payout-account", body).then((r) => r.payout_account),
   recordStorefrontPayout: (workspaceId: number, body: unknown) =>
     scopedPost<{ status: string }>(workspaceId, "/api/v1/storefront/payments/record-payout", body),
+  // Shipbubble Courier Delivery
+  getStorefrontShipbubbleSettings: (workspaceId: number) =>
+    scopedGet<import("@/types/finance").StorefrontShipbubbleSettingsView>(workspaceId, "/api/v1/storefront/shipping/shipbubble"),
+  updateStorefrontShipbubbleSettings: (workspaceId: number, body: { api_key?: string; disconnect?: boolean; strategy?: "cheapest" | "selected"; selected_couriers?: string[]; default_weight_grams?: number }) =>
+    scopedPatch<import("@/types/finance").StorefrontShipbubbleSettingsView>(workspaceId, "/api/v1/storefront/shipping/shipbubble", body),
+  testStorefrontShipbubbleConnection: (workspaceId: number, apiKey?: string) =>
+    scopedPost<{ couriers: import("@/types/finance").ShipbubbleCourierInfo[] }>(workspaceId, "/api/v1/storefront/shipping/shipbubble/test", { api_key: apiKey ?? "" }).then((r) => r.couriers ?? []),
+  retryStorefrontCourierBooking: (workspaceId: number, orderId: number) =>
+    scopedPost<{ order: MerchantOrder }>(workspaceId, `/api/v1/storefront/orders/${orderId}/commands/retry-courier-booking`, {}).then((r) => r.order),
+  fetchPublicDeliveryRates: (slug: string, body: { address: string; name?: string; email?: string; phone?: string; lines: Array<{ storefront_product_id: number; quantity: string }> }) =>
+    apiClient.post<unknown, import("@/types/finance").PublicDeliveryRatesResponse>(`/api/v1/public/storefronts/${encodeURIComponent(slug)}/delivery-rates`, body),
 
   cancelPublicOrder: (token: string, reason?: string) =>
     apiClient.post<{ reason?: string }, { order: PublicOrderStatus }>(`/api/v1/public/orders/${encodeURIComponent(token)}/cancel`, { reason }).then((r) => r.order),

@@ -396,6 +396,11 @@ function SettingsContent({ workspaceId }: WorkspaceInfo) {
     queryFn: () => financeApi.getStorefrontPayments(workspaceId),
     retry: false,
   });
+  const shipbubbleQuery = useQuery({
+    queryKey: [...moneyKeys.workspace(workspaceId), "storefront-shipbubble"],
+    queryFn: () => financeApi.getStorefrontShipbubbleSettings(workspaceId),
+    retry: false,
+  });
   const outletsQuery = useQuery({
     queryKey: [...moneyKeys.workspace(workspaceId), "outlets"],
     queryFn: () => financeApi.listOutlets(workspaceId),
@@ -404,8 +409,12 @@ function SettingsContent({ workspaceId }: WorkspaceInfo) {
 
   const [active, setActive] = useState<CardKey | null>(null);
   const [draft, setDraft] = useState<Record<string, unknown>>({});
+  const [sbCouriers, setSbCouriers] = useState<Array<{ courier_id: string; service_code: string; name: string }>>([]);
+  const [sbTesting, setSbTesting] = useState(false);
+  const [sbStatus, setSbStatus] = useState("");
   const sf = query.data;
   const paySettings = paymentSettingsQuery.data;
+  const shipbubbleSettings = shipbubbleQuery.data;
   const outlets = outletsQuery.data ?? [];
 
   const update = useFinanceAction(workspaceId, (body: unknown) => financeApi.updateStorefrontSettings(workspaceId, body), {
@@ -445,6 +454,10 @@ function SettingsContent({ workspaceId }: WorkspaceInfo) {
           estimate_text: area.estimate_text ?? "",
           outlet_id: area.outlet_id ? String(area.outlet_id) : "",
         })),
+        shipbubble_api_key: "",
+        shipbubble_strategy: shipbubbleSettings?.strategy ?? "cheapest",
+        shipbubble_couriers: shipbubbleSettings?.selected_couriers ?? [],
+        default_weight_grams: shipbubbleSettings?.default_weight_grams ?? 500,
       },
       payments: {
         checkout_require_email: s.checkout_require_email,
@@ -506,6 +519,18 @@ function SettingsContent({ workspaceId }: WorkspaceInfo) {
       return;
     }
     if (active === "delivery") {
+      try {
+        await financeApi.updateStorefrontShipbubbleSettings(workspaceId, {
+          api_key: String(draft.shipbubble_api_key ?? "").trim() || undefined,
+          strategy: (draft.shipbubble_strategy as "cheapest" | "selected") || "cheapest",
+          selected_couriers: (draft.shipbubble_couriers as string[]) ?? [],
+          default_weight_grams: Math.max(1, Number(draft.default_weight_grams ?? 500) || 500),
+        });
+        void shipbubbleQuery.refetch();
+      } catch (err: unknown) {
+        toast.danger((err as Error)?.message || "Failed to save Shipbubble settings");
+        return;
+      }
       const areasPayload = ((draft.delivery_areas as DeliveryAreaDraft[]) ?? []).map((a) => ({
         id: a.id,
         name: a.name,
@@ -543,9 +568,84 @@ function SettingsContent({ workspaceId }: WorkspaceInfo) {
         {active === "details" && <>{field("name", "Store name")}{field("slug", "Store link", "your-store")}{field("contact_phone", "Phone")}{field("contact_email", "Email")}{field("whatsapp_number", "WhatsApp number")}{field("address", "Address")}<fieldset className="space-y-2"><legend className="text-sm font-semibold">Opening hours</legend>{["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"].map((day)=><AppInput key={day} label={day} value={String((draft.business_hours as Record<string,string>)?.[day.toLowerCase()]??"")} placeholder="9:00 AM–5:00 PM or Closed" onChange={(e)=>set("business_hours",{...(draft.business_hours as Record<string,string>??{}),[day.toLowerCase()]:e.target.value})} />)}</fieldset></>}
         {active === "delivery" && <>
           <p className="text-sm font-medium">Delivery options</p>
-          {(["pickup", "merchant_delivery", "customer_arranged"] as const).map((method) => (
-            <AppSwitch key={method} label={method === "pickup" ? "Pickup" : method === "merchant_delivery" ? "Store delivery" : "Customer arranges delivery"} isSelected={(draft.delivery_methods as string[] ?? []).includes(method)} onChange={(checked) => set("delivery_methods", checked ? [...(draft.delivery_methods as string[] ?? []), method] : (draft.delivery_methods as string[] ?? []).filter((x) => x !== method))} />
+          {(["pickup", "merchant_delivery", "courier", "customer_arranged"] as const).map((method) => (
+            <AppSwitch key={method} label={method === "pickup" ? "Pickup" : method === "merchant_delivery" ? "Store delivery" : method === "courier" ? "Courier delivery (Shipbubble)" : "Customer arranges delivery"} isSelected={(draft.delivery_methods as string[] ?? []).includes(method)} onChange={(checked) => set("delivery_methods", checked ? [...(draft.delivery_methods as string[] ?? []), method] : (draft.delivery_methods as string[] ?? []).filter((x) => x !== method))} />
           ))}
+          <div className="space-y-3 rounded-xl border border-default p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-semibold">Shipbubble courier settings</p>
+              {shipbubbleSettings?.connected ? (
+                <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                  Connected ({shipbubbleSettings.api_key_masked})
+                </span>
+              ) : null}
+            </div>
+            <AppInput
+              label="Shipbubble API key"
+              type="password"
+              value={String(draft.shipbubble_api_key ?? "")}
+              onChange={(e) => { set("shipbubble_api_key", e.target.value); setSbStatus(""); }}
+              placeholder={shipbubbleSettings?.connected ? "Leave blank to keep saved key" : "Enter your Shipbubble secret key"}
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <AppButton
+                size="sm"
+                variant="secondary"
+                label={sbTesting ? "Testing..." : "Test connection"}
+                isLoading={sbTesting}
+                onPress={async () => {
+                  setSbTesting(true);
+                  setSbStatus("");
+                  try {
+                    const list = await financeApi.testStorefrontShipbubbleConnection(workspaceId, String(draft.shipbubble_api_key ?? ""));
+                    setSbCouriers(list);
+                    setSbStatus(`Connected (${list.length} operational couriers found)`);
+                  } catch (err: unknown) {
+                    setSbStatus((err as Error)?.message || "Connection test failed");
+                  } finally {
+                    setSbTesting(false);
+                  }
+                }}
+              />
+              {sbStatus ? <span className="text-xs text-muted">{sbStatus}</span> : null}
+            </div>
+            <AppSelect
+              label="Courier selection"
+              selectedKey={String(draft.shipbubble_strategy ?? "cheapest")}
+              onSelectionChange={(key) => set("shipbubble_strategy", key)}
+              options={[
+                { key: "cheapest", label: "Cheapest available" },
+                { key: "selected", label: "Choose couriers" },
+              ]}
+            />
+            {draft.shipbubble_strategy === "selected" ? (
+              <div className="space-y-1.5">
+                <p className="text-xs text-muted">Available couriers (run Test connection to load live list):</p>
+                {(sbCouriers.length > 0 ? sbCouriers : ((draft.shipbubble_couriers as string[]) ?? []).map((code) => ({ courier_id: code, service_code: code, name: code }))).map((c) => {
+                  const chosenList = (draft.shipbubble_couriers as string[]) ?? [];
+                  const checked = chosenList.includes(c.service_code);
+                  return (
+                    <label key={c.service_code} className="flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => set("shipbubble_couriers", e.target.checked ? [...chosenList, c.service_code] : chosenList.filter((x) => x !== c.service_code))}
+                      />
+                      <span>{c.name} ({c.service_code})</span>
+                    </label>
+                  );
+                })}
+              </div>
+            ) : null}
+            <AppInput
+              label="Default item weight (grams)"
+              type="number"
+              min="1"
+              value={String(draft.default_weight_grams ?? 500)}
+              onChange={(e) => set("default_weight_grams", Number(e.target.value))}
+              description="Fallback weight when a product does not specify one."
+            />
+          </div>
           {field("default_delivery_fee", `Default delivery fee (${sf.currency})`)}
           <div className="space-y-2 pt-2">
             <p className="text-xs font-semibold">Delivery areas</p>

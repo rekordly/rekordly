@@ -51,6 +51,11 @@ function OrderContent({ workspaceId, id }: WorkspaceInfo & { id: number }) {
     (body: { money_account_id: number; notes?: string }) => financeApi.markStorefrontOrderPaid(workspaceId, id, body),
     { success: "Order marked paid", onDone: () => { setMarkPaidOpen(false); setPaidNote(""); after(); } },
   );
+  const retryCourier = useFinanceAction(
+    workspaceId,
+    () => financeApi.retryStorefrontCourierBooking(workspaceId, id),
+    { success: "Courier shipment booked", onDone: after },
+  );
   const cancel = useFinanceAction(workspaceId, (action: { kind: "cancel" | "decline"; reason: string }) => action.kind === "cancel" ? financeApi.cancelStorefrontOrder(workspaceId, id, action.reason) : financeApi.declineStorefrontOrder(workspaceId, id, action.reason), { success: "Order updated", onDone: after });
   const change = useFinanceAction(workspaceId, (body: unknown) => financeApi.requestOrderChange(workspaceId, id, body), { success: "Revision sent for review", onDone: after });
   const recordReturn = useFinanceAction(workspaceId, (body: {reason:string}) => financeApi.returnStorefrontOrder(workspaceId, id, body), { success: "Return recorded and stock restored", onDone: after });
@@ -97,9 +102,23 @@ function OrderContent({ workspaceId, id }: WorkspaceInfo & { id: number }) {
         { icon: Truck, label: "Method", value: orderLabel(order.delivery_method) },
         { icon: MapPin, label: "Address", value: <span className="block max-w-48 whitespace-normal text-right">{order.delivery_address || "Not provided"}</span> },
         ...(order.pickup_code ? [{ icon: QrCode, label: "Pickup code", value: <span className="font-mono font-semibold tracking-wider">{order.pickup_code}</span> }] : []),
-        ...(order.courier_tracking_number ? [{ icon: Truck, label: "Tracking", value: order.courier_tracking_url ? <a href={order.courier_tracking_url} target="_blank" rel="noreferrer" className="text-primary underline">{order.courier_tracking_number}</a> : order.courier_tracking_number }] : []),
+        ...(order.courier_name ? [{ icon: Truck, label: "Courier", value: order.courier_name }] : []),
+        ...(order.courier_status ? [{ icon: Package, label: "Courier status", value: <span className="capitalize">{order.courier_status.replaceAll("_", " ")}</span> }] : []),
+        ...(order.courier_tracking_number ? [{ icon: Truck, label: "Tracking", value: order.courier_tracking_url ? <a href={order.courier_tracking_url} target="_blank" rel="noreferrer" className="text-primary underline">{order.courier_tracking_number}</a> : <span className="font-mono">{order.courier_tracking_number}</span> }] : []),
       ]} />
     </>}>
+    {order.courier_booking_error ? (
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-900">
+        <div className="flex items-start gap-3">
+          <Warning size={20} className="mt-0.5 shrink-0" />
+          <div>
+            <p className="font-medium">Courier booking failed</p>
+            <p className="mt-0.5 text-rose-800">{order.courier_booking_error}</p>
+          </div>
+        </div>
+        <AppButton size="sm" variant="secondary" label={retryCourier.isPending ? "Retrying..." : "Retry courier booking"} isLoading={retryCourier.isPending} onPress={() => retryCourier.mutate(undefined)} />
+      </div>
+    ) : null}
     {status === "paid_needs_attention" ? <div className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"><Warning size={20} className="mt-0.5 shrink-0" /><div><p className="font-medium">Payment received after hold expired</p><p className="mt-1 text-amber-800">Check current item stock before confirming or fulfilling this order, or issue a refund if items sold out.</p></div></div> : null}
     <CardFrame><CardHeader title="Order items" icon={Package} /><div className="mt-4"><ItemsTable rows={order.lines ?? []} rowKey={(line) => line.id} columns={[{ key: "title", label: "Item", render: (line) => <div><span className="font-medium">{line.title}</span>{line.variant_name ? <p className="mt-1 text-xs text-muted">{line.variant_name}</p> : null}</div> }, { key: "requested", label: "Requested", align: "right", render: (line) => Number(line.requested_quantity) }, { key: "confirmed", label: "Confirmed", align: "right", render: (line) => Number(line.confirmed_quantity) }, { key: "delivered", label: "Delivered", align: "right", render: (line) => Number(line.fulfilled_quantity) }, { key: "total", label: "Total", align: "right", render: (line) => money(line.line_total_minor) }]} card={(line) => ({ title: line.title, sub: "Requested " + Number(line.requested_quantity) + " · Delivered " + Number(line.fulfilled_quantity), amount: money(line.line_total_minor) })} total={{ label: "Order total", amount: money(order.total_minor) }} /></div></CardFrame>
     {order.customer_note ? <CardFrame><CardHeader title="Customer note" icon={User} /><p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-muted">{order.customer_note}</p></CardFrame> : null}

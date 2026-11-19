@@ -7,6 +7,7 @@ import (
 	"crypto/sha512"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -19,6 +20,7 @@ import (
 	"github.com/rekordly/rekordly-api/internal/db"
 	"github.com/rekordly/rekordly-api/internal/finance"
 	"github.com/rekordly/rekordly-api/internal/payments"
+	"github.com/rekordly/rekordly-api/internal/shipping"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 )
@@ -1082,7 +1084,6 @@ func TestStorefrontPickupHoldCodeAndManualMarkPaid(t *testing.T) {
 	require.Equal(t, totDebits, totCredits)
 	require.Greater(t, totDebits, int64(0))
 }
-
 func TestStorefrontSquadProviderWebhookAndUnsupportedMethodHiding(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
@@ -1307,6 +1308,318 @@ func TestStorefrontSquadProviderWebhookAndUnsupportedMethodHiding(t *testing.T) 
 	require.NoError(t, pool.QueryRow(ctx, `SELECT COALESCE(sum(debit_minor),0), COALESCE(sum(credit_minor),0) FROM ledger_lines WHERE workspace_id=$1`, ws).Scan(&totDebits, &totCredits))
 	require.Equal(t, totDebits, totCredits)
 	require.Greater(t, totDebits, int64(0))
+}
+
+type mockShippingClient struct {
+	mu           struct{ fetches int }
+	failLabel    bool
+	lastWeightKG string
+}
+
+func (m *mockShippingClient) ValidateAddress(ctx context.Context, apiKey string, in shipping.AddressInput) (shipping.ValidatedAddress, error) {
+	if apiKey == "" {
+		return shipping.ValidatedAddress{}, shipping.ErrProviderUnavailable
+	}
+	code := int64(1010)
+	if in.Name != "" && in.Address != "10 Store Way, Lekki, Lagos" {
+		code = 2020
+	}
+	return shipping.ValidatedAddress{AddressCode: code, Formatted: in.Address}, nil
+}
+
+func (m *mockShippingClient) ListCouriers(ctx context.Context, apiKey string) ([]shipping.CourierInfo, error) {
+	if apiKey == "" {
+		return nil, shipping.ErrProviderUnavailable
+	}
+	return []shipping.CourierInfo{
+		{CourierID: "gigl_id", ServiceCode: "gigl", Name: "GIG Logistics", Status: "operational"},
+		{CourierID: "dhl_id", ServiceCode: "dhl", Name: "DHL Express", Status: "operational"},
+	}, nil
+}
+
+func (m *mockShippingClient) FetchRates(ctx context.Context, apiKey string, req shipping.RateRequest) (shipping.RatesResponse, error) {
+	m.mu.fetches++
+	if len(req.PackageItems) > 0 {
+		m.lastWeightKG = req.PackageItems[0].UnitWeightKG
+	}
+	return shipping.RatesResponse{
+		RequestToken: "sb_tok_test_1",
+		ExpiresAt:    time.Now().UTC().Add(30 * time.Minute),
+		Couriers: []shipping.CourierRate{
+			{CourierID: "gigl_id", ServiceCode: "gigl", CourierName: "GIG Logistics", TotalMinor: 250000, EstimateText: "2-3 days", Currency: "NGN"},
+			{CourierID: "dhl_id", ServiceCode: "dhl", CourierName: "DHL Express", TotalMinor: 480000, EstimateText: "1 day", Currency: "NGN"},
+		},
+	}, nil
+}
+
+func (m *mockShippingClient) CreateLabel(ctx context.Context, apiKey string, req shipping.LabelRequest) (shipping.ShipmentLabel, error) {
+	if m.failLabel {
+		return shipping.ShipmentLabel{}, errors.New("shipbubble upstream timeout")
+	}
+	return shipping.ShipmentLabel{
+		OrderID:        "SB-777",
+		TrackingNumber: "TRK-LIVE-777",
+		TrackingURL:    "https://track.shipbubble.com/TRK-LIVE-777",
+		CourierName:    "GIG Logistics",
+		Status:         "confirmed",
+	}, nil
+}
+
+func (m *mockShippingClient) VerifyWebhook(apiKey string, rawBody []byte, headers http.Header) (shipping.WebhookEvent, error) {
+	return shipping.NewShipbubbleClient("", 0).VerifyWebhook(apiKey, rawBody, headers)
+}
+
+func TestStorefrontShipbubbleRatesBookingAndWebhook(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	ws, user := createTestWorkspace(t, pool, "sf-shipbubble")
+	wsOther, _ := createTestWorkspace(t, pool, "sf-sb-other")
+
+	shipMock := &mockShippingClient{failLabel: true}
+	svc := finance.NewService(
+		pool,
+		finance.WithStorefrontPaymentProvider(&mockPaymentProvider{key: "paystack"}),
+		finance.WithShippingClient(shipMock),
+	)
+
+	router := gin.New()
+	handler := finance.NewHandler(svc, nil)
+	v1 := router.Group("/api/v1")
+	handler.RegisterPublicStorefrontRoutes(v1)
+
+	outlet, err := svc.CreateOutlet(ctx, ws, user, finance.CreateOutletInput{
+		Name: "Lekki Store", LocationType: "outlet", Address: "10 Store Way, Lekki, Lagos", IsDefault: true,
+	})
+	require.NoError(t, err)
+
+	item, err := svc.CreateCatalogueItem(ctx, ws, user, finance.CreateCatalogueItemInput{
+		Name: "Heavy Leather Boot", Kind: "stock_tracked", SellingPrice: "100", Currency: "NGN", IdempotencyKey: "sb-item-1",
+	})
+	require.NoError(t, err)
+	vars, err := svc.ListProductVariants(ctx, ws, item.ID)
+	require.NoError(t, err)
+	_, err = svc.CreateOpeningStock(ctx, ws, user, finance.CreateOpeningStockInput{
+		ProductID: item.ID, LocationID: outlet.ID, EffectiveOn: "2026-11-11",
+		Quantity: "5", UnitCost: "40", Currency: "NGN", Reason: "SB open stock", IdempotencyKey: "sb-open-1",
+	})
+	require.NoError(t, err)
+
+	slug := fmt.Sprintf("shipbubble-%d", time.Now().UnixNano()%1000000)
+	_, err = svc.CreateStorefront(ctx, ws, user, finance.CreateStorefrontInput{
+		Name: "Courier Shop", Slug: slug, DefaultOutletID: &outlet.ID, Currency: "NGN",
+	})
+	require.NoError(t, err)
+	_, err = svc.UpdateStorefrontSettings(ctx, ws, finance.UpdateStorefrontSettingsInput{
+		ContactPhone:    "+2348009998888",
+		ContactEmail:    "merchant-sb@example.com",
+		Address:         "10 Store Way, Lekki, Lagos",
+		DeliveryMethods: []string{"courier", "pickup"},
+	})
+	require.NoError(t, err)
+	sfProd, err := svc.UpsertStorefrontProduct(ctx, ws, vars[0].ID, finance.PublishCatalogueVariantInput{IsPublished: true})
+	require.NoError(t, err)
+	_, err = svc.PublishStorefront(ctx, ws, true)
+	require.NoError(t, err)
+
+	// Connect Paystack payout account
+	_, err = svc.SavePayoutAccount(ctx, ws, finance.SavePayoutAccountInput{
+		Provider: "paystack", BankCode: "058", AccountNumber: "0123456789", AccountName: "COURIER SHOP LTD",
+	})
+	require.NoError(t, err)
+	_, err = svc.UpdateStorefrontPaymentSettings(ctx, ws, finance.UpdateStorefrontPaymentSettingsInput{
+		PaymentBankTransferEnabled:   sfBoolPtr(true),
+		PaymentManualTransferEnabled: sfBoolPtr(true),
+		PaymentCodEnabled:            sfBoolPtr(true),
+	})
+	require.NoError(t, err)
+
+	// Configure Shipbubble with encrypted key (masked in GET, never plaintext)
+	sbKey := "sb_live_super_secret_8899"
+	defWeight := int32(500)
+	sbView, err := svc.UpdateStorefrontShipbubbleSettings(ctx, ws, finance.UpdateStorefrontShipbubbleSettingsInput{
+		APIKey:             &sbKey,
+		Strategy:           "cheapest",
+		DefaultWeightGrams: &defWeight,
+	})
+	require.NoError(t, err)
+	require.True(t, sbView.Connected)
+	require.NotEqual(t, sbKey, sbView.APIKeyMasked)
+	require.Contains(t, sbView.APIKeyMasked, "8899")
+
+	sbGet, err := svc.GetStorefrontShipbubbleSettings(ctx, ws)
+	require.NoError(t, err)
+	require.NotEqual(t, sbKey, sbGet.APIKeyMasked)
+	require.Equal(t, int32(500), sbGet.DefaultWeightGrams)
+
+	// Workspace isolation: wsOther has no storefront / cannot see ws Shipbubble config
+	_, err = svc.GetStorefrontShipbubbleSettings(ctx, wsOther)
+	require.Error(t, err)
+
+	// 1. Default weight fallback (500g -> 0.500kg) + rate caching across identical requests
+	ratesReq := finance.PublicDeliveryRatesInput{
+		Address: "25 Wuse II, Abuja",
+		Name:    "Zainab Buyer",
+		Email:   "zainab@example.com",
+		Phone:   "+2348022223333",
+		Lines:   []finance.CartLineInput{{StorefrontProductID: sfProd.ID, Quantity: "1"}},
+	}
+	rateResp1, err := svc.GetPublicDeliveryRates(ctx, slug, false, ratesReq)
+	require.NoError(t, err)
+	require.False(t, rateResp1.Cached)
+	require.Equal(t, 1, shipMock.mu.fetches)
+	require.Equal(t, "0.500", shipMock.lastWeightKG)
+	require.Len(t, rateResp1.Rates, 1) // strategy = cheapest
+	require.Equal(t, "gigl", rateResp1.Rates[0].ServiceCode)
+	require.Equal(t, int64(250000), rateResp1.Rates[0].TotalMinor)
+
+	rateResp2, err := svc.GetPublicDeliveryRates(ctx, slug, false, ratesReq)
+	require.NoError(t, err)
+	require.True(t, rateResp2.Cached)
+	require.Equal(t, 1, shipMock.mu.fetches, "second identical rate call must hit DB cache")
+
+	// Variant weight overrides store default weight
+	varWeight := int32(750)
+	_, err = svc.UpdateProductVariant(ctx, ws, item.ID, vars[0].ID, finance.UpdateVariantInput{WeightGrams: &varWeight})
+	require.NoError(t, err)
+	rateResp3, err := svc.GetPublicDeliveryRates(ctx, slug, false, finance.PublicDeliveryRatesInput{
+		Address: "26 Wuse II, Abuja",
+		Lines:   []finance.CartLineInput{{StorefrontProductID: sfProd.ID, Quantity: "1"}},
+	})
+	require.NoError(t, err)
+	require.Equal(t, 2, shipMock.mu.fetches)
+	require.Equal(t, "0.750", shipMock.lastWeightKG)
+	_ = rateResp3
+
+	// 2. Courier checkout enforces online payment only and validates rate_token
+	_, err = svc.SubmitGuestCheckout(ctx, slug, false, finance.GuestCheckoutInput{
+		ClientKey:          "sb-cli-cod",
+		CustomerName:       "Zainab Buyer",
+		CustomerPhone:      "+2348022223333",
+		CustomerEmail:      "zainab@example.com",
+		DeliveryMethod:     "courier",
+		DeliveryAddress:    "25 Wuse II, Abuja",
+		PaymentMethod:      "cod",
+		RateToken:          rateResp1.RequestToken,
+		CourierServiceCode: rateResp1.Rates[0].ServiceCode,
+		CourierID:          rateResp1.Rates[0].CourierID,
+		PolicyAcknowledged: true,
+		Lines:              []finance.CartLineInput{{StorefrontProductID: sfProd.ID, Quantity: "1"}},
+	})
+	require.Error(t, err, "courier delivery must reject offline payment")
+
+	_, err = svc.SubmitGuestCheckout(ctx, slug, false, finance.GuestCheckoutInput{
+		ClientKey:          "sb-cli-badtok",
+		CustomerName:       "Zainab Buyer",
+		CustomerPhone:      "+2348022223333",
+		CustomerEmail:      "zainab@example.com",
+		DeliveryMethod:     "courier",
+		DeliveryAddress:    "25 Wuse II, Abuja",
+		PaymentMethod:      "virtual_account",
+		RateToken:          "tampered_token",
+		CourierServiceCode: "gigl",
+		PolicyAcknowledged: true,
+		Lines:              []finance.CartLineInput{{StorefrontProductID: sfProd.ID, Quantity: "1"}},
+	})
+	require.Error(t, err, "tampered rate token must be rejected")
+
+	// 3. Valid courier checkout -> payment webhook fires while CreateLabel fails -> order is paid with retry state
+	conf, err := svc.SubmitGuestCheckout(ctx, slug, false, finance.GuestCheckoutInput{
+		ClientKey:          "sb-cli-ok",
+		CustomerName:       "Zainab Buyer",
+		CustomerPhone:      "+2348022223333",
+		CustomerEmail:      "zainab@example.com",
+		DeliveryMethod:     "courier",
+		DeliveryAddress:    "25 Wuse II, Abuja",
+		PaymentMethod:      "virtual_account",
+		RateToken:          rateResp1.RequestToken,
+		CourierServiceCode: rateResp1.Rates[0].ServiceCode,
+		CourierID:          rateResp1.Rates[0].CourierID,
+		PolicyAcknowledged: true,
+		IdempotencyKey:     fmt.Sprintf("sb-ok-%d", time.Now().UnixNano()),
+		Lines:              []finance.CartLineInput{{StorefrontProductID: sfProd.ID, Quantity: "1"}},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "260000", conf.TotalMinor) // 10000 item + 250000 courier fee
+
+	var orderID int64
+	var attemptRef string
+	var attemptAmt int64
+	require.NoError(t, pool.QueryRow(ctx, `
+		SELECT o.id, a.reference, a.amount_minor
+		FROM storefront_orders o
+		JOIN storefront_payment_attempts a ON a.order_id = o.id
+		WHERE o.workspace_id = $1 AND o.order_reference = $2
+	`, ws, conf.OrderReference).Scan(&orderID, &attemptRef, &attemptAmt))
+
+	payPayload := []byte(fmt.Sprintf(`{"event":"charge.success","data":{"reference":"%s","amount":%d,"fees":1000,"status":"success"}}`, attemptRef, attemptAmt))
+	reqPay := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/payments/paystack", bytes.NewReader(payPayload))
+	reqPay.Header.Set("x-paystack-signature", signMockWebhook(payPayload))
+	wPay := httptest.NewRecorder()
+	router.ServeHTTP(wPay, reqPay)
+	require.Equal(t, http.StatusOK, wPay.Code)
+
+	merchantOrd, err := svc.GetMerchantOrder(ctx, ws, orderID)
+	require.NoError(t, err)
+	require.Equal(t, "paid", merchantOrd.PaymentStatus)
+	require.NotNil(t, merchantOrd.CourierBookingError)
+	require.Equal(t, "booking_failed", *merchantOrd.CourierStatus)
+
+	// Workspace isolation on retry
+	_, err = svc.RetryStorefrontOrderCourierBooking(ctx, wsOther, orderID)
+	require.ErrorIs(t, err, finance.ErrNotFound)
+
+	// 4. Retry succeeds once Shipbubble recovers -> tracking number & URL saved
+	shipMock.failLabel = false
+	retried, err := svc.RetryStorefrontOrderCourierBooking(ctx, ws, orderID)
+	require.NoError(t, err)
+	require.NotNil(t, retried.CourierTrackingNumber)
+	require.Equal(t, "TRK-LIVE-777", *retried.CourierTrackingNumber)
+	require.NotNil(t, retried.CourierTrackingURL)
+	require.Nil(t, retried.CourierBookingError)
+
+	// 5. Shipbubble webhook signature check (wrong -> 401; valid picked_up -> delivered -> fulfils once & idempotent replay)
+	signSB := func(raw []byte) string {
+		mac := hmac.New(sha512.New, []byte(sbKey))
+		mac.Write(raw)
+		return hex.EncodeToString(mac.Sum(nil))
+	}
+	pickupWH := []byte(`{"event":"shipment.status.changed","status":"picked_up","tracking_number":"TRK-LIVE-777","courier_name":"GIG Logistics"}`)
+	reqSBWrong := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/shipbubble", bytes.NewReader(pickupWH))
+	reqSBWrong.Header.Set("x-ship-signature", "deadbeef")
+	wSBWrong := httptest.NewRecorder()
+	router.ServeHTTP(wSBWrong, reqSBWrong)
+	require.Equal(t, http.StatusUnauthorized, wSBWrong.Code)
+
+	reqSBPickup := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/shipbubble", bytes.NewReader(pickupWH))
+	reqSBPickup.Header.Set("x-ship-signature", signSB(pickupWH))
+	wSBPickup := httptest.NewRecorder()
+	router.ServeHTTP(wSBPickup, reqSBPickup)
+	require.Equal(t, http.StatusOK, wSBPickup.Code)
+
+	delivWH := []byte(`{"event":"shipment.status.changed","status":"completed","tracking_number":"TRK-LIVE-777","courier_name":"GIG Logistics"}`)
+	reqSBDeliv := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/shipbubble", bytes.NewReader(delivWH))
+	reqSBDeliv.Header.Set("x-ship-signature", signSB(delivWH))
+	wSBDeliv := httptest.NewRecorder()
+	router.ServeHTTP(wSBDeliv, reqSBDeliv)
+	require.Equal(t, http.StatusOK, wSBDeliv.Code)
+
+	// Replayed delivered webhook changes nothing
+	reqSBReplay := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/shipbubble", bytes.NewReader(delivWH))
+	reqSBReplay.Header.Set("x-ship-signature", signSB(delivWH))
+	wSBReplay := httptest.NewRecorder()
+	router.ServeHTTP(wSBReplay, reqSBReplay)
+	require.Equal(t, http.StatusOK, wSBReplay.Code)
+
+	afterOrd, err := svc.GetMerchantOrder(ctx, ws, orderID)
+	require.NoError(t, err)
+	require.Equal(t, "delivered", *afterOrd.CourierStatus)
+	require.Equal(t, "fulfilled", afterOrd.FulfilmentStatus)
+	require.Equal(t, "completed", afterOrd.CommercialStatus)
+
+	var onHand, resQty decimal.Decimal
+	require.NoError(t, pool.QueryRow(ctx, `SELECT quantity_on_hand, reserved_quantity FROM inventory_balances WHERE workspace_id=$1 AND location_id=$2 AND product_id=$3`, ws, outlet.ID, item.ID).Scan(&onHand, &resQty))
+	require.True(t, decimal.NewFromInt(4).Equal(onHand), "stock must be deducted once (5 -> 4)")
+	require.True(t, resQty.IsZero())
 }
 
 func sfBoolPtr(b bool) *bool    { return &b }

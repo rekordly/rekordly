@@ -1733,3 +1733,34 @@ export interface StorefrontPaymentSettingsView {
   manual_bank_account_number?: string | null;
   manual_bank_account_name?: string | null;
 }
+
+export interface StorefrontShipbubbleSettingsView {
+  connected: boolean;
+  api_key_masked: string;
+  strategy: "cheapest" | "selected";
+  selected_couriers: string[];
+  default_weight_grams: number;
+}
+
+export interface ShipbubbleCourierInfo {
+  courier_id: string;
+  service_code: string;
+  name: string;
+  status: string;
+}
+
+export interface PublicCourierRate {
+  courier_id: string;
+  service_code: string;
+  courier_name: string;
+  total_minor: string;
+  estimate_text: string;
+  currency: string;
+}
+
+export interface PublicDeliveryRatesResponse {
+  request_token: string;
+  expires_at: string;
+  cached: boolean;
+  rates: PublicCourierRate[];
+}

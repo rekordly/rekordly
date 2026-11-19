@@ -923,7 +923,7 @@ func (s *Service) FulfilStorefrontOrder(ctx context.Context, ws, user, orderID i
 		RecipientName:   optionalPgText(sanitizePublicText(in.RecipientName, 160)),
 		TrackingNote:    optionalPgText(sanitizePublicText(in.TrackingNote, 400)),
 		CogsTotalMinor:  cogsTotal,
-		CreatedByUserID: pgtype.Int8{Int64: user, Valid: true},
+		CreatedByUserID: pgtype.Int8{Int64: user, Valid: user > 0},
 	})
 	if err != nil {
 		return MerchantOrderView{}, err
@@ -971,12 +971,16 @@ func (s *Service) FulfilStorefrontOrder(ctx context.Context, ws, user, orderID i
 	if _, err := tx.Exec(ctx, `UPDATE storefront_orders SET fulfilment_status=$2, commercial_status=$3, version=version+1, updated_at=now() WHERE id=$1`, o.ID, nextFulfilmentStatus, nextCommercialStatus); err != nil {
 		return MerchantOrderView{}, err
 	}
+	actorType := "merchant"
+	if user <= 0 {
+		actorType = "system"
+	}
 	if _, err := q.CreateStorefrontOrderEvent(ctx, db.CreateStorefrontOrderEventParams{
 		WorkspaceID:     ws,
 		OrderID:         o.ID,
 		EventType:       "order_fulfilled",
-		ActorType:       "merchant",
-		ActorUserID:     pgtype.Int8{Int64: user, Valid: true},
+		ActorType:       actorType,
+		ActorUserID:     pgtype.Int8{Int64: user, Valid: user > 0},
 		CustomerVisible: true,
 		Message:         pgtype.Text{String: fmt.Sprintf("Order %s %s", o.OrderReference, nextFulfilmentStatus), Valid: true},
 	}); err != nil {

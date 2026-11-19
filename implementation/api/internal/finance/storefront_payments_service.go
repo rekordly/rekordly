@@ -825,6 +825,11 @@ func (s *Service) MarkStorefrontOrderPaid(ctx context.Context, attempt db.Storef
 		return err
 	}
 
+	// Book Shipbubble shipment after payment commits; failure leaves order paid with retry flag.
+	if order.DeliveryMethod == "courier" && (!order.CourierTrackingNumber.Valid || strings.TrimSpace(order.CourierTrackingNumber.String) == "") {
+		_ = s.BookStorefrontShipment(ctx, attempt.WorkspaceID, order.ID)
+	}
+
 	// Async email notification if email is configured
 	if s.emailProvider != nil && order.CustomerEmail.Valid && strings.TrimSpace(order.CustomerEmail.String) != "" {
 		_, _ = s.emailProvider.SendEmail(ctx, notify.SendEmailRequest{

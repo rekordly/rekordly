@@ -18,6 +18,7 @@ import (
 	"github.com/rekordly/rekordly-api/internal/crypto"
 	"github.com/rekordly/rekordly-api/internal/db"
 	"github.com/rekordly/rekordly-api/internal/payments"
+	"github.com/rekordly/rekordly-api/internal/shipping"
 	"github.com/shopspring/decimal"
 )
 
@@ -1909,7 +1910,38 @@ type validatedCourierRate struct {
 }
 
 func (s *Service) resolveAndValidateCourierRate(ctx context.Context, storefrontID int64, rateToken, serviceCode, courierID string) (validatedCourierRate, error) {
-	return validatedCourierRate{}, errors.New("courier delivery rates are not configured")
+	tok := strings.TrimSpace(rateToken)
+	svc := strings.TrimSpace(serviceCode)
+	cid := strings.TrimSpace(courierID)
+	if tok == "" || svc == "" {
+		return validatedCourierRate{}, errors.New("courier rate token and service code are required")
+	}
+	cached, err := s.queries.GetStorefrontShippingRateByToken(ctx, db.GetStorefrontShippingRateByTokenParams{
+		StorefrontID: storefrontID,
+		RequestToken: tok,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return validatedCourierRate{}, errors.New("delivery rate expired or unknown; please refresh courier rates")
+	}
+	if err != nil {
+		return validatedCourierRate{}, err
+	}
+	var rates []shipping.CourierRate
+	if err := json.Unmarshal(cached.RatesJson, &rates); err != nil {
+		return validatedCourierRate{}, errors.New("cached delivery rates could not be verified")
+	}
+	for _, r := range rates {
+		if strings.EqualFold(r.ServiceCode, svc) && (cid == "" || strings.EqualFold(r.CourierID, cid)) {
+			return validatedCourierRate{
+				RequestToken: cached.RequestToken,
+				CourierName:  r.CourierName,
+				ServiceCode:  r.ServiceCode,
+				CourierID:    r.CourierID,
+				TotalMinor:   r.TotalMinor,
+			}, nil
+		}
+	}
+	return validatedCourierRate{}, errors.New("selected courier rate is not valid for this quote")
 }
 
 func (s *Service) notifyStorefrontWorkspace(ctx context.Context, ws int64, title, body string) {

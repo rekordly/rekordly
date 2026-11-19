@@ -15,6 +15,7 @@ import (
 	"github.com/rekordly/rekordly-api/internal/db"
 	"github.com/rekordly/rekordly-api/internal/notify"
 	"github.com/rekordly/rekordly-api/internal/payments"
+	"github.com/rekordly/rekordly-api/internal/shipping"
 )
 
 var (
@@ -41,10 +42,17 @@ type Service struct {
 	emailProvider              notify.EmailProvider
 	guestShareBaseURL          string
 	storefrontPaymentProviders map[string]payments.Provider
+	shippingClient             shipping.Client
 	platformCommissionPercent  float64
 }
 
 type ServiceOption func(*Service)
+
+func WithShippingClient(client shipping.Client) ServiceOption {
+	return func(service *Service) {
+		service.shippingClient = client
+	}
+}
 
 func WithStorefrontPaymentProvider(provider payments.Provider) ServiceOption {
 	return func(service *Service) {

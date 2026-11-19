@@ -15,7 +15,7 @@ import { StatusPill } from "@/components/ui/page";
 import { createIdempotencyKey } from "@/lib/utils";
 import { financeApi, formatMinorAmount } from "@/lib/money";
 import { createDefaultSections, resolvePalette, STORE_THEMES, type BrandSettings, type ThemeKey } from "@/lib/store-themes";
-import type { GuestCheckoutConfirmation, ManualBankDetails, PublicStorefrontProduct, StorefrontPickupPoint, ValidatedCart } from "@/types/finance";
+import type { GuestCheckoutConfirmation, ManualBankDetails, PublicCourierRate, PublicDeliveryRatesResponse, PublicStorefrontProduct, StorefrontPickupPoint, ValidatedCart } from "@/types/finance";
 import { EssentialStoreFooter, StoreServiceCards } from "./essential-store-footer";
 import { EssentialProductDetail } from "./essential-product-detail";
 import { resolveStoreBrand } from "@/lib/store-themes/brand";
@@ -72,6 +72,10 @@ export function PublicStorefrontClient({ slug, page = "home", collectionSlug, pr
   const [policyAccepted, setPolicyAccepted] = useState(true);
   const [checkoutError, setCheckoutError] = useState("");
   const [confirmedOrder, setConfirmedOrder] = useState<GuestCheckoutConfirmation | null>(null);
+  const [courierRatesData, setCourierRatesData] = useState<PublicDeliveryRatesResponse | null>(null);
+  const [selectedCourierCode, setSelectedCourierCode] = useState("");
+  const [loadingCourierRates, setLoadingCourierRates] = useState(false);
+  const [courierRatesError, setCourierRatesError] = useState("");
 
   const storeQuery = useQuery({
     queryKey: ["public-storefront", slug, searchText, selectedCol],
@@ -169,8 +173,40 @@ export function PublicStorefrontClient({ slug, page = "home", collectionSlug, pr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cart, deliveryMethod, deliveryAreaId]);
 
+  const selectedCourierRate = deliveryMethod === "courier" && courierRatesData?.rates?.length
+    ? (courierRatesData.rates.find((r) => r.service_code === selectedCourierCode) ?? courierRatesData.rates[0])
+    : null;
+
+  const handleFetchCourierRates = async () => {
+    if (!deliveryAddress.trim() || cart.length === 0) {
+      setCourierRatesError("Enter your delivery address first.");
+      return;
+    }
+    setLoadingCourierRates(true);
+    setCourierRatesError("");
+    try {
+      const res = await financeApi.fetchPublicDeliveryRates(slug, {
+        address: deliveryAddress.trim(),
+        name: customerName.trim(),
+        email: customerEmail.trim(),
+        phone: customerPhone.trim(),
+        lines: cart.map((l) => ({ storefront_product_id: l.storefront_product_id, quantity: String(l.quantity) })),
+      });
+      setCourierRatesData(res);
+      setSelectedCourierCode(res.rates[0]?.service_code ?? "");
+    } catch (err: unknown) {
+      setCourierRatesData(null);
+      setCourierRatesError(err instanceof Error ? err.message : "Could not load courier rates");
+    } finally {
+      setLoadingCourierRates(false);
+    }
+  };
+
   const submitCheckout = useMutation({
     mutationFn: async () => {
+      if (deliveryMethod === "courier" && !selectedCourierRate) {
+        throw new Error("Get courier rates and choose a courier option before placing your order.");
+      }
       const idempotencyKey = createIdempotencyKey();
       return financeApi.submitGuestCheckout(
         slug,
@@ -187,6 +223,9 @@ export function PublicStorefrontClient({ slug, page = "home", collectionSlug, pr
           delivery_method: deliveryMethod,
           delivery_area_id: deliveryAreaId ? Number(deliveryAreaId) : undefined,
           pickup_point_id: deliveryMethod === "pickup" && pickupPointId ? Number(pickupPointId) : undefined,
+          rate_token: deliveryMethod === "courier" ? courierRatesData?.request_token : undefined,
+          courier_service_code: deliveryMethod === "courier" ? selectedCourierRate?.service_code : undefined,
+          courier_id: deliveryMethod === "courier" ? selectedCourierRate?.courier_id : undefined,
           payment_method: paymentMethod || undefined,
           delivery_address: deliveryAddress,
           customer_note: customerNote,
@@ -394,11 +433,18 @@ export function PublicStorefrontClient({ slug, page = "home", collectionSlug, pr
         customerEmail={customerEmail}
         setCustomerEmail={setCustomerEmail}
         deliveryMethod={deliveryMethod}
-        setDeliveryMethod={setDeliveryMethod}
+        setDeliveryMethod={(m) => { setDeliveryMethod(m); setCourierRatesError(""); }}
         deliveryAreaId={deliveryAreaId}
         setDeliveryAreaId={setDeliveryAreaId}
         deliveryAddress={deliveryAddress}
-        setDeliveryAddress={setDeliveryAddress}
+        setDeliveryAddress={(addr) => { setDeliveryAddress(addr); setCourierRatesData(null); setSelectedCourierCode(""); setCourierRatesError(""); }}
+        shipbubbleEnabled={Boolean(sf.shipbubble_enabled)}
+        courierRates={courierRatesData?.rates ?? []}
+        selectedCourierCode={selectedCourierRate?.service_code ?? ""}
+        setSelectedCourierCode={setSelectedCourierCode}
+        loadingCourierRates={loadingCourierRates}
+        courierRatesError={courierRatesError}
+        onFetchCourierRates={() => void handleFetchCourierRates()}
         customerNote={customerNote}
         setCustomerNote={setCustomerNote}
         policyAccepted={policyAccepted}
@@ -500,6 +546,13 @@ type PublicCartPageProps = {
   setDeliveryAreaId: (value: string) => void;
   deliveryAddress: string;
   setDeliveryAddress: (value: string) => void;
+  shipbubbleEnabled: boolean;
+  courierRates: PublicCourierRate[];
+  selectedCourierCode: string;
+  setSelectedCourierCode: (value: string) => void;
+  loadingCourierRates: boolean;
+  courierRatesError: string;
+  onFetchCourierRates: () => void;
   customerNote: string;
   setCustomerNote: (value: string) => void;
   policyAccepted: boolean;
@@ -522,7 +575,12 @@ function PolicyPage({ page, policies }: { page: "policies" | "privacy" | "return
 
 function PublicCartPage(props: PublicCartPageProps) {
   const subtotalBig = props.cart.reduce((total, line) => total + BigInt(line.price_minor) * BigInt(line.quantity), BigInt(0));
-  const deliveryMinorBig = props.validatedCart ? BigInt(props.validatedCart.delivery_fee_minor || "0") : BigInt(0);
+  const selectedCourierRate = props.deliveryMethod === "courier" && props.courierRates.length
+    ? (props.courierRates.find((r) => r.service_code === props.selectedCourierCode) ?? props.courierRates[0])
+    : null;
+  const deliveryMinorBig = props.deliveryMethod === "courier"
+    ? (selectedCourierRate ? BigInt(selectedCourierRate.total_minor || "0") : BigInt(0))
+    : (props.validatedCart ? BigInt(props.validatedCart.delivery_fee_minor || "0") : BigInt(0));
   const baseTotalBig = subtotalBig + deliveryMinorBig;
   const isOnlinePay = props.paymentMethod === "virtual_account" || props.paymentMethod === "card";
   let processingFeeBig = BigInt(0);
@@ -574,7 +632,7 @@ function PublicCartPage(props: PublicCartPageProps) {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2"><AppInput label="Phone / WhatsApp" isRequired={props.requirePhone} value={props.customerPhone} onChange={(event) => props.setCustomerPhone(event.target.value)} placeholder="+234…" /><AppInput label="Email" type="email" isRequired={emailRequired} value={props.customerEmail} onChange={(event) => props.setCustomerEmail(event.target.value)} placeholder="you@example.com" /></div>
 
         <h2 className="pt-2 text-lg font-semibold">2. Delivery method</h2>
-        <ChoiceCards layout="list" label="How would you like to receive your order?" value={props.deliveryMethod} onChange={props.setDeliveryMethod} options={props.deliveryMethods.map((method) => ({ key: method, label: method === "pickup" ? "Pickup" : method === "merchant_delivery" ? "Store delivery" : "Arrange my own", description: method === "pickup" ? "Collect from a store pickup point" : method === "merchant_delivery" ? "Delivered to your address" : "Send your own dispatch rider", icon: method === "pickup" ? Storefront : method === "merchant_delivery" ? Truck : Handshake }))} />
+        <ChoiceCards layout="list" label="How would you like to receive your order?" value={props.deliveryMethod} onChange={props.setDeliveryMethod} options={props.deliveryMethods.filter((method) => method !== "courier" || props.shipbubbleEnabled).map((method) => ({ key: method, label: method === "pickup" ? "Pickup" : method === "merchant_delivery" ? "Store delivery" : method === "courier" ? "Courier delivery" : "Arrange my own", description: method === "pickup" ? "Collect from a store pickup point" : method === "merchant_delivery" ? "Delivered to your address" : method === "courier" ? "Tracked doorstep delivery (online payment required)" : "Send your own dispatch rider", icon: method === "pickup" ? Storefront : method === "merchant_delivery" || method === "courier" ? Truck : Handshake }))} />
 
         {props.deliveryMethod === "pickup" && props.pickupPoints.length > 0 ? (
           <div className="space-y-2">
@@ -596,7 +654,30 @@ function PublicCartPage(props: PublicCartPageProps) {
         ) : null}
 
         {props.deliveryMethod === "merchant_delivery" && props.deliveryAreas.length ? <AppSelect label="Delivery area" placeholder="Choose a delivery area" isRequired selectedKey={props.deliveryAreaId || undefined} onSelectionChange={props.setDeliveryAreaId} options={props.deliveryAreas.map((area) => ({ key: String(area.id), label: area.state ? `${area.name} (${area.state})` : area.name, description: [area.fee_minor === "0" ? "Free" : formatMinorAmount(area.fee_minor, props.currency, props.currencyExponent), area.estimate_text].filter(Boolean).join(" · ") }))} /> : null}
-        {props.deliveryMethod === "merchant_delivery" ? <AppInput label="Delivery address" isRequired value={props.deliveryAddress} onChange={(event) => props.setDeliveryAddress(event.target.value)} placeholder="Street address and landmark" /> : null}
+        {props.deliveryMethod === "merchant_delivery" || props.deliveryMethod === "courier" ? <AppInput label="Delivery address" isRequired value={props.deliveryAddress} onChange={(event) => props.setDeliveryAddress(event.target.value)} placeholder="Street address, city and state" /> : null}
+        {props.deliveryMethod === "courier" ? (
+          <div className="space-y-3 rounded-xl border border-black/10 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-medium text-muted">Get live shipping quotes for your address</p>
+              <AppButton size="sm" variant="secondary" label={props.loadingCourierRates ? "Loading rates..." : props.courierRates.length ? "Refresh rates" : "Get courier rates"} isLoading={props.loadingCourierRates} onPress={props.onFetchCourierRates} />
+            </div>
+            {props.courierRatesError ? <p role="alert" className="text-xs text-danger">{props.courierRatesError}</p> : null}
+            {props.courierRates.length > 0 ? (
+              <ChoiceCards
+                layout="list"
+                label="Choose a courier"
+                value={selectedCourierRate?.service_code ?? ""}
+                onChange={props.setSelectedCourierCode}
+                options={props.courierRates.map((rate) => ({
+                  key: rate.service_code,
+                  label: rate.courier_name,
+                  description: [formatMinorAmount(rate.total_minor, props.currency, props.currencyExponent), rate.estimate_text].filter(Boolean).join(" · "),
+                  icon: Truck,
+                }))}
+              />
+            ) : null}
+          </div>
+        ) : null}
         {props.freeDeliveryThreshold && props.deliveryMethod === "merchant_delivery" ? <p className="text-xs text-muted">Free delivery over {formatMinorAmount(props.freeDeliveryThreshold, props.currency, props.currencyExponent)}.</p> : null}
 
         {paymentOptions.length > 0 ? (
@@ -611,14 +692,16 @@ function PublicCartPage(props: PublicCartPageProps) {
               </div>
             ) : null}
           </>
+        ) : props.deliveryMethod === "courier" ? (
+          <p className="text-xs text-danger">Courier delivery requires an online payment method enabled on this store.</p>
         ) : null}
 
         <AppInput label="Note for the store (optional)" value={props.customerNote} onChange={(event) => props.setCustomerNote(event.target.value)} placeholder="Preferred delivery or pickup time" />
         <label className="flex items-start gap-2 text-xs text-muted"><input className="mt-0.5" type="checkbox" checked={props.policyAccepted} onChange={(event) => props.setPolicyAccepted(event.target.checked)} /><span>Items are held briefly while you complete checkout.</span></label>
         <div className="space-y-2 border-t border-black/10 pt-4 text-sm">
           <div className="flex items-center justify-between"><span>Items subtotal</span><span>{formatMinorAmount(subtotalBig.toString(), props.currency, props.currencyExponent)}</span></div>
-          {props.deliveryMethod === "merchant_delivery" ? (
-            <div className="flex items-center justify-between"><span>Delivery</span><span>{deliveryMinorBig === BigInt(0) ? "Free" : formatMinorAmount(deliveryMinorBig.toString(), props.currency, props.currencyExponent)}</span></div>
+          {props.deliveryMethod === "merchant_delivery" || props.deliveryMethod === "courier" ? (
+            <div className="flex items-center justify-between"><span>{props.deliveryMethod === "courier" ? "Courier shipping" : "Delivery"}</span><span>{props.deliveryMethod === "courier" && !selectedCourierRate ? "Select rate" : deliveryMinorBig === BigInt(0) ? "Free" : formatMinorAmount(deliveryMinorBig.toString(), props.currency, props.currencyExponent)}</span></div>
           ) : null}
           {processingFeeBig > BigInt(0) ? (
             <div className="flex items-center justify-between"><span>Payment processing fee</span><span>{formatMinorAmount(processingFeeBig.toString(), props.currency, props.currencyExponent)}</span></div>
@@ -627,7 +710,7 @@ function PublicCartPage(props: PublicCartPageProps) {
             <span>Total</span>
             <strong className="tabular-nums">{formatMinorAmount(finalTotalBig.toString(), props.currency, props.currencyExponent)}</strong>
           </div>
-          <AppButton className="mt-4 w-full" type="submit" isLoading={props.isSubmitting} isDisabled={!props.policyAccepted} label={isOnlinePay ? `Pay ${formatMinorAmount(finalTotalBig.toString(), props.currency, props.currencyExponent)}` : "Place order"} />
+          <AppButton className="mt-4 w-full" type="submit" isLoading={props.isSubmitting} isDisabled={!props.policyAccepted || (props.deliveryMethod === "courier" && (!selectedCourierRate || paymentOptions.length === 0))} label={isOnlinePay ? `Pay ${formatMinorAmount(finalTotalBig.toString(), props.currency, props.currencyExponent)}` : "Place order"} />
         </div>
       </section>
     </form>}
