@@ -34,16 +34,16 @@ type Bank struct {
 }
 
 type OrderPaymentRequest struct {
-	AmountMinor              int64     `json:"amount_minor"`
-	Currency                 string    `json:"currency"`
-	Reference                string    `json:"reference"`
-	CustomerEmail            string    `json:"customer_email"`
-	CustomerName             string    `json:"customer_name"`
-	SubaccountRef            string    `json:"subaccount_ref"`
+	AmountMinor               int64     `json:"amount_minor"`
+	Currency                  string    `json:"currency"`
+	Reference                 string    `json:"reference"`
+	CustomerEmail             string    `json:"customer_email"`
+	CustomerName              string    `json:"customer_name"`
+	SubaccountRef             string    `json:"subaccount_ref"`
 	PlatformCommissionPercent float64   `json:"platform_commission_percent"`
-	FeeBearer                string    `json:"fee_bearer"` // "merchant" | "customer"
-	ExpiresAt                time.Time `json:"expires_at"`
-	CallbackURL              string    `json:"callback_url,omitempty"`
+	FeeBearer                 string    `json:"fee_bearer"` // "merchant" | "customer"
+	ExpiresAt                 time.Time `json:"expires_at"`
+	CallbackURL               string    `json:"callback_url,omitempty"`
 }
 
 type VirtualAccount struct {
@@ -77,6 +77,25 @@ type PaymentResult struct {
 	FeeMinor    int64     `json:"fee_minor"`
 	Channel     string    `json:"channel"`
 	PaidAt      time.Time `json:"paid_at"`
+}
+
+// MethodSupportChecker is optionally implemented by payment providers whose
+// per-method availability depends on merchant or provider capabilities.
+type MethodSupportChecker interface {
+	SupportsMethod(method string) bool
+}
+
+// ProviderSupportsMethod checks whether p supports the given storefront payment
+// method ("virtual_account" or "card"). Providers without MethodSupportChecker
+// are treated as supporting both methods.
+func ProviderSupportsMethod(p Provider, method string) bool {
+	if p == nil {
+		return false
+	}
+	if checker, ok := p.(MethodSupportChecker); ok {
+		return checker.SupportsMethod(method)
+	}
+	return true
 }
 
 type Provider interface {

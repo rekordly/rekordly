@@ -56,13 +56,23 @@ function PaymentsForm({
   const [isResolving, setIsResolving] = useState(false);
   const [resolveError, setResolveError] = useState("");
   const [isSavingPayout, setIsSavingPayout] = useState(false);
+  const [providerChoice, setProviderChoice] = useState("");
+
+  const availableProviders = paymentSettings?.available_providers?.length
+    ? paymentSettings.available_providers
+    : ["paystack"];
+  const payout = paymentSettings?.payout_account;
+  const selectedProvider = availableProviders.includes(providerChoice)
+    ? providerChoice
+    : payout?.provider && availableProviders.includes(payout.provider)
+      ? payout.provider
+      : availableProviders[0];
 
   const banksQuery = useQuery({
-    queryKey: [...moneyKeys.workspace(workspaceId), "payment-banks"],
-    queryFn: () => financeApi.listPaymentBanks(workspaceId, "paystack"),
+    queryKey: [...moneyKeys.workspace(workspaceId), "payment-banks", selectedProvider],
+    queryFn: () => financeApi.listPaymentBanks(workspaceId, selectedProvider),
   });
   const banks = banksQuery.data ?? [];
-  const payout = paymentSettings?.payout_account;
 
   const handleResolve = async (bCode: string, accNum: string) => {
     if (!bCode || accNum.length !== 10) return;
@@ -70,6 +80,7 @@ function PaymentsForm({
     setResolveError("");
     try {
       const res = await financeApi.resolveStorefrontBankAccount(workspaceId, {
+        provider: selectedProvider,
         bank_code: bCode,
         account_number: accNum,
       });
@@ -87,6 +98,7 @@ function PaymentsForm({
     setIsSavingPayout(true);
     try {
       await financeApi.saveStorefrontPayoutAccount(workspaceId, {
+        provider: selectedProvider,
         bank_code: bankCode,
         account_number: accountNumber,
         account_name: resolvedName,
@@ -135,6 +147,22 @@ function PaymentsForm({
         ) : (
           <div className="rounded-xl border border-border bg-surface-raised p-4 space-y-3">
             <p className="text-xs font-semibold text-foreground">Connect bank account</p>
+            {availableProviders.length > 1 ? (
+              <AppSelect
+                label="Payment provider"
+                selectedKey={selectedProvider}
+                onSelectionChange={(key) => {
+                  setProviderChoice(key);
+                  setBankCode("");
+                  setResolvedName("");
+                  setResolveError("");
+                }}
+                options={availableProviders.map((prov) => ({
+                  key: prov,
+                  label: prov === "squad" ? "Squad (GTCO)" : prov === "paystack" ? "Paystack" : prov,
+                }))}
+              />
+            ) : null}
             <AppComboBox
               label="Settlement bank"
               placeholder="Search or select bank..."

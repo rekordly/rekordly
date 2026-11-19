@@ -368,15 +368,12 @@ func (s *Service) GetPublicStorefrontProjection(ctx context.Context, slugOrHost 
 			})
 		}
 		payoutAccounts, _ := s.queries.ListMerchantPayoutAccounts(ctx, sf.WorkspaceID)
-		var activeProviders []string
-		for _, pa := range payoutAccounts {
-			if pa.Status == "active" {
-				if _, ok := s.storefrontPaymentProviders[pa.Provider]; ok {
-					activeProviders = append(activeProviders, pa.Provider)
-				}
-			}
-		}
+		activeProviders := activeRegisteredProviders(payoutAccounts, s.storefrontPaymentProviders)
+		_, primaryProv := selectPrimaryPayoutAccount(payoutAccounts, s.storefrontPaymentProviders, "")
 		onlineReady := len(activeProviders) > 0
+		bankTransferSupported := onlineReady && payments.ProviderSupportsMethod(primaryProv, "virtual_account")
+		cardSupported := onlineReady && payments.ProviderSupportsMethod(primaryProv, "card")
+		onlineReady = onlineReady && (bankTransferSupported || cardSupported)
 		var manualBank *ManualBankDetailsView
 		if st.PaymentManualTransferEnabled && st.ManualBankAccountNumber.Valid && strings.TrimSpace(st.ManualBankAccountNumber.String) != "" {
 			manualBank = &ManualBankDetailsView{
@@ -425,8 +422,8 @@ func (s *Service) GetPublicStorefrontProjection(ctx context.Context, slugOrHost 
 			FreeDeliveryThresholdMinor:   stView.FreeDeliveryThresholdMinor,
 			DeliveryAreas:                publicAreas,
 			PickupPoints:                 pickupPoints,
-			PaymentBankTransferEnabled:   st.PaymentBankTransferEnabled && onlineReady,
-			PaymentCardEnabled:           st.PaymentCardEnabled && onlineReady,
+			PaymentBankTransferEnabled:   st.PaymentBankTransferEnabled && bankTransferSupported,
+			PaymentCardEnabled:           st.PaymentCardEnabled && cardSupported,
 			PaymentManualTransferEnabled: st.PaymentManualTransferEnabled,
 			PaymentCodEnabled:            st.PaymentCodEnabled,
 			OnlinePaymentsReady:          onlineReady,
@@ -954,38 +951,21 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 
 	// Resolve active provider + payout account
 	payoutAccounts, _ := s.queries.ListMerchantPayoutAccounts(ctx, proj.internalWS)
-	var chosenPayout *db.MerchantPayoutAccount
-	var chosenProvider payments.Provider
-	preferredProvKey := strings.ToLower(strings.TrimSpace(in.PaymentProvider))
-	for idx := range payoutAccounts {
-		pa := payoutAccounts[idx]
-		if pa.Status != "active" {
-			continue
-		}
-		prov, ok := s.storefrontPaymentProviders[pa.Provider]
-		if !ok || prov == nil {
-			continue
-		}
-		if preferredProvKey != "" && pa.Provider == preferredProvKey {
-			chosenPayout = &pa
-			chosenProvider = prov
-			break
-		}
-		if chosenPayout == nil {
-			chosenPayout = &pa
-			chosenProvider = prov
-		}
-	}
+	chosenPayout, chosenProvider := selectPrimaryPayoutAccount(payoutAccounts, s.storefrontPaymentProviders, in.PaymentProvider)
 
 	// Determine & validate payment method
 	payMethod := strings.ToLower(strings.TrimSpace(in.PaymentMethod))
 	if payMethod == "" {
-		if chosenProvider != nil && settings.PaymentBankTransferEnabled {
+		if chosenProvider != nil && settings.PaymentBankTransferEnabled && payments.ProviderSupportsMethod(chosenProvider, "virtual_account") {
 			payMethod = "virtual_account"
-		} else if settings.PaymentManualTransferEnabled {
+		} else if chosenProvider != nil && settings.PaymentCardEnabled && payments.ProviderSupportsMethod(chosenProvider, "card") {
+			payMethod = "card"
+		} else if delivMethod != "courier" && settings.PaymentManualTransferEnabled {
 			payMethod = "manual_transfer"
-		} else if settings.PaymentCodEnabled {
+		} else if delivMethod != "courier" && settings.PaymentCodEnabled {
 			payMethod = "cod"
+		} else if delivMethod == "courier" {
+			return GuestCheckoutConfirmation{}, errors.New("online payment provider does not support courier checkout")
 		} else {
 			payMethod = "manual_transfer"
 		}
@@ -995,9 +975,15 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 		if !settings.PaymentBankTransferEnabled && in.PaymentMethod != "" {
 			return GuestCheckoutConfirmation{}, errors.New("online bank transfer is disabled for this store")
 		}
+		if chosenProvider != nil && !payments.ProviderSupportsMethod(chosenProvider, "virtual_account") {
+			return GuestCheckoutConfirmation{}, errors.New("online bank transfer is not supported by the active payment provider")
+		}
 	case "card":
 		if !settings.PaymentCardEnabled {
 			return GuestCheckoutConfirmation{}, errors.New("card payment is disabled for this store")
+		}
+		if chosenProvider != nil && !payments.ProviderSupportsMethod(chosenProvider, "card") {
+			return GuestCheckoutConfirmation{}, errors.New("card payment is not supported by the active payment provider")
 		}
 	case "manual_transfer":
 		if delivMethod == "courier" {
@@ -1375,6 +1361,9 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 				ExpiresAt:                 holdExpiresAt,
 			})
 			if vaErr != nil {
+				if errors.Is(vaErr, payments.ErrNotSupported) {
+					return GuestCheckoutConfirmation{}, errors.New("online bank transfer is not supported by the active payment provider")
+				}
 				return GuestCheckoutConfirmation{}, vaErr
 			}
 			if _, aErr := q.CreateStorefrontPaymentAttempt(ctx, db.CreateStorefrontPaymentAttemptParams{

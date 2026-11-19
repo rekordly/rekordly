@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -83,18 +84,87 @@ type RecordPayoutInput struct {
 }
 
 func (s *Service) getPaymentProvider(key string) (payments.Provider, error) {
+	if s.storefrontPaymentProviders == nil || len(s.storefrontPaymentProviders) == 0 {
+		return nil, ErrProviderNotAvailable
+	}
 	key = strings.ToLower(strings.TrimSpace(key))
 	if key == "" {
-		key = "paystack"
-	}
-	if s.storefrontPaymentProviders == nil {
-		return nil, ErrProviderNotAvailable
+		if p, ok := s.storefrontPaymentProviders["paystack"]; ok && p != nil {
+			return p, nil
+		}
+		keys := make([]string, 0, len(s.storefrontPaymentProviders))
+		for k, p := range s.storefrontPaymentProviders {
+			if p != nil {
+				keys = append(keys, k)
+			}
+		}
+		sort.Strings(keys)
+		if len(keys) == 0 {
+			return nil, ErrProviderNotAvailable
+		}
+		return s.storefrontPaymentProviders[keys[0]], nil
 	}
 	p, ok := s.storefrontPaymentProviders[key]
 	if !ok || p == nil {
 		return nil, ErrProviderNotAvailable
 	}
 	return p, nil
+}
+
+func activeRegisteredProviders(accounts []db.MerchantPayoutAccount, providers map[string]payments.Provider) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, pa := range accounts {
+		if pa.Status != "active" || seen[pa.Provider] {
+			continue
+		}
+		if p, ok := providers[pa.Provider]; ok && p != nil {
+			seen[pa.Provider] = true
+			out = append(out, pa.Provider)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// selectPrimaryPayoutAccount picks the preferred active registered payout account, or
+// falls back to the most recently updated active registered account (preferring "paystack" on tie).
+func selectPrimaryPayoutAccount(accounts []db.MerchantPayoutAccount, providers map[string]payments.Provider, preferred string) (*db.MerchantPayoutAccount, payments.Provider) {
+	pref := strings.ToLower(strings.TrimSpace(preferred))
+	var active []db.MerchantPayoutAccount
+	for _, pa := range accounts {
+		if pa.Status != "active" {
+			continue
+		}
+		p, ok := providers[pa.Provider]
+		if !ok || p == nil {
+			continue
+		}
+		if pref != "" && pa.Provider == pref {
+			chosen := pa
+			return &chosen, p
+		}
+		active = append(active, pa)
+	}
+	if len(active) == 0 {
+		return nil, nil
+	}
+	sort.Slice(active, func(i, j int) bool {
+		ti := active[i].UpdatedAt.Time
+		tj := active[j].UpdatedAt.Time
+		if !ti.Equal(tj) {
+			return ti.After(tj)
+		}
+		if active[i].Provider == "paystack" && active[j].Provider != "paystack" {
+			return true
+		}
+		if active[j].Provider == "paystack" && active[i].Provider != "paystack" {
+			return false
+		}
+		return active[i].Provider < active[j].Provider
+	})
+	chosen := active[0]
+	return &chosen, providers[chosen.Provider]
 }
 
 func (s *Service) ListPaymentBanks(ctx context.Context, providerKey string) ([]payments.Bank, error) {
@@ -198,14 +268,16 @@ func (s *Service) GetStorefrontPaymentSettings(ctx context.Context, wsID int64) 
 
 	var payoutView *MerchantPayoutAccountView
 	if accounts, lErr := s.queries.ListMerchantPayoutAccounts(ctx, wsID); lErr == nil && len(accounts) > 0 {
-		chosen := accounts[0]
-		for _, a := range accounts {
-			if a.Status == "active" {
-				chosen = a
-				if _, ok := s.storefrontPaymentProviders[a.Provider]; ok {
+		chosen, _ := selectPrimaryPayoutAccount(accounts, s.storefrontPaymentProviders, "")
+		if chosen == nil {
+			fallback := accounts[0]
+			for _, a := range accounts {
+				if a.Status == "active" {
+					fallback = a
 					break
 				}
 			}
+			chosen = &fallback
 		}
 		payoutView = &MerchantPayoutAccountView{
 			ID:                 chosen.ID,
@@ -221,6 +293,7 @@ func (s *Service) GetStorefrontPaymentSettings(ctx context.Context, wsID int64) 
 	for k := range s.storefrontPaymentProviders {
 		avail = append(avail, k)
 	}
+	sort.Strings(avail)
 	if len(avail) == 0 {
 		avail = append(avail, "paystack")
 	}
@@ -352,7 +425,27 @@ func (s *Service) HandlePaymentWebhook(ctx context.Context, providerKey string, 
 		return ErrInvalidWebhookSignature
 	}
 
-	// Idempotent webhook tracking
+	attempt, err := s.queries.GetStorefrontPaymentAttemptByReference(ctx, event.Reference)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// Record unknown reference idempotently and accept
+			_, _ = s.queries.InsertPaymentWebhookEvent(ctx, db.InsertPaymentWebhookEventParams{
+				Provider: providerKey,
+				EventID:  event.Reference,
+				Outcome:  "ignored_unknown_reference",
+			})
+			return nil
+		}
+		return err
+	}
+	if attempt.Provider != providerKey {
+		return nil
+	}
+	if event.Status == "paid" && event.AmountMinor != attempt.AmountMinor {
+		return ErrPaymentAmountMismatch
+	}
+
+	// Idempotent webhook tracking (keyed on provider + reference after validation)
 	recorded, err := s.queries.InsertPaymentWebhookEvent(ctx, db.InsertPaymentWebhookEventParams{
 		Provider: providerKey,
 		EventID:  event.Reference,
@@ -362,14 +455,6 @@ func (s *Service) HandlePaymentWebhook(ctx context.Context, providerKey string, 
 		return nil // already processed, idempotent 200
 	}
 	if err != nil {
-		return err
-	}
-
-	attempt, err := s.queries.GetStorefrontPaymentAttemptByReference(ctx, event.Reference)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil // unknown attempt, accept and ignore
-		}
 		return err
 	}
 
@@ -383,9 +468,6 @@ func (s *Service) HandlePaymentWebhook(ctx context.Context, providerKey string, 
 	}
 
 	if event.Status == "paid" {
-		if event.AmountMinor != attempt.AmountMinor {
-			return ErrPaymentAmountMismatch
-		}
 		attempt.FeeMinor = event.FeeMinor
 		attempt.RawEvent = event.Raw
 		return s.MarkStorefrontOrderPaid(ctx, attempt)

@@ -49,6 +49,7 @@ type Config struct {
 	SquadSecretKey            string
 	SquadWebhookSecret        string
 	SquadBaseURL              string
+	SquadDynamicVAEnabled     bool
 	PlatformCommissionPercent float64
 	ResendAPIKey              string
 	ResendBaseURL             string
@@ -85,6 +86,7 @@ func Load() (Config, error) {
 	v.SetDefault("COMMERCIAL_MODE", "controlled_beta")
 	v.SetDefault("PAYSTACK_BASE_URL", "https://api.paystack.co")
 	v.SetDefault("SQUAD_BASE_URL", "https://api-d.squadco.com")
+	v.SetDefault("SQUAD_DYNAMIC_VA_ENABLED", false)
 	v.SetDefault("PLATFORM_COMMISSION_PERCENT", 0)
 	v.SetDefault("RESEND_BASE_URL", "https://api.resend.com")
 	v.SetDefault("EMAIL_FROM", "notifications@rekordly.com")
@@ -133,6 +135,7 @@ func Load() (Config, error) {
 		SquadSecretKey:            v.GetString("SQUAD_SECRET_KEY"),
 		SquadWebhookSecret:        v.GetString("SQUAD_WEBHOOK_SECRET"),
 		SquadBaseURL:              strings.TrimRight(strings.TrimSpace(v.GetString("SQUAD_BASE_URL")), "/"),
+		SquadDynamicVAEnabled:     v.GetBool("SQUAD_DYNAMIC_VA_ENABLED"),
 		PlatformCommissionPercent: parseFloatOrZero(v.GetString("PLATFORM_COMMISSION_PERCENT")),
 		ResendAPIKey:              v.GetString("RESEND_API_KEY"),
 		ResendBaseURL:             strings.TrimRight(strings.TrimSpace(v.GetString("RESEND_BASE_URL")), "/"),

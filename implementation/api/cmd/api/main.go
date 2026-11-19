@@ -83,6 +83,11 @@ func main() {
 			payments.NewPaystackProvider(cfg.PaystackSecretKey, cfg.PaystackWebhookSecret, cfg.PaystackBaseURL, 15*time.Second),
 		))
 	}
+	if cfg.SquadSecretKey != "" {
+		serviceOpts = append(serviceOpts, finance.WithStorefrontPaymentProvider(
+			payments.NewSquadProvider(cfg.SquadSecretKey, cfg.SquadWebhookSecret, cfg.SquadBaseURL, 15*time.Second, payments.WithSquadDynamicVA(cfg.SquadDynamicVAEnabled)),
+		))
+	}
 
 	financeService := finance.NewService(pool, serviceOpts...)
 	financeAuthMiddleware := finance.AuthAndWorkspaceMiddleware(pool, authService)

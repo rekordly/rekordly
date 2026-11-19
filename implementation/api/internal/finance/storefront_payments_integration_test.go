@@ -1083,5 +1083,231 @@ func TestStorefrontPickupHoldCodeAndManualMarkPaid(t *testing.T) {
 	require.Greater(t, totDebits, int64(0))
 }
 
+func TestStorefrontSquadProviderWebhookAndUnsupportedMethodHiding(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	ws, user := createTestWorkspace(t, pool, "sf-squad")
+
+	squadSecret := "sq_test_key_integration"
+	squadWHSecret := "sq_wh_secret_integration"
+	squadSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/payout/account/lookup":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"status":  200,
+				"success": true,
+				"data": map[string]any{
+					"account_name":   "SQUAD MERCHANT VENTURES",
+					"account_number": "0123456789",
+				},
+			})
+		case r.Method == http.MethodPost && r.URL.Path == "/merchant/create-sub-users":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"status":  200,
+				"success": true,
+				"data": map[string]any{
+					"sub_merchant_id": "SQD_SUB_999",
+				},
+			})
+		case r.Method == http.MethodPost && r.URL.Path == "/transaction/initiate":
+			var body map[string]any
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"status":  200,
+				"success": true,
+				"data": map[string]any{
+					"checkout_url":    "https://pay.squadco.com/chk_test_999",
+					"transaction_ref": body["transaction_ref"],
+				},
+			})
+		case r.Method == http.MethodPost && r.URL.Path == "/virtual-account":
+			w.WriteHeader(http.StatusForbidden)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"status":  403,
+				"success": false,
+				"message": "Dynamic virtual account pool not enabled",
+			})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer squadSrv.Close()
+
+	squadProv := payments.NewSquadProvider(squadSecret, squadWHSecret, squadSrv.URL, 5*time.Second)
+	svc := finance.NewService(
+		pool,
+		finance.WithStorefrontPaymentProvider(&mockPaymentProvider{key: "paystack"}),
+		finance.WithStorefrontPaymentProvider(squadProv),
+	)
+
+	router := gin.New()
+	handler := finance.NewHandler(svc, nil)
+	v1 := router.Group("/api/v1")
+	handler.RegisterPublicStorefrontRoutes(v1)
+
+	outlet, err := svc.CreateOutlet(ctx, ws, user, finance.CreateOutletInput{
+		Name:          "Squad Hub",
+		LocationType:  "outlet",
+		Address:       "12 Admiralty Way, Lagos",
+		IsDefault:     true,
+		IsPickupPoint: true,
+	})
+	require.NoError(t, err)
+
+	item, err := svc.CreateCatalogueItem(ctx, ws, user, finance.CreateCatalogueItemInput{
+		Name: "Squad Sneaker", Kind: "stock_tracked", SellingPrice: "120", Currency: "NGN", IdempotencyKey: "sq-item-1",
+	})
+	require.NoError(t, err)
+	vars, err := svc.ListProductVariants(ctx, ws, item.ID)
+	require.NoError(t, err)
+	_, err = svc.CreateOpeningStock(ctx, ws, user, finance.CreateOpeningStockInput{
+		ProductID: item.ID, LocationID: outlet.ID, EffectiveOn: "2026-11-11",
+		Quantity: "4", UnitCost: "60", Currency: "NGN", Reason: "Squad init", IdempotencyKey: "sq-open-1",
+	})
+	require.NoError(t, err)
+
+	slug := fmt.Sprintf("squad-%d", time.Now().UnixNano()%1000000)
+	_, err = svc.CreateStorefront(ctx, ws, user, finance.CreateStorefrontInput{
+		Name:            "Squad Test Store",
+		Slug:            slug,
+		DefaultOutletID: &outlet.ID,
+		Currency:        "NGN",
+	})
+	require.NoError(t, err)
+	_, err = svc.UpdateStorefrontSettings(ctx, ws, finance.UpdateStorefrontSettingsInput{
+		ContactPhone:    "+2348001112233",
+		DeliveryMethods: []string{"pickup"},
+	})
+	require.NoError(t, err)
+	sfProd, err := svc.UpsertStorefrontProduct(ctx, ws, vars[0].ID, finance.PublishCatalogueVariantInput{IsPublished: true})
+	require.NoError(t, err)
+	_, err = svc.PublishStorefront(ctx, ws, true)
+	require.NoError(t, err)
+
+	// Connect Squad payout account (virtual_account unsupported by default on SquadProvider)
+	resolved, err := svc.ResolveBankAccount(ctx, "squad", "058", "0123456789")
+	require.NoError(t, err)
+	require.Equal(t, "SQUAD MERCHANT VENTURES", resolved)
+
+	payout, err := svc.SavePayoutAccount(ctx, ws, finance.SavePayoutAccountInput{
+		Provider:      "squad",
+		BankCode:      "058",
+		AccountNumber: "0123456789",
+		AccountName:   resolved,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "squad", payout.Provider)
+
+	_, err = svc.UpdateStorefrontPaymentSettings(ctx, ws, finance.UpdateStorefrontPaymentSettingsInput{
+		PaymentBankTransferEnabled:   sfBoolPtr(true),
+		PaymentCardEnabled:           sfBoolPtr(true),
+		PaymentManualTransferEnabled: sfBoolPtr(false),
+		PaymentCodEnabled:            sfBoolPtr(false),
+	})
+	require.NoError(t, err)
+
+	settingsView, err := svc.GetStorefrontPaymentSettings(ctx, ws)
+	require.NoError(t, err)
+	require.Contains(t, settingsView.AvailableProviders, "paystack")
+	require.Contains(t, settingsView.AvailableProviders, "squad")
+	require.NotNil(t, settingsView.PayoutAccount)
+	require.Equal(t, "squad", settingsView.PayoutAccount.Provider)
+
+	// Public projection hides virtual_account because SquadProvider reports ErrNotSupported / SupportsMethod("virtual_account")==false
+	proj, err := svc.GetPublicStorefrontProjection(ctx, slug, false, "", "")
+	require.NoError(t, err)
+	require.False(t, proj.PaymentBankTransferEnabled, "ErrNotSupported/SupportsMethod must hide unsupported VA payment method")
+	require.True(t, proj.PaymentCardEnabled)
+	require.True(t, proj.OnlinePaymentsReady)
+
+	// Explicit virtual_account checkout on Squad-only provider fails cleanly
+	_, err = svc.SubmitGuestCheckout(ctx, slug, false, finance.GuestCheckoutInput{
+		ClientKey:          "sq-client-bad",
+		CustomerName:       "Tolu Ade",
+		CustomerPhone:      "+2348030000001",
+		CustomerEmail:      "tolu@example.com",
+		DeliveryMethod:     "pickup",
+		PickupPointID:      outlet.ID,
+		PaymentMethod:      "virtual_account",
+		PolicyAcknowledged: true,
+		Lines:              []finance.CartLineInput{{StorefrontProductID: sfProd.ID, Quantity: "1"}},
+	})
+	require.Error(t, err)
+
+	// Default checkout picks card checkout on Squad and creates payment attempt
+	conf, err := svc.SubmitGuestCheckout(ctx, slug, false, finance.GuestCheckoutInput{
+		ClientKey:          "sq-client-good",
+		CustomerName:       "Tolu Ade",
+		CustomerPhone:      "+2348030000001",
+		CustomerEmail:      "tolu@example.com",
+		DeliveryMethod:     "pickup",
+		PickupPointID:      outlet.ID,
+		PolicyAcknowledged: true,
+		IdempotencyKey:     fmt.Sprintf("sq-chk-%d", time.Now().UnixNano()),
+		Lines:              []finance.CartLineInput{{StorefrontProductID: sfProd.ID, Quantity: "1"}},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, conf.CardCheckoutURL)
+	require.Equal(t, "https://pay.squadco.com/chk_test_999", *conf.CardCheckoutURL)
+
+	var attemptRef string
+	var attemptAmt int64
+	require.NoError(t, pool.QueryRow(ctx, `
+		SELECT a.reference, a.amount_minor
+		FROM storefront_payment_attempts a
+		JOIN storefront_orders o ON o.id = a.order_id
+		WHERE o.workspace_id = $1 AND o.order_reference = $2
+	`, ws, conf.OrderReference).Scan(&attemptRef, &attemptAmt))
+
+	signSquad := func(b []byte) string {
+		mac := hmac.New(sha512.New, []byte(squadWHSecret))
+		mac.Write(b)
+		return hex.EncodeToString(mac.Sum(nil))
+	}
+
+	// 1. Invalid webhook signature -> 401
+	badPayload := []byte(fmt.Sprintf(`{"Event":"charge_successful","TransactionRef":"%s","Body":{"transaction_ref":"%s","amount":%d,"transaction_status":"Success"}}`, attemptRef, attemptRef, attemptAmt))
+	reqBad := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/payments/squad", bytes.NewReader(badPayload))
+	reqBad.Header.Set("x-squad-encrypted-body", "invalid_hex_sig")
+	wBad := httptest.NewRecorder()
+	router.ServeHTTP(wBad, reqBad)
+	require.Equal(t, http.StatusUnauthorized, wBad.Code)
+
+	// 2. Valid signature but amount mismatch -> rejected (400), order stays unpaid
+	mismatchPayload := []byte(fmt.Sprintf(`{"Event":"charge_successful","TransactionRef":"%s","Body":{"transaction_ref":"%s","amount":%d,"transaction_status":"Success"}}`, attemptRef, attemptRef, attemptAmt-1000))
+	reqMismatch := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/payments/squad", bytes.NewReader(mismatchPayload))
+	reqMismatch.Header.Set("x-squad-encrypted-body", signSquad(mismatchPayload))
+	wMismatch := httptest.NewRecorder()
+	router.ServeHTTP(wMismatch, reqMismatch)
+	require.Equal(t, http.StatusBadRequest, wMismatch.Code)
+
+	// 3. Valid Squad webhook with exact amount -> 200, order paid, sale + balanced ledger created
+	goodPayload := []byte(fmt.Sprintf(`{"Event":"charge_successful","TransactionRef":"%s","Body":{"transaction_ref":"%s","amount":%d,"merchant_amount":%d,"transaction_status":"Success"}}`, attemptRef, attemptRef, attemptAmt, attemptAmt-150))
+	reqGood := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/payments/squad", bytes.NewReader(goodPayload))
+	reqGood.Header.Set("x-squad-encrypted-body", signSquad(goodPayload))
+	wGood := httptest.NewRecorder()
+	router.ServeHTTP(wGood, reqGood)
+	require.Equal(t, http.StatusOK, wGood.Code)
+
+	// 4. Replayed Squad webhook -> 200 idempotent, single sale & single ledger entry
+	reqReplay := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/payments/squad", bytes.NewReader(goodPayload))
+	reqReplay.Header.Set("x-squad-encrypted-body", signSquad(goodPayload))
+	wReplay := httptest.NewRecorder()
+	router.ServeHTTP(wReplay, reqReplay)
+	require.Equal(t, http.StatusOK, wReplay.Code)
+
+	var payStatus string
+	var saleCount int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT payment_status FROM storefront_orders WHERE workspace_id=$1 AND order_reference=$2`, ws, conf.OrderReference).Scan(&payStatus))
+	require.Equal(t, "paid", payStatus)
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM sales WHERE workspace_id=$1`, ws).Scan(&saleCount))
+	require.Equal(t, 1, saleCount)
+
+	var totDebits, totCredits int64
+	require.NoError(t, pool.QueryRow(ctx, `SELECT COALESCE(sum(debit_minor),0), COALESCE(sum(credit_minor),0) FROM ledger_lines WHERE workspace_id=$1`, ws).Scan(&totDebits, &totCredits))
+	require.Equal(t, totDebits, totCredits)
+	require.Greater(t, totDebits, int64(0))
+}
+
 func sfBoolPtr(b bool) *bool    { return &b }
 func sfStrPtr(s string) *string { return &s }
