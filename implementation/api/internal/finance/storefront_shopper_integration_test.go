@@ -263,6 +263,7 @@ func TestShopperIdentityTrackingSecurityAndIsolation(t *testing.T) {
 		"payment_method":      "cod",
 		"save_details":        true,
 		"policy_acknowledged": true,
+		"idempotency_key":     fmt.Sprintf("shop-chk-%d", time.Now().UnixNano()),
 		"lines":               []map[string]any{{"storefront_product_id": prodA, "quantity": "1"}},
 	}, sessionCookie)
 	require.Equal(t, http.StatusCreated, wCheckout.Code)

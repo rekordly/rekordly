@@ -1311,9 +1311,10 @@ func TestStorefrontSquadProviderWebhookAndUnsupportedMethodHiding(t *testing.T) 
 }
 
 type mockShippingClient struct {
-	mu           struct{ fetches int }
-	failLabel    bool
-	lastWeightKG string
+	mu             struct{ fetches int }
+	failLabel      bool
+	lastWeightKG   string
+	trackingNumber string
 }
 
 func (m *mockShippingClient) ValidateAddress(ctx context.Context, apiKey string, in shipping.AddressInput) (shipping.ValidatedAddress, error) {
@@ -1356,10 +1357,14 @@ func (m *mockShippingClient) CreateLabel(ctx context.Context, apiKey string, req
 	if m.failLabel {
 		return shipping.ShipmentLabel{}, errors.New("shipbubble upstream timeout")
 	}
+	trk := m.trackingNumber
+	if trk == "" {
+		trk = "TRK-LIVE-777"
+	}
 	return shipping.ShipmentLabel{
 		OrderID:        "SB-777",
-		TrackingNumber: "TRK-LIVE-777",
-		TrackingURL:    "https://track.shipbubble.com/TRK-LIVE-777",
+		TrackingNumber: trk,
+		TrackingURL:    "https://track.shipbubble.com/" + trk,
 		CourierName:    "GIG Logistics",
 		Status:         "confirmed",
 	}, nil
@@ -1375,7 +1380,8 @@ func TestStorefrontShipbubbleRatesBookingAndWebhook(t *testing.T) {
 	ws, user := createTestWorkspace(t, pool, "sf-shipbubble")
 	wsOther, _ := createTestWorkspace(t, pool, "sf-sb-other")
 
-	shipMock := &mockShippingClient{failLabel: true}
+	trkNum := fmt.Sprintf("TRK-LIVE-%d", time.Now().UnixNano())
+	shipMock := &mockShippingClient{failLabel: true, trackingNumber: trkNum}
 	svc := finance.NewService(
 		pool,
 		finance.WithStorefrontPaymentProvider(&mockPaymentProvider{key: "paystack"}),
@@ -1573,7 +1579,7 @@ func TestStorefrontShipbubbleRatesBookingAndWebhook(t *testing.T) {
 	retried, err := svc.RetryStorefrontOrderCourierBooking(ctx, ws, orderID)
 	require.NoError(t, err)
 	require.NotNil(t, retried.CourierTrackingNumber)
-	require.Equal(t, "TRK-LIVE-777", *retried.CourierTrackingNumber)
+	require.Equal(t, trkNum, *retried.CourierTrackingNumber)
 	require.NotNil(t, retried.CourierTrackingURL)
 	require.Nil(t, retried.CourierBookingError)
 
@@ -1583,7 +1589,7 @@ func TestStorefrontShipbubbleRatesBookingAndWebhook(t *testing.T) {
 		mac.Write(raw)
 		return hex.EncodeToString(mac.Sum(nil))
 	}
-	pickupWH := []byte(`{"event":"shipment.status.changed","status":"picked_up","tracking_number":"TRK-LIVE-777","courier_name":"GIG Logistics"}`)
+	pickupWH := []byte(fmt.Sprintf(`{"event":"shipment.status.changed","status":"picked_up","tracking_number":"%s","courier_name":"GIG Logistics"}`, trkNum))
 	reqSBWrong := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/shipbubble", bytes.NewReader(pickupWH))
 	reqSBWrong.Header.Set("x-ship-signature", "deadbeef")
 	wSBWrong := httptest.NewRecorder()
@@ -1596,7 +1602,7 @@ func TestStorefrontShipbubbleRatesBookingAndWebhook(t *testing.T) {
 	router.ServeHTTP(wSBPickup, reqSBPickup)
 	require.Equal(t, http.StatusOK, wSBPickup.Code)
 
-	delivWH := []byte(`{"event":"shipment.status.changed","status":"completed","tracking_number":"TRK-LIVE-777","courier_name":"GIG Logistics"}`)
+	delivWH := []byte(fmt.Sprintf(`{"event":"shipment.status.changed","status":"completed","tracking_number":"%s","courier_name":"GIG Logistics"}`, trkNum))
 	reqSBDeliv := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/shipbubble", bytes.NewReader(delivWH))
 	reqSBDeliv.Header.Set("x-ship-signature", signSB(delivWH))
 	wSBDeliv := httptest.NewRecorder()

@@ -654,7 +654,7 @@ func (s *Service) HandleShipbubbleWebhook(ctx context.Context, rawBody []byte, h
 		return ErrInvalidWebhookSignature
 	}
 
-	eventID := fmt.Sprintf("sb:%s:%s", tracking, ev.Status)
+	eventID := fmt.Sprintf("sb:%d:%s:%s", order.ID, tracking, ev.Status)
 	rec, recErr := s.queries.InsertPaymentWebhookEvent(ctx, db.InsertPaymentWebhookEventParams{
 		Provider: "shipbubble",
 		EventID:  eventID,
