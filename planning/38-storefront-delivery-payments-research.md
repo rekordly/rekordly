@@ -164,22 +164,23 @@ Order number + email alone is weak: order numbers leak and emails are guessable.
 
 ## 7. Launch plan
 
-**Phase A: launch**
-1. Paystack subaccounts: merchant bank setup, pay online (card, transfer, USSD) with webhook confirmation, Paystack fee and clearing entries in the books.
-2. Per-store payment switches: Online, Bank transfer (manual), Pay on delivery or at pickup.
-3. Holds at checkout, using the table in section 5, with merchant-set times, auto-expiry and a customer countdown.
-4. Pickup points (outlets), a pickup code, and "Ready for pickup".
-5. Delivery areas with state, fee, estimated time and outlet.
-6. "Track my order" with an email code on each store. Keep the status link.
+**Phase A: launch (Done — 18–19 Nov 2026)**
+1. **DONE:** Paystack & Squad payment provider layer (`63fa8d4`, `d7b76a1`): merchant bank payout setup (encrypted subaccount refs), Pay with Transfer / Card / USSD with HMAC webhook verification, idempotent webhook processing, clearing & fee ledger postings, and manual "Record payout from Paystack/Squad". *(Migrations `000070`; note Squad uses a curated static CBN bank directory fallback and gates dynamic VA behind `SQUAD_DYNAMIC_VA_ENABLED` defaulting off + `payments.ErrNotSupported` method hiding.)*
+2. **DONE:** Per-store payment switches: Online bank transfer, Card/USSD, Bank transfer to own account (manual transfer + "Mark paid"), Pay on delivery / at pickup, fee bearer (`merchant`/`customer`), and hold-time settings.
+3. **DONE:** Atomic holds at checkout and unified "paid" path into Sales and double-entry books (`5a302d9`): `payment` 15 min, `transfer_manual` 2 h, `awaiting_confirmation` 2 h, `pickup` 48 h, auto-expiry in `ExpireStaleStorefrontReservations`, late-payment stock re-hold or `paid_needs_attention`, and live 1s countdown. *(Migrations `000070`–`000071`.)*
+4. **DONE:** Pickup points on outlets (`is_pickup_point`, `pickup_note`), per-outlet stock holds, 6-character pickup code (`Ready for pickup` -> `Collected (code)`), and launch checkout/order-status UI (`6d24f29`). *(Migrations `000071`–`000073`.)*
+5. **DONE:** Delivery areas extended with optional `state`, `estimate_text`, and fulfilling `outlet_id` (`6d24f29`).
+6. **DONE:** Passwordless "Track my order" email OTP code + opaque sign-in link on every store (`/s/[slug]/orders`) while keeping private `/orders/status/<token>` status links with masked phones (`048e856`). *(Migrations `000072`–`000073`.)*
 
-**Phase B: soon after**
-7. Shipbubble connect: live courier rates at checkout, auto-booking after payment, tracking webhooks into the order timeline. Product weight and store default weight.
-8. Rekordly ID: one sign-in across stores, saved details, and `rekordly.com/orders`.
+**Phase B: soon after (Done — 19 Nov 2026)**
+7. **DONE:** Shipbubble connect (`13377a6`, `cf89e8a`): encrypted merchant API key + masked display, Test connection, cheapest vs selected courier strategy, product/variant `weight_grams` + store default weight, cached `POST /delivery-rates` + server checkout rate re-validation, auto-booking after payment (+ manual Retry), signed tracking webhooks into the timeline, and auto-fulfilment on `delivered`. *(Migrations `000071`, `000073`.)*
+8. **DONE:** Cross-store shopper identity ("Rekordly ID", `048e856`): passwordless session cookie across stores, `/orders` page, returning-shopper checkout prefill, and optional "Save my details".
 
 **Phase C: later**
 9. Courier cash on delivery (Shipbubble COD) with payout reconciliation.
 10. Personal Rekordly upsell (purchases appear as personal expenses automatically).
-11. POS (in `TODO.md`) on the same holds and Sales.
+11. Phone / WhatsApp OTP codes (launch shipped with email codes only).
+12. POS (in `TODO.md`) on the same holds and Sales.
 
 ---
 
