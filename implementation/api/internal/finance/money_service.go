@@ -14,6 +14,7 @@ import (
 	"github.com/rekordly/rekordly-api/internal/billing"
 	"github.com/rekordly/rekordly-api/internal/db"
 	"github.com/rekordly/rekordly-api/internal/notify"
+	"github.com/rekordly/rekordly-api/internal/payments"
 )
 
 var (
@@ -35,13 +36,32 @@ type Service struct {
 	planLimitChecker  PlanLimitChecker
 	evidenceUploader  EvidenceUploadAuthorizer
 	dnsLookupTXT      func(string) ([]string, error)
-	aiOrchestrator    *ai.Orchestrator
-	paymentProvider   billing.PaymentProvider
-	emailProvider     notify.EmailProvider
-	guestShareBaseURL string
+	aiOrchestrator             *ai.Orchestrator
+	paymentProvider            billing.PaymentProvider
+	emailProvider              notify.EmailProvider
+	guestShareBaseURL          string
+	storefrontPaymentProviders map[string]payments.Provider
+	platformCommissionPercent  float64
 }
 
 type ServiceOption func(*Service)
+
+func WithStorefrontPaymentProvider(provider payments.Provider) ServiceOption {
+	return func(service *Service) {
+		if service.storefrontPaymentProviders == nil {
+			service.storefrontPaymentProviders = make(map[string]payments.Provider)
+		}
+		if provider != nil {
+			service.storefrontPaymentProviders[provider.Key()] = provider
+		}
+	}
+}
+
+func WithPlatformCommissionPercent(pct float64) ServiceOption {
+	return func(service *Service) {
+		service.platformCommissionPercent = pct
+	}
+}
 
 func WithEmailProvider(provider notify.EmailProvider, guestShareBaseURL string) ServiceOption {
 	return func(service *Service) {

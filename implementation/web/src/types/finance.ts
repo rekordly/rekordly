@@ -1623,3 +1623,27 @@ export interface MerchantOrder {
   events?: PublicOrderEvent[];
   suggested_customers?: { id: number; name: string; phone?: string | null; email?: string | null }[];
 }
+
+export interface MerchantPayoutAccountView {
+  id: number;
+  provider: string;
+  bank_code: string;
+  account_number_last4: string;
+  account_name: string;
+  status: string;
+}
+
+export interface StorefrontPaymentSettingsView {
+  payout_account: MerchantPayoutAccountView | null;
+  available_providers: string[];
+  payment_bank_transfer_enabled: boolean;
+  payment_card_enabled: boolean;
+  payment_manual_transfer_enabled: boolean;
+  payment_cod_enabled: boolean;
+  fee_bearer: "merchant" | "customer";
+  hold_payment_minutes: number;
+  hold_manual_transfer_hours: number;
+  hold_confirmation_hours: number;
+  hold_pickup_hours: number;
+  commission_percent: number;
+}

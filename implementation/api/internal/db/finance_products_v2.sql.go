@@ -803,7 +803,7 @@ SET sku = $1,
     compare_at_price_minor = $5,
     updated_at = now()
 WHERE workspace_id = $6 AND id = $7
-RETURNING id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor, compare_at_price_minor, position, archived_at
+RETURNING id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor, compare_at_price_minor, position, archived_at, weight_grams
 `
 
 type UpdateDefaultVariantV2Params struct {
@@ -845,6 +845,7 @@ func (q *Queries) UpdateDefaultVariantV2(ctx context.Context, arg UpdateDefaultV
 		&i.CompareAtPriceMinor,
 		&i.Position,
 		&i.ArchivedAt,
+		&i.WeightGrams,
 	)
 	return i, err
 }
@@ -924,7 +925,7 @@ SET name = $1,
     archived_at = $9,
     updated_at = now()
 WHERE workspace_id = $10 AND id = $11
-RETURNING id, workspace_id, name, description, kind, status, unit_name, idempotency_key, created_by_user_id, created_at, updated_at, short_description, long_description, image_urls, archived_at, show_on_store
+RETURNING id, workspace_id, name, description, kind, status, unit_name, idempotency_key, created_by_user_id, created_at, updated_at, short_description, long_description, image_urls, archived_at, show_on_store, weight_grams
 `
 
 type UpdateProductV2Params struct {
@@ -973,6 +974,7 @@ func (q *Queries) UpdateProductV2(ctx context.Context, arg UpdateProductV2Params
 		&i.ImageUrls,
 		&i.ArchivedAt,
 		&i.ShowOnStore,
+		&i.WeightGrams,
 	)
 	return i, err
 }

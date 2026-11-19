@@ -16,7 +16,7 @@ INSERT INTO products (
     workspace_id, name, description, kind, status, unit_name, idempotency_key, created_by_user_id, show_on_store
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9
-) RETURNING id, workspace_id, name, description, kind, status, unit_name, idempotency_key, created_by_user_id, created_at, updated_at, short_description, long_description, image_urls, archived_at, show_on_store
+) RETURNING id, workspace_id, name, description, kind, status, unit_name, idempotency_key, created_by_user_id, created_at, updated_at, short_description, long_description, image_urls, archived_at, show_on_store, weight_grams
 `
 
 type CreateProductParams struct {
@@ -61,6 +61,7 @@ func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (P
 		&i.ImageUrls,
 		&i.ArchivedAt,
 		&i.ShowOnStore,
+		&i.WeightGrams,
 	)
 	return i, err
 }
@@ -71,7 +72,7 @@ INSERT INTO product_variants (
     currency, currency_exponent, is_default, is_active
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
-) RETURNING id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor, compare_at_price_minor, position, archived_at
+) RETURNING id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor, compare_at_price_minor, position, archived_at, weight_grams
 `
 
 type CreateProductVariantParams struct {
@@ -119,12 +120,13 @@ func (q *Queries) CreateProductVariant(ctx context.Context, arg CreateProductVar
 		&i.CompareAtPriceMinor,
 		&i.Position,
 		&i.ArchivedAt,
+		&i.WeightGrams,
 	)
 	return i, err
 }
 
 const getDefaultProductVariant = `-- name: GetDefaultProductVariant :one
-SELECT id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor, compare_at_price_minor, position, archived_at FROM product_variants
+SELECT id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor, compare_at_price_minor, position, archived_at, weight_grams FROM product_variants
 WHERE workspace_id = $1 AND product_id = $2 AND is_default = true
 `
 
@@ -154,12 +156,13 @@ func (q *Queries) GetDefaultProductVariant(ctx context.Context, arg GetDefaultPr
 		&i.CompareAtPriceMinor,
 		&i.Position,
 		&i.ArchivedAt,
+		&i.WeightGrams,
 	)
 	return i, err
 }
 
 const getProductByID = `-- name: GetProductByID :one
-SELECT id, workspace_id, name, description, kind, status, unit_name, idempotency_key, created_by_user_id, created_at, updated_at, short_description, long_description, image_urls, archived_at, show_on_store FROM products
+SELECT id, workspace_id, name, description, kind, status, unit_name, idempotency_key, created_by_user_id, created_at, updated_at, short_description, long_description, image_urls, archived_at, show_on_store, weight_grams FROM products
 WHERE id = $1 AND workspace_id = $2
 `
 
@@ -188,12 +191,13 @@ func (q *Queries) GetProductByID(ctx context.Context, arg GetProductByIDParams) 
 		&i.ImageUrls,
 		&i.ArchivedAt,
 		&i.ShowOnStore,
+		&i.WeightGrams,
 	)
 	return i, err
 }
 
 const getProductByIdempotency = `-- name: GetProductByIdempotency :one
-SELECT id, workspace_id, name, description, kind, status, unit_name, idempotency_key, created_by_user_id, created_at, updated_at, short_description, long_description, image_urls, archived_at, show_on_store FROM products
+SELECT id, workspace_id, name, description, kind, status, unit_name, idempotency_key, created_by_user_id, created_at, updated_at, short_description, long_description, image_urls, archived_at, show_on_store, weight_grams FROM products
 WHERE workspace_id = $1 AND idempotency_key = $2
 `
 
@@ -222,6 +226,7 @@ func (q *Queries) GetProductByIdempotency(ctx context.Context, arg GetProductByI
 		&i.ImageUrls,
 		&i.ArchivedAt,
 		&i.ShowOnStore,
+		&i.WeightGrams,
 	)
 	return i, err
 }

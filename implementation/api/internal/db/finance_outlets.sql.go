@@ -28,7 +28,7 @@ INSERT INTO inventory_locations (
     workspace_id, name, location_type, code, address, phone, is_default, is_active
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8
-) RETURNING id, workspace_id, name, location_type, is_active, created_at, updated_at, code, address, phone, is_default
+) RETURNING id, workspace_id, name, location_type, is_active, created_at, updated_at, code, address, phone, is_default, is_pickup_point, pickup_note
 `
 
 type CreateInventoryLocationParams struct {
@@ -66,12 +66,14 @@ func (q *Queries) CreateInventoryLocation(ctx context.Context, arg CreateInvento
 		&i.Address,
 		&i.Phone,
 		&i.IsDefault,
+		&i.IsPickupPoint,
+		&i.PickupNote,
 	)
 	return i, err
 }
 
 const getDefaultInventoryLocation = `-- name: GetDefaultInventoryLocation :one
-SELECT id, workspace_id, name, location_type, is_active, created_at, updated_at, code, address, phone, is_default FROM inventory_locations
+SELECT id, workspace_id, name, location_type, is_active, created_at, updated_at, code, address, phone, is_default, is_pickup_point, pickup_note FROM inventory_locations
 WHERE workspace_id = $1 AND is_default = true AND is_active = true
 LIMIT 1
 `
@@ -91,12 +93,14 @@ func (q *Queries) GetDefaultInventoryLocation(ctx context.Context, workspaceID i
 		&i.Address,
 		&i.Phone,
 		&i.IsDefault,
+		&i.IsPickupPoint,
+		&i.PickupNote,
 	)
 	return i, err
 }
 
 const getInventoryLocationByCode = `-- name: GetInventoryLocationByCode :one
-SELECT id, workspace_id, name, location_type, is_active, created_at, updated_at, code, address, phone, is_default FROM inventory_locations
+SELECT id, workspace_id, name, location_type, is_active, created_at, updated_at, code, address, phone, is_default, is_pickup_point, pickup_note FROM inventory_locations
 WHERE workspace_id = $1 AND lower(code) = lower($2)
 `
 
@@ -120,12 +124,14 @@ func (q *Queries) GetInventoryLocationByCode(ctx context.Context, arg GetInvento
 		&i.Address,
 		&i.Phone,
 		&i.IsDefault,
+		&i.IsPickupPoint,
+		&i.PickupNote,
 	)
 	return i, err
 }
 
 const getInventoryLocationByID = `-- name: GetInventoryLocationByID :one
-SELECT id, workspace_id, name, location_type, is_active, created_at, updated_at, code, address, phone, is_default FROM inventory_locations
+SELECT id, workspace_id, name, location_type, is_active, created_at, updated_at, code, address, phone, is_default, is_pickup_point, pickup_note FROM inventory_locations
 WHERE workspace_id = $1 AND id = $2
 `
 
@@ -149,12 +155,14 @@ func (q *Queries) GetInventoryLocationByID(ctx context.Context, arg GetInventory
 		&i.Address,
 		&i.Phone,
 		&i.IsDefault,
+		&i.IsPickupPoint,
+		&i.PickupNote,
 	)
 	return i, err
 }
 
 const listInventoryLocations = `-- name: ListInventoryLocations :many
-SELECT id, workspace_id, name, location_type, is_active, created_at, updated_at, code, address, phone, is_default FROM inventory_locations
+SELECT id, workspace_id, name, location_type, is_active, created_at, updated_at, code, address, phone, is_default, is_pickup_point, pickup_note FROM inventory_locations
 WHERE workspace_id = $1
   AND ($2::boolean IS NULL OR is_active = $2)
 ORDER BY is_default DESC, id ASC
@@ -186,6 +194,8 @@ func (q *Queries) ListInventoryLocations(ctx context.Context, arg ListInventoryL
 			&i.Address,
 			&i.Phone,
 			&i.IsDefault,
+			&i.IsPickupPoint,
+			&i.PickupNote,
 		); err != nil {
 			return nil, err
 		}
@@ -202,7 +212,7 @@ UPDATE inventory_locations
 SET is_default = true,
     updated_at = now()
 WHERE workspace_id = $1 AND id = $2
-RETURNING id, workspace_id, name, location_type, is_active, created_at, updated_at, code, address, phone, is_default
+RETURNING id, workspace_id, name, location_type, is_active, created_at, updated_at, code, address, phone, is_default, is_pickup_point, pickup_note
 `
 
 type SetDefaultInventoryLocationParams struct {
@@ -225,6 +235,8 @@ func (q *Queries) SetDefaultInventoryLocation(ctx context.Context, arg SetDefaul
 		&i.Address,
 		&i.Phone,
 		&i.IsDefault,
+		&i.IsPickupPoint,
+		&i.PickupNote,
 	)
 	return i, err
 }
@@ -239,7 +251,7 @@ SET name = $3,
     is_active = $8,
     updated_at = now()
 WHERE workspace_id = $1 AND id = $2
-RETURNING id, workspace_id, name, location_type, is_active, created_at, updated_at, code, address, phone, is_default
+RETURNING id, workspace_id, name, location_type, is_active, created_at, updated_at, code, address, phone, is_default, is_pickup_point, pickup_note
 `
 
 type UpdateInventoryLocationParams struct {
@@ -277,6 +289,8 @@ func (q *Queries) UpdateInventoryLocation(ctx context.Context, arg UpdateInvento
 		&i.Address,
 		&i.Phone,
 		&i.IsDefault,
+		&i.IsPickupPoint,
+		&i.PickupNote,
 	)
 	return i, err
 }

@@ -204,7 +204,7 @@ func (q *Queries) GetInventoryBalance(ctx context.Context, arg GetInventoryBalan
 }
 
 const getInventoryLocation = `-- name: GetInventoryLocation :one
-SELECT id, workspace_id, name, location_type, is_active, created_at, updated_at, code, address, phone, is_default FROM inventory_locations WHERE workspace_id = $1 AND id = $2 AND is_active = true
+SELECT id, workspace_id, name, location_type, is_active, created_at, updated_at, code, address, phone, is_default, is_pickup_point, pickup_note FROM inventory_locations WHERE workspace_id = $1 AND id = $2 AND is_active = true
 `
 
 type GetInventoryLocationParams struct {
@@ -227,6 +227,8 @@ func (q *Queries) GetInventoryLocation(ctx context.Context, arg GetInventoryLoca
 		&i.Address,
 		&i.Phone,
 		&i.IsDefault,
+		&i.IsPickupPoint,
+		&i.PickupNote,
 	)
 	return i, err
 }
@@ -264,7 +266,7 @@ const getOrCreateDefaultInventoryLocation = `-- name: GetOrCreateDefaultInventor
 INSERT INTO inventory_locations (workspace_id, name, location_type)
 VALUES ($1, 'Main outlet', 'outlet')
 ON CONFLICT (workspace_id, name) DO UPDATE SET updated_at = now()
-RETURNING id, workspace_id, name, location_type, is_active, created_at, updated_at, code, address, phone, is_default
+RETURNING id, workspace_id, name, location_type, is_active, created_at, updated_at, code, address, phone, is_default, is_pickup_point, pickup_note
 `
 
 func (q *Queries) GetOrCreateDefaultInventoryLocation(ctx context.Context, workspaceID int64) (InventoryLocation, error) {
@@ -282,6 +284,8 @@ func (q *Queries) GetOrCreateDefaultInventoryLocation(ctx context.Context, works
 		&i.Address,
 		&i.Phone,
 		&i.IsDefault,
+		&i.IsPickupPoint,
+		&i.PickupNote,
 	)
 	return i, err
 }

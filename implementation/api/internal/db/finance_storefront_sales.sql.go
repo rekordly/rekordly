@@ -170,7 +170,7 @@ func (q *Queries) GetSaleByStorefrontOrder(ctx context.Context, arg GetSaleBySto
 }
 
 const getStorefrontOrderByInvoiceForUpdate = `-- name: GetStorefrontOrderByInvoiceForUpdate :one
-SELECT id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id FROM storefront_orders
+SELECT id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id FROM storefront_orders
 WHERE workspace_id = $1 AND linked_invoice_id = $2
 FOR UPDATE
 `
@@ -224,6 +224,16 @@ func (q *Queries) GetStorefrontOrderByInvoiceForUpdate(ctx context.Context, arg 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeliveryAreaID,
+		&i.HoldType,
+		&i.ProcessingFeeMinor,
+		&i.PickupCode,
+		&i.PickupPointID,
+		&i.CourierName,
+		&i.CourierTrackingNumber,
+		&i.CourierStatus,
+		&i.CourierBookingError,
+		&i.RateToken,
+		&i.ShopperID,
 	)
 	return i, err
 }

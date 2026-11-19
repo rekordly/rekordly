@@ -1356,17 +1356,19 @@ type InventoryCostingSetting struct {
 }
 
 type InventoryLocation struct {
-	ID           int64              `json:"id"`
-	WorkspaceID  int64              `json:"workspace_id"`
-	Name         string             `json:"name"`
-	LocationType string             `json:"location_type"`
-	IsActive     bool               `json:"is_active"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
-	Code         pgtype.Text        `json:"code"`
-	Address      pgtype.Text        `json:"address"`
-	Phone        pgtype.Text        `json:"phone"`
-	IsDefault    bool               `json:"is_default"`
+	ID            int64              `json:"id"`
+	WorkspaceID   int64              `json:"workspace_id"`
+	Name          string             `json:"name"`
+	LocationType  string             `json:"location_type"`
+	IsActive      bool               `json:"is_active"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	Code          pgtype.Text        `json:"code"`
+	Address       pgtype.Text        `json:"address"`
+	Phone         pgtype.Text        `json:"phone"`
+	IsDefault     bool               `json:"is_default"`
+	IsPickupPoint bool               `json:"is_pickup_point"`
+	PickupNote    string             `json:"pickup_note"`
 }
 
 type InventoryMovement struct {
@@ -1776,6 +1778,19 @@ type Membership struct {
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 	SuspendedAt pgtype.Timestamptz `json:"suspended_at"`
 	RemovedAt   pgtype.Timestamptz `json:"removed_at"`
+}
+
+type MerchantPayoutAccount struct {
+	ID                 int64              `json:"id"`
+	WorkspaceID        int64              `json:"workspace_id"`
+	Provider           string             `json:"provider"`
+	BankCode           string             `json:"bank_code"`
+	AccountNumberLast4 string             `json:"account_number_last4"`
+	AccountName        string             `json:"account_name"`
+	SubaccountRef      string             `json:"subaccount_ref"`
+	Status             string             `json:"status"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
 
 type MixedMoneyGroup struct {
@@ -2217,6 +2232,15 @@ type PaymentReceipt struct {
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 }
 
+type PaymentWebhookEvent struct {
+	ID          int64              `json:"id"`
+	Provider    string             `json:"provider"`
+	EventID     string             `json:"event_id"`
+	ReceivedAt  pgtype.Timestamptz `json:"received_at"`
+	ProcessedAt pgtype.Timestamptz `json:"processed_at"`
+	Outcome     string             `json:"outcome"`
+}
+
 type PeriodCloseCheck struct {
 	ID              int64  `json:"id"`
 	CloseRunID      int64  `json:"close_run_id"`
@@ -2365,6 +2389,7 @@ type Product struct {
 	ImageUrls        []byte             `json:"image_urls"`
 	ArchivedAt       pgtype.Timestamptz `json:"archived_at"`
 	ShowOnStore      bool               `json:"show_on_store"`
+	WeightGrams      pgtype.Int4        `json:"weight_grams"`
 }
 
 type ProductCollection struct {
@@ -2479,6 +2504,7 @@ type ProductVariant struct {
 	CompareAtPriceMinor pgtype.Int8        `json:"compare_at_price_minor"`
 	Position            int32              `json:"position"`
 	ArchivedAt          pgtype.Timestamptz `json:"archived_at"`
+	WeightGrams         pgtype.Int4        `json:"weight_grams"`
 }
 
 type ProjectionRebuildRun struct {
@@ -2977,6 +3003,35 @@ type ShareGrant struct {
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 }
 
+type Shopper struct {
+	ID             int64              `json:"id"`
+	Email          string             `json:"email"`
+	Name           pgtype.Text        `json:"name"`
+	Phone          pgtype.Text        `json:"phone"`
+	SavedAddresses []byte             `json:"saved_addresses"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	LastSeenAt     pgtype.Timestamptz `json:"last_seen_at"`
+}
+
+type ShopperLoginCode struct {
+	ID           int64              `json:"id"`
+	ShopperEmail string             `json:"shopper_email"`
+	CodeHash     string             `json:"code_hash"`
+	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
+	Attempts     int32              `json:"attempts"`
+	UsedAt       pgtype.Timestamptz `json:"used_at"`
+	IpHash       string             `json:"ip_hash"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+type ShopperSession struct {
+	TokenHash  string             `json:"token_hash"`
+	ShopperID  int64              `json:"shopper_id"`
+	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	LastSeenAt pgtype.Timestamptz `json:"last_seen_at"`
+}
+
 type SocialLinkAttempt struct {
 	ID              int64              `json:"id"`
 	TargetUserID    int64              `json:"target_user_id"`
@@ -3145,6 +3200,19 @@ type StorefrontCartLine struct {
 	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
 }
 
+type StorefrontCartReminderJob struct {
+	ID               int64              `json:"id"`
+	WorkspaceID      int64              `json:"workspace_id"`
+	StorefrontID     int64              `json:"storefront_id"`
+	CartID           int64              `json:"cart_id"`
+	Email            string             `json:"email"`
+	VisitorTokenHash string             `json:"visitor_token_hash"`
+	DueAt            pgtype.Timestamptz `json:"due_at"`
+	Status           string             `json:"status"`
+	SentAt           pgtype.Timestamptz `json:"sent_at"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
 type StorefrontCatalogueMutation struct {
 	ID             int64              `json:"id"`
 	WorkspaceID    int64              `json:"workspace_id"`
@@ -3178,6 +3246,9 @@ type StorefrontDeliveryArea struct {
 	IsActive     bool               `json:"is_active"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	State        pgtype.Text        `json:"state"`
+	EstimateText string             `json:"estimate_text"`
+	OutletID     pgtype.Int8        `json:"outlet_id"`
 }
 
 type StorefrontDesignEvent struct {
@@ -3224,6 +3295,18 @@ type StorefrontFulfilment struct {
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 }
 
+type StorefrontNewsletterSubscriber struct {
+	ID              int64              `json:"id"`
+	WorkspaceID     int64              `json:"workspace_id"`
+	StorefrontID    int64              `json:"storefront_id"`
+	Email           string             `json:"email"`
+	NormalizedEmail string             `json:"normalized_email"`
+	Status          string             `json:"status"`
+	ConsentedAt     pgtype.Timestamptz `json:"consented_at"`
+	UnsubscribedAt  pgtype.Timestamptz `json:"unsubscribed_at"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
 type StorefrontOrder struct {
 	ID                      int64              `json:"id"`
 	WorkspaceID             int64              `json:"workspace_id"`
@@ -3264,6 +3347,16 @@ type StorefrontOrder struct {
 	CreatedAt               pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
 	DeliveryAreaID          pgtype.Int8        `json:"delivery_area_id"`
+	HoldType                pgtype.Text        `json:"hold_type"`
+	ProcessingFeeMinor      int64              `json:"processing_fee_minor"`
+	PickupCode              pgtype.Text        `json:"pickup_code"`
+	PickupPointID           pgtype.Int8        `json:"pickup_point_id"`
+	CourierName             pgtype.Text        `json:"courier_name"`
+	CourierTrackingNumber   pgtype.Text        `json:"courier_tracking_number"`
+	CourierStatus           pgtype.Text        `json:"courier_status"`
+	CourierBookingError     pgtype.Text        `json:"courier_booking_error"`
+	RateToken               pgtype.Text        `json:"rate_token"`
+	ShopperID               pgtype.Int8        `json:"shopper_id"`
 }
 
 type StorefrontOrderEvent struct {
@@ -3317,6 +3410,26 @@ type StorefrontOrderVersion struct {
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 }
 
+type StorefrontPaymentAttempt struct {
+	ID                   int64              `json:"id"`
+	WorkspaceID          int64              `json:"workspace_id"`
+	OrderID              int64              `json:"order_id"`
+	Provider             string             `json:"provider"`
+	Method               string             `json:"method"`
+	Reference            string             `json:"reference"`
+	AmountMinor          int64              `json:"amount_minor"`
+	FeeMinor             int64              `json:"fee_minor"`
+	CommissionMinor      int64              `json:"commission_minor"`
+	VirtualAccountNumber pgtype.Text        `json:"virtual_account_number"`
+	BankName             pgtype.Text        `json:"bank_name"`
+	ExpiresAt            pgtype.Timestamptz `json:"expires_at"`
+	Status               string             `json:"status"`
+	RawEvent             []byte             `json:"raw_event"`
+	PaidAt               pgtype.Timestamptz `json:"paid_at"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
 type StorefrontProduct struct {
 	ID                 int64              `json:"id"`
 	WorkspaceID        int64              `json:"workspace_id"`
@@ -3343,53 +3456,93 @@ type StorefrontProduct struct {
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
 
+type StorefrontProductReview struct {
+	ID               int64              `json:"id"`
+	WorkspaceID      int64              `json:"workspace_id"`
+	StorefrontID     int64              `json:"storefront_id"`
+	ProductID        int64              `json:"product_id"`
+	ReviewerName     string             `json:"reviewer_name"`
+	Rating           int16              `json:"rating"`
+	ReviewText       string             `json:"review_text"`
+	Status           string             `json:"status"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	ReviewedAt       pgtype.Timestamptz `json:"reviewed_at"`
+	ReviewedByUserID pgtype.Int8        `json:"reviewed_by_user_id"`
+}
+
 type StorefrontSetting struct {
-	StorefrontID               int64              `json:"storefront_id"`
-	WorkspaceID                int64              `json:"workspace_id"`
-	Tagline                    pgtype.Text        `json:"tagline"`
-	Description                pgtype.Text        `json:"description"`
-	LogoUrl                    pgtype.Text        `json:"logo_url"`
-	BannerUrl                  pgtype.Text        `json:"banner_url"`
-	PrimaryColor               string             `json:"primary_color"`
-	AccentColor                string             `json:"accent_color"`
-	BackgroundColor            string             `json:"background_color"`
-	TextColor                  string             `json:"text_color"`
-	FontFamily                 string             `json:"font_family"`
-	SectionOrder               []byte             `json:"section_order"`
-	ContactPhone               pgtype.Text        `json:"contact_phone"`
-	ContactEmail               pgtype.Text        `json:"contact_email"`
-	WhatsappNumber             pgtype.Text        `json:"whatsapp_number"`
-	Address                    pgtype.Text        `json:"address"`
-	BusinessHours              []byte             `json:"business_hours"`
-	SocialLinks                []byte             `json:"social_links"`
-	DeliveryMethods            []byte             `json:"delivery_methods"`
-	DeliveryGuidance           pgtype.Text        `json:"delivery_guidance"`
-	DefaultDeliveryFeeMinor    int64              `json:"default_delivery_fee_minor"`
-	CheckoutRequireEmail       bool               `json:"checkout_require_email"`
-	CheckoutRequirePhone       bool               `json:"checkout_require_phone"`
-	ReturnPolicy               pgtype.Text        `json:"return_policy"`
-	PrivacyPolicy              pgtype.Text        `json:"privacy_policy"`
-	TermsPolicy                pgtype.Text        `json:"terms_policy"`
-	CustomPolicy               pgtype.Text        `json:"custom_policy"`
-	SeoTitle                   pgtype.Text        `json:"seo_title"`
-	SeoDescription             pgtype.Text        `json:"seo_description"`
-	SeoImageUrl                pgtype.Text        `json:"seo_image_url"`
-	SeoIndexable               bool               `json:"seo_indexable"`
-	CanonicalDomainID          pgtype.Int8        `json:"canonical_domain_id"`
-	Version                    int32              `json:"version"`
-	UpdatedAt                  pgtype.Timestamptz `json:"updated_at"`
-	Brand                      []byte             `json:"brand"`
-	Sections                   []byte             `json:"sections"`
-	DraftName                  pgtype.Text        `json:"draft_name"`
-	DraftThemeKey              string             `json:"draft_theme_key"`
-	DraftBrand                 []byte             `json:"draft_brand"`
-	DraftSections              []byte             `json:"draft_sections"`
-	PublishedAt                pgtype.Timestamptz `json:"published_at"`
-	AutoShowNewProducts        bool               `json:"auto_show_new_products"`
-	ShowSoldOut                bool               `json:"show_sold_out"`
-	ShowStockCount             bool               `json:"show_stock_count"`
-	LowStockThreshold          int32              `json:"low_stock_threshold"`
-	FreeDeliveryThresholdMinor pgtype.Int8        `json:"free_delivery_threshold_minor"`
+	StorefrontID                 int64              `json:"storefront_id"`
+	WorkspaceID                  int64              `json:"workspace_id"`
+	Tagline                      pgtype.Text        `json:"tagline"`
+	Description                  pgtype.Text        `json:"description"`
+	LogoUrl                      pgtype.Text        `json:"logo_url"`
+	BannerUrl                    pgtype.Text        `json:"banner_url"`
+	PrimaryColor                 string             `json:"primary_color"`
+	AccentColor                  string             `json:"accent_color"`
+	BackgroundColor              string             `json:"background_color"`
+	TextColor                    string             `json:"text_color"`
+	FontFamily                   string             `json:"font_family"`
+	SectionOrder                 []byte             `json:"section_order"`
+	ContactPhone                 pgtype.Text        `json:"contact_phone"`
+	ContactEmail                 pgtype.Text        `json:"contact_email"`
+	WhatsappNumber               pgtype.Text        `json:"whatsapp_number"`
+	Address                      pgtype.Text        `json:"address"`
+	BusinessHours                []byte             `json:"business_hours"`
+	SocialLinks                  []byte             `json:"social_links"`
+	DeliveryMethods              []byte             `json:"delivery_methods"`
+	DeliveryGuidance             pgtype.Text        `json:"delivery_guidance"`
+	DefaultDeliveryFeeMinor      int64              `json:"default_delivery_fee_minor"`
+	CheckoutRequireEmail         bool               `json:"checkout_require_email"`
+	CheckoutRequirePhone         bool               `json:"checkout_require_phone"`
+	ReturnPolicy                 pgtype.Text        `json:"return_policy"`
+	PrivacyPolicy                pgtype.Text        `json:"privacy_policy"`
+	TermsPolicy                  pgtype.Text        `json:"terms_policy"`
+	CustomPolicy                 pgtype.Text        `json:"custom_policy"`
+	SeoTitle                     pgtype.Text        `json:"seo_title"`
+	SeoDescription               pgtype.Text        `json:"seo_description"`
+	SeoImageUrl                  pgtype.Text        `json:"seo_image_url"`
+	SeoIndexable                 bool               `json:"seo_indexable"`
+	CanonicalDomainID            pgtype.Int8        `json:"canonical_domain_id"`
+	Version                      int32              `json:"version"`
+	UpdatedAt                    pgtype.Timestamptz `json:"updated_at"`
+	Brand                        []byte             `json:"brand"`
+	Sections                     []byte             `json:"sections"`
+	DraftName                    pgtype.Text        `json:"draft_name"`
+	DraftThemeKey                string             `json:"draft_theme_key"`
+	DraftBrand                   []byte             `json:"draft_brand"`
+	DraftSections                []byte             `json:"draft_sections"`
+	PublishedAt                  pgtype.Timestamptz `json:"published_at"`
+	AutoShowNewProducts          bool               `json:"auto_show_new_products"`
+	ShowSoldOut                  bool               `json:"show_sold_out"`
+	ShowStockCount               bool               `json:"show_stock_count"`
+	LowStockThreshold            int32              `json:"low_stock_threshold"`
+	FreeDeliveryThresholdMinor   pgtype.Int8        `json:"free_delivery_threshold_minor"`
+	MetaPixelID                  string             `json:"meta_pixel_id"`
+	TiktokPixelID                string             `json:"tiktok_pixel_id"`
+	GoogleAnalyticsID            string             `json:"google_analytics_id"`
+	PaymentBankTransferEnabled   bool               `json:"payment_bank_transfer_enabled"`
+	PaymentCardEnabled           bool               `json:"payment_card_enabled"`
+	PaymentManualTransferEnabled bool               `json:"payment_manual_transfer_enabled"`
+	PaymentCodEnabled            bool               `json:"payment_cod_enabled"`
+	FeeBearer                    string             `json:"fee_bearer"`
+	HoldPaymentMinutes           int32              `json:"hold_payment_minutes"`
+	HoldManualTransferHours      int32              `json:"hold_manual_transfer_hours"`
+	HoldConfirmationHours        int32              `json:"hold_confirmation_hours"`
+	HoldPickupHours              int32              `json:"hold_pickup_hours"`
+	DefaultWeightGrams           int32              `json:"default_weight_grams"`
+	ShipbubbleApiKey             pgtype.Text        `json:"shipbubble_api_key"`
+	ShipbubbleStrategy           string             `json:"shipbubble_strategy"`
+	ShipbubbleCouriers           []byte             `json:"shipbubble_couriers"`
+}
+
+type StorefrontThemePurchase struct {
+	ID                   int64              `json:"id"`
+	WorkspaceID          int64              `json:"workspace_id"`
+	StorefrontID         int64              `json:"storefront_id"`
+	ThemeKey             string             `json:"theme_key"`
+	PlanVersionID        int64              `json:"plan_version_id"`
+	BillingTransactionID int64              `json:"billing_transaction_id"`
+	PurchasedAt          pgtype.Timestamptz `json:"purchased_at"`
 }
 
 type Subscription struct {

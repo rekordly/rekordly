@@ -171,7 +171,7 @@ INSERT INTO product_variants (
     is_default, is_active
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
-) RETURNING id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor, compare_at_price_minor, position, archived_at
+) RETURNING id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor, compare_at_price_minor, position, archived_at, weight_grams
 `
 
 type CreateVariantParams struct {
@@ -221,6 +221,7 @@ func (q *Queries) CreateVariant(ctx context.Context, arg CreateVariantParams) (P
 		&i.CompareAtPriceMinor,
 		&i.Position,
 		&i.ArchivedAt,
+		&i.WeightGrams,
 	)
 	return i, err
 }
@@ -265,7 +266,7 @@ func (q *Queries) DeleteUnusedOptionVariant(ctx context.Context, arg DeleteUnuse
 }
 
 const getVariantByID = `-- name: GetVariantByID :one
-SELECT id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor, compare_at_price_minor, position, archived_at FROM product_variants
+SELECT id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor, compare_at_price_minor, position, archived_at, weight_grams FROM product_variants
 WHERE workspace_id = $1 AND id = $2
 `
 
@@ -295,6 +296,7 @@ func (q *Queries) GetVariantByID(ctx context.Context, arg GetVariantByIDParams) 
 		&i.CompareAtPriceMinor,
 		&i.Position,
 		&i.ArchivedAt,
+		&i.WeightGrams,
 	)
 	return i, err
 }
@@ -469,7 +471,7 @@ func (q *Queries) ListVariantStockByProduct(ctx context.Context, arg ListVariant
 }
 
 const listVariantsByProductID = `-- name: ListVariantsByProductID :many
-SELECT id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor, compare_at_price_minor, position, archived_at FROM product_variants
+SELECT id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor, compare_at_price_minor, position, archived_at, weight_grams FROM product_variants
 WHERE workspace_id = $1 AND product_id = $2
 ORDER BY is_default DESC, id ASC
 `
@@ -506,6 +508,7 @@ func (q *Queries) ListVariantsByProductID(ctx context.Context, arg ListVariantsB
 			&i.CompareAtPriceMinor,
 			&i.Position,
 			&i.ArchivedAt,
+			&i.WeightGrams,
 		); err != nil {
 			return nil, err
 		}
@@ -523,7 +526,7 @@ UPDATE product_variants SET name = $1, sku = $2, barcode = $3,
   compare_at_price_minor = $6, is_active = $7,
   archived_at = NULL, position = $8, updated_at = now()
 WHERE workspace_id = $9 AND product_id = $10 AND id = $11 AND NOT is_default
-RETURNING id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor, compare_at_price_minor, position, archived_at
+RETURNING id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor, compare_at_price_minor, position, archived_at, weight_grams
 `
 
 type UpdateOptionVariantParams struct {
@@ -573,6 +576,7 @@ func (q *Queries) UpdateOptionVariant(ctx context.Context, arg UpdateOptionVaria
 		&i.CompareAtPriceMinor,
 		&i.Position,
 		&i.ArchivedAt,
+		&i.WeightGrams,
 	)
 	return i, err
 }
@@ -637,7 +641,7 @@ SET name = $3,
     is_active = $8,
     updated_at = now()
 WHERE workspace_id = $1 AND id = $2
-RETURNING id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor, compare_at_price_minor, position, archived_at
+RETURNING id, workspace_id, product_id, name, sku, barcode, selling_price_minor, currency, currency_exponent, is_default, is_active, created_at, updated_at, cost_price_minor, compare_at_price_minor, position, archived_at, weight_grams
 `
 
 type UpdateVariantParams struct {
@@ -681,6 +685,7 @@ func (q *Queries) UpdateVariant(ctx context.Context, arg UpdateVariantParams) (P
 		&i.CompareAtPriceMinor,
 		&i.Position,
 		&i.ArchivedAt,
+		&i.WeightGrams,
 	)
 	return i, err
 }

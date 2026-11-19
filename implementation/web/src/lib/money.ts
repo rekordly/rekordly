@@ -967,6 +967,20 @@ export const financeApi = {
     apiClient.post<{ message: string }, { order: PublicOrderStatus }>(`/api/v1/public/orders/${encodeURIComponent(token)}/messages`, { message }).then((r) => r.order),
   acknowledgePublicOrderChanges: (token: string, expectedVersion: number) =>
     apiClient.post<{ expected_version: number }, { order: PublicOrderStatus }>(`/api/v1/public/orders/${encodeURIComponent(token)}/acknowledge`, { expected_version: expectedVersion }).then((r) => r.order),
+  // Storefront Payments
+  getStorefrontPayments: (workspaceId: number) =>
+    scopedGet<import("@/types/finance").StorefrontPaymentSettingsView>(workspaceId, "/api/v1/storefront/payments"),
+  updateStorefrontPaymentSettings: (workspaceId: number, body: unknown) =>
+    scopedPatch<import("@/types/finance").StorefrontPaymentSettingsView>(workspaceId, "/api/v1/storefront/payments/settings", body),
+  listPaymentBanks: (workspaceId: number, provider = "paystack") =>
+    scopedGet<{ banks: Array<{ code: string; name: string }> }>(workspaceId, "/api/v1/storefront/payments/banks", { provider }).then((r) => r.banks ?? []),
+  resolveStorefrontBankAccount: (workspaceId: number, body: { provider?: string; bank_code: string; account_number: string }) =>
+    scopedPost<{ account_name: string; account_number: string; bank_code: string }>(workspaceId, "/api/v1/storefront/payments/resolve-account", body),
+  saveStorefrontPayoutAccount: (workspaceId: number, body: { provider?: string; bank_code: string; account_number: string; account_name?: string }) =>
+    scopedPost<{ payout_account: import("@/types/finance").MerchantPayoutAccountView }>(workspaceId, "/api/v1/storefront/payments/payout-account", body).then((r) => r.payout_account),
+  recordStorefrontPayout: (workspaceId: number, body: unknown) =>
+    scopedPost<{ status: string }>(workspaceId, "/api/v1/storefront/payments/record-payout", body),
+
   cancelPublicOrder: (token: string, reason?: string) =>
     apiClient.post<{ reason?: string }, { order: PublicOrderStatus }>(`/api/v1/public/orders/${encodeURIComponent(token)}/cancel`, { reason }).then((r) => r.order),
   requestPublicOrderReturn: (token: string, reason?: string) =>

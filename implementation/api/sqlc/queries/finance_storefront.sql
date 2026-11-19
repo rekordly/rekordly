@@ -540,13 +540,13 @@ WHERE workspace_id = $1 AND storefront_id = $2 AND is_active
 ORDER BY position, id;
 
 -- name: CreateStorefrontDeliveryArea :one
-INSERT INTO storefront_delivery_areas (workspace_id, storefront_id, name, fee_minor, description, position)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO storefront_delivery_areas (workspace_id, storefront_id, name, fee_minor, description, position, state, estimate_text, outlet_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 RETURNING *;
 
 -- name: UpdateStorefrontDeliveryArea :one
 UPDATE storefront_delivery_areas
-SET name = $4, fee_minor = $5, description = $6, position = $7, is_active = true, updated_at = now()
+SET name = $4, fee_minor = $5, description = $6, position = $7, state = $8, estimate_text = $9, outlet_id = $10, is_active = true, updated_at = now()
 WHERE workspace_id = $1 AND storefront_id = $2 AND id = $3
 RETURNING *;
 

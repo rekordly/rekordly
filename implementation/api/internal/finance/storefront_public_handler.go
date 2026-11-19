@@ -11,6 +11,7 @@ import (
 )
 
 func (h *Handler) RegisterPublicStorefrontRoutes(g *gin.RouterGroup) {
+	h.RegisterStorefrontPaymentWebhookRoutes(g)
 	g.GET("/public/storefronts/by-host", h.getPublicStorefrontByHost)
 	g.GET("/public/storefronts/:slug", h.getPublicStorefront)
 	g.GET("/public/storefronts/:slug/products/:productId", h.getPublicStorefrontProduct)
