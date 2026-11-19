@@ -94,6 +94,38 @@ func TestStorefrontPremiumThemeDraftsRemainIndependentAndPrivate(t *testing.T) {
 	require.NotEmpty(t, public.Sections)
 	require.Equal(t, "Updated Market promotion", public.Sections[0].Content["heading"])
 
+	item, err := svc.CreateCatalogueItem(ctx, ws, user, finance.CreateCatalogueItemInput{
+		Name: "Design consultation", Kind: "service", UnitName: "session",
+		SellingPrice: "5000", Currency: "NGN", IdempotencyKey: "premium-product",
+	})
+	require.NoError(t, err)
+	variants, err := svc.ListProductVariants(ctx, ws, item.ID)
+	require.NoError(t, err)
+	require.NotEmpty(t, variants)
+	product, err := svc.UpsertStorefrontProduct(ctx, ws, variants[0].ID, finance.PublishCatalogueVariantInput{
+		IsPublished: true, PublicTitle: "Design consultation", AvailabilityPolicy: "in_out_stock",
+	})
+	require.NoError(t, err)
+	lines := []finance.CartLineInput{{StorefrontProductID: product.ID, Quantity: "1", ExpectedPriceMinor: "500000"}}
+	submitOrder := func(theme, cartToken string) {
+		t.Helper()
+		checkout, err := svc.SubmitGuestCheckout(ctx, "premium-draft-shop", false, finance.GuestCheckoutInput{
+			CartToken: cartToken, Lines: lines, CustomerName: "Demo shopper", CustomerPhone: "+2348012345678",
+			DeliveryMethod: "pickup", PolicyAcknowledged: true, IdempotencyKey: "premium-checkout-" + theme,
+		})
+		require.NoError(t, err)
+		require.Equal(t, "500000", checkout.TotalMinor)
+		require.NotEmpty(t, checkout.StatusToken)
+		status, err := svc.GetPublicOrderStatus(ctx, checkout.StatusToken)
+		require.NoError(t, err)
+		require.Equal(t, checkout.OrderReference, status.OrderReference)
+		require.Equal(t, checkout.TotalMinor, status.TotalMinor)
+	}
+	submitOrder("market", "")
+	cart, err := svc.UpsertVisitorCart(ctx, "premium-draft-shop", "", lines, "pickup")
+	require.NoError(t, err)
+	require.NotEmpty(t, cart.CartToken)
+
 	studio = save("studio", "Studio campaign", "reopen-studio", marketLive.Version)
 	_, err = svc.PublishStorefrontDesign(ctx, ws, user, finance.StorefrontDesignCommandInput{
 		ExpectedVersion: studio.Version, IdempotencyKey: "publish-owned-studio",
@@ -104,4 +136,8 @@ func TestStorefrontPremiumThemeDraftsRemainIndependentAndPrivate(t *testing.T) {
 	require.Equal(t, "studio", public.ThemeKey)
 	require.NotEmpty(t, public.Sections)
 	require.Equal(t, "Studio campaign", public.Sections[0].Content["heading"])
+	restored, err := svc.GetVisitorCart(ctx, "premium-draft-shop", cart.CartToken, "pickup")
+	require.NoError(t, err)
+	require.Equal(t, cart.EstimatedTotal, restored.EstimatedTotal)
+	submitOrder("studio", restored.CartToken)
 }
