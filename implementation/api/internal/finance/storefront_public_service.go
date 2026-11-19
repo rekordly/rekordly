@@ -2,19 +2,21 @@ package finance
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/rekordly/rekordly-api/internal/db"
+	"github.com/rekordly/rekordly-api/internal/payments"
 	"github.com/shopspring/decimal"
 )
 
@@ -677,7 +679,36 @@ func (s *Service) GetVisitorCartWithArea(ctx context.Context, slug, rawToken, de
 	return calc, nil
 }
 
-// Guest Checkout Request (Never reserves stock or posts accounting/invoice/payment)
+// Guest Checkout Request (Atomic Stock Holds & Double-Entry Checkout Launch)
+
+func generatePickupCode() string {
+	const charset = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
+	b := make([]byte, 6)
+	_, _ = rand.Read(b)
+	for i := range b {
+		b[i] = charset[int(b[i])%len(charset)]
+	}
+	return string(b)
+}
+
+type PublicVirtualAccountView struct {
+	AccountNumber string  `json:"account_number"`
+	BankName      string  `json:"bank_name"`
+	AccountName   string  `json:"account_name"`
+	ExpiresAt     *string `json:"expires_at,omitempty"`
+}
+
+type PublicPaymentAttemptView struct {
+	ID                   int64   `json:"id"`
+	Provider             string  `json:"provider"`
+	Method               string  `json:"method"`
+	Reference            string  `json:"reference"`
+	AmountMinor          int64   `json:"amount_minor"`
+	VirtualAccountNumber *string `json:"virtual_account_number,omitempty"`
+	BankName             *string `json:"bank_name,omitempty"`
+	ExpiresAt            *string `json:"expires_at,omitempty"`
+	Status               string  `json:"status"`
+}
 
 type GuestCheckoutInput struct {
 	ClientKey             string          `json:"-"`
@@ -690,6 +721,8 @@ type GuestCheckoutInput struct {
 	PreferredContact      string          `json:"preferred_contact_method"`
 	DeliveryMethod        string          `json:"delivery_method"`
 	DeliveryAreaID        int64           `json:"delivery_area_id"`
+	PickupPointID         int64           `json:"pickup_point_id"`
+	PaymentMethod         string          `json:"payment_method"`
 	DeliveryAddress       string          `json:"delivery_address"`
 	DeliveryLandmark      string          `json:"delivery_landmark"`
 	PreferredDeliveryTime string          `json:"preferred_delivery_time"`
@@ -699,14 +732,20 @@ type GuestCheckoutInput struct {
 }
 
 type GuestCheckoutConfirmation struct {
-	OrderReference   string `json:"order_reference"`
-	StatusToken      string `json:"status_token,omitempty"`
-	CommercialStatus string `json:"commercial_status"`
-	FulfilmentStatus string `json:"fulfilment_status"`
-	PaymentStatus    string `json:"payment_status"`
-	Currency         string `json:"currency"`
-	TotalMinor       string `json:"total_minor"`
-	Message          string `json:"message"`
+	OrderReference     string                    `json:"order_reference"`
+	StatusToken        string                    `json:"status_token,omitempty"`
+	CommercialStatus   string                    `json:"commercial_status"`
+	FulfilmentStatus   string                    `json:"fulfilment_status"`
+	PaymentStatus      string                    `json:"payment_status"`
+	Currency           string                    `json:"currency"`
+	TotalMinor         string                    `json:"total_minor"`
+	ProcessingFeeMinor int64                     `json:"processing_fee_minor"`
+	Message            string                    `json:"message"`
+	HoldType           *string                   `json:"hold_type,omitempty"`
+	HoldExpiresAt      *string                   `json:"hold_expires_at,omitempty"`
+	VirtualAccount     *PublicVirtualAccountView `json:"virtual_account,omitempty"`
+	CardCheckoutURL    *string                   `json:"card_checkout_url,omitempty"`
+	PickupCode         *string                   `json:"pickup_code,omitempty"`
 }
 
 func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, isHost bool, in GuestCheckoutInput) (GuestCheckoutConfirmation, error) {
@@ -759,22 +798,117 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 		WorkspaceID:    proj.internalWS,
 		IdempotencyKey: key,
 	}); err == nil {
+		var va *PublicVirtualAccountView
+		var cardURL *string
+		if att, aErr := s.queries.GetPublicPaymentAttemptByOrder(ctx, old.ID); aErr == nil {
+			if att.Method == "virtual_account" && att.VirtualAccountNumber.Valid {
+				var expStr *string
+				if att.ExpiresAt.Valid {
+					s := att.ExpiresAt.Time.UTC().Format(time.RFC3339)
+					expStr = &s
+				}
+				va = &PublicVirtualAccountView{
+					AccountNumber: att.VirtualAccountNumber.String,
+					BankName:      att.BankName.String,
+					AccountName:   "REKORDLY / " + old.CustomerName,
+					ExpiresAt:     expStr,
+				}
+			}
+		}
+		var expStr *string
+		if old.ReservationExpiresAt.Valid {
+			s := old.ReservationExpiresAt.Time.UTC().Format(time.RFC3339)
+			expStr = &s
+		}
 		return GuestCheckoutConfirmation{
-			OrderReference:   old.OrderReference,
-			CommercialStatus: old.CommercialStatus,
-			FulfilmentStatus: old.FulfilmentStatus,
-			PaymentStatus:    old.PaymentStatus,
-			Currency:         old.Currency,
-			TotalMinor:       fmt.Sprint(old.TotalMinor),
-			Message:          "Order request received; awaiting merchant confirmation.",
+			OrderReference:     old.OrderReference,
+			CommercialStatus:   old.CommercialStatus,
+			FulfilmentStatus:   old.FulfilmentStatus,
+			PaymentStatus:      old.PaymentStatus,
+			Currency:           old.Currency,
+			TotalMinor:         fmt.Sprint(old.TotalMinor),
+			ProcessingFeeMinor: old.ProcessingFeeMinor,
+			Message:            "Order request received; awaiting merchant confirmation.",
+			HoldType:           nullableText(old.HoldType),
+			HoldExpiresAt:      expStr,
+			VirtualAccount:     va,
+			CardCheckoutURL:    cardURL,
+			PickupCode:         nullableText(old.PickupCode),
 		}, nil
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return GuestCheckoutConfirmation{}, err
 	}
 
+	// Fetch Storefront Settings for Hold durations & fee bearer
+	settings, _ := s.queries.GetStorefrontSettings(ctx, db.GetStorefrontSettingsParams{
+		StorefrontID: proj.internalID,
+		WorkspaceID:  proj.internalWS,
+	})
+
+	// Determine outlet: default vs chosen pickup point
+	targetOutletID := proj.internalOutletID
+	if delivMethod == "pickup" && in.PickupPointID > 0 {
+		var validPickup bool
+		_ = s.pool.QueryRow(ctx, `
+			SELECT true FROM inventory_locations
+			WHERE workspace_id = $1 AND id = $2 AND is_active = true AND is_pickup_point = true
+		`, proj.internalWS, in.PickupPointID).Scan(&validPickup)
+		if validPickup {
+			targetOutletID = pgtype.Int8{Int64: in.PickupPointID, Valid: true}
+		}
+	}
+
+	// Determine hold type and countdown duration
+	payMethod := strings.TrimSpace(in.PaymentMethod)
+	if payMethod == "" {
+		payMethod = "virtual_account"
+	}
+	holdType := "payment"
+	holdDuration := 15 * time.Minute
+	if settings.HoldPaymentMinutes > 0 {
+		holdDuration = time.Duration(settings.HoldPaymentMinutes) * time.Minute
+	}
+	switch payMethod {
+	case "manual_transfer":
+		holdType = "manual_transfer"
+		holdDuration = 2 * time.Hour
+		if settings.HoldManualTransferHours > 0 {
+			holdDuration = time.Duration(settings.HoldManualTransferHours) * time.Hour
+		}
+	case "cod":
+		holdType = "merchant_review"
+		holdDuration = 2 * time.Hour
+		if settings.HoldConfirmationHours > 0 {
+			holdDuration = time.Duration(settings.HoldConfirmationHours) * time.Hour
+		}
+	case "card", "virtual_account":
+		holdType = "payment"
+	}
+	holdExpiresAt := time.Now().UTC().Add(holdDuration)
+
+	// Processing fee calculation (if customer bears fee)
+	subVal, _ := decimal.NewFromString(calc.SubtotalMinor)
+	delivVal, _ := decimal.NewFromString(calc.DeliveryFeeMinor)
+	baseTotal := subVal.IntPart() + delivVal.IntPart()
+	processingFeeMinor := int64(0)
+	if settings.FeeBearer == "customer" && (payMethod == "virtual_account" || payMethod == "card") {
+		fee := int64(float64(baseTotal) * 0.015)
+		if fee > 200000 {
+			fee = 200000
+		}
+		processingFeeMinor = fee
+	}
+	finalTotal := baseTotal + processingFeeMinor
+
+	var pickupCode *string
+	if delivMethod == "pickup" {
+		code := generatePickupCode()
+		pickupCode = &code
+	}
+
 	publicProdRows, err := s.queries.ListPublicStorefrontProducts(ctx, db.ListPublicStorefrontProductsParams{
 		StorefrontID: proj.internalID,
-		OutletID:     proj.internalOutletID,
+		OutletID:     targetOutletID,
 	})
 	if err != nil {
 		return GuestCheckoutConfirmation{}, err
@@ -796,27 +930,70 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := s.queries.WithTx(tx)
 
+	// Verify and lock stock for tracked items
+	type reservedStockItem struct {
+		lineIndex int
+		productID int64
+		variantID int64
+		quantity  decimal.Decimal
+		balance   db.InventoryBalance
+	}
+	toReserve := make([]reservedStockItem, 0, len(calc.Lines))
+	for idx, cl := range calc.Lines {
+		row, ok := prodMap[cl.StorefrontProductID]
+		if !ok {
+			return GuestCheckoutConfirmation{}, ErrCartItemChanged
+		}
+		if row.ProductKind == "stock_tracked" {
+			bal, bErr := q.GetInventoryBalanceForUpdate(ctx, db.GetInventoryBalanceForUpdateParams{
+				WorkspaceID: proj.internalWS,
+				LocationID:  targetOutletID.Int64,
+				ProductID:   row.ProductID,
+				VariantID:   pgtype.Int8{Int64: row.VariantID, Valid: true},
+			})
+			reqQty, _ := decimal.NewFromString(cl.Quantity)
+			if bErr != nil {
+				return GuestCheckoutConfirmation{}, fmt.Errorf("item %s is not stocked at this outlet", row.PublicTitle)
+			}
+			avail := bal.QuantityOnHand.Sub(bal.ReservedQuantity)
+			if avail.LessThan(reqQty) {
+				variantDesc := ""
+				if strings.TrimSpace(row.VariantName) != "" {
+					variantDesc = " (" + row.VariantName + ")"
+				}
+				if avail.LessThanOrEqual(decimal.Zero) {
+					return GuestCheckoutConfirmation{}, fmt.Errorf("%s%s is sold out", row.PublicTitle, variantDesc)
+				}
+				return GuestCheckoutConfirmation{}, fmt.Errorf("only %s left of %s%s", avail.String(), row.PublicTitle, variantDesc)
+			}
+			toReserve = append(toReserve, reservedStockItem{
+				lineIndex: idx,
+				productID: row.ProductID,
+				variantID: row.VariantID,
+				quantity:  reqQty,
+				balance:   bal,
+			})
+		}
+	}
+
 	seq, err := q.NextStorefrontOrderSequence(ctx, proj.internalID)
 	if err != nil {
 		return GuestCheckoutConfirmation{}, err
 	}
 	orderRef := fmt.Sprintf("ORD-%06d", seq)
-	subVal, _ := decimal.NewFromString(calc.SubtotalMinor)
-	delivVal, _ := decimal.NewFromString(calc.DeliveryFeeMinor)
-	totVal, _ := decimal.NewFromString(calc.EstimatedTotal)
 
 	order, err := q.CreateStorefrontOrder(ctx, db.CreateStorefrontOrderParams{
 		WorkspaceID:            proj.internalWS,
 		StorefrontID:           proj.internalID,
 		OrderReference:         orderRef,
 		PublicTokenHash:        hashOpaqueToken(rawStatusToken),
-		OutletID:               proj.internalOutletID,
+		OutletID:               targetOutletID,
 		Currency:               proj.Currency,
 		CurrencyExponent:       proj.CurrencyExponent,
 		SubtotalMinor:          subVal.IntPart(),
 		TaxMinor:               0,
 		DeliveryFeeMinor:       delivVal.IntPart(),
-		TotalMinor:             totVal.IntPart(),
+		TotalMinor:             finalTotal,
 		DeliveryMethod:         delivMethod,
 		DeliveryAreaID:         pgtype.Int8{Int64: calc.DeliveryAreaID, Valid: calc.DeliveryAreaID > 0},
 		CustomerName:           custName,
@@ -836,12 +1013,67 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 		return GuestCheckoutConfirmation{}, err
 	}
 
+	var pPointID *int64
+	if delivMethod == "pickup" && in.PickupPointID > 0 {
+		pPointID = &in.PickupPointID
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE storefront_orders
+		SET hold_type = $2,
+		    reservation_expires_at = $3,
+		    processing_fee_minor = $4,
+		    pickup_code = $5,
+		    pickup_point_id = $6,
+		    commercial_status = 'confirmed',
+		    fulfilment_status = 'reserved',
+		    payment_status = 'unpaid',
+		    updated_at = now()
+		WHERE id = $1
+	`, order.ID, holdType, holdExpiresAt, processingFeeMinor, pickupCode, pPointID); err != nil {
+		return GuestCheckoutConfirmation{}, fmt.Errorf("update storefront order hold: %w", err)
+	}
+
 	if err := linkMatchingOrderCustomer(ctx, tx, proj.internalWS, order.ID, custEmail, custPhone); err != nil {
 		return GuestCheckoutConfirmation{}, err
 	}
 
+	// Atomically increment reserved_quantity and create stock reservations
+	reservationsByLine := map[int]int64{}
+	for _, res := range toReserve {
+		newRes := res.balance.ReservedQuantity.Add(res.quantity)
+		_, err := q.UpdateInventoryBalanceQuantities(ctx, db.UpdateInventoryBalanceQuantitiesParams{
+			WorkspaceID:       proj.internalWS,
+			LocationID:        targetOutletID.Int64,
+			ProductID:         res.productID,
+			VariantID:         pgtype.Int8{Int64: res.variantID, Valid: true},
+			QuantityOnHand:    res.balance.QuantityOnHand,
+			ReservedQuantity:  newRes,
+			InTransitQuantity: res.balance.InTransitQuantity,
+			ValueOnHandMinor:  res.balance.ValueOnHandMinor,
+		})
+		if err != nil {
+			return GuestCheckoutConfirmation{}, err
+		}
+		sr, err := q.CreateStockReservation(ctx, db.CreateStockReservationParams{
+			WorkspaceID:    proj.internalWS,
+			LocationID:     targetOutletID.Int64,
+			ProductID:      res.productID,
+			VariantID:      pgtype.Int8{Int64: res.variantID, Valid: true},
+			OrderID:        pgtype.Int8{Int64: order.ID, Valid: true},
+			Quantity:       res.quantity,
+			Status:         "active",
+			ExpiresAt:      pgtype.Timestamptz{Time: holdExpiresAt, Valid: true},
+			Notes:          pgtype.Text{String: "Held for storefront order " + orderRef, Valid: true},
+			IdempotencyKey: pgtype.Text{String: fmt.Sprintf("sf-ord-%d-line-%d", order.ID, res.lineIndex), Valid: true},
+		})
+		if err != nil {
+			return GuestCheckoutConfirmation{}, err
+		}
+		reservationsByLine[res.lineIndex] = sr.ID
+	}
+
 	createdLines := make([]db.StorefrontOrderLine, 0, len(calc.Lines))
-	for _, cl := range calc.Lines {
+	for idx, cl := range calc.Lines {
 		row, ok := prodMap[cl.StorefrontProductID]
 		if !ok {
 			return GuestCheckoutConfirmation{}, ErrCartItemChanged
@@ -867,6 +1099,9 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 		if err != nil {
 			return GuestCheckoutConfirmation{}, err
 		}
+		if resID, has := reservationsByLine[idx]; has {
+			_, _ = tx.Exec(ctx, `UPDATE storefront_order_lines SET reservation_id = $2 WHERE id = $1`, ol.ID, resID)
+		}
 		createdLines = append(createdLines, ol)
 	}
 
@@ -879,7 +1114,7 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 		OrderID:             order.ID,
 		Version:             1,
 		Snapshot:            snapBytes,
-		ChangeSummary:       optionalPgText("Order request submitted by customer"),
+		ChangeSummary:       optionalPgText("Order placed by customer"),
 		RequiresCustomerAck: false,
 		ActorType:           "customer",
 	}); err != nil {
@@ -888,13 +1123,90 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 	if _, err := q.CreateStorefrontOrderEvent(ctx, db.CreateStorefrontOrderEventParams{
 		WorkspaceID:     proj.internalWS,
 		OrderID:         order.ID,
-		EventType:       "request_submitted",
+		EventType:       "order_placed",
 		ActorType:       "customer",
 		CustomerVisible: true,
-		Message:         optionalPgText("Order request submitted; awaiting merchant confirmation."),
+		Message:         optionalPgText(fmt.Sprintf("Order placed. Stock held for %v.", holdDuration)),
 	}); err != nil {
 		return GuestCheckoutConfirmation{}, err
 	}
+
+	// If online payment (virtual account or card): create payment attempt
+	var publicVA *PublicVirtualAccountView
+	var cardCheckoutURL *string
+	if payMethod == "virtual_account" || payMethod == "card" {
+		attemptRef := fmt.Sprintf("att_%s_%d", orderRef, time.Now().UnixNano()%1000000)
+		prov, pErr := s.getPaymentProvider("paystack")
+		if pErr == nil {
+			payoutAcc, _ := q.GetMerchantPayoutAccount(ctx, db.GetMerchantPayoutAccountParams{
+				WorkspaceID: proj.internalWS,
+				Provider:    prov.Key(),
+			})
+			if payMethod == "virtual_account" {
+				va, vaErr := prov.CreateOrderVirtualAccount(ctx, payments.OrderPaymentRequest{
+					Reference:                  attemptRef,
+					AmountMinor:                finalTotal,
+					Currency:                   proj.Currency,
+					CustomerEmail:              custEmail,
+					CustomerName:               custName,
+					SubaccountRef:              payoutAcc.SubaccountRef,
+					FeeBearer:                  settings.FeeBearer,
+					PlatformCommissionPercent: s.platformCommissionPercent,
+					ExpiresAt:                  holdExpiresAt,
+				})
+				if vaErr == nil {
+					_, _ = q.CreateStorefrontPaymentAttempt(ctx, db.CreateStorefrontPaymentAttemptParams{
+						WorkspaceID:           proj.internalWS,
+						OrderID:               order.ID,
+						Provider:              prov.Key(),
+						Method:                "virtual_account",
+						Reference:             attemptRef,
+						AmountMinor:           finalTotal,
+						FeeMinor:              0,
+						CommissionMinor:       0,
+						VirtualAccountNumber: pgtype.Text{String: va.AccountNumber, Valid: true},
+						BankName:              pgtype.Text{String: va.BankName, Valid: true},
+						ExpiresAt:             pgtype.Timestamptz{Time: holdExpiresAt, Valid: true},
+						Status:                "pending",
+					})
+					expS := holdExpiresAt.Format(time.RFC3339)
+					publicVA = &PublicVirtualAccountView{
+						AccountNumber: va.AccountNumber,
+						BankName:      va.BankName,
+						AccountName:   va.AccountName,
+						ExpiresAt:     &expS,
+					}
+				}
+			} else if payMethod == "card" {
+				cardRes, cErr := prov.InitializeCardCheckout(ctx, payments.OrderPaymentRequest{
+					Reference:                  attemptRef,
+					AmountMinor:                finalTotal,
+					Currency:                   proj.Currency,
+					CustomerEmail:              custEmail,
+					CustomerName:               custName,
+					SubaccountRef:              payoutAcc.SubaccountRef,
+					FeeBearer:                  settings.FeeBearer,
+					PlatformCommissionPercent: s.platformCommissionPercent,
+					CallbackURL:                fmt.Sprintf("https://%s.rekordly.com/orders/%s", proj.Slug, rawStatusToken),
+				})
+				if cErr == nil {
+					_, _ = q.CreateStorefrontPaymentAttempt(ctx, db.CreateStorefrontPaymentAttemptParams{
+						WorkspaceID:     proj.internalWS,
+						OrderID:         order.ID,
+						Provider:        prov.Key(),
+						Method:          "card",
+						Reference:       attemptRef,
+						AmountMinor:     finalTotal,
+						FeeMinor:        0,
+						CommissionMinor: 0,
+						Status:          "pending",
+					})
+					cardCheckoutURL = &cardRes.AuthorizationURL
+				}
+			}
+		}
+	}
+
 	if strings.TrimSpace(in.CartToken) != "" {
 		if cart, cErr := q.GetStorefrontCartByHash(ctx, db.GetStorefrontCartByHashParams{
 			CartTokenHash: hashOpaqueToken(in.CartToken),
@@ -919,17 +1231,24 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 		FROM workspace_memberships m
 		WHERE m.workspace_id = $1 AND m.status = 'active'
 		LIMIT 5
-	`, proj.internalWS, fmt.Sprintf("New order request %s", orderRef), fmt.Sprintf("%s requested an order totaling %s %s", custName, FormatMinorToMajorMust(fmt.Sprint(order.TotalMinor), int(order.CurrencyExponent)), order.Currency))
+	`, proj.internalWS, fmt.Sprintf("New order %s", orderRef), fmt.Sprintf("%s placed an order totaling %s %s", custName, FormatMinorToMajorMust(fmt.Sprint(finalTotal), int(order.CurrencyExponent)), order.Currency))
 
+	expStr := holdExpiresAt.Format(time.RFC3339)
 	return GuestCheckoutConfirmation{
-		OrderReference:   orderRef,
-		StatusToken:      rawStatusToken,
-		CommercialStatus: order.CommercialStatus,
-		FulfilmentStatus: order.FulfilmentStatus,
-		PaymentStatus:    order.PaymentStatus,
-		Currency:         order.Currency,
-		TotalMinor:       fmt.Sprint(order.TotalMinor),
-		Message:          "Order request received. Merchant will confirm availability, pricing, delivery and payment arrangement.",
+		OrderReference:     orderRef,
+		StatusToken:        rawStatusToken,
+		CommercialStatus:   "confirmed",
+		FulfilmentStatus:   "reserved",
+		PaymentStatus:      "unpaid",
+		Currency:           order.Currency,
+		TotalMinor:         fmt.Sprint(finalTotal),
+		ProcessingFeeMinor: processingFeeMinor,
+		Message:            "Order placed successfully. Please complete payment before the hold expires.",
+		HoldType:           &holdType,
+		HoldExpiresAt:      &expStr,
+		VirtualAccount:     publicVA,
+		CardCheckoutURL:    cardCheckoutURL,
+		PickupCode:         pickupCode,
 	}, nil
 }
 
@@ -954,31 +1273,39 @@ type PublicOrderEventView struct {
 }
 
 type PublicOrderStatusView struct {
-	OrderReference          string                 `json:"order_reference"`
-	StorefrontName          string                 `json:"storefront_name"`
-	StorefrontSlug          string                 `json:"storefront_slug"`
-	MerchantPhone           *string                `json:"merchant_phone,omitempty"`
-	MerchantEmail           *string                `json:"merchant_email,omitempty"`
-	MerchantWhatsapp        *string                `json:"merchant_whatsapp,omitempty"`
-	CommercialStatus        string                 `json:"commercial_status"`
-	FulfilmentStatus        string                 `json:"fulfilment_status"`
-	PaymentStatus           string                 `json:"payment_status"`
-	Version                 int32                  `json:"version"`
-	Currency                string                 `json:"currency"`
-	CurrencyExponent        int32                  `json:"currency_exponent"`
-	SubtotalMinor           string                 `json:"subtotal_minor"`
-	DeliveryFeeMinor        string                 `json:"delivery_fee_minor"`
-	TotalMinor              string                 `json:"total_minor"`
-	DeliveryMethod          string                 `json:"delivery_method"`
-	DeliveryAddress         *string                `json:"delivery_address,omitempty"`
-	PaymentArrangement      *string                `json:"payment_arrangement,omitempty"`
-	RequiresCustomerAck     bool                   `json:"requires_customer_ack"`
-	LatestChangeSummary     *string                `json:"latest_change_summary,omitempty"`
-	LinkedInvoiceShareToken *string                `json:"linked_invoice_share_token,omitempty"`
-	DeclineOrCancelReason   *string                `json:"decline_or_cancel_reason,omitempty"`
-	Lines                   []PublicOrderLineView  `json:"lines"`
-	Events                  []PublicOrderEventView `json:"events"`
-	CreatedAt               string                 `json:"created_at"`
+	OrderReference          string                    `json:"order_reference"`
+	StorefrontName          string                    `json:"storefront_name"`
+	StorefrontSlug          string                    `json:"storefront_slug"`
+	MerchantPhone           *string                   `json:"merchant_phone,omitempty"`
+	MerchantEmail           *string                   `json:"merchant_email,omitempty"`
+	MerchantWhatsapp        *string                   `json:"merchant_whatsapp,omitempty"`
+	CommercialStatus        string                    `json:"commercial_status"`
+	FulfilmentStatus        string                    `json:"fulfilment_status"`
+	PaymentStatus           string                    `json:"payment_status"`
+	Version                 int32                     `json:"version"`
+	Currency                string                    `json:"currency"`
+	CurrencyExponent        int32                     `json:"currency_exponent"`
+	SubtotalMinor           string                    `json:"subtotal_minor"`
+	DeliveryFeeMinor        string                    `json:"delivery_fee_minor"`
+	TotalMinor              string                    `json:"total_minor"`
+	ProcessingFeeMinor      int64                     `json:"processing_fee_minor"`
+	DeliveryMethod          string                    `json:"delivery_method"`
+	DeliveryAddress         *string                   `json:"delivery_address,omitempty"`
+	PaymentArrangement      *string                   `json:"payment_arrangement,omitempty"`
+	RequiresCustomerAck     bool                      `json:"requires_customer_ack"`
+	LatestChangeSummary     *string                   `json:"latest_change_summary,omitempty"`
+	LinkedInvoiceShareToken *string                   `json:"linked_invoice_share_token,omitempty"`
+	DeclineOrCancelReason   *string                   `json:"decline_or_cancel_reason,omitempty"`
+	HoldType                *string                   `json:"hold_type,omitempty"`
+	HoldExpiresAt           *string                   `json:"hold_expires_at,omitempty"`
+	PickupCode              *string                   `json:"pickup_code,omitempty"`
+	CourierName             *string                   `json:"courier_name,omitempty"`
+	CourierTrackingNumber   *string                   `json:"courier_tracking_number,omitempty"`
+	CourierStatus           *string                   `json:"courier_status,omitempty"`
+	LatestPaymentAttempt    *PublicPaymentAttemptView `json:"latest_payment_attempt,omitempty"`
+	Lines                   []PublicOrderLineView     `json:"lines"`
+	Events                  []PublicOrderEventView    `json:"events"`
+	CreatedAt               string                    `json:"created_at"`
 }
 
 func (s *Service) buildPublicOrderStatusView(ctx context.Context, o db.StorefrontOrder) (PublicOrderStatusView, error) {
@@ -1028,6 +1355,33 @@ func (s *Service) buildPublicOrderStatusView(ctx context.Context, o db.Storefron
 		reqAck = true
 		changeSum = nullableText(versions[0].ChangeSummary)
 	}
+
+	var latestAttempt *PublicPaymentAttemptView
+	if att, aErr := s.queries.GetPublicPaymentAttemptByOrder(ctx, o.ID); aErr == nil {
+		var expStr *string
+		if att.ExpiresAt.Valid {
+			s := att.ExpiresAt.Time.UTC().Format(time.RFC3339)
+			expStr = &s
+		}
+		latestAttempt = &PublicPaymentAttemptView{
+			ID:                   att.ID,
+			Provider:             att.Provider,
+			Method:               att.Method,
+			Reference:            att.Reference,
+			AmountMinor:          att.AmountMinor,
+			VirtualAccountNumber: nullableText(att.VirtualAccountNumber),
+			BankName:             nullableText(att.BankName),
+			ExpiresAt:            expStr,
+			Status:               att.Status,
+		}
+	}
+
+	var holdExpStr *string
+	if o.ReservationExpiresAt.Valid {
+		s := o.ReservationExpiresAt.Time.UTC().Format(time.RFC3339)
+		holdExpStr = &s
+	}
+
 	return PublicOrderStatusView{
 		OrderReference:          o.OrderReference,
 		StorefrontName:          sfName,
@@ -1044,6 +1398,7 @@ func (s *Service) buildPublicOrderStatusView(ctx context.Context, o db.Storefron
 		SubtotalMinor:           fmt.Sprint(o.SubtotalMinor),
 		DeliveryFeeMinor:        fmt.Sprint(o.DeliveryFeeMinor),
 		TotalMinor:              fmt.Sprint(o.TotalMinor),
+		ProcessingFeeMinor:      o.ProcessingFeeMinor,
 		DeliveryMethod:          o.DeliveryMethod,
 		DeliveryAddress:         nullableText(o.DeliveryAddress),
 		PaymentArrangement:      nullableText(o.PaymentArrangement),
@@ -1051,6 +1406,13 @@ func (s *Service) buildPublicOrderStatusView(ctx context.Context, o db.Storefron
 		LatestChangeSummary:     changeSum,
 		LinkedInvoiceShareToken: nullableText(o.LinkedInvoiceShareToken),
 		DeclineOrCancelReason:   nullableText(o.DeclineOrCancelReason),
+		HoldType:                nullableText(o.HoldType),
+		HoldExpiresAt:           holdExpStr,
+		PickupCode:              nullableText(o.PickupCode),
+		CourierName:             nullableText(o.CourierName),
+		CourierTrackingNumber:   nullableText(o.CourierTrackingNumber),
+		CourierStatus:           nullableText(o.CourierStatus),
+		LatestPaymentAttempt:    latestAttempt,
 		Lines:                   pubLines,
 		Events:                  pubEvents,
 		CreatedAt:               o.CreatedAt.Time.UTC().Format(time.RFC3339),

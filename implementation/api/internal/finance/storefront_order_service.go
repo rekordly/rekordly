@@ -902,6 +902,7 @@ func (s *Service) DeclineOrCancelStorefrontOrder(ctx context.Context, ws, user, 
 			WorkspaceID: ws,
 			LocationID:  res.LocationID,
 			ProductID:   res.ProductID,
+			VariantID:   res.VariantID,
 		})
 		if bErr == nil {
 			newRes := bal.ReservedQuantity.Sub(res.Quantity)
@@ -912,6 +913,7 @@ func (s *Service) DeclineOrCancelStorefrontOrder(ctx context.Context, ws, user, 
 				WorkspaceID:       ws,
 				LocationID:        res.LocationID,
 				ProductID:         res.ProductID,
+				VariantID:         res.VariantID,
 				QuantityOnHand:    bal.QuantityOnHand,
 				ReservedQuantity:  newRes,
 				InTransitQuantity: bal.InTransitQuantity,
@@ -1271,8 +1273,9 @@ func (s *Service) ExpireStaleStorefrontReservations(ctx context.Context) (int, e
 	rows, err := s.pool.Query(ctx, `
 		SELECT workspace_id, id
 		FROM storefront_orders
-		WHERE commercial_status = 'confirmed'
+		WHERE commercial_status IN ('confirmed', 'request_received')
 		  AND fulfilment_status = 'reserved'
+		  AND payment_status IN ('unpaid', 'not_requested')
 		  AND reservation_expires_at IS NOT NULL
 		  AND reservation_expires_at < now()
 		ORDER BY reservation_expires_at ASC
@@ -1296,8 +1299,21 @@ func (s *Service) ExpireStaleStorefrontReservations(ctx context.Context) (int, e
 
 	expired := 0
 	for _, t := range targets {
-		if _, err := s.DeclineOrCancelStorefrontOrder(ctx, t.ws, 0, t.id, "cancel", "Reservation expired automatically"); err == nil {
+		if _, err := s.DeclineOrCancelStorefrontOrder(ctx, t.ws, 0, t.id, "cancel", "Payment hold expired"); err == nil {
 			expired++
+			_, _ = s.pool.Exec(ctx, `
+				UPDATE storefront_payment_attempts
+				SET status = 'expired', updated_at = now()
+				WHERE workspace_id = $1 AND order_id = $2 AND status = 'pending'
+			`, t.ws, t.id)
+			_, _ = s.queries.CreateStorefrontOrderEvent(ctx, db.CreateStorefrontOrderEventParams{
+				WorkspaceID:     t.ws,
+				OrderID:         t.id,
+				EventType:       "hold_expired",
+				ActorType:       "system",
+				CustomerVisible: true,
+				Message:         optionalPgText("Checkout stock hold expired. Order cancelled."),
+			})
 		}
 	}
 	return expired, nil

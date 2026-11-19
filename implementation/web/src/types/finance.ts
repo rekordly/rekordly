@@ -1521,6 +1521,25 @@ export interface ValidatedCart {
   lines: ValidatedCartLine[];
 }
 
+export interface PublicVirtualAccount {
+  account_number: string;
+  bank_name: string;
+  account_name: string;
+  expires_at?: string | null;
+}
+
+export interface PublicPaymentAttempt {
+  id: number;
+  provider: string;
+  method: string;
+  reference: string;
+  amount_minor: number;
+  virtual_account_number?: string | null;
+  bank_name?: string | null;
+  expires_at?: string | null;
+  status: string;
+}
+
 export interface GuestCheckoutConfirmation {
   order_reference: string;
   status_token?: string;
@@ -1529,7 +1548,13 @@ export interface GuestCheckoutConfirmation {
   payment_status: string;
   currency: string;
   total_minor: string;
+  processing_fee_minor?: number;
   message: string;
+  hold_type?: string | null;
+  hold_expires_at?: string | null;
+  virtual_account?: PublicVirtualAccount | null;
+  card_checkout_url?: string | null;
+  pickup_code?: string | null;
 }
 
 export interface PublicOrderEvent {
@@ -1555,6 +1580,7 @@ export interface PublicOrderStatus {
   subtotal_minor: string;
   delivery_fee_minor: string;
   total_minor: string;
+  processing_fee_minor?: number;
   delivery_method: string;
   delivery_address?: string | null;
   payment_arrangement?: string | null;
@@ -1562,6 +1588,13 @@ export interface PublicOrderStatus {
   latest_change_summary?: string | null;
   linked_invoice_share_token?: string | null;
   decline_or_cancel_reason?: string | null;
+  hold_type?: string | null;
+  hold_expires_at?: string | null;
+  pickup_code?: string | null;
+  courier_name?: string | null;
+  courier_tracking_number?: string | null;
+  courier_status?: string | null;
+  latest_payment_attempt?: PublicPaymentAttempt | null;
   lines: {
     title: string;
     variant_name?: string | null;
