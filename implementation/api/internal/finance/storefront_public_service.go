@@ -1445,6 +1445,10 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 		return GuestCheckoutConfirmation{}, err
 	}
 
+	if in.ShopperID > 0 && in.SaveDetails {
+		s.saveShopperDetails(ctx, in.ShopperID, custName, custPhone, delivAddr)
+	}
+
 	// Best-effort workspace notification outside transaction so delivery issue cannot rollback valid order
 	_, _ = s.pool.Exec(ctx, `
 		INSERT INTO notifications (workspace_id, user_id, category, title, body, action_url)

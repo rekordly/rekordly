@@ -4,7 +4,7 @@ import { CheckCircle, CreditCard, Bank, Money, MagnifyingGlass, ShoppingBag, Tra
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 
 import { AppButton } from "@/components/ui/app-button";
 import { AppInput } from "@/components/ui/app-input";
@@ -18,6 +18,7 @@ import { createDefaultSections, resolvePalette, STORE_THEMES, type BrandSettings
 import type { GuestCheckoutConfirmation, ManualBankDetails, PublicCourierRate, PublicDeliveryRatesResponse, PublicStorefrontProduct, StorefrontPickupPoint, ValidatedCart } from "@/types/finance";
 import { EssentialStoreFooter, StoreServiceCards } from "./essential-store-footer";
 import { EssentialProductDetail } from "./essential-product-detail";
+import { ShopperOrdersClient } from "./shopper-orders-client";
 import { resolveStoreBrand } from "@/lib/store-themes/brand";
 import { STORE_WRAP } from "@/lib/store-themes/layout";
 import { SideSheet } from "@/components/ui/side-sheet";
@@ -44,7 +45,7 @@ function availabilityLabel(p: PublicStorefrontProduct): { text: string; tone: "s
   return { text: "Out of stock", tone: "danger" };
 }
 
-export function PublicStorefrontClient({ slug, page = "home", collectionSlug, productID }: { slug: string; page?: "home" | "shop" | "about" | "policies" | "privacy" | "returns" | "terms" | "delivery" | "cart" | "collection" | "product"; productID?: number; collectionSlug?: string }) {
+export function PublicStorefrontClient({ slug, page = "home", collectionSlug, productID }: { slug: string; page?: "home" | "shop" | "about" | "policies" | "privacy" | "returns" | "terms" | "delivery" | "cart" | "collection" | "product" | "orders"; productID?: number; collectionSlug?: string }) {
   const router = useRouter();
   const [cartOpen, setCartOpen] = useState(false);
   const [cartNavigationError, setCartNavigationError] = useState("");
@@ -59,15 +60,23 @@ export function PublicStorefrontClient({ slug, page = "home", collectionSlug, pr
   const [activeProductGroup, setActiveProductGroup] = useState<PublicStorefrontProduct[] | null>(null);
   const [selectedVariantId, setSelectedVariantId] = useState<number>(0);
 
-  // Checkout state
-  const [customerName, setCustomerName] = useState("");
-  const [customerPhone, setCustomerPhone] = useState("");
-  const [customerEmail, setCustomerEmail] = useState("");
+  const shopperQuery = useQuery({
+    queryKey: ["shopper-me"],
+    queryFn: () => financeApi.getShopperMe(),
+    retry: false,
+  });
+  const shopper = shopperQuery.data;
+
+  // Checkout state (null defers to signed-in shopper prefill until edited)
+  const [customerNameInput, setCustomerName] = useState<string | null>(null);
+  const [customerPhoneInput, setCustomerPhone] = useState<string | null>(null);
+  const [customerEmailInput, setCustomerEmail] = useState<string | null>(null);
   const [deliveryMethodChoice, setDeliveryMethod] = useState("pickup");
   const [deliveryAreaIdChoice, setDeliveryAreaId] = useState("");
   const [pickupPointIdChoice, setPickupPointId] = useState("");
   const [paymentMethodChoice, setPaymentMethod] = useState("virtual_account");
-  const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [deliveryAddressInput, setDeliveryAddress] = useState<string | null>(null);
+  const [saveDetails, setSaveDetails] = useState(true);
   const [customerNote, setCustomerNote] = useState("");
   const [policyAccepted, setPolicyAccepted] = useState(true);
   const [checkoutError, setCheckoutError] = useState("");
@@ -76,6 +85,11 @@ export function PublicStorefrontClient({ slug, page = "home", collectionSlug, pr
   const [selectedCourierCode, setSelectedCourierCode] = useState("");
   const [loadingCourierRates, setLoadingCourierRates] = useState(false);
   const [courierRatesError, setCourierRatesError] = useState("");
+
+  const customerName = customerNameInput ?? shopper?.name ?? "";
+  const customerPhone = customerPhoneInput ?? shopper?.phone ?? "";
+  const customerEmail = customerEmailInput ?? shopper?.email ?? "";
+  const deliveryAddress = deliveryAddressInput ?? shopper?.saved_addresses?.[0] ?? "";
 
   const storeQuery = useQuery({
     queryKey: ["public-storefront", slug, searchText, selectedCol],
@@ -229,6 +243,7 @@ export function PublicStorefrontClient({ slug, page = "home", collectionSlug, pr
           payment_method: paymentMethod || undefined,
           delivery_address: deliveryAddress,
           customer_note: customerNote,
+          save_details: Boolean(shopper) && saveDetails,
           policy_acknowledged: policyAccepted,
         },
         idempotencyKey,
@@ -400,6 +415,12 @@ export function PublicStorefrontClient({ slug, page = "home", collectionSlug, pr
         { key: "other", title: "More information", body: sf.custom_policy },
       ]} /> : null}
 
+      {page === "orders" ? (
+        <Suspense fallback={<div className="mx-auto max-w-3xl px-5 py-12 text-sm text-muted">Loading your orders…</div>}>
+          <ShopperOrdersClient storeSlug={slug} storeName={sf.name} />
+        </Suspense>
+      ) : null}
+
       {page === "cart" ? <PublicCartPage
         storeName={sf.name}
         currency={sf.currency}
@@ -445,6 +466,10 @@ export function PublicStorefrontClient({ slug, page = "home", collectionSlug, pr
         loadingCourierRates={loadingCourierRates}
         courierRatesError={courierRatesError}
         onFetchCourierRates={() => void handleFetchCourierRates()}
+        signedInShopper={Boolean(shopper)}
+        savedAddresses={shopper?.saved_addresses ?? []}
+        saveDetails={saveDetails}
+        setSaveDetails={setSaveDetails}
         customerNote={customerNote}
         setCustomerNote={setCustomerNote}
         policyAccepted={policyAccepted}
@@ -553,6 +578,10 @@ type PublicCartPageProps = {
   loadingCourierRates: boolean;
   courierRatesError: string;
   onFetchCourierRates: () => void;
+  signedInShopper: boolean;
+  savedAddresses: string[];
+  saveDetails: boolean;
+  setSaveDetails: (value: boolean) => void;
   customerNote: string;
   setCustomerNote: (value: string) => void;
   policyAccepted: boolean;
@@ -654,6 +683,23 @@ function PublicCartPage(props: PublicCartPageProps) {
         ) : null}
 
         {props.deliveryMethod === "merchant_delivery" && props.deliveryAreas.length ? <AppSelect label="Delivery area" placeholder="Choose a delivery area" isRequired selectedKey={props.deliveryAreaId || undefined} onSelectionChange={props.setDeliveryAreaId} options={props.deliveryAreas.map((area) => ({ key: String(area.id), label: area.state ? `${area.name} (${area.state})` : area.name, description: [area.fee_minor === "0" ? "Free" : formatMinorAmount(area.fee_minor, props.currency, props.currencyExponent), area.estimate_text].filter(Boolean).join(" · ") }))} /> : null}
+        {(props.deliveryMethod === "merchant_delivery" || props.deliveryMethod === "courier") && props.signedInShopper && props.savedAddresses.length > 0 ? (
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium text-muted">Saved addresses</p>
+            <div className="flex flex-wrap gap-1.5">
+              {props.savedAddresses.map((addr) => (
+                <button
+                  key={addr}
+                  type="button"
+                  onClick={() => props.setDeliveryAddress(addr)}
+                  className={`rounded-full border px-3 py-1 text-xs transition-colors ${props.deliveryAddress === addr ? "border-primary bg-primary/10 font-medium text-primary" : "border-black/15 text-muted hover:border-black/30"}`}
+                >
+                  {addr}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
         {props.deliveryMethod === "merchant_delivery" || props.deliveryMethod === "courier" ? <AppInput label="Delivery address" isRequired value={props.deliveryAddress} onChange={(event) => props.setDeliveryAddress(event.target.value)} placeholder="Street address, city and state" /> : null}
         {props.deliveryMethod === "courier" ? (
           <div className="space-y-3 rounded-xl border border-black/10 p-3">
@@ -697,6 +743,12 @@ function PublicCartPage(props: PublicCartPageProps) {
         ) : null}
 
         <AppInput label="Note for the store (optional)" value={props.customerNote} onChange={(event) => props.setCustomerNote(event.target.value)} placeholder="Preferred delivery or pickup time" />
+        {props.signedInShopper ? (
+          <label className="flex items-start gap-2 text-xs text-muted">
+            <input className="mt-0.5" type="checkbox" checked={props.saveDetails} onChange={(event) => props.setSaveDetails(event.target.checked)} />
+            <span>Save my details for faster checkout next time.</span>
+          </label>
+        ) : null}
         <label className="flex items-start gap-2 text-xs text-muted"><input className="mt-0.5" type="checkbox" checked={props.policyAccepted} onChange={(event) => props.setPolicyAccepted(event.target.checked)} /><span>Items are held briefly while you complete checkout.</span></label>
         <div className="space-y-2 border-t border-black/10 pt-4 text-sm">
           <div className="flex items-center justify-between"><span>Items subtotal</span><span>{formatMinorAmount(subtotalBig.toString(), props.currency, props.currencyExponent)}</span></div>

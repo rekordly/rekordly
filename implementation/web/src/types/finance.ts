@@ -1764,3 +1764,24 @@ export interface PublicDeliveryRatesResponse {
   cached: boolean;
   rates: PublicCourierRate[];
 }
+
+export interface ShopperProfileView {
+  email: string;
+  name?: string | null;
+  phone?: string | null;
+  saved_addresses: string[];
+}
+
+export interface ShopperOrderSummaryView {
+  order_reference: string;
+  storefront_name: string;
+  storefront_slug: string;
+  created_at: string;
+  currency: string;
+  currency_exponent: number;
+  total_minor: string;
+  commercial_status: string;
+  payment_status: string;
+  fulfilment_status: string;
+  order_url?: string;
+}

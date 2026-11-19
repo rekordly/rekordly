@@ -54,8 +54,10 @@ func (h *Handler) storefrontError(c *gin.Context, err error) {
 		status, code = http.StatusNotFound, "PRODUCT_NOT_PUBLISHED"
 	case errors.Is(err, ErrCartItemChanged):
 		status, code = http.StatusConflict, "CART_ITEM_CHANGED"
-	case errors.Is(err, ErrCheckoutRateLimited):
+	case errors.Is(err, ErrCheckoutRateLimited), errors.Is(err, ErrShopperRateLimited):
 		status, code = http.StatusTooManyRequests, "CHECKOUT_RATE_LIMITED"
+	case errors.Is(err, ErrShopperCodeInvalid), errors.Is(err, ErrShopperUnauthenticated):
+		status, code = http.StatusUnauthorized, "SHOPPER_UNAUTHORIZED"
 	case errors.Is(err, ErrOrderVersionConflict):
 		status, code = http.StatusConflict, "ORDER_VERSION_CONFLICT"
 	case errors.Is(err, ErrStorefrontDesignVersionConflict):

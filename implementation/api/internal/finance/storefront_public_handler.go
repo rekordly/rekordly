@@ -29,6 +29,8 @@ func (h *Handler) RegisterPublicStorefrontRoutes(g *gin.RouterGroup) {
 	g.POST("/public/orders/:token/acknowledge", h.acknowledgePublicOrderChanges)
 	g.POST("/public/orders/:token/cancel", h.cancelPublicOrderBeforeConfirm)
 	g.POST("/public/orders/:token/return-request", h.requestPublicOrderReturn)
+
+	h.registerPublicShopperRoutes(g)
 }
 
 func (h *Handler) getPublicStorefrontByHost(c *gin.Context) {
@@ -169,6 +171,11 @@ func (h *Handler) submitGuestCheckout(c *gin.Context) {
 		in.IdempotencyKey = c.GetHeader("Idempotency-Key")
 	}
 	in.ClientKey = c.ClientIP()
+	if sessTok := readShopperSessionCookie(c); sessTok != "" {
+		if sid, sErr := h.service.ResolveShopperIDBySessionToken(c.Request.Context(), sessTok); sErr == nil {
+			in.ShopperID = sid
+		}
+	}
 	res, err := h.service.SubmitGuestCheckout(c.Request.Context(), c.Param("slug"), false, in)
 	if err != nil {
 		h.storefrontError(c, err)

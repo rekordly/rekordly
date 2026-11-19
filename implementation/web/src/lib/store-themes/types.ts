@@ -113,7 +113,7 @@ export interface ThemeRendererProps {
   cartCount?: number;
   onCartClick?: () => void;
   selectCollection?: (slug: string) => void;
-  page?: "home" | "shop" | "about" | "policies" | "privacy" | "returns" | "terms" | "delivery" | "cart" | "collection" | "product";
+  page?: "home" | "shop" | "about" | "policies" | "privacy" | "returns" | "terms" | "delivery" | "cart" | "collection" | "product" | "orders";
   collectionSlug?: string;
 }
 

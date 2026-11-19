@@ -1004,6 +1004,18 @@ export const financeApi = {
     apiClient.post<{ reason?: string }, { order: PublicOrderStatus }>(`/api/v1/public/orders/${encodeURIComponent(token)}/cancel`, { reason }).then((r) => r.order),
   requestPublicOrderReturn: (token: string, reason?: string) =>
     apiClient.post<{ reason?: string }, { order: PublicOrderStatus }>(`/api/v1/public/orders/${encodeURIComponent(token)}/return-request`, { reason }).then((r) => r.order),
+
+  // Passwordless Shopper Identity & Cross-Store Order Tracking
+  requestShopperCode: (email: string, storeSlug?: string) =>
+    apiClient.post<{ email: string; store_slug?: string }, { message: string }>("/api/v1/public/shopper/code", { email, store_slug: storeSlug }),
+  verifyShopperLogin: (body: { email?: string; code?: string; token?: string }) =>
+    apiClient.post<typeof body, { shopper: import("@/types/finance").ShopperProfileView }>("/api/v1/public/shopper/verify", body).then((r) => r.shopper),
+  getShopperMe: () =>
+    apiClient.get<{ shopper: import("@/types/finance").ShopperProfileView }>("/api/v1/public/shopper/me").then((r) => r.shopper),
+  listShopperOrders: (storeSlug?: string) =>
+    apiClient.get<{ orders: import("@/types/finance").ShopperOrderSummaryView[] }>(storeSlug ? `/api/v1/public/shopper/orders?store=${encodeURIComponent(storeSlug)}` : "/api/v1/public/shopper/orders").then((r) => r.orders ?? []),
+  logoutShopper: () =>
+    apiClient.post<Record<string, never>, { signed_out: boolean }>("/api/v1/public/shopper/logout", {}),
 };
 
 /** Query keys are always namespaced by workspace so one space can never render another's rows. */
