@@ -98,7 +98,7 @@ export function StorePreview({ data, draft }: { data: PublicStorefrontProjection
     else setPage("shop");
   };
   return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-white" onClickCapture={navigate} onSubmitCapture={(event) => { event.preventDefault(); setPage("shop"); }}>
+    <div className="overflow-hidden rounded-2xl border border-border bg-surface" onClickCapture={navigate} onSubmitCapture={(event) => { event.preventDefault(); setPage("shop"); }}>
       <Renderer store={store} brand={draft.brand} sections={draft.sections} page={page} />
       {page === "shop" ? <StoreServiceCards slug={data.slug} delivery={data.delivery_guidance} returns={data.return_policy} support={data.contact_email ? `mailto:${data.contact_email}` : undefined} /> : null}
       <EssentialStoreFooter store={store} brand={draft.brand} showContact={draft.sections.find((section) => section.type === "contact")?.enabled !== false} />
@@ -224,11 +224,11 @@ function Content({ workspaceId, template }: { workspaceId: number; template?: Se
         return <article key={key} className="min-w-0">
           <Link href={"/store/templates/customization/" + key} className="group block">
             <div className="relative aspect-[4/3] overflow-hidden rounded-xl border border-border bg-surface-secondary">
-              {key === "simple" ? <div aria-hidden="true" inert className="pointer-events-none absolute top-0 left-0 w-[1280px] origin-top-left scale-[0.24] bg-white">
+              {key === "simple" ? <div aria-hidden="true" inert className="pointer-events-none absolute top-0 left-0 w-[1280px] origin-top-left scale-[0.24] bg-surface">
                 {preview.data ? <StorePreview data={preview.data.storefront} draft={draftFrom(design, key)} /> : null}
               </div> : <Image src={"/storefront-demos/media/" + key + "-preview.jpg"} alt={manifest.name + " storefront screenshot"} fill sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw" className="object-cover object-top" /> }
               <div className="absolute inset-0 grid place-items-center bg-black/25 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
-                <span className="flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-black"><PaintBrush size={16} aria-hidden="true" />{option?.owned || key === "simple" ? "Customise" : "Try template"}</span>
+                <span className="flex items-center gap-2 rounded-full bg-surface px-5 py-2.5 text-sm font-semibold text-black"><PaintBrush size={16} aria-hidden="true" />{option?.owned || key === "simple" ? "Customise" : "Try template"}</span>
               </div>
             </div>
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2">

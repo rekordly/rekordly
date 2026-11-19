@@ -44,7 +44,7 @@ export function EssentialProductDetail({ slug, product: initialProduct, products
 
   return (
     <main className={`${STORE_WRAP} py-8 sm:py-12`}>
-      <Link href={`/s/${slug}/shop`} className="inline-flex items-center gap-1.5 text-[13px] text-[#6E736D] hover:text-current">
+      <Link href={`/s/${slug}/shop`} className="inline-flex items-center gap-1.5 text-[13px] text-muted hover:text-current">
         <ArrowLeft size={14} aria-hidden="true" />
         Shop
       </Link>
@@ -55,7 +55,7 @@ export function EssentialProductDetail({ slug, product: initialProduct, products
               <Image src={product.image_urls[image] || product.image_urls[0]} alt={product.title} fill sizes="(max-width:768px) 100vw, 50vw" unoptimized className="object-cover" />
             ) : (
               <div className="grid h-full place-items-center">
-                <ImageSquare size={40} className="text-black/20" aria-hidden="true" />
+                <ImageSquare size={40} className="text-muted/50" aria-hidden="true" />
               </div>
             )}
           </div>
@@ -78,16 +78,16 @@ export function EssentialProductDetail({ slug, product: initialProduct, products
           ) : null}
         </div>
 
-        <div className={market ? "space-y-6 rounded-xl border border-black/10 bg-white p-5 md:sticky md:top-28 sm:p-7" : "space-y-6 md:sticky md:top-28"}>
+        <div className={market ? "space-y-6 rounded-xl border border-border bg-surface p-5 md:sticky md:top-28 sm:p-7" : "space-y-6 md:sticky md:top-28"}>
           <div>
             <h1 className={studio ? "break-words text-4xl leading-tight font-medium tracking-tight lg:text-6xl" : "break-words text-3xl leading-tight font-semibold tracking-tight sm:text-4xl"} style={{ fontFamily: "var(--store-heading-font)" }}>{product.title}</h1>
             <p className="mt-3 text-2xl font-semibold tabular">{formatMinorAmount(product.price_minor, product.currency, product.currency_exponent)}</p>
-            <p className="mt-1 text-[13px] text-[#6E736D]">{stock}</p>
+            <p className="mt-1 text-[13px] text-muted">{stock}</p>
           </div>
 
           {variants.length > 1 ? (
             <div>
-              <h2 className="mb-2.5 text-[12px] font-semibold tracking-[0.14em] text-[#6E736D] uppercase">Options</h2>
+              <h2 className="mb-2.5 text-[12px] font-semibold tracking-[0.14em] text-muted uppercase">Options</h2>
               <ChoiceCards value={String(product.id)} options={variants.map((variant) => ({ key: String(variant.id), label: variant.variant_name || variant.title, description: variant.availability_state === "out_of_stock" ? "Sold out" : formatMinorAmount(variant.price_minor, variant.currency, variant.currency_exponent) }))} onChange={(value) => {
                 setSelectedID(Number(value));
                 setImage(0);
@@ -96,15 +96,15 @@ export function EssentialProductDetail({ slug, product: initialProduct, products
             </div>
           ) : null}
 
-          {product.contact_only ? <div className="rounded-lg border border-black/10 p-4 text-sm">
+          {product.contact_only ? <div className="rounded-lg border border-border p-4 text-sm">
             {contactLink ? <a className="font-semibold underline underline-offset-4" href={contactLink}>Contact the store to order</a> : <p>Contact the store to order.</p>}
           </div> : !soldOut && onAddToCart && onViewCart ? <PremiumCartButton quantity={cartQuantities?.[product.id]} onAdd={() => onAddToCart(product)} onView={onViewCart} /> : <PublicProductActions key={product.id} slug={slug} productID={product.id} priceMinor={product.price_minor} unavailable={soldOut} />}
 
-          <div className="divide-y divide-black/10 border-y border-black/10">
+          <div className="divide-y divide-border border-y border-border">
             {product.description ? (
               <details open className="group py-4">
                 <summary className="cursor-pointer list-none text-[14px] font-semibold">Description</summary>
-                <p className="mt-3 text-[14px] leading-7 whitespace-pre-wrap text-[#6E736D]">{product.description}</p>
+                <p className="mt-3 text-[14px] leading-7 whitespace-pre-wrap text-muted">{product.description}</p>
               </details>
             ) : null}
             <details className="py-4">
@@ -116,7 +116,7 @@ export function EssentialProductDetail({ slug, product: initialProduct, products
           </div>
         </div>
       </div>
-      {related.size ? <section className="mt-14 space-y-6 border-t border-black/10 pt-9" aria-labelledby="related-products">
+      {related.size ? <section className="mt-14 space-y-6 border-t border-border pt-9" aria-labelledby="related-products">
         <h2 id="related-products" className="text-2xl font-semibold" style={{ fontFamily: "var(--store-heading-font)" }}>Related products</h2>
         <PremiumGrid store={{ slug, name: "", collections: [], products }} products={Array.from(related.values()).slice(0, 4)} compact={market} />
       </section> : null}

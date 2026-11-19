@@ -375,7 +375,7 @@ export function PublicStorefrontClient({ slug, page = "home", collectionSlug, pr
         <AppButton size="sm" variant={selectedCol === "" ? "primary" : "secondary"} label="All" onPress={() => setSelectedCol("")} />
         {sf.collections.map((collection) => <AppButton key={collection.id} size="sm" variant={selectedCol === collection.slug ? "primary" : "secondary"} label={collection.name} onPress={() => setSelectedCol(collection.slug)} />)}
       </div>
-      {productGroups.size === 0 ? <div className="w-full rounded-2xl border border-black/10 p-8 text-center"><p className="font-semibold">No matching items found</p><p className="mt-1 text-xs opacity-75">Try another search or contact {sf.contact_phone || sf.contact_email || "the merchant"} directly.</p></div> : null}
+      {productGroups.size === 0 ? <div className="w-full rounded-2xl border border-border p-8 text-center"><p className="font-semibold">No matching items found</p><p className="mt-1 text-xs opacity-75">Try another search or contact {sf.contact_phone || sf.contact_email || "the merchant"} directly.</p></div> : null}
     </section>
   );
 
@@ -384,7 +384,7 @@ export function PublicStorefrontClient({ slug, page = "home", collectionSlug, pr
     const primary = variants[0];
     if (!primary) return null;
     const badge = availabilityLabel(primary);
-    return <article key={primary.product_id} className="group h-full overflow-hidden rounded-2xl border border-black/10 bg-white transition-shadow hover:shadow-lg">
+    return <article key={primary.product_id} className="group h-full overflow-hidden rounded-2xl border border-border bg-surface transition-shadow hover:shadow-lg">
       <Link href={`/s/${encodeURIComponent(slug)}/products/${primary.id}`} className="block">
         <div className="relative aspect-[4/3] overflow-hidden bg-gray-100">
           {primary.image_urls?.[0] ? <Image src={primary.image_urls[0]} alt={primary.title} fill sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw" unoptimized className="object-cover transition-transform duration-300 group-hover:scale-[1.03]" /> : <div className="grid h-full place-items-center text-sm text-gray-400">Image coming soon</div>}
@@ -401,7 +401,7 @@ export function PublicStorefrontClient({ slug, page = "home", collectionSlug, pr
   };
 
   return (
-    <div className={themeKey === "studio" ? "min-h-screen bg-[#fcfaf6]" : "min-h-screen bg-white"} style={{ "--store-primary": resolved.palette.primary, "--store-accent": resolved.palette.accent, "--premium-surface": themeKey === "studio" ? "#f3eee7" : "#f1f3f4", "--store-heading-font": resolved.heading.headingFamily, "--accent": resolved.palette.primary, "--primary": resolved.palette.primary, "--primary-foreground": readableOn(resolved.palette.primary), "--premium-button-text": readableOn(resolved.palette.primary), fontFamily: resolved.body.bodyFamily, color: "#252a27" } as React.CSSProperties}>
+    <div className={themeKey === "studio" ? "flex min-h-dvh flex-col bg-[#fcfaf6] dark:bg-background [&_h1]:font-[family-name:var(--store-heading-font)] [&_h2]:font-[family-name:var(--store-heading-font)]" : "flex min-h-dvh flex-col bg-background [&_h1]:font-[family-name:var(--store-heading-font)] [&_h2]:font-[family-name:var(--store-heading-font)]"} style={{ "--store-primary": resolved.palette.primary, "--store-accent": resolved.palette.accent, "--premium-surface": "var(--surface-secondary)", "--store-heading-font": resolved.heading.headingFamily, "--accent": resolved.palette.primary, "--primary": resolved.palette.primary, "--primary-foreground": readableOn(resolved.palette.primary), "--premium-button-text": readableOn(resolved.palette.primary), fontFamily: resolved.body.bodyFamily, color: "var(--foreground)" } as React.CSSProperties}>
       <Renderer
         store={{ name: sf.name, slug: sf.slug, tagline: sf.tagline, description: sf.description, logo_url: brand.logo_url ?? sf.logo_url, banner_url: sf.banner_url, phone: sf.contact_phone, whatsapp_number: sf.whatsapp_number, address: sf.address, business_hours: sf.business_hours, products: sf.products.map((product) => ({ ...product, is_featured: product.is_featured ?? false })), collections: sf.collections }}
         brand={resolvedBrand}
@@ -639,7 +639,7 @@ function PolicyPage({ page, policies }: { page: "policies" | "privacy" | "return
   const title = page === "policies" ? "Policies & help" : page === "returns" ? "Returns & refunds" : page === "terms" ? "Terms of service" : page === "privacy" ? "Privacy" : "Delivery";
   return <main className="mx-auto w-full max-w-3xl space-y-5 px-5 py-12 sm:px-8 sm:py-16">
     <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Store information</p><h1 className="mt-2 text-3xl font-bold">{title}</h1><p className="mt-2 text-sm text-muted">Information provided by this store for its customers.</p></div>
-    {visible.length ? visible.map((policy) => <section key={policy.key} className="rounded-2xl border border-black/10 bg-white p-6"><h2 className="font-semibold">{policy.title}</h2><p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-muted">{policy.body}</p></section>) : <section className="rounded-2xl border border-black/10 bg-white p-6 text-sm leading-7 text-muted">This store has not published this information yet. Contact the store directly if you need help.</section>}
+    {visible.length ? visible.map((policy) => <section key={policy.key} className="rounded-2xl border border-border bg-surface p-6"><h2 className="font-semibold">{policy.title}</h2><p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-muted">{policy.body}</p></section>) : <section className="rounded-2xl border border-border bg-surface p-6 text-sm leading-7 text-muted">This store has not published this information yet. Contact the store directly if you need help.</section>}
   </main>;
 }
 
@@ -682,25 +682,25 @@ function PublicCartPage(props: PublicCartPageProps) {
       <p className="mt-3 text-sm">Reference: <strong>{props.confirmedOrder.order_reference}</strong></p>
       <p className="mt-1 text-sm text-muted">{props.confirmedOrder.message}</p>
       <p className="mt-2 text-sm">Total: {formatMinorAmount(props.confirmedOrder.total_minor, props.confirmedOrder.currency, props.currencyExponent)}</p>
-      {props.confirmedOrder.status_token ? <Link href={`/orders/status/${props.confirmedOrder.status_token}`} className="mt-5 inline-flex rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-white">View order & payment details</Link> : null}
+      {props.confirmedOrder.status_token ? <Link href={`/orders/status/${props.confirmedOrder.status_token}`} className="mt-5 inline-flex rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground">View order & payment details</Link> : null}
       <div><AppButton className="mt-4" variant="secondary" label="Continue shopping" onPress={props.onResetConfirmation} /></div>
-    </section> : props.cart.length === 0 ? <section className="rounded-2xl border border-black/10 bg-white p-8 text-center">
-      <ShoppingBag size={36} weight="duotone" className="mx-auto text-muted" /><h2 className="mt-3 text-lg font-semibold">Your cart is empty</h2><p className="mt-1 text-sm text-muted">Browse the shop to find something you like.</p><Link href="./shop" className="mt-5 inline-flex rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-white">Browse products</Link>
+    </section> : props.cart.length === 0 ? <section className="rounded-2xl border border-border bg-surface p-8 text-center">
+      <ShoppingBag size={36} weight="duotone" className="mx-auto text-muted" /><h2 className="mt-3 text-lg font-semibold">Your cart is empty</h2><p className="mt-1 text-sm text-muted">Browse the shop to find something you like.</p><Link href="./shop" className="mt-5 inline-flex rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground">Browse products</Link>
     </section> : <form onSubmit={(event) => { event.preventDefault(); props.onSubmit(); }} className="grid items-start gap-6 lg:grid-cols-[1fr_400px]">
-      <section className="space-y-5 rounded-2xl border border-black/10 bg-white p-5 sm:p-7">
+      <section className="space-y-5 rounded-2xl border border-border bg-surface p-5 sm:p-7">
         <div className="flex items-center justify-between"><h2 className="text-lg font-semibold">Items ({props.cart.length})</h2><Link href="./shop" className="text-sm font-medium text-primary">Continue shopping</Link></div>
         {props.validatedCart?.has_changes ? <div className="flex gap-2 rounded-xl border border-warning bg-warning/10 p-3 text-sm"><Warning size={18} className="shrink-0" />Some prices or availability changed. Review the updated total before placing your order.</div> : null}
         {props.checkoutError ? <p role="alert" className="text-sm font-medium text-danger">{props.checkoutError}</p> : null}
-        <div className="divide-y divide-black/10">{props.cart.map((line) => <div key={line.storefront_product_id} className="flex flex-wrap items-center justify-between gap-4 py-4">
+        <div className="divide-y divide-border">{props.cart.map((line) => <div key={line.storefront_product_id} className="flex flex-wrap items-center justify-between gap-4 py-4">
           <div className="min-w-0"><p className="truncate font-medium">{line.title}</p>{line.variant_name ? <p className="mt-1 text-xs text-muted">{line.variant_name}</p> : null}<p className="mt-1 text-sm text-muted">{formatMinorAmount(line.price_minor, props.currency, props.currencyExponent)} each</p></div>
           <div className="flex shrink-0 items-center gap-2"><AppButton size="sm" variant="secondary" aria-label="Decrease quantity" label="−" onPress={() => props.onQuantityChange(line.storefront_product_id, Math.max(1, line.quantity - 1))} /><span className="w-6 text-center text-sm tabular-nums">{line.quantity}</span><AppButton size="sm" variant="secondary" aria-label="Increase quantity" label="+" onPress={() => props.onQuantityChange(line.storefront_product_id, Math.min(line.max_qty, line.quantity + 1))} /><AppButton size="sm" variant="ghost" isIconOnly aria-label="Remove item" startContent={<Trash />} onPress={() => props.onRemove(line.storefront_product_id)} /></div>
         </div>)}</div>
       </section>
-      {props.mode === "cart" ? <section className="space-y-4 rounded-2xl border border-black/10 bg-white p-5 sm:p-7">
+      {props.mode === "cart" ? <section className="space-y-4 rounded-2xl border border-border bg-surface p-5 sm:p-7">
         <h2 className="text-lg font-semibold">Order summary</h2>
         <div className="flex justify-between gap-3 text-sm"><span>Subtotal</span><strong>{formatMinorAmount(subtotalBig.toString(), props.currency, props.currencyExponent)}</strong></div>
         <AppButton className="w-full" label="Continue to checkout" isLoading={props.isOpeningCheckout} onPress={props.onCheckout} />
-      </section> : <section className="space-y-5 rounded-2xl border border-black/10 bg-white p-5 sm:p-7">
+      </section> : <section className="space-y-5 rounded-2xl border border-border bg-surface p-5 sm:p-7">
         <h2 className="text-lg font-semibold">1. Contact</h2>
         <AppInput label="Your name" isRequired value={props.customerName} onChange={(event) => props.setCustomerName(event.target.value)} placeholder="Your name" />
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2"><AppInput label="Phone / WhatsApp" isRequired={props.requirePhone} value={props.customerPhone} onChange={(event) => props.setCustomerPhone(event.target.value)} placeholder="+234…" /><AppInput label="Email" type="email" isRequired={emailRequired} value={props.customerEmail} onChange={(event) => props.setCustomerEmail(event.target.value)} placeholder="you@example.com" /></div>
@@ -737,7 +737,7 @@ function PublicCartPage(props: PublicCartPageProps) {
                   key={addr}
                   type="button"
                   onClick={() => props.setDeliveryAddress(addr)}
-                  className={`rounded-full border px-3 py-1 text-xs transition-colors ${props.deliveryAddress === addr ? "border-primary bg-primary/10 font-medium text-primary" : "border-black/15 text-muted hover:border-black/30"}`}
+                  className={`rounded-full border px-3 py-1 text-xs transition-colors ${props.deliveryAddress === addr ? "border-primary bg-primary/10 font-medium text-primary" : "border-border text-muted hover:border-black/30"}`}
                 >
                   {addr}
                 </button>
@@ -747,7 +747,7 @@ function PublicCartPage(props: PublicCartPageProps) {
         ) : null}
         {props.deliveryMethod === "merchant_delivery" || props.deliveryMethod === "courier" ? <AppInput label="Delivery address" isRequired value={props.deliveryAddress} onChange={(event) => props.setDeliveryAddress(event.target.value)} placeholder="Street address, city and state" /> : null}
         {props.deliveryMethod === "courier" ? (
-          <div className="space-y-3 rounded-xl border border-black/10 p-3">
+          <div className="space-y-3 rounded-xl border border-border p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs font-medium text-muted">Get live shipping quotes for your address</p>
               <AppButton size="sm" variant="secondary" label={props.loadingCourierRates ? "Loading rates..." : props.courierRates.length ? "Refresh rates" : "Get courier rates"} isLoading={props.loadingCourierRates} onPress={props.onFetchCourierRates} />
@@ -795,7 +795,7 @@ function PublicCartPage(props: PublicCartPageProps) {
           </label>
         ) : null}
         <label className="flex items-start gap-2 text-xs text-muted"><input className="mt-0.5" type="checkbox" checked={props.policyAccepted} onChange={(event) => props.setPolicyAccepted(event.target.checked)} /><span>Items are held briefly while you complete checkout.</span></label>
-        <div className="space-y-2 border-t border-black/10 pt-4 text-sm">
+        <div className="space-y-2 border-t border-border pt-4 text-sm">
           <div className="flex items-center justify-between"><span>Items subtotal</span><span>{formatMinorAmount(subtotalBig.toString(), props.currency, props.currencyExponent)}</span></div>
           {props.deliveryMethod === "merchant_delivery" || props.deliveryMethod === "courier" ? (
             <div className="flex items-center justify-between"><span>{props.deliveryMethod === "courier" ? "Courier shipping" : "Delivery"}</span><span>{props.deliveryMethod === "courier" && !selectedCourierRate ? "Select rate" : deliveryMinorBig === BigInt(0) ? "Free" : formatMinorAmount(deliveryMinorBig.toString(), props.currency, props.currencyExponent)}</span></div>
@@ -803,7 +803,7 @@ function PublicCartPage(props: PublicCartPageProps) {
           {processingFeeBig > BigInt(0) ? (
             <div className="flex items-center justify-between"><span>Payment processing fee</span><span>{formatMinorAmount(processingFeeBig.toString(), props.currency, props.currencyExponent)}</span></div>
           ) : null}
-          <div className="flex items-center justify-between border-t border-black/10 pt-2 text-base font-bold">
+          <div className="flex items-center justify-between border-t border-border pt-2 text-base font-bold">
             <span>Total</span>
             <strong className="tabular-nums">{formatMinorAmount(finalTotalBig.toString(), props.currency, props.currencyExponent)}</strong>
           </div>

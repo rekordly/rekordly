@@ -81,7 +81,7 @@ export function ProductGridSection({ section, data, renderProduct, productTools,
     {text(section, "title", "Shop our products") ? <h2 className="font-[family-name:var(--store-heading-font)] text-xl font-bold tracking-tight sm:text-2xl">{text(section, "title", "Shop our products")}</h2> : null}
     {productTools}
     <div className={`grid grid-cols-2 ${boutique ? "gap-3 sm:grid-cols-3 lg:grid-cols-4" : "gap-3 sm:gap-5 lg:grid-cols-4"}`}>
-      {productGroups.map((variants) => { const product = variants[0]; return <div key={product.product_id}>{renderProduct?.(product, variants) ?? <a href={`/s/${data.slug}/products/${product.product_id}`} className="block overflow-hidden rounded-xl border border-black/10 bg-[var(--store-surface)]">
+      {productGroups.map((variants) => { const product = variants[0]; return <div key={product.product_id}>{renderProduct?.(product, variants) ?? <a href={`/s/${data.slug}/products/${product.product_id}`} className="block overflow-hidden rounded-xl border border-border bg-[var(--store-surface)]">
         <div className={`relative bg-black/5 ${boutique ? "aspect-[3/4]" : "aspect-square"}`}>{product.image_urls[0] ? <Image src={product.image_urls[0]} alt={product.title} fill sizes="(max-width: 640px) 50vw, 25vw" className="object-cover" unoptimized /> : null}</div>
         <div className="space-y-1 p-3"><p className="truncate text-sm font-medium">{product.title}</p><p className="text-sm font-semibold" style={{ color: "var(--store-primary)" }}>{formatMinorAmount(product.price_minor, product.currency, product.currency_exponent)}</p></div>
       </a>}</div>;})}
@@ -114,13 +114,13 @@ export function FaqSection({ section, onSectionClick: onClick, preview }: { sect
   const raw = section.content.items;
   const items = Array.isArray(raw) ? raw.filter((item): item is { question: string; answer: string } => Boolean(item && typeof item === "object" && "question" in item && "answer" in item)).slice(0, 10) : [];
   if (!items.length) return null;
-  return <Frame section={section} preview={preview} onClick={onClick}><div className="space-y-3 py-8"><h2 className="font-[family-name:var(--store-heading-font)] text-xl font-bold">Questions and answers</h2><div className="divide-y divide-black/10 rounded-xl border border-black/10 px-4">{items.map((item, index) => <details key={`${section.id}-${index}`} className="py-4"><summary className="cursor-pointer text-sm font-semibold">{item.question}</summary><p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[var(--store-muted)]">{item.answer}</p></details>)}</div></div></Frame>;
+  return <Frame section={section} preview={preview} onClick={onClick}><div className="space-y-3 py-8"><h2 className="font-[family-name:var(--store-heading-font)] text-xl font-bold">Questions and answers</h2><div className="divide-y divide-border rounded-xl border border-border px-4">{items.map((item, index) => <details key={`${section.id}-${index}`} className="py-4"><summary className="cursor-pointer text-sm font-semibold">{item.question}</summary><p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[var(--store-muted)]">{item.answer}</p></details>)}</div></div></Frame>;
 }
 
 export function ContactSection({ section, data, onSectionClick: onClick, preview }: { section: StoreSection; data: ThemeRendererProps["store"] } & Pick<ThemeRendererProps, "onSectionClick" | "preview">) {
   const hasContact = data.phone || data.whatsapp_number || data.address || Object.keys(data.business_hours ?? {}).length > 0;
   if (!hasContact) return null;
-  return <Frame section={section} preview={preview} onClick={onClick}><div className="space-y-2 border-t border-black/10 py-7"><h2 className="font-[family-name:var(--store-heading-font)] text-lg font-bold">Get in touch</h2>
+  return <Frame section={section} preview={preview} onClick={onClick}><div className="space-y-2 border-t border-border py-7"><h2 className="font-[family-name:var(--store-heading-font)] text-lg font-bold">Get in touch</h2>
     {data.phone ? <p className="text-sm">Phone: <a href={`tel:${data.phone}`} className="underline">{data.phone}</a></p> : null}
     {data.whatsapp_number ? <p className="text-sm">WhatsApp: <a href={`https://wa.me/${data.whatsapp_number.replace(/\D/g, "")}`} className="underline">Message us</a></p> : null}
     {data.address ? <p className="text-sm">{data.address}</p> : null}

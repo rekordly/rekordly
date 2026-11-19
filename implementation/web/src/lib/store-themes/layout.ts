@@ -4,8 +4,8 @@
 /** The content column every template section sits in. */
 export const STORE_WRAP = "mx-auto w-full max-w-[1320px] px-5 sm:px-8";
 
-/** Light grey used behind product images and service cards. */
-export const STORE_SURFACE = "#F3F3F1";
+/** Theme surface used behind product images and service cards. */
+export const STORE_SURFACE = "var(--surface-secondary)";
 
 /** Black or white text, whichever reads better on the given background colour. */
 export function readableOn(background: string): "#17211B" | "#FFFFFF" {

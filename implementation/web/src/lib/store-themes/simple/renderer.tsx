@@ -30,8 +30,8 @@ function stockLabel(variants: ThemeProduct[]) {
 function Checkbox({ checked, label, onChange }: { checked: boolean; label: string; onChange: () => void }) {
   return (
     <button type="button" role="checkbox" aria-checked={checked} onClick={onChange} className="flex w-full cursor-pointer items-center gap-3 py-1 text-left text-[14px]">
-      <span className="grid size-4 shrink-0 place-items-center rounded-[4px] border transition-colors" style={checked ? { background: "var(--store-primary)", borderColor: "var(--store-primary)" } : { borderColor: "rgba(0,0,0,.3)" }}>
-        {checked ? <span className="size-1.5 rounded-[1px] bg-white" /> : null}
+      <span className="grid size-4 shrink-0 place-items-center rounded-[4px] border transition-colors" style={checked ? { background: "var(--store-primary)", borderColor: "var(--store-primary)" } : { borderColor: "var(--border)" }}>
+        {checked ? <span className="size-1.5 rounded-[1px] bg-surface" /> : null}
       </span>
       <span className={checked ? "font-medium" : "text-[var(--store-muted)]"}>{label}</span>
     </button>
@@ -99,11 +99,11 @@ export function SimpleStoreRenderer(props: ThemeRendererProps) {
     "--store-primary": palette.primary,
     "--store-accent": palette.accent,
     "--store-surface": STORE_SURFACE,
-    "--store-text": "#1C211E",
-    "--store-muted": "#6E736D",
+    "--store-text": "var(--foreground)",
+    "--store-muted": "var(--muted)",
     "--store-heading-font": heading.headingFamily,
     color: "#1C211E",
-    background: "#FFFFFF",
+    background: "var(--background)",
     fontFamily: body.bodyFamily,
   } as CSSProperties;
   const headingStyle = { fontFamily: heading.headingFamily };
@@ -127,7 +127,7 @@ export function SimpleStoreRenderer(props: ThemeRendererProps) {
               aria-pressed={availability === value}
               onClick={() => setAvailability(availability === value ? "" : value)}
               className="cursor-pointer rounded-full border px-3.5 py-1.5 text-[13px] transition-colors"
-              style={availability === value ? { background: "var(--store-primary)", borderColor: "var(--store-primary)", color: onPrimary } : { borderColor: "rgba(0,0,0,.15)" }}
+              style={availability === value ? { background: "var(--store-primary)", borderColor: "var(--store-primary)", color: onPrimary } : { borderColor: "var(--border)" }}
             >
               {label}
             </button>
@@ -161,12 +161,12 @@ export function SimpleStoreRenderer(props: ThemeRendererProps) {
               onCartClick ? (
               <button type="button" onClick={onCartClick} aria-label={`Cart, ${cartCount} items`} className={`relative grid size-10 place-items-center rounded-full transition-colors ${chip}`}>
                 <ShoppingBag size={18} aria-hidden="true" />
-                {cartCount ? <span className="absolute -top-0.5 -right-0.5 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-white px-1 text-[10px] font-bold text-[#1C211E]">{cartCount > 99 ? "99+" : cartCount}</span> : null}
+                {cartCount ? <span className="absolute -top-0.5 -right-0.5 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-surface px-1 text-[10px] font-bold text-foreground">{cartCount > 99 ? "99+" : cartCount}</span> : null}
               </button>
               ) : (
               <a href={`${base}/cart`} aria-label={`Cart, ${cartCount} items`} className={`relative grid size-10 place-items-center rounded-full transition-colors ${chip}`}>
                 <ShoppingBag size={18} aria-hidden="true" />
-                {cartCount ? <span className="absolute -top-0.5 -right-0.5 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-white px-1 text-[10px] font-bold text-[#1C211E]">{cartCount > 99 ? "99+" : cartCount}</span> : null}
+                {cartCount ? <span className="absolute -top-0.5 -right-0.5 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-surface px-1 text-[10px] font-bold text-foreground">{cartCount > 99 ? "99+" : cartCount}</span> : null}
               </a>
               )
             )}
@@ -215,33 +215,33 @@ export function SimpleStoreRenderer(props: ThemeRendererProps) {
                   {props.collectionSlug ? ` · ${store.collections.find((item) => item.slug === props.collectionSlug)?.name || "Collection"}` : ""}
                 </p>
                 <div className="flex items-center gap-3">
-                  <label className="flex items-center gap-2 border-b border-black/15 pb-1.5 focus-within:border-black/50">
+                  <label className="flex items-center gap-2 border-b border-border pb-1.5 focus-within:border-foreground/50">
                     <MagnifyingGlass size={16} className="text-[var(--store-muted)]" aria-hidden="true" />
                     <input type="search" value={search} onChange={(event) => { setSearch(event.target.value); setLimit(PAGE_SIZE); }} placeholder="Search" aria-label="Search products" className="w-32 bg-transparent text-[14px] outline-none sm:w-48" />
                   </label>
-                  <button type="button" onClick={() => setFiltersOpen(!filtersOpen)} className="h-9 cursor-pointer rounded-full border border-black/15 px-4 text-[12px] font-semibold tracking-[0.1em] uppercase lg:hidden">
+                  <button type="button" onClick={() => setFiltersOpen(!filtersOpen)} className="h-9 cursor-pointer rounded-full border border-border px-4 text-[12px] font-semibold tracking-[0.1em] uppercase lg:hidden">
                     Filters
                   </button>
                 </div>
               </div>
-              {filtersOpen ? <div className="mb-6 rounded-2xl border border-black/10 p-5 lg:hidden">{filters}</div> : null}
+              {filtersOpen ? <div className="mb-6 rounded-2xl border border-border p-5 lg:hidden">{filters}</div> : null}
 
               {listing?.enabled === false ? (
                 <p className="py-16 text-center text-[14px] text-[var(--store-muted)]">Products are coming soon.</p>
               ) : products.length ? (
-                <div className="grid grid-cols-2 border-t border-l border-black/10 xl:grid-cols-3">
+                <div className="grid grid-cols-2 border-t border-l border-border xl:grid-cols-3">
                   {products.slice(0, limit).map((variants) => {
                     const product = variants[0];
                     const soldOut = variants.every((variant) => variant.availability_state === "out_of_stock");
                     return (
-                      <a key={product.product_id} href={`${base}/products/${product.id}`} className="group flex min-w-0 flex-col border-r border-b border-black/10 p-3 sm:p-5">
+                      <a key={product.product_id} href={`${base}/products/${product.id}`} className="group flex min-w-0 flex-col border-r border-b border-border p-3 sm:p-5">
                         <div className="relative aspect-square overflow-hidden rounded-xl" style={{ background: STORE_SURFACE }}>
                           {product.image_urls[0] ? (
                             <Image src={product.image_urls[0]} alt={product.title} fill sizes="(max-width: 1280px) 50vw, 25vw" unoptimized className="object-cover transition duration-500 group-hover:scale-[1.04]" />
                           ) : (
-                            <div className="grid h-full place-items-center"><ShoppingBag size={32} className="text-black/20" aria-hidden="true" /></div>
+                            <div className="grid h-full place-items-center"><ShoppingBag size={32} className="text-muted/50" aria-hidden="true" /></div>
                           )}
-                          {soldOut ? <span className="absolute top-3 left-3 rounded-full bg-white/90 px-2.5 py-1 text-[11px] font-semibold">Sold out</span> : null}
+                          {soldOut ? <span className="absolute top-3 left-3 rounded-full bg-surface/95 px-2.5 py-1 text-[11px] font-semibold">Sold out</span> : null}
                         </div>
                         <h3 className="mt-4 line-clamp-1 text-[15px] font-semibold tracking-tight sm:text-[17px]" style={headingStyle}>{product.title}</h3>
                         <p className="mt-1 text-[14px] font-semibold tabular">{formatMinorAmount(product.price_minor, product.currency, product.currency_exponent)}</p>
@@ -258,7 +258,7 @@ export function SimpleStoreRenderer(props: ThemeRendererProps) {
               )}
 
               {limit < products.length ? (
-                <button type="button" onClick={() => setLimit(limit + PAGE_SIZE)} className="mx-auto mt-10 block h-11 cursor-pointer rounded-full border border-black/20 px-8 text-[12px] font-semibold tracking-[0.12em] uppercase transition-colors hover:bg-black/5">
+                <button type="button" onClick={() => setLimit(limit + PAGE_SIZE)} className="mx-auto mt-10 block h-11 cursor-pointer rounded-full border border-border px-8 text-[12px] font-semibold tracking-[0.12em] uppercase transition-colors hover:bg-surface-secondary">
                   Load more
                 </button>
               ) : null}
@@ -280,9 +280,9 @@ export function SimpleStoreRenderer(props: ThemeRendererProps) {
 
       {searchOpen ? (
         <div role="dialog" aria-modal="true" aria-label="Search the store" className="fixed inset-0 z-50 bg-black/40 backdrop-blur-[2px]" onClick={() => setSearchOpen(false)}>
-          <div className="bg-white py-8 shadow-xl" onClick={(event) => event.stopPropagation()}>
+          <div className="bg-surface py-8 shadow-xl" onClick={(event) => event.stopPropagation()}>
             <div className={STORE_WRAP}>
-              <div className="flex items-center gap-3 border-b border-black/15 pb-3">
+              <div className="flex items-center gap-3 border-b border-border pb-3">
                 <MagnifyingGlass size={22} className="text-[var(--store-muted)]" aria-hidden="true" />
                 <input
                   autoFocus
@@ -294,14 +294,14 @@ export function SimpleStoreRenderer(props: ThemeRendererProps) {
                   onKeyDown={(event) => { if (event.key === "Escape") setSearchOpen(false); }}
                   className="min-w-0 flex-1 bg-transparent text-xl outline-none sm:text-2xl"
                 />
-                <button type="button" onClick={() => setSearchOpen(false)} aria-label="Close search" className="grid size-10 cursor-pointer place-items-center rounded-full hover:bg-black/5">
+                <button type="button" onClick={() => setSearchOpen(false)} aria-label="Close search" className="grid size-10 cursor-pointer place-items-center rounded-full hover:bg-surface-secondary">
                   <X size={20} aria-hidden="true" />
                 </button>
               </div>
               {search ? (
                 <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   {products.slice(0, 4).map(([product]) => (
-                    <a key={product.id} href={`${base}/products/${product.id}`} className="flex items-center gap-3 rounded-xl p-2 hover:bg-black/5">
+                    <a key={product.id} href={`${base}/products/${product.id}`} className="flex items-center gap-3 rounded-xl p-2 hover:bg-surface-secondary">
                       <span className="relative size-14 shrink-0 overflow-hidden rounded-lg" style={{ background: STORE_SURFACE }}>
                         {product.image_urls[0] ? <Image src={product.image_urls[0]} alt="" fill sizes="56px" unoptimized className="object-cover" /> : null}
                       </span>

@@ -43,7 +43,7 @@ export function EssentialStoreFooter({ store, brand, showContact = true }: { sto
   const whatsapp = store.whatsapp_number?.replace(/\D/g, "");
 
   return (
-    <footer style={{ background: palette.primary, color: readableOn(palette.primary) }}>
+    <footer className="mt-auto" style={{ background: palette.primary, color: readableOn(palette.primary) }}>
       <div className={`${STORE_WRAP} py-14 sm:py-20`}>
         <a href={base} className="inline-flex max-w-full items-center gap-4">
           {logo ? <Image src={logo} alt={`${store.name} logo`} width={64} height={64} unoptimized className="size-14 shrink-0 rounded-full object-cover sm:size-16" /> : null}

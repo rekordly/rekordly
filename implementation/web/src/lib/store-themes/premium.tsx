@@ -50,7 +50,7 @@ function SearchBox({ store }: Pick<ThemeRendererProps, "store">) {
       onKeyDown={(event) => {
         if (event.key === "Escape") setShow(false);
       }}>
-      <div className="flex h-11 items-center rounded-lg border border-current/20 bg-white text-[#212522] focus-within:ring-2 focus-within:ring-current/30">
+      <div className="flex h-11 items-center rounded-lg border border-current/20 bg-surface text-foreground focus-within:ring-2 focus-within:ring-current/30">
         <input type="search" name="q" aria-label="Search products" aria-controls={suggestions.length ? id : undefined}
           className="h-full min-w-0 flex-1 bg-transparent px-3 text-sm outline-none"
           placeholder="Search products" maxLength={120} value={text}
@@ -58,9 +58,9 @@ function SearchBox({ store }: Pick<ThemeRendererProps, "store">) {
         <button type="submit" aria-label="Search" className="grid h-full w-11 shrink-0 place-items-center"><MagnifyingGlass size={20} /></button>
       </div>
       {suggestions.length ? (
-        <ul id={id} className="absolute inset-x-0 top-full z-30 mt-1 grid rounded-lg border border-black/10 bg-white p-2 text-[#212522] shadow-lg">
+        <ul id={id} className="absolute inset-x-0 top-full z-30 mt-1 grid rounded-lg border border-border bg-surface p-2 text-foreground shadow-lg">
           {suggestions.map(([product]) => (
-            <li key={product.id}><Link className="block rounded px-3 py-2.5 text-sm hover:bg-black/5 focus:bg-black/5"
+            <li key={product.id}><Link className="block rounded px-3 py-2.5 text-sm hover:bg-surface-secondary focus:bg-surface-secondary"
               href={productPath(store, product.id)}>{product.title}</Link></li>
           ))}
         </ul>
@@ -77,15 +77,15 @@ export function PremiumShell({ model, family, children }: { model: ThemeRenderer
   const logo = brand.logo_url || store.logo_url;
   const style = {
     "--store-primary": palette.primary, "--store-accent": palette.accent, "--store-heading-font": heading.headingFamily,
-    "--premium-button-text": readableOn(palette.primary), "--premium-surface": studio ? "#f3eee7" : "#f1f3f4", "--store-muted": "#626661",
-    fontFamily: body.bodyFamily, background: studio ? "#fcfaf6" : "#fff", color: "#222822",
+    "--premium-button-text": readableOn(palette.primary), "--premium-surface": "var(--surface-secondary)", "--store-muted": "var(--muted)",
+    fontFamily: body.bodyFamily, color: "var(--foreground)",
   } as CSSProperties;
   const cartLabel = "Cart (" + cartCount + ")";
   const cartContent = <><ShoppingBag size={21} /><span>{cartLabel}</span></>;
   return (
     <div className="contents" style={style}>
       {sections.filter((section) => section.enabled && section.type === "announcement").map((section) => <AnnouncementSection key={section.id} section={section} />)}
-      <header className={studio ? "sticky top-0 z-30 border-b border-black/10 bg-[#fcfaf6]" : "sticky top-0 z-30"} style={studio ? undefined : { background: palette.primary, color: readableOn(palette.primary) }}>
+      <header className={studio ? "sticky top-0 z-30 border-b border-border bg-[#fcfaf6] dark:bg-surface" : "sticky top-0 z-30"} style={studio ? undefined : { background: palette.primary, color: readableOn(palette.primary) }}>
         <div className={premiumWidth + (studio ? " grid grid-cols-[1fr_auto] items-center gap-4 py-5 sm:grid-cols-[1fr_1fr_auto]" : " grid grid-cols-[1fr_auto] items-center gap-4 py-4 md:grid-cols-[minmax(0,1fr)_minmax(0,3fr)_auto]")}>
           <Link href={base} className="flex min-w-0 items-center gap-2 text-xl font-semibold" style={headingFont}>
             {logo ? <Image src={logo} alt="" width={40} height={40} unoptimized className="size-10 shrink-0 object-contain" /> : null}
@@ -99,7 +99,7 @@ export function PremiumShell({ model, family, children }: { model: ThemeRenderer
             : <Link href={base + "/cart"} className="flex items-center gap-2 justify-self-end rounded-lg border border-current/25 px-3 py-2 text-sm">{cartContent}</Link>)}
         </div>
       </header>
-      <nav aria-label="Store navigation" className="border-b border-black/10 bg-white">
+      <nav aria-label="Store navigation" className="border-b border-border bg-surface">
         <div className={premiumWidth + (studio ? " flex flex-wrap justify-center gap-x-6 gap-y-2 py-3 text-sm" : " flex flex-wrap gap-x-5 gap-y-2 py-3 text-sm")}>
           <Link href={base + "/shop"} className="font-semibold hover:underline">Shop all</Link>
           {store.collections.filter((collection) => collection.slug).slice(0, studio ? 4 : 7).map((collection) => (
@@ -117,7 +117,7 @@ export function PremiumShell({ model, family, children }: { model: ThemeRenderer
 export function PremiumMedia({ src, alt, className = "" }: { src?: string | null; alt: string; className?: string }) {
   return <div className={"relative overflow-hidden bg-[var(--premium-surface)] " + className}>
     {src ? <Image src={src} alt={alt} fill unoptimized sizes="(max-width: 640px) 100vw, 50vw" className="object-cover" /> : (
-      <div className="grid h-full place-items-center text-black/25"><ImageSquare size={32} aria-hidden="true" /></div>
+      <div className="grid h-full place-items-center text-muted/55"><ImageSquare size={32} aria-hidden="true" /></div>
     )}
   </div>;
 }
@@ -128,8 +128,8 @@ function listingVariant(variants: ThemeProduct[]) {
 
 export function PremiumCartButton({ quantity = 0, onAdd, onView, compact = false }: { quantity?: number; onAdd: () => void; onView: () => void; compact?: boolean }) {
   const inCart = quantity > 0;
-  return <button type="button" onClick={inCart ? onView : onAdd} className={["flex w-full items-center justify-center gap-2 rounded-lg border border-black/10 font-semibold", compact ? "mt-3 min-h-10 px-2 py-2 text-xs" : "min-h-12 px-4 py-3 text-sm", inCart ? "bg-[var(--premium-surface,#f1f3f4)] text-[#222822] hover:underline" : "bg-[var(--store-primary,#16453b)] text-[var(--premium-button-text,#fff)] hover:opacity-90"].join(" ")}>
-    {inCart ? <><Check size={16} aria-hidden="true" /> In cart ({quantity}) · View cart</> : <><ShoppingBag size={16} aria-hidden="true" /> Add to cart</>}
+  return <button type="button" onClick={inCart ? onView : onAdd} aria-label={inCart ? "View cart, " + quantity + " of this item" : undefined} className={["flex w-full items-center justify-center gap-2 rounded-lg border border-border font-semibold", compact ? "mt-3 min-h-10 px-2 py-2 text-xs" : "min-h-12 px-4 py-3 text-sm", inCart ? "bg-[var(--premium-surface,var(--surface-secondary))] text-foreground hover:underline" : "bg-[var(--store-primary,#16453b)] text-[var(--premium-button-text,#fff)] hover:opacity-90"].join(" ")}>
+    {inCart ? <><Check size={16} aria-hidden="true" /> In cart <span className="rounded-full bg-current/10 px-1.5 tabular-nums">{quantity}</span></> : <><ShoppingBag size={16} aria-hidden="true" /> Add to cart</>}
   </button>;
 }
 
@@ -141,7 +141,7 @@ export function PremiumGrid({ store, products, compact, onQuickAdd, cartQuantiti
         const quantity = variants.reduce((count, item) => count + (cartQuantities?.[item.id] ?? 0), 0);
         const canQuickAdd = compact && variants.length === 1 && product.availability_state !== "out_of_stock" && product.availability_state !== "request_only" && !product.contact_only && onQuickAdd;
         return (
-          <li key={product.product_id} className={compact ? "min-w-0 rounded-xl border border-black/10 bg-white p-2.5 sm:p-3" : "min-w-0"}>
+          <li key={product.product_id} className={compact ? "min-w-0 rounded-xl border border-border bg-surface p-2.5 sm:p-3" : "min-w-0"}>
             <Link href={productPath(store, product.id)} className="group block">
               <PremiumMedia src={product.image_urls[0]} alt={product.title} className={compact ? "aspect-square rounded-lg" : "aspect-[4/5]"} />
               <h3 className="mt-3 break-words text-sm font-semibold group-hover:underline sm:text-base">{product.title}</h3>
@@ -186,7 +186,7 @@ export function PremiumCatalogue({ model, compact }: { model: ThemeRendererProps
       </label>
       {page === "search" ? <label className="grid gap-2">
         Collection
-        <select value={searchCollection} onChange={(event) => { setSearchCollection(event.target.value); setLimit(24); }} className="w-full rounded-md border border-black/15 bg-white px-2 py-2">
+        <select value={searchCollection} onChange={(event) => { setSearchCollection(event.target.value); setLimit(24); }} className="w-full rounded-md border border-border bg-surface px-2 py-2">
           <option value="">All collections</option>
           {store.collections.filter((item) => item.slug).map((item) => <option key={item.id} value={item.slug}>{item.name}</option>)}
         </select>
@@ -202,20 +202,20 @@ export function PremiumCatalogue({ model, compact }: { model: ThemeRendererProps
         {page === "search" ? (searchQuery ? "Results for “" + searchQuery + "”" : "Search products") : collection?.name || "Shop"}
       </h1>
       <div className={compact ? "grid gap-7 lg:grid-cols-[11rem_minmax(0,1fr)]" : "grid gap-7"}>
-        {compact ? <aside className="hidden border-r border-black/10 pr-5 lg:block">{filters}</aside> : null}
+        {compact ? <aside className="hidden border-r border-border pr-5 lg:block">{filters}</aside> : null}
         <div className="min-w-0">
           <div className="mb-5 flex flex-wrap items-center gap-3">
             <p className="mr-auto text-sm text-[var(--store-muted)]" role="status">{groups.length} {groups.length === 1 ? "product" : "products"}</p>
-            <button type="button" className={compact ? "rounded-md border border-black/15 px-3 py-2 text-sm lg:hidden" : "rounded-md border border-black/15 px-3 py-2 text-sm"} onClick={() => setFiltersOpen(true)}>Filters</button>
-            <select aria-label="Sort products" className="max-w-full rounded-md border border-black/15 bg-white px-2 py-2 text-sm"
+            <button type="button" className={compact ? "rounded-md border border-border px-3 py-2 text-sm lg:hidden" : "rounded-md border border-border px-3 py-2 text-sm"} onClick={() => setFiltersOpen(true)}>Filters</button>
+            <select aria-label="Sort products" className="max-w-full rounded-md border border-border bg-surface px-2 py-2 text-sm"
               value={sort} onChange={(event) => { setSort(event.target.value); setLimit(24); }}>
               <option value="featured">Featured</option><option value="title">Name A–Z</option>
               <option value="price-low">Price: low to high</option><option value="price-high">Price: high to low</option>
             </select>
           </div>
           {groups.length ? <PremiumGrid store={store} products={groups.slice(0, limit)} compact={compact} onQuickAdd={onQuickAdd} cartQuantities={cartQuantities} onCartClick={onCartClick} />
-            : <div className="rounded-lg border border-black/10 p-7 text-sm">No products found. <Link className="underline" href={storePath(store) + "/shop"}>Browse all products</Link></div>}
-          {groups.length > limit ? <button type="button" onClick={() => setLimit(limit + 24)} className="mx-auto mt-8 block rounded-md border border-black/20 px-5 py-2.5 text-sm">Load more</button> : null}
+            : <div className="rounded-lg border border-border p-7 text-sm">No products found. <Link className="underline" href={storePath(store) + "/shop"}>Browse all products</Link></div>}
+          {groups.length > limit ? <button type="button" onClick={() => setLimit(limit + 24)} className="mx-auto mt-8 block rounded-md border border-border px-5 py-2.5 text-sm">Load more</button> : null}
         </div>
       </div>
       <SideSheet title="Filters" isOpen={filtersOpen} onClose={() => setFiltersOpen(false)}>{filters}</SideSheet>
