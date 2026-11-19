@@ -196,61 +196,75 @@ func normalizeCustomHostname(raw string) (string, error) {
 }
 
 type StorefrontSettingsView struct {
-	Tagline                 *string           `json:"tagline,omitempty"`
-	Description             *string           `json:"description,omitempty"`
-	LogoURL                 *string           `json:"logo_url,omitempty"`
-	BannerURL               *string           `json:"banner_url,omitempty"`
-	PrimaryColor            string            `json:"primary_color"`
-	AccentColor             string            `json:"accent_color"`
-	BackgroundColor         string            `json:"background_color"`
-	TextColor               string            `json:"text_color"`
-	FontFamily              string            `json:"font_family"`
-	SectionOrder            []string          `json:"section_order"`
-	ContactPhone            *string           `json:"contact_phone,omitempty"`
-	ContactEmail            *string           `json:"contact_email,omitempty"`
-	WhatsappNumber          *string           `json:"whatsapp_number,omitempty"`
-	Address                 *string           `json:"address,omitempty"`
-	BusinessHours           map[string]string `json:"business_hours"`
-	SocialLinks             map[string]string `json:"social_links"`
-	DeliveryMethods         []string          `json:"delivery_methods"`
-	DeliveryGuidance        *string           `json:"delivery_guidance,omitempty"`
-	DefaultDeliveryFeeMinor string            `json:"default_delivery_fee_minor"`
-	FreeDeliveryThresholdMinor *string        `json:"free_delivery_threshold_minor,omitempty"`
-	DeliveryAreas           []StorefrontDeliveryAreaView `json:"delivery_areas"`
-	MetaPixelID             string            `json:"meta_pixel_id,omitempty"`
-	TikTokPixelID           string            `json:"tiktok_pixel_id,omitempty"`
-	GoogleAnalyticsID       string            `json:"google_analytics_id,omitempty"`
-	CheckoutRequireEmail    bool              `json:"checkout_require_email"`
-	CheckoutRequirePhone    bool              `json:"checkout_require_phone"`
-	AutoShowNewProducts     bool              `json:"auto_show_new_products"`
-	ShowSoldOut             bool              `json:"show_sold_out"`
-	ShowStockCount          bool              `json:"show_stock_count"`
-	LowStockThreshold       int32             `json:"low_stock_threshold"`
-	ReturnPolicy            *string           `json:"return_policy,omitempty"`
-	PrivacyPolicy           *string           `json:"privacy_policy,omitempty"`
-	TermsPolicy             *string           `json:"terms_policy,omitempty"`
-	CustomPolicy            *string           `json:"custom_policy,omitempty"`
-	SeoTitle                *string           `json:"seo_title,omitempty"`
-	SeoDescription          *string           `json:"seo_description,omitempty"`
-	SeoImageURL             *string           `json:"seo_image_url,omitempty"`
-	SeoIndexable            bool              `json:"seo_indexable"`
-	Version                 int32             `json:"version"`
+	Tagline                    *string                      `json:"tagline,omitempty"`
+	Description                *string                      `json:"description,omitempty"`
+	LogoURL                    *string                      `json:"logo_url,omitempty"`
+	BannerURL                  *string                      `json:"banner_url,omitempty"`
+	PrimaryColor               string                       `json:"primary_color"`
+	AccentColor                string                       `json:"accent_color"`
+	BackgroundColor            string                       `json:"background_color"`
+	TextColor                  string                       `json:"text_color"`
+	FontFamily                 string                       `json:"font_family"`
+	SectionOrder               []string                     `json:"section_order"`
+	ContactPhone               *string                      `json:"contact_phone,omitempty"`
+	ContactEmail               *string                      `json:"contact_email,omitempty"`
+	WhatsappNumber             *string                      `json:"whatsapp_number,omitempty"`
+	Address                    *string                      `json:"address,omitempty"`
+	BusinessHours              map[string]string            `json:"business_hours"`
+	SocialLinks                map[string]string            `json:"social_links"`
+	DeliveryMethods            []string                     `json:"delivery_methods"`
+	DeliveryGuidance           *string                      `json:"delivery_guidance,omitempty"`
+	DefaultDeliveryFeeMinor    string                       `json:"default_delivery_fee_minor"`
+	FreeDeliveryThresholdMinor *string                      `json:"free_delivery_threshold_minor,omitempty"`
+	DeliveryAreas              []StorefrontDeliveryAreaView `json:"delivery_areas"`
+	MetaPixelID                string                       `json:"meta_pixel_id,omitempty"`
+	TikTokPixelID              string                       `json:"tiktok_pixel_id,omitempty"`
+	GoogleAnalyticsID          string                       `json:"google_analytics_id,omitempty"`
+	CheckoutRequireEmail       bool                         `json:"checkout_require_email"`
+	CheckoutRequirePhone       bool                         `json:"checkout_require_phone"`
+	AutoShowNewProducts        bool                         `json:"auto_show_new_products"`
+	ShowSoldOut                bool                         `json:"show_sold_out"`
+	ShowStockCount             bool                         `json:"show_stock_count"`
+	LowStockThreshold          int32                        `json:"low_stock_threshold"`
+	ReturnPolicy               *string                      `json:"return_policy,omitempty"`
+	PrivacyPolicy              *string                      `json:"privacy_policy,omitempty"`
+	TermsPolicy                *string                      `json:"terms_policy,omitempty"`
+	CustomPolicy               *string                      `json:"custom_policy,omitempty"`
+	SeoTitle                   *string                      `json:"seo_title,omitempty"`
+	SeoDescription             *string                      `json:"seo_description,omitempty"`
+	SeoImageURL                *string                      `json:"seo_image_url,omitempty"`
+	SeoIndexable               bool                         `json:"seo_indexable"`
+	Version                    int32                        `json:"version"`
 }
 
 type StorefrontDeliveryAreaView struct {
-	ID          int64  `json:"id"`
-	Name        string `json:"name"`
-	FeeMinor    string `json:"fee_minor"`
-	Description string `json:"description"`
-	Position    int32  `json:"position"`
-	IsActive    bool   `json:"is_active"`
+	ID           int64   `json:"id"`
+	Name         string  `json:"name"`
+	FeeMinor     string  `json:"fee_minor"`
+	Description  string  `json:"description"`
+	Position     int32   `json:"position"`
+	IsActive     bool    `json:"is_active"`
+	State        *string `json:"state,omitempty"`
+	EstimateText string  `json:"estimate_text"`
+	OutletID     *int64  `json:"outlet_id,omitempty"`
 }
 
 type StorefrontDeliveryAreaInput struct {
-	ID          int64  `json:"id"`
-	Name        string `json:"name"`
-	Fee         string `json:"fee"`
-	Description string `json:"description"`
+	ID           int64   `json:"id"`
+	Name         string  `json:"name"`
+	Fee          string  `json:"fee"`
+	Description  string  `json:"description"`
+	State        *string `json:"state,omitempty"`
+	EstimateText string  `json:"estimate_text"`
+	OutletID     *int64  `json:"outlet_id,omitempty"`
+}
+
+type StorefrontPickupPointView struct {
+	ID         int64   `json:"id"`
+	Name       string  `json:"name"`
+	Address    *string `json:"address,omitempty"`
+	Phone      *string `json:"phone,omitempty"`
+	PickupNote string  `json:"pickup_note"`
 }
 
 type StorefrontView struct {
@@ -280,51 +294,51 @@ type CreateStorefrontInput struct {
 }
 
 type UpdateStorefrontSettingsInput struct {
-	IdempotencyKey       string            `json:"idempotency_key,omitempty"`
-	Name                 string            `json:"name"`
-	Slug                 string            `json:"slug"`
-	ThemeKey             string            `json:"theme_key"`
-	DefaultOutletID      *int64            `json:"default_outlet_id"`
-	ReservationTTLHours  *int32            `json:"reservation_ttl_hours"`
-	Tagline              string            `json:"tagline"`
-	Description          string            `json:"description"`
-	LogoURL              string            `json:"logo_url"`
-	BannerURL            string            `json:"banner_url"`
-	PrimaryColor         string            `json:"primary_color"`
- Brand *StorefrontBrand `json:"brand"`
-	AccentColor          string            `json:"accent_color"`
-	BackgroundColor      string            `json:"background_color"`
-	TextColor            string            `json:"text_color"`
-	FontFamily           string            `json:"font_family"`
-	SectionOrder         []string          `json:"section_order"`
-	ContactPhone         string            `json:"contact_phone"`
-	ContactEmail         string            `json:"contact_email"`
-	WhatsappNumber       string            `json:"whatsapp_number"`
-	Address              string            `json:"address"`
-	BusinessHours        map[string]string `json:"business_hours"`
-	SocialLinks          map[string]string `json:"social_links"`
-	DeliveryMethods      []string          `json:"delivery_methods"`
-	DeliveryGuidance     string            `json:"delivery_guidance"`
-	DefaultDeliveryFee   string            `json:"default_delivery_fee"`
-	FreeDeliveryThreshold *string          `json:"free_delivery_threshold"`
-	DeliveryAreas        []StorefrontDeliveryAreaInput `json:"delivery_areas"`
-	MetaPixelID          string            `json:"meta_pixel_id"`
-	TikTokPixelID        string            `json:"tiktok_pixel_id"`
-	GoogleAnalyticsID    string            `json:"google_analytics_id"`
-	CheckoutRequireEmail *bool             `json:"checkout_require_email"`
-	CheckoutRequirePhone *bool             `json:"checkout_require_phone"`
-	ReturnPolicy         string            `json:"return_policy"`
-	PrivacyPolicy        string            `json:"privacy_policy"`
-	TermsPolicy          string            `json:"terms_policy"`
-	CustomPolicy         string            `json:"custom_policy"`
-	SeoTitle             string            `json:"seo_title"`
-	SeoDescription       string            `json:"seo_description"`
-	SeoImageURL          string            `json:"seo_image_url"`
-	SeoIndexable         *bool             `json:"seo_indexable"`
-	AutoShowNewProducts  *bool             `json:"auto_show_new_products"`
-	ShowSoldOut          *bool             `json:"show_sold_out"`
-	ShowStockCount       *bool             `json:"show_stock_count"`
-	LowStockThreshold    *int32            `json:"low_stock_threshold"`
+	IdempotencyKey        string                        `json:"idempotency_key,omitempty"`
+	Name                  string                        `json:"name"`
+	Slug                  string                        `json:"slug"`
+	ThemeKey              string                        `json:"theme_key"`
+	DefaultOutletID       *int64                        `json:"default_outlet_id"`
+	ReservationTTLHours   *int32                        `json:"reservation_ttl_hours"`
+	Tagline               string                        `json:"tagline"`
+	Description           string                        `json:"description"`
+	LogoURL               string                        `json:"logo_url"`
+	BannerURL             string                        `json:"banner_url"`
+	PrimaryColor          string                        `json:"primary_color"`
+	Brand                 *StorefrontBrand              `json:"brand"`
+	AccentColor           string                        `json:"accent_color"`
+	BackgroundColor       string                        `json:"background_color"`
+	TextColor             string                        `json:"text_color"`
+	FontFamily            string                        `json:"font_family"`
+	SectionOrder          []string                      `json:"section_order"`
+	ContactPhone          string                        `json:"contact_phone"`
+	ContactEmail          string                        `json:"contact_email"`
+	WhatsappNumber        string                        `json:"whatsapp_number"`
+	Address               string                        `json:"address"`
+	BusinessHours         map[string]string             `json:"business_hours"`
+	SocialLinks           map[string]string             `json:"social_links"`
+	DeliveryMethods       []string                      `json:"delivery_methods"`
+	DeliveryGuidance      string                        `json:"delivery_guidance"`
+	DefaultDeliveryFee    string                        `json:"default_delivery_fee"`
+	FreeDeliveryThreshold *string                       `json:"free_delivery_threshold"`
+	DeliveryAreas         []StorefrontDeliveryAreaInput `json:"delivery_areas"`
+	MetaPixelID           string                        `json:"meta_pixel_id"`
+	TikTokPixelID         string                        `json:"tiktok_pixel_id"`
+	GoogleAnalyticsID     string                        `json:"google_analytics_id"`
+	CheckoutRequireEmail  *bool                         `json:"checkout_require_email"`
+	CheckoutRequirePhone  *bool                         `json:"checkout_require_phone"`
+	ReturnPolicy          string                        `json:"return_policy"`
+	PrivacyPolicy         string                        `json:"privacy_policy"`
+	TermsPolicy           string                        `json:"terms_policy"`
+	CustomPolicy          string                        `json:"custom_policy"`
+	SeoTitle              string                        `json:"seo_title"`
+	SeoDescription        string                        `json:"seo_description"`
+	SeoImageURL           string                        `json:"seo_image_url"`
+	SeoIndexable          *bool                         `json:"seo_indexable"`
+	AutoShowNewProducts   *bool                         `json:"auto_show_new_products"`
+	ShowSoldOut           *bool                         `json:"show_sold_out"`
+	ShowStockCount        *bool                         `json:"show_stock_count"`
+	LowStockThreshold     *int32                        `json:"low_stock_threshold"`
 }
 
 func settingsToView(st db.StorefrontSetting) StorefrontSettingsView {
@@ -343,42 +357,42 @@ func settingsToView(st db.StorefrontSetting) StorefrontSettingsView {
 	var delivery []string
 	_ = json.Unmarshal(st.DeliveryMethods, &delivery)
 	return StorefrontSettingsView{
-		Tagline:                 nullableText(st.Tagline),
-		Description:             nullableText(st.Description),
-		LogoURL:                 nullableText(st.LogoUrl),
-		BannerURL:               nullableText(st.BannerUrl),
-		PrimaryColor:            st.PrimaryColor,
-		AccentColor:             st.AccentColor,
-		BackgroundColor:         st.BackgroundColor,
-		TextColor:               st.TextColor,
-		FontFamily:              st.FontFamily,
-		SectionOrder:            sections,
-		ContactPhone:            nullableText(st.ContactPhone),
-		ContactEmail:            nullableText(st.ContactEmail),
-		WhatsappNumber:          nullableText(st.WhatsappNumber),
-		Address:                 nullableText(st.Address),
-		BusinessHours:           hours,
-		SocialLinks:             socials,
-		DeliveryMethods:         delivery,
-		DeliveryGuidance:        nullableText(st.DeliveryGuidance),
-		DefaultDeliveryFeeMinor: fmt.Sprint(st.DefaultDeliveryFeeMinor),
+		Tagline:                    nullableText(st.Tagline),
+		Description:                nullableText(st.Description),
+		LogoURL:                    nullableText(st.LogoUrl),
+		BannerURL:                  nullableText(st.BannerUrl),
+		PrimaryColor:               st.PrimaryColor,
+		AccentColor:                st.AccentColor,
+		BackgroundColor:            st.BackgroundColor,
+		TextColor:                  st.TextColor,
+		FontFamily:                 st.FontFamily,
+		SectionOrder:               sections,
+		ContactPhone:               nullableText(st.ContactPhone),
+		ContactEmail:               nullableText(st.ContactEmail),
+		WhatsappNumber:             nullableText(st.WhatsappNumber),
+		Address:                    nullableText(st.Address),
+		BusinessHours:              hours,
+		SocialLinks:                socials,
+		DeliveryMethods:            delivery,
+		DeliveryGuidance:           nullableText(st.DeliveryGuidance),
+		DefaultDeliveryFeeMinor:    fmt.Sprint(st.DefaultDeliveryFeeMinor),
 		FreeDeliveryThresholdMinor: nullableMinor(st.FreeDeliveryThresholdMinor),
-		DeliveryAreas:           []StorefrontDeliveryAreaView{},
-		CheckoutRequireEmail:    st.CheckoutRequireEmail,
-		CheckoutRequirePhone:    st.CheckoutRequirePhone,
-		AutoShowNewProducts:     st.AutoShowNewProducts,
-		ShowSoldOut:             st.ShowSoldOut,
-		ShowStockCount:          st.ShowStockCount,
-		LowStockThreshold:       st.LowStockThreshold,
-		ReturnPolicy:            nullableText(st.ReturnPolicy),
-		PrivacyPolicy:           nullableText(st.PrivacyPolicy),
-		TermsPolicy:             nullableText(st.TermsPolicy),
-		CustomPolicy:            nullableText(st.CustomPolicy),
-		SeoTitle:                nullableText(st.SeoTitle),
-		SeoDescription:          nullableText(st.SeoDescription),
-		SeoImageURL:             nullableText(st.SeoImageUrl),
-		SeoIndexable:            st.SeoIndexable,
-		Version:                 st.Version,
+		DeliveryAreas:              []StorefrontDeliveryAreaView{},
+		CheckoutRequireEmail:       st.CheckoutRequireEmail,
+		CheckoutRequirePhone:       st.CheckoutRequirePhone,
+		AutoShowNewProducts:        st.AutoShowNewProducts,
+		ShowSoldOut:                st.ShowSoldOut,
+		ShowStockCount:             st.ShowStockCount,
+		LowStockThreshold:          st.LowStockThreshold,
+		ReturnPolicy:               nullableText(st.ReturnPolicy),
+		PrivacyPolicy:              nullableText(st.PrivacyPolicy),
+		TermsPolicy:                nullableText(st.TermsPolicy),
+		CustomPolicy:               nullableText(st.CustomPolicy),
+		SeoTitle:                   nullableText(st.SeoTitle),
+		SeoDescription:             nullableText(st.SeoDescription),
+		SeoImageURL:                nullableText(st.SeoImageUrl),
+		SeoIndexable:               st.SeoIndexable,
+		Version:                    st.Version,
 	}
 }
 
@@ -396,7 +410,17 @@ func (s *Service) buildStorefrontView(ctx context.Context, sf db.Storefront) (St
 		return StorefrontView{}, err
 	}
 	for _, area := range areas {
-		settings.DeliveryAreas = append(settings.DeliveryAreas, StorefrontDeliveryAreaView{ID: area.ID, Name: area.Name, FeeMinor: fmt.Sprint(area.FeeMinor), Description: area.Description, Position: area.Position, IsActive: area.IsActive})
+		settings.DeliveryAreas = append(settings.DeliveryAreas, StorefrontDeliveryAreaView{
+			ID:           area.ID,
+			Name:         area.Name,
+			FeeMinor:     fmt.Sprint(area.FeeMinor),
+			Description:  area.Description,
+			Position:     area.Position,
+			IsActive:     area.IsActive,
+			State:        nullableText(area.State),
+			EstimateText: area.EstimateText,
+			OutletID:     nullableInt8(area.OutletID),
+		})
 	}
 	pubCount, err := s.queries.CountPublishedStorefrontProducts(ctx, sf.ID)
 	if err != nil {
@@ -626,7 +650,7 @@ func (s *Service) UpdateStorefrontSettings(ctx context.Context, ws int64, in Upd
 	if len(in.DeliveryMethods) > 0 {
 		validDel := make([]string, 0, len(in.DeliveryMethods))
 		for _, m := range in.DeliveryMethods {
-			if m == "pickup" || m == "merchant_delivery" || m == "customer_arranged" {
+			if m == "pickup" || m == "merchant_delivery" || m == "customer_arranged" || m == "courier" {
 				validDel = append(validDel, m)
 			}
 		}
@@ -674,12 +698,18 @@ func (s *Service) UpdateStorefrontSettings(ctx context.Context, ws int64, in Upd
 	if err != nil {
 		return StorefrontView{}, err
 	}
- if in.Brand != nil {
-  if err := validateStoreBrand(in.Brand); err != nil { return StorefrontView{}, err }
-  brandPatch, err := json.Marshal(map[string]any{"colors": in.Brand.Colors, "heading_font": in.Brand.HeadingFont, "body_font": in.Brand.BodyFont})
-  if err != nil { return StorefrontView{}, err }
-  if _, err := tx.Exec(ctx, `UPDATE storefront_settings SET brand=COALESCE(brand,'{}'::jsonb) || $3::jsonb, draft_brand=COALESCE(draft_brand,'{}'::jsonb) || $3::jsonb, version=version+1 WHERE workspace_id=$1 AND storefront_id=$2`, ws, sf.ID, brandPatch); err != nil { return StorefrontView{}, err }
- }
+	if in.Brand != nil {
+		if err := validateStoreBrand(in.Brand); err != nil {
+			return StorefrontView{}, err
+		}
+		brandPatch, err := json.Marshal(map[string]any{"colors": in.Brand.Colors, "heading_font": in.Brand.HeadingFont, "body_font": in.Brand.BodyFont})
+		if err != nil {
+			return StorefrontView{}, err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE storefront_settings SET brand=COALESCE(brand,'{}'::jsonb) || $3::jsonb, draft_brand=COALESCE(draft_brand,'{}'::jsonb) || $3::jsonb, version=version+1 WHERE workspace_id=$1 AND storefront_id=$2`, ws, sf.ID, brandPatch); err != nil {
+			return StorefrontView{}, err
+		}
+	}
 	if _, err := q.UpdateStorefrontSettings(ctx, db.UpdateStorefrontSettingsParams{
 		StorefrontID:            sf.ID,
 		WorkspaceID:             ws,
@@ -753,11 +783,47 @@ func (s *Service) UpdateStorefrontSettings(ctx context.Context, ws int64, in Upd
 				return StorefrontView{}, errors.New("each delivery area needs a valid non-negative fee")
 			}
 			description := sanitizePublicText(area.Description, 400)
+			var stateParam pgtype.Text
+			if area.State != nil {
+				stClean := sanitizePublicText(*area.State, 80)
+				if stClean != "" {
+					stateParam = pgtype.Text{String: stClean, Valid: true}
+				}
+			}
+			estimateText := sanitizePublicText(area.EstimateText, 100)
+			var outletParam pgtype.Int8
+			if area.OutletID != nil && *area.OutletID > 0 {
+				if _, oErr := q.GetInventoryLocationByID(ctx, db.GetInventoryLocationByIDParams{WorkspaceID: ws, ID: *area.OutletID}); oErr != nil {
+					return StorefrontView{}, ErrNotFound
+				}
+				outletParam = pgtype.Int8{Int64: *area.OutletID, Valid: true}
+			}
 			var saved db.StorefrontDeliveryArea
 			if area.ID > 0 {
-				saved, err = q.UpdateStorefrontDeliveryArea(ctx, db.UpdateStorefrontDeliveryAreaParams{WorkspaceID: ws, StorefrontID: sf.ID, ID: area.ID, Name: name, FeeMinor: fee, Description: description, Position: int32(index)})
+				saved, err = q.UpdateStorefrontDeliveryArea(ctx, db.UpdateStorefrontDeliveryAreaParams{
+					WorkspaceID:  ws,
+					StorefrontID: sf.ID,
+					ID:           area.ID,
+					Name:         name,
+					FeeMinor:     fee,
+					Description:  description,
+					Position:     int32(index),
+					State:        stateParam,
+					EstimateText: estimateText,
+					OutletID:     outletParam,
+				})
 			} else {
-				saved, err = q.CreateStorefrontDeliveryArea(ctx, db.CreateStorefrontDeliveryAreaParams{WorkspaceID: ws, StorefrontID: sf.ID, Name: name, FeeMinor: fee, Description: description, Position: int32(index)})
+				saved, err = q.CreateStorefrontDeliveryArea(ctx, db.CreateStorefrontDeliveryAreaParams{
+					WorkspaceID:  ws,
+					StorefrontID: sf.ID,
+					Name:         name,
+					FeeMinor:     fee,
+					Description:  description,
+					Position:     int32(index),
+					State:        stateParam,
+					EstimateText: estimateText,
+					OutletID:     outletParam,
+				})
 			}
 			if errors.Is(err, pgx.ErrNoRows) {
 				return StorefrontView{}, ErrNotFound
@@ -815,7 +881,9 @@ func nullablePgInt4(value *int32) pgtype.Int4 {
 }
 
 func nullableMinor(value pgtype.Int8) *string {
-	if !value.Valid { return nil }
+	if !value.Valid {
+		return nil
+	}
 	text := fmt.Sprint(value.Int64)
 	return &text
 }

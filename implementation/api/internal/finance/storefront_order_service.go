@@ -54,6 +54,7 @@ type MerchantOrderView struct {
 	CurrencyExponent      int32                        `json:"currency_exponent"`
 	SubtotalMinor         string                       `json:"subtotal_minor"`
 	DeliveryFeeMinor      string                       `json:"delivery_fee_minor"`
+	ProcessingFeeMinor    string                       `json:"processing_fee_minor"`
 	TotalMinor            string                       `json:"total_minor"`
 	DeliveryMethod        string                       `json:"delivery_method"`
 	CustomerName          string                       `json:"customer_name"`
@@ -66,6 +67,15 @@ type MerchantOrderView struct {
 	LinkedInvoiceID       *int64                       `json:"linked_invoice_id,omitempty"`
 	LinkedSaleID          *int64                       `json:"linked_sale_id,omitempty"`
 	DeclineOrCancelReason *string                      `json:"decline_or_cancel_reason,omitempty"`
+	HoldType              *string                      `json:"hold_type,omitempty"`
+	ReservationExpiresAt  *string                      `json:"reservation_expires_at,omitempty"`
+	PickupCode            *string                      `json:"pickup_code,omitempty"`
+	PickupPointID         *int64                       `json:"pickup_point_id,omitempty"`
+	CourierName           *string                      `json:"courier_name,omitempty"`
+	CourierTrackingNumber *string                      `json:"courier_tracking_number,omitempty"`
+	CourierStatus         *string                      `json:"courier_status,omitempty"`
+	CourierBookingError   *string                      `json:"courier_booking_error,omitempty"`
+	CourierTrackingURL    *string                      `json:"courier_tracking_url,omitempty"`
 	CreatedAt             string                       `json:"created_at"`
 	Lines                 []MerchantOrderLineView      `json:"lines,omitempty"`
 	Events                []PublicOrderEventView       `json:"events,omitempty"`
@@ -73,6 +83,11 @@ type MerchantOrderView struct {
 }
 
 func merchantOrderHeader(o db.StorefrontOrder) MerchantOrderView {
+	var holdExp *string
+	if o.ReservationExpiresAt.Valid {
+		s := o.ReservationExpiresAt.Time.UTC().Format(time.RFC3339)
+		holdExp = &s
+	}
 	return MerchantOrderView{
 		ID:                    o.ID,
 		OrderReference:        o.OrderReference,
@@ -86,6 +101,7 @@ func merchantOrderHeader(o db.StorefrontOrder) MerchantOrderView {
 		CurrencyExponent:      o.CurrencyExponent,
 		SubtotalMinor:         fmt.Sprint(o.SubtotalMinor),
 		DeliveryFeeMinor:      fmt.Sprint(o.DeliveryFeeMinor),
+		ProcessingFeeMinor:    fmt.Sprint(o.ProcessingFeeMinor),
 		TotalMinor:            fmt.Sprint(o.TotalMinor),
 		DeliveryMethod:        o.DeliveryMethod,
 		CustomerName:          o.CustomerName,
@@ -97,6 +113,15 @@ func merchantOrderHeader(o db.StorefrontOrder) MerchantOrderView {
 		PaymentArrangement:    nullableText(o.PaymentArrangement),
 		LinkedInvoiceID:       nullableInt8(o.LinkedInvoiceID),
 		DeclineOrCancelReason: nullableText(o.DeclineOrCancelReason),
+		HoldType:              nullableText(o.HoldType),
+		ReservationExpiresAt:  holdExp,
+		PickupCode:            nullableText(o.PickupCode),
+		PickupPointID:         nullableInt8(o.PickupPointID),
+		CourierName:           nullableText(o.CourierName),
+		CourierTrackingNumber: nullableText(o.CourierTrackingNumber),
+		CourierStatus:         nullableText(o.CourierStatus),
+		CourierBookingError:   nullableText(o.CourierBookingError),
+		CourierTrackingURL:    nullableText(o.CourierTrackingUrl),
 		CreatedAt:             o.CreatedAt.Time.UTC().Format(time.RFC3339),
 	}
 }
@@ -113,8 +138,10 @@ func (s *Service) buildMerchantOrderDetail(ctx context.Context, o db.StorefrontO
 	v.Lines = make([]MerchantOrderLineView, 0, len(lines))
 	for _, l := range lines {
 		var avail decimal.Decimal
-		if o.OutletID.Valid {
-			_ = s.pool.QueryRow(ctx, `SELECT COALESCE((quantity_on_hand - reserved_quantity), 0) FROM inventory_balances WHERE workspace_id=$1 AND location_id=$2 AND product_id=$3`, o.WorkspaceID, o.OutletID.Int64, l.ProductID).Scan(&avail)
+		if o.OutletID.Valid && l.VariantID.Valid {
+			_ = s.pool.QueryRow(ctx, `SELECT COALESCE((quantity_on_hand - reserved_quantity), 0) FROM inventory_balances WHERE workspace_id=$1 AND location_id=$2 AND product_id=$3 AND variant_id=$4`, o.WorkspaceID, o.OutletID.Int64, l.ProductID, l.VariantID.Int64).Scan(&avail)
+		} else if o.OutletID.Valid {
+			_ = s.pool.QueryRow(ctx, `SELECT COALESCE(sum(quantity_on_hand - reserved_quantity), 0) FROM inventory_balances WHERE workspace_id=$1 AND location_id=$2 AND product_id=$3`, o.WorkspaceID, o.OutletID.Int64, l.ProductID).Scan(&avail)
 		} else {
 			_ = s.pool.QueryRow(ctx, `SELECT COALESCE(sum(quantity_on_hand - reserved_quantity), 0) FROM inventory_balances WHERE workspace_id=$1 AND product_id=$2`, o.WorkspaceID, l.ProductID).Scan(&avail)
 		}
@@ -416,6 +443,121 @@ func (s *Service) PackStorefrontOrder(ctx context.Context, ws, user, orderID int
 	return s.buildMerchantOrderDetail(ctx, order)
 }
 
+func (s *Service) ReadyForPickupStorefrontOrder(ctx context.Context, ws, user, orderID int64, expectedVersion int32) (MerchantOrderView, error) {
+	if expectedVersion < 1 {
+		return MerchantOrderView{}, errors.New("expected_version is required")
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return MerchantOrderView{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := s.queries.WithTx(tx)
+	existing, err := q.GetStorefrontOrderForUpdate(ctx, db.GetStorefrontOrderForUpdateParams{WorkspaceID: ws, ID: orderID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return MerchantOrderView{}, ErrNotFound
+	}
+	if err != nil {
+		return MerchantOrderView{}, err
+	}
+	if existing.DeliveryMethod != "pickup" {
+		return MerchantOrderView{}, errors.New("only pickup orders can be marked ready for pickup")
+	}
+	if existing.Version != expectedVersion {
+		return MerchantOrderView{}, ErrOrderVersionConflict
+	}
+	updated, err := q.UpdateStorefrontOrderPackedReady(ctx, db.UpdateStorefrontOrderPackedReadyParams{
+		WorkspaceID: ws,
+		ID:          orderID,
+		Version:     expectedVersion,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return MerchantOrderView{}, errors.New("order is not in a state to be marked ready for pickup")
+	}
+	if err != nil {
+		return MerchantOrderView{}, err
+	}
+	msg := "Your order is packed and ready for pickup."
+	if existing.PickupCode.Valid && existing.PickupCode.String != "" {
+		msg = fmt.Sprintf("Your order is packed and ready for pickup. Show pickup code %s when collecting.", existing.PickupCode.String)
+	}
+	if _, err := q.CreateStorefrontOrderEvent(ctx, db.CreateStorefrontOrderEventParams{
+		WorkspaceID:     ws,
+		OrderID:         orderID,
+		EventType:       "ready_for_pickup",
+		ActorType:       "merchant",
+		ActorUserID:     pgtype.Int8{Int64: user, Valid: user > 0},
+		CustomerVisible: true,
+		Message:         pgtype.Text{String: msg, Valid: true},
+	}); err != nil {
+		return MerchantOrderView{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return MerchantOrderView{}, err
+	}
+	return s.buildMerchantOrderDetail(ctx, updated)
+}
+
+type CollectStorefrontOrderInput struct {
+	ExpectedVersion int32  `json:"expected_version"`
+	PickupCode      string `json:"pickup_code"`
+	MoneyAccountID  int64  `json:"money_account_id"`
+}
+
+func (s *Service) CollectStorefrontOrder(ctx context.Context, ws, user, orderID int64, in CollectStorefrontOrderInput) (MerchantOrderView, error) {
+	if in.ExpectedVersion < 1 {
+		return MerchantOrderView{}, errors.New("expected_version is required")
+	}
+	order, err := s.queries.GetStorefrontOrderByID(ctx, db.GetStorefrontOrderByIDParams{WorkspaceID: ws, ID: orderID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return MerchantOrderView{}, ErrNotFound
+	}
+	if err != nil {
+		return MerchantOrderView{}, err
+	}
+	if order.DeliveryMethod != "pickup" {
+		return MerchantOrderView{}, errors.New("only pickup orders can be collected with a pickup code")
+	}
+	if order.Version != in.ExpectedVersion {
+		return MerchantOrderView{}, ErrOrderVersionConflict
+	}
+	entered := strings.ToUpper(strings.TrimSpace(in.PickupCode))
+	expected := strings.ToUpper(strings.TrimSpace(order.PickupCode.String))
+	if expected == "" || entered == "" || entered != expected {
+		return MerchantOrderView{}, errors.New("invalid pickup code")
+	}
+	if order.PaymentStatus != "paid" {
+		if in.MoneyAccountID <= 0 {
+			return MerchantOrderView{}, errors.New("select a cash or POS account to record payment on collection")
+		}
+		if err := s.MarkStorefrontOrderPaidManual(ctx, ws, orderID, in.MoneyAccountID, "Collected at pickup with code"); err != nil {
+			return MerchantOrderView{}, err
+		}
+	}
+	refreshed, err := s.queries.GetStorefrontOrderByID(ctx, db.GetStorefrontOrderByIDParams{WorkspaceID: ws, ID: orderID})
+	if err != nil {
+		return MerchantOrderView{}, err
+	}
+	view, err := s.FulfilStorefrontOrder(ctx, ws, user, orderID, FulfilStorefrontOrderInput{
+		ExpectedVersion: refreshed.Version,
+		RecipientName:   order.CustomerName,
+		TrackingNote:    "Collected at pickup with code " + expected,
+	})
+	if err != nil {
+		return MerchantOrderView{}, err
+	}
+	_, _ = s.queries.CreateStorefrontOrderEvent(ctx, db.CreateStorefrontOrderEventParams{
+		WorkspaceID:     ws,
+		OrderID:         orderID,
+		EventType:       "order_collected",
+		ActorType:       "merchant",
+		ActorUserID:     pgtype.Int8{Int64: user, Valid: user > 0},
+		CustomerVisible: true,
+		Message:         optionalPgText("Order handed over and collected at pickup."),
+	})
+	return s.GetMerchantOrder(ctx, ws, view.ID)
+}
+
 func (s *Service) ConfirmStorefrontOrder(ctx context.Context, ws, user, orderID int64, in ConfirmOrderInput) (MerchantOrderView, error) {
 	if in.ExpectedVersion < 1 {
 		return MerchantOrderView{}, errors.New("expected_version is required")
@@ -701,6 +843,7 @@ func (s *Service) FulfilStorefrontOrder(ctx context.Context, ws, user, orderID i
 				WorkspaceID: ws,
 				LocationID:  res.LocationID,
 				ProductID:   l.ProductID,
+				VariantID:   res.VariantID,
 			})
 			if err != nil || bal.QuantityOnHand.LessThan(fulfilQty) {
 				return MerchantOrderView{}, ErrInsufficientStock
@@ -727,6 +870,7 @@ func (s *Service) FulfilStorefrontOrder(ctx context.Context, ws, user, orderID i
 				WorkspaceID:       ws,
 				LocationID:        res.LocationID,
 				ProductID:         l.ProductID,
+				VariantID:         res.VariantID,
 				QuantityOnHand:    newQty,
 				ReservedQuantity:  newReserved,
 				InTransitQuantity: bal.InTransitQuantity,

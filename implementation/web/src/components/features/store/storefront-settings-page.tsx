@@ -6,19 +6,21 @@ import { Bank, CheckCircle, WarningCircle } from "@phosphor-icons/react";
 import { AppButton } from "@/components/ui/app-button";
 import { AppComboBox } from "@/components/ui/app-combo-box";
 import { AppInput } from "@/components/ui/app-input";
+import { AppSelect } from "@/components/ui/app-select";
 import { AppSwitch } from "@/components/ui/app-switch";
 import { AppTextarea } from "@/components/ui/app-textarea";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { SideSheet } from "@/components/ui/side-sheet";
 import { Page, PageHeader } from "@/components/ui/page";
+import { toast } from "@heroui/react";
 import { financeApi, moneyKeys } from "@/lib/money";
 import { hasWorkspacePermission, useActiveWorkspace } from "@/stores/workspace-store";
 import { WorkspaceGate, useFinanceAction, type WorkspaceInfo } from "../finance/shared";
-import type { Storefront, StorefrontPaymentSettingsView } from "@/types/finance";
+import type { InventoryOutlet, Storefront, StorefrontPaymentSettingsView } from "@/types/finance";
 import { uploadProductImage } from "@/lib/products";
 
 type CardKey = "details" | "delivery" | "payments" | "shoppers" | "policies" | "sharing";
-type DeliveryAreaDraft = { id: number; name: string; fee: string; description: string };
+type DeliveryAreaDraft = { id: number; name: string; fee: string; description: string; state: string; estimate_text: string; outlet_id: string };
 function minorToMajor(minor: string, exponent: number) {
   const value = BigInt(minor || "0");
   if (exponent <= 0) return value.toString();
@@ -219,6 +221,30 @@ function PaymentsForm({
             isSelected={Boolean(draft.payment_manual_transfer_enabled)}
             onChange={(v) => set("payment_manual_transfer_enabled", v)}
           />
+          {Boolean(draft.payment_manual_transfer_enabled) && (
+            <div className="space-y-2 rounded-lg border border-border bg-surface p-3">
+              <p className="text-xs font-medium text-muted">Bank account shown to shoppers for manual transfer</p>
+              <AppInput
+                label="Bank name"
+                placeholder="e.g. Guaranty Trust Bank"
+                value={String(draft.manual_bank_name ?? "")}
+                onChange={(e) => set("manual_bank_name", e.target.value)}
+              />
+              <AppInput
+                label="Account number"
+                placeholder="0123456789"
+                maxLength={20}
+                value={String(draft.manual_bank_account_number ?? "")}
+                onChange={(e) => set("manual_bank_account_number", e.target.value)}
+              />
+              <AppInput
+                label="Account name"
+                placeholder="Your Business Name"
+                value={String(draft.manual_bank_account_name ?? "")}
+                onChange={(e) => set("manual_bank_account_name", e.target.value)}
+              />
+            </div>
+          )}
           <AppSwitch
             label="Pay on delivery / pickup"
             description="Customer pays with cash or POS upon package receipt or pickup."
@@ -342,23 +368,56 @@ function SettingsContent({ workspaceId }: WorkspaceInfo) {
     queryFn: () => financeApi.getStorefrontPayments(workspaceId),
     retry: false,
   });
+  const outletsQuery = useQuery({
+    queryKey: [...moneyKeys.workspace(workspaceId), "outlets"],
+    queryFn: () => financeApi.listOutlets(workspaceId),
+    retry: false,
+  });
 
   const [active, setActive] = useState<CardKey | null>(null);
   const [draft, setDraft] = useState<Record<string, unknown>>({});
   const sf = query.data;
   const paySettings = paymentSettingsQuery.data;
+  const outlets = outletsQuery.data ?? [];
 
   const update = useFinanceAction(workspaceId, (body: unknown) => financeApi.updateStorefrontSettings(workspaceId, body), {
     success: "Store settings saved",
     onDone: () => { setActive(null); void query.refetch(); },
   });
 
+  const togglePickupPoint = async (outlet: InventoryOutlet, isPickup: boolean, note?: string) => {
+    try {
+      await financeApi.updateOutlet(workspaceId, outlet.id, {
+        is_pickup_point: isPickup,
+        pickup_note: note ?? outlet.pickup_note ?? "",
+      });
+      void outletsQuery.refetch();
+      toast.success("Pickup point updated");
+    } catch (err: unknown) {
+      toast.danger((err as Error)?.message || "Could not update pickup point");
+    }
+  };
+
   const open = (key: CardKey) => {
     if (!sf) return;
     const s = sf.settings;
     const values: Record<CardKey, Record<string, unknown>> = {
       details: { name: sf.name, slug: sf.slug, contact_phone: s.contact_phone ?? "", contact_email: s.contact_email ?? "", address: s.address ?? "", whatsapp_number: s.whatsapp_number ?? "", business_hours: s.business_hours },
-      delivery: { delivery_methods: s.delivery_methods, delivery_guidance: s.delivery_guidance ?? "", default_delivery_fee: minorToMajor(s.default_delivery_fee_minor, sf.currency_exponent), free_delivery_threshold: s.free_delivery_threshold_minor ? minorToMajor(s.free_delivery_threshold_minor, sf.currency_exponent) : "", delivery_areas: s.delivery_areas.filter((area) => area.is_active).map((area) => ({ id: area.id, name: area.name, fee: minorToMajor(area.fee_minor, sf.currency_exponent), description: area.description })) },
+      delivery: {
+        delivery_methods: s.delivery_methods,
+        delivery_guidance: s.delivery_guidance ?? "",
+        default_delivery_fee: minorToMajor(s.default_delivery_fee_minor, sf.currency_exponent),
+        free_delivery_threshold: s.free_delivery_threshold_minor ? minorToMajor(s.free_delivery_threshold_minor, sf.currency_exponent) : "",
+        delivery_areas: s.delivery_areas.filter((area) => area.is_active).map((area) => ({
+          id: area.id,
+          name: area.name,
+          fee: minorToMajor(area.fee_minor, sf.currency_exponent),
+          description: area.description,
+          state: area.state ?? "",
+          estimate_text: area.estimate_text ?? "",
+          outlet_id: area.outlet_id ? String(area.outlet_id) : "",
+        })),
+      },
       payments: {
         checkout_require_email: s.checkout_require_email,
         checkout_require_phone: s.checkout_require_phone,
@@ -372,6 +431,9 @@ function SettingsContent({ workspaceId }: WorkspaceInfo) {
         hold_manual_transfer_hours: paySettings?.hold_manual_transfer_hours ?? 2,
         hold_confirmation_hours: paySettings?.hold_confirmation_hours ?? 2,
         hold_pickup_hours: paySettings?.hold_pickup_hours ?? 48,
+        manual_bank_name: paySettings?.manual_bank_name ?? "",
+        manual_bank_account_number: paySettings?.manual_bank_account_number ?? "",
+        manual_bank_account_name: paySettings?.manual_bank_account_name ?? "",
       },
       shoppers: { tagline: s.tagline ?? "", description: s.description ?? "", logo_url: s.logo_url ?? "", banner_url: s.banner_url ?? "", auto_show_new_products: s.auto_show_new_products, show_sold_out: s.show_sold_out, show_stock_count: s.show_stock_count, low_stock_threshold: s.low_stock_threshold },
       policies: { return_policy: s.return_policy ?? "", privacy_policy: s.privacy_policy ?? "", terms_policy: s.terms_policy ?? "", custom_policy: s.custom_policy ?? "" },
@@ -397,11 +459,36 @@ function SettingsContent({ workspaceId }: WorkspaceInfo) {
           hold_manual_transfer_hours: Number(draft.hold_manual_transfer_hours ?? 2),
           hold_confirmation_hours: Number(draft.hold_confirmation_hours ?? 2),
           hold_pickup_hours: Number(draft.hold_pickup_hours ?? 48),
+          manual_bank_name: String(draft.manual_bank_name ?? ""),
+          manual_bank_account_number: String(draft.manual_bank_account_number ?? ""),
+          manual_bank_account_name: String(draft.manual_bank_account_name ?? ""),
         });
         void paymentSettingsQuery.refetch();
-      } catch (err) {
-        console.error("Failed to update payment settings", err);
+      } catch (err: unknown) {
+        toast.danger((err as Error)?.message || "Failed to save payment settings");
+        return;
       }
+      update.mutate({
+        card: "payments",
+        checkout_require_email: Boolean(draft.checkout_require_email),
+        checkout_require_phone: Boolean(draft.checkout_require_phone),
+        reservation_ttl_hours: Number(draft.reservation_ttl_hours ?? 48),
+        idempotency_key: crypto.randomUUID(),
+      });
+      return;
+    }
+    if (active === "delivery") {
+      const areasPayload = ((draft.delivery_areas as DeliveryAreaDraft[]) ?? []).map((a) => ({
+        id: a.id,
+        name: a.name,
+        fee: a.fee,
+        description: a.description,
+        state: a.state ? a.state : null,
+        estimate_text: a.estimate_text ?? "",
+        outlet_id: a.outlet_id ? Number(a.outlet_id) : null,
+      }));
+      update.mutate({ ...draft, delivery_areas: areasPayload, card: active, idempotency_key: crypto.randomUUID() });
+      return;
     }
     update.mutate({ ...draft, card: active, idempotency_key: crypto.randomUUID() });
   };
@@ -426,7 +513,70 @@ function SettingsContent({ workspaceId }: WorkspaceInfo) {
     <SideSheet isOpen={Boolean(active)} onClose={() => setActive(null)} title={active ? CARD_INFO[active].title : "Edit settings"} footer={<><AppButton variant="tertiary" label="Cancel" onPress={() => setActive(null)} /><AppButton label="Save changes" isLoading={update.isPending} onPress={save} /></>}>
       <div className="space-y-4">
         {active === "details" && <>{field("name", "Store name")}{field("slug", "Store link", "your-store")}{field("contact_phone", "Phone")}{field("contact_email", "Email")}{field("whatsapp_number", "WhatsApp number")}{field("address", "Address")}<fieldset className="space-y-2"><legend className="text-sm font-semibold">Opening hours</legend>{["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"].map((day)=><AppInput key={day} label={day} value={String((draft.business_hours as Record<string,string>)?.[day.toLowerCase()]??"")} placeholder="9:00 AM–5:00 PM or Closed" onChange={(e)=>set("business_hours",{...(draft.business_hours as Record<string,string>??{}),[day.toLowerCase()]:e.target.value})} />)}</fieldset></>}
-        {active === "delivery" && <><p className="text-sm font-medium">Delivery options</p>{(["pickup", "merchant_delivery", "customer_arranged"] as const).map((method) => <AppSwitch key={method} label={method === "pickup" ? "Pickup" : method === "merchant_delivery" ? "Store delivery" : "Customer arranges delivery"} isSelected={(draft.delivery_methods as string[] ?? []).includes(method)} onChange={(checked) => set("delivery_methods", checked ? [...(draft.delivery_methods as string[] ?? []), method] : (draft.delivery_methods as string[] ?? []).filter((x) => x !== method))} />)}{field("default_delivery_fee", `Default delivery fee (${sf.currency})`)}<p className="text-xs font-semibold">Delivery areas</p>{((draft.delivery_areas as DeliveryAreaDraft[]) ?? []).map((area,index)=><div key={area.id || `new-${index}`} className="rounded-xl border border-default p-3 space-y-2"><AppInput label="Area name" value={area.name} onChange={(e)=>set("delivery_areas",(draft.delivery_areas as DeliveryAreaDraft[]).map((item,i)=>i===index?{...item,name:e.target.value}:item))} /><AppInput label={`Delivery fee (${sf.currency})`} value={area.fee} onChange={(e)=>set("delivery_areas",(draft.delivery_areas as DeliveryAreaDraft[]).map((item,i)=>i===index?{...item,fee:e.target.value}:item))} /><AppInput label="Delivery note" value={area.description} onChange={(e)=>set("delivery_areas",(draft.delivery_areas as DeliveryAreaDraft[]).map((item,i)=>i===index?{...item,description:e.target.value}:item))} /><AppButton size="sm" variant="tertiary" label="Remove area" onPress={()=>set("delivery_areas",(draft.delivery_areas as DeliveryAreaDraft[]).filter((_,i)=>i!==index))} /></div>)}<AppButton size="sm" variant="secondary" label="Add delivery area" onPress={()=>set("delivery_areas",[...(draft.delivery_areas as DeliveryAreaDraft[] ?? []),{id:0,name:"",fee:"0",description:""}])} /><AppInput label={`Free delivery on orders over (${sf.currency})`} value={String(draft.free_delivery_threshold??"")} onChange={(e)=>set("free_delivery_threshold",e.target.value)} placeholder="Leave blank to turn off" /><AppTextarea label="Delivery guidance" value={String(draft.delivery_guidance ?? "")} onChange={(e) => set("delivery_guidance", e.target.value)} /></>}
+        {active === "delivery" && <>
+          <p className="text-sm font-medium">Delivery options</p>
+          {(["pickup", "merchant_delivery", "customer_arranged"] as const).map((method) => (
+            <AppSwitch key={method} label={method === "pickup" ? "Pickup" : method === "merchant_delivery" ? "Store delivery" : "Customer arranges delivery"} isSelected={(draft.delivery_methods as string[] ?? []).includes(method)} onChange={(checked) => set("delivery_methods", checked ? [...(draft.delivery_methods as string[] ?? []), method] : (draft.delivery_methods as string[] ?? []).filter((x) => x !== method))} />
+          ))}
+          {field("default_delivery_fee", `Default delivery fee (${sf.currency})`)}
+          <div className="space-y-2 pt-2">
+            <p className="text-xs font-semibold">Delivery areas</p>
+            {((draft.delivery_areas as DeliveryAreaDraft[]) ?? []).map((area, index) => (
+              <div key={area.id || `new-${index}`} className="rounded-xl border border-default p-3 space-y-2">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <AppInput label="Area name" value={area.name} onChange={(e) => set("delivery_areas", (draft.delivery_areas as DeliveryAreaDraft[]).map((item, i) => i === index ? { ...item, name: e.target.value } : item))} />
+                  <AppInput label="State (optional)" placeholder="e.g. Lagos" value={area.state} onChange={(e) => set("delivery_areas", (draft.delivery_areas as DeliveryAreaDraft[]).map((item, i) => i === index ? { ...item, state: e.target.value } : item))} />
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <AppInput label={`Delivery fee (${sf.currency})`} value={area.fee} onChange={(e) => set("delivery_areas", (draft.delivery_areas as DeliveryAreaDraft[]).map((item, i) => i === index ? { ...item, fee: e.target.value } : item))} />
+                  <AppInput label="Estimated delivery time" placeholder="e.g. 1–2 days" value={area.estimate_text} onChange={(e) => set("delivery_areas", (draft.delivery_areas as DeliveryAreaDraft[]).map((item, i) => i === index ? { ...item, estimate_text: e.target.value } : item))} />
+                </div>
+                {outlets.length > 0 && (
+                  <AppSelect
+                    label="Fulfilling outlet (optional)"
+                    placeholder="Default storefront outlet"
+                    options={outlets.filter((o) => o.is_active).map((o) => ({ key: String(o.id), label: o.name }))}
+                    selectedKey={area.outlet_id || undefined}
+                    onSelectionChange={(k) => set("delivery_areas", (draft.delivery_areas as DeliveryAreaDraft[]).map((item, i) => i === index ? { ...item, outlet_id: k } : item))}
+                  />
+                )}
+                <AppInput label="Delivery note" value={area.description} onChange={(e) => set("delivery_areas", (draft.delivery_areas as DeliveryAreaDraft[]).map((item, i) => i === index ? { ...item, description: e.target.value } : item))} />
+                <AppButton size="sm" variant="tertiary" label="Remove area" onPress={() => set("delivery_areas", (draft.delivery_areas as DeliveryAreaDraft[]).filter((_, i) => i !== index))} />
+              </div>
+            ))}
+            <AppButton size="sm" variant="secondary" label="Add delivery area" onPress={() => set("delivery_areas", [...(draft.delivery_areas as DeliveryAreaDraft[] ?? []), { id: 0, name: "", fee: "0", description: "", state: "", estimate_text: "", outlet_id: "" }])} />
+          </div>
+          {outlets.length > 0 && (
+            <div className="space-y-2 pt-2 border-t border-default">
+              <p className="text-xs font-semibold">Pickup points</p>
+              <p className="text-xs text-muted">Choose which active outlets shoppers can pick up orders from (stock is held at the selected outlet).</p>
+              {outlets.filter((o) => o.is_active).map((outlet) => (
+                <div key={outlet.id} className="rounded-xl border border-default p-3 space-y-2">
+                  <AppSwitch
+                    label={outlet.name}
+                    description={outlet.address || "No street address saved on outlet"}
+                    isSelected={Boolean(outlet.is_pickup_point)}
+                    onChange={(checked) => void togglePickupPoint(outlet, checked)}
+                  />
+                  {outlet.is_pickup_point ? (
+                    <AppInput
+                      label="Pickup instructions"
+                      placeholder="e.g. Call on arrival at gate"
+                      defaultValue={outlet.pickup_note ?? ""}
+                      onBlur={(e) => {
+                        if (e.target.value !== (outlet.pickup_note ?? "")) {
+                          void togglePickupPoint(outlet, true, e.target.value);
+                        }
+                      }}
+                    />
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          )}
+          <AppInput label={`Free delivery on orders over (${sf.currency})`} value={String(draft.free_delivery_threshold ?? "")} onChange={(e) => set("free_delivery_threshold", e.target.value)} placeholder="Leave blank to turn off" />
+          <AppTextarea label="Delivery guidance" value={String(draft.delivery_guidance ?? "")} onChange={(e) => set("delivery_guidance", e.target.value)} />
+        </>}
         {active === "payments" && (
           <PaymentsForm
             workspaceId={workspaceId}

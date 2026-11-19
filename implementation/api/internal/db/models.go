@@ -3014,14 +3014,15 @@ type Shopper struct {
 }
 
 type ShopperLoginCode struct {
-	ID           int64              `json:"id"`
-	ShopperEmail string             `json:"shopper_email"`
-	CodeHash     string             `json:"code_hash"`
-	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
-	Attempts     int32              `json:"attempts"`
-	UsedAt       pgtype.Timestamptz `json:"used_at"`
-	IpHash       string             `json:"ip_hash"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	ID            int64              `json:"id"`
+	ShopperEmail  string             `json:"shopper_email"`
+	CodeHash      string             `json:"code_hash"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	Attempts      int32              `json:"attempts"`
+	UsedAt        pgtype.Timestamptz `json:"used_at"`
+	IpHash        string             `json:"ip_hash"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	LinkTokenHash pgtype.Text        `json:"link_token_hash"`
 }
 
 type ShopperSession struct {
@@ -3357,6 +3358,10 @@ type StorefrontOrder struct {
 	CourierBookingError     pgtype.Text        `json:"courier_booking_error"`
 	RateToken               pgtype.Text        `json:"rate_token"`
 	ShopperID               pgtype.Int8        `json:"shopper_id"`
+	PublicTokenEnc          pgtype.Text        `json:"public_token_enc"`
+	CourierServiceCode      pgtype.Text        `json:"courier_service_code"`
+	CourierID               pgtype.Text        `json:"courier_id"`
+	CourierTrackingUrl      pgtype.Text        `json:"courier_tracking_url"`
 }
 
 type StorefrontOrderEvent struct {
@@ -3533,6 +3538,19 @@ type StorefrontSetting struct {
 	ShipbubbleApiKey             pgtype.Text        `json:"shipbubble_api_key"`
 	ShipbubbleStrategy           string             `json:"shipbubble_strategy"`
 	ShipbubbleCouriers           []byte             `json:"shipbubble_couriers"`
+	ManualBankName               pgtype.Text        `json:"manual_bank_name"`
+	ManualBankAccountNumber      pgtype.Text        `json:"manual_bank_account_number"`
+	ManualBankAccountName        pgtype.Text        `json:"manual_bank_account_name"`
+}
+
+type StorefrontShippingRateCache struct {
+	CacheKey     string             `json:"cache_key"`
+	WorkspaceID  int64              `json:"workspace_id"`
+	StorefrontID int64              `json:"storefront_id"`
+	RequestToken string             `json:"request_token"`
+	RatesJson    []byte             `json:"rates_json"`
+	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
 
 type StorefrontThemePurchase struct {

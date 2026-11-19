@@ -66,8 +66,10 @@ export interface InventoryOutlet {
   phone?: string | null;
   is_default: boolean;
   is_active: boolean;
-  created_at: string;
-  updated_at: string;
+  is_pickup_point?: boolean;
+  pickup_note?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface ProductOption {
@@ -1280,7 +1282,17 @@ export interface StorefrontSettings {
   delivery_guidance?: string | null;
   default_delivery_fee_minor: string;
   free_delivery_threshold_minor?: string | null;
-  delivery_areas: { id: number; name: string; fee_minor: string; description: string; position: number; is_active: boolean }[];
+  delivery_areas: { id: number; name: string; fee_minor: string; description: string; position: number; is_active: boolean; state?: string | null; estimate_text?: string; outlet_id?: number | null }[];
+  pickup_points?: StorefrontPickupPoint[];
+  payment_bank_transfer_enabled?: boolean;
+  payment_card_enabled?: boolean;
+  payment_manual_transfer_enabled?: boolean;
+  payment_cod_enabled?: boolean;
+  online_payments_ready?: boolean;
+  available_payment_providers?: string[];
+  fee_bearer?: "merchant" | "customer";
+  shipbubble_enabled?: boolean;
+  manual_bank_details?: ManualBankDetails | null;
   checkout_require_email: boolean;
   checkout_require_phone: boolean;
   auto_show_new_products: boolean;
@@ -1451,6 +1463,20 @@ export interface PublicStorefrontProduct {
   seo_description?: string | null;
 }
 
+export interface StorefrontPickupPoint {
+  id: number;
+  name: string;
+  address?: string | null;
+  phone?: string | null;
+  pickup_note: string;
+}
+
+export interface ManualBankDetails {
+  bank_name: string;
+  account_number: string;
+  account_name: string;
+}
+
 export interface PublicStorefrontProjection {
   name: string;
   slug: string;
@@ -1479,7 +1505,17 @@ export interface PublicStorefrontProjection {
   delivery_guidance?: string | null;
   default_delivery_fee_minor: string;
   free_delivery_threshold_minor?: string | null;
-  delivery_areas: { id: number; name: string; fee_minor: string; description: string; position: number; is_active: boolean }[];
+  delivery_areas: { id: number; name: string; fee_minor: string; description: string; position: number; is_active: boolean; state?: string | null; estimate_text?: string; outlet_id?: number | null }[];
+  pickup_points?: StorefrontPickupPoint[];
+  payment_bank_transfer_enabled?: boolean;
+  payment_card_enabled?: boolean;
+  payment_manual_transfer_enabled?: boolean;
+  payment_cod_enabled?: boolean;
+  online_payments_ready?: boolean;
+  available_payment_providers?: string[];
+  fee_bearer?: "merchant" | "customer";
+  shipbubble_enabled?: boolean;
+  manual_bank_details?: ManualBankDetails | null;
   checkout_require_email: boolean;
   checkout_require_phone: boolean;
   return_policy?: string | null;
@@ -1591,9 +1627,13 @@ export interface PublicOrderStatus {
   hold_type?: string | null;
   hold_expires_at?: string | null;
   pickup_code?: string | null;
+  pickup_point?: StorefrontPickupPoint | null;
+  manual_bank_details?: ManualBankDetails | null;
+  customer_phone_masked?: string | null;
   courier_name?: string | null;
   courier_tracking_number?: string | null;
   courier_status?: string | null;
+  courier_tracking_url?: string | null;
   latest_payment_attempt?: PublicPaymentAttempt | null;
   lines: {
     title: string;
@@ -1651,6 +1691,16 @@ export interface MerchantOrder {
   linked_invoice_id?: number | null;
   linked_sale_id?: number | null;
   decline_or_cancel_reason?: string | null;
+  hold_type?: string | null;
+  reservation_expires_at?: string | null;
+  processing_fee_minor?: string;
+  pickup_code?: string | null;
+  pickup_point_id?: number | null;
+  courier_name?: string | null;
+  courier_tracking_number?: string | null;
+  courier_status?: string | null;
+  courier_booking_error?: string | null;
+  courier_tracking_url?: string | null;
   created_at: string;
   lines?: MerchantOrderLine[];
   events?: PublicOrderEvent[];
@@ -1679,4 +1729,7 @@ export interface StorefrontPaymentSettingsView {
   hold_confirmation_hours: number;
   hold_pickup_hours: number;
   commission_percent: number;
+  manual_bank_name?: string | null;
+  manual_bank_account_number?: string | null;
+  manual_bank_account_name?: string | null;
 }

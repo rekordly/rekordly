@@ -343,18 +343,18 @@ func TestStorefrontPaymentWebhookAndOrderPaidLedgerPosting(t *testing.T) {
 	})
 	q := db.New(pool)
 	attempt, err := q.CreateStorefrontPaymentAttempt(ctx, db.CreateStorefrontPaymentAttemptParams{
-		WorkspaceID:           ws,
-		OrderID:               orderID,
-		Provider:              "paystack",
-		Method:                "virtual_account",
-		Reference:             attemptRef,
-		AmountMinor:           1275000,
-		FeeMinor:              19125, // 1.5% fee
-		CommissionMinor:       0,
+		WorkspaceID:          ws,
+		OrderID:              orderID,
+		Provider:             "paystack",
+		Method:               "virtual_account",
+		Reference:            attemptRef,
+		AmountMinor:          1275000,
+		FeeMinor:             19125, // 1.5% fee
+		CommissionMinor:      0,
 		VirtualAccountNumber: pgtype.Text{String: "9988776655", Valid: true},
-		BankName:              pgtype.Text{String: "Wema Bank", Valid: true},
-		ExpiresAt:             pgtype.Timestamptz{Time: time.Now().UTC().Add(15 * time.Minute), Valid: true},
-		Status:                "pending",
+		BankName:             pgtype.Text{String: "Wema Bank", Valid: true},
+		ExpiresAt:            pgtype.Timestamptz{Time: time.Now().UTC().Add(15 * time.Minute), Valid: true},
+		Status:               "pending",
 	})
 	require.NoError(t, err)
 
@@ -504,11 +504,13 @@ func TestCheckoutStockHoldAndExpiry(t *testing.T) {
 	_, err = pool.Exec(ctx, `UPDATE storefronts SET default_outlet_id = $2 WHERE id = $1`, sf.ID, outletID)
 	require.NoError(t, err)
 
-	// Connect payout account
+	// Connect payout account (encrypted at rest)
+	encSub, err := crypto.Encrypt("SUB_HOLD_001")
+	require.NoError(t, err)
 	_, err = pool.Exec(ctx, `
 		INSERT INTO merchant_payout_accounts (workspace_id, provider, bank_code, account_number_last4, account_name, subaccount_ref, status)
-		VALUES ($1, 'paystack', '058', '1234', 'MOCK HOLD MERCHANT', 'SUB_HOLD_001', 'active')
-	`, ws)
+		VALUES ($1, 'paystack', '058', '1234', 'MOCK HOLD MERCHANT', $2, 'active')
+	`, ws, encSub)
 	require.NoError(t, err)
 
 	// Create Product with 2 units on hand
@@ -765,18 +767,18 @@ func TestLatePaymentWebhookReHoldStockOrNeedsAttention(t *testing.T) {
 	})
 	q := db.New(pool)
 	attemptA, err := q.CreateStorefrontPaymentAttempt(ctx, db.CreateStorefrontPaymentAttemptParams{
-		WorkspaceID:           ws,
-		OrderID:               orderA,
-		Provider:              "paystack",
-		Method:                "virtual_account",
-		Reference:             attemptRefA,
-		AmountMinor:           5000000,
-		FeeMinor:              75000,
-		CommissionMinor:       0,
+		WorkspaceID:          ws,
+		OrderID:              orderA,
+		Provider:             "paystack",
+		Method:               "virtual_account",
+		Reference:            attemptRefA,
+		AmountMinor:          5000000,
+		FeeMinor:             75000,
+		CommissionMinor:      0,
 		VirtualAccountNumber: pgtype.Text{String: "1122334455", Valid: true},
-		BankName:              pgtype.Text{String: "Wema Bank", Valid: true},
-		ExpiresAt:             pgtype.Timestamptz{Time: time.Now().UTC().Add(-time.Hour), Valid: true},
-		Status:                "pending",
+		BankName:             pgtype.Text{String: "Wema Bank", Valid: true},
+		ExpiresAt:            pgtype.Timestamptz{Time: time.Now().UTC().Add(-time.Hour), Valid: true},
+		Status:               "pending",
 	})
 	require.NoError(t, err)
 
@@ -850,18 +852,18 @@ func TestLatePaymentWebhookReHoldStockOrNeedsAttention(t *testing.T) {
 		_, _ = pool.Exec(ctx, "DELETE FROM payment_webhook_events WHERE event_id = $1", attemptRefB)
 	})
 	attemptB, err := q.CreateStorefrontPaymentAttempt(ctx, db.CreateStorefrontPaymentAttemptParams{
-		WorkspaceID:           ws,
-		OrderID:               orderB,
-		Provider:              "paystack",
-		Method:                "virtual_account",
-		Reference:             attemptRefB,
-		AmountMinor:           5000000,
-		FeeMinor:              75000,
-		CommissionMinor:       0,
+		WorkspaceID:          ws,
+		OrderID:              orderB,
+		Provider:             "paystack",
+		Method:               "virtual_account",
+		Reference:            attemptRefB,
+		AmountMinor:          5000000,
+		FeeMinor:             75000,
+		CommissionMinor:      0,
 		VirtualAccountNumber: pgtype.Text{String: "9988112233", Valid: true},
-		BankName:              pgtype.Text{String: "Wema Bank", Valid: true},
-		ExpiresAt:             pgtype.Timestamptz{Time: time.Now().UTC().Add(-time.Hour), Valid: true},
-		Status:                "pending",
+		BankName:             pgtype.Text{String: "Wema Bank", Valid: true},
+		ExpiresAt:            pgtype.Timestamptz{Time: time.Now().UTC().Add(-time.Hour), Valid: true},
+		Status:               "pending",
 	})
 	require.NoError(t, err)
 
@@ -898,3 +900,188 @@ func TestLatePaymentWebhookReHoldStockOrNeedsAttention(t *testing.T) {
 	_ = attemptA
 	_ = attemptB
 }
+
+func TestStorefrontPickupHoldCodeAndManualMarkPaid(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	ws, user := createTestWorkspace(t, pool, "sf-pickup-manual")
+	wsOther, _ := createTestWorkspace(t, pool, "sf-pickup-other")
+
+	svc := finance.NewService(pool)
+
+	defaultOutlet, err := svc.CreateOutlet(ctx, ws, user, finance.CreateOutletInput{
+		Name: "Head Office", LocationType: "warehouse", IsDefault: true,
+	})
+	require.NoError(t, err)
+
+	pickupOutlet, err := svc.CreateOutlet(ctx, ws, user, finance.CreateOutletInput{
+		Name: "Lekki Pickup Desk", LocationType: "outlet", Address: "14 Admiralty Way, Lekki",
+		IsPickupPoint: true, PickupNote: "Ask for pickup desk beside reception",
+	})
+	require.NoError(t, err)
+
+	bankAcc, err := svc.CreateAccount(ctx, ws, finance.CreateAccountInput{Name: "GTB Business", AccountType: "bank", Currency: "NGN"})
+	require.NoError(t, err)
+	cashAcc, err := svc.CreateAccount(ctx, ws, finance.CreateAccountInput{Name: "Shop Cash Till", AccountType: "cash", Currency: "NGN"})
+	require.NoError(t, err)
+	otherAcc, err := svc.CreateAccount(ctx, wsOther, finance.CreateAccountInput{Name: "Foreign Bank", AccountType: "bank", Currency: "NGN"})
+	require.NoError(t, err)
+
+	item, err := svc.CreateCatalogueItem(ctx, ws, user, finance.CreateCatalogueItemInput{
+		Name: "Canvas Tote", Kind: "stock_tracked", SellingPrice: "50", Currency: "NGN", IdempotencyKey: "pm-item-1",
+	})
+	require.NoError(t, err)
+	vars, err := svc.ListProductVariants(ctx, ws, item.ID)
+	require.NoError(t, err)
+
+	_, err = svc.CreateOpeningStock(ctx, ws, user, finance.CreateOpeningStockInput{
+		ProductID: item.ID, LocationID: defaultOutlet.ID, EffectiveOn: "2026-11-11",
+		Quantity: "5", UnitCost: "20", Currency: "NGN", Reason: "Default stock", IdempotencyKey: "pm-open-def",
+	})
+	require.NoError(t, err)
+	_, err = svc.CreateOpeningStock(ctx, ws, user, finance.CreateOpeningStockInput{
+		ProductID: item.ID, LocationID: pickupOutlet.ID, EffectiveOn: "2026-11-11",
+		Quantity: "3", UnitCost: "20", Currency: "NGN", Reason: "Pickup stock", IdempotencyKey: "pm-open-pk",
+	})
+	require.NoError(t, err)
+
+	slug := fmt.Sprintf("pickup-shop-%d", time.Now().UnixNano()%1000000)
+	_, err = svc.CreateStorefront(ctx, ws, user, finance.CreateStorefrontInput{
+		Name: "Pickup Shop", Slug: slug, DefaultOutletID: &defaultOutlet.ID, Currency: "NGN",
+	})
+	require.NoError(t, err)
+	stateName := "Lagos"
+	_, err = svc.UpdateStorefrontSettings(ctx, ws, finance.UpdateStorefrontSettingsInput{
+		ContactPhone: "+2348001112222",
+		DeliveryAreas: []finance.StorefrontDeliveryAreaInput{
+			{Name: "Lekki Phase 1", Fee: "15", State: &stateName, EstimateText: "1–2 days", OutletID: &pickupOutlet.ID},
+		},
+	})
+	require.NoError(t, err)
+	_, err = svc.UpdateStorefrontPaymentSettings(ctx, ws, finance.UpdateStorefrontPaymentSettingsInput{
+		PaymentManualTransferEnabled: sfBoolPtr(true),
+		PaymentCodEnabled:            sfBoolPtr(true),
+		ManualBankName:               sfStrPtr("Guaranty Trust Bank"),
+		ManualBankAccountNumber:      sfStrPtr("0123456789"),
+		ManualBankAccountName:        sfStrPtr("Pickup Shop Ltd"),
+	})
+	require.NoError(t, err)
+	sfProd, err := svc.UpsertStorefrontProduct(ctx, ws, vars[0].ID, finance.PublishCatalogueVariantInput{IsPublished: true})
+	require.NoError(t, err)
+	_, err = svc.PublishStorefront(ctx, ws, true)
+	require.NoError(t, err)
+
+	proj, err := svc.GetPublicStorefrontProjection(ctx, slug, false, "", "")
+	require.NoError(t, err)
+	require.Len(t, proj.PickupPoints, 1)
+	require.Equal(t, "Ask for pickup desk beside reception", proj.PickupPoints[0].PickupNote)
+	require.Len(t, proj.DeliveryAreas, 1)
+	require.Equal(t, "1–2 days", proj.DeliveryAreas[0].EstimateText)
+	require.Equal(t, "Lagos", *proj.DeliveryAreas[0].State)
+
+	// 1. Place pickup order with manual transfer -> holds at pickupOutlet ONLY, generates 6-char pickup code
+	conf, err := svc.SubmitGuestCheckout(ctx, slug, false, finance.GuestCheckoutInput{
+		ClientKey:          "pickup-client-1",
+		Lines:              []finance.CartLineInput{{StorefrontProductID: sfProd.ID, Quantity: "2"}},
+		CustomerName:       "Chidi",
+		CustomerPhone:      "+2348033334444",
+		DeliveryMethod:     "pickup",
+		PickupPointID:      pickupOutlet.ID,
+		PaymentMethod:      "manual_transfer",
+		PolicyAcknowledged: true,
+		IdempotencyKey:     fmt.Sprintf("pk-man-%d", time.Now().UnixNano()),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, conf.PickupCode)
+	require.Len(t, *conf.PickupCode, 6)
+	require.Equal(t, "transfer_manual", *conf.HoldType)
+
+	var defRes, pkRes decimal.Decimal
+	require.NoError(t, pool.QueryRow(ctx, `SELECT reserved_quantity FROM inventory_balances WHERE workspace_id=$1 AND location_id=$2 AND product_id=$3 AND variant_id=$4`, ws, defaultOutlet.ID, item.ID, vars[0].ID).Scan(&defRes))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT reserved_quantity FROM inventory_balances WHERE workspace_id=$1 AND location_id=$2 AND product_id=$3 AND variant_id=$4`, ws, pickupOutlet.ID, item.ID, vars[0].ID).Scan(&pkRes))
+	require.True(t, defRes.IsZero(), "default outlet should have 0 reserved")
+	require.True(t, decimal.NewFromInt(2).Equal(pkRes), "pickup outlet must hold 2 units")
+
+	orders, err := svc.ListMerchantOrders(ctx, ws, "", 0)
+	require.NoError(t, err)
+	oID := orders[0].ID
+
+	// Cross-workspace money account must be rejected on Mark paid
+	err = svc.MarkStorefrontOrderPaidManual(ctx, ws, oID, otherAcc.ID, "wrong ws")
+	require.ErrorIs(t, err, finance.ErrForbiddenAccount)
+
+	// Valid manual Mark paid debits bankAcc and creates Sale
+	require.NoError(t, svc.MarkStorefrontOrderPaidManual(ctx, ws, oID, bankAcc.ID, "Transfer verified"))
+	afterPaid, err := svc.GetMerchantOrder(ctx, ws, oID)
+	require.NoError(t, err)
+	require.Equal(t, "paid", afterPaid.PaymentStatus)
+	require.NotNil(t, afterPaid.LinkedSaleID)
+
+	// Ready for pickup -> packed
+	readyOrd, err := svc.ReadyForPickupStorefrontOrder(ctx, ws, user, oID, afterPaid.Version)
+	require.NoError(t, err)
+	require.Equal(t, "packed", readyOrd.FulfilmentStatus)
+
+	// Wrong pickup code rejected
+	_, err = svc.CollectStorefrontOrder(ctx, ws, user, oID, finance.CollectStorefrontOrderInput{
+		ExpectedVersion: readyOrd.Version,
+		PickupCode:      "WRONG1",
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid pickup code")
+
+	// Correct pickup code fulfils order & issues stock from pickup outlet
+	collected, err := svc.CollectStorefrontOrder(ctx, ws, user, oID, finance.CollectStorefrontOrderInput{
+		ExpectedVersion: readyOrd.Version,
+		PickupCode:      *conf.PickupCode,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "fulfilled", collected.FulfilmentStatus)
+	require.Equal(t, "completed", collected.CommercialStatus)
+
+	var pkQoh decimal.Decimal
+	require.NoError(t, pool.QueryRow(ctx, `SELECT quantity_on_hand FROM inventory_balances WHERE workspace_id=$1 AND location_id=$2 AND product_id=$3 AND variant_id=$4`, ws, pickupOutlet.ID, item.ID, vars[0].ID).Scan(&pkQoh))
+	require.True(t, decimal.NewFromInt(1).Equal(pkQoh), "3 - 2 = 1 left at pickup outlet")
+
+	// 2. Pay at pickup (COD) -> Collected records payment in Cash account and fulfils
+	conf2, err := svc.SubmitGuestCheckout(ctx, slug, false, finance.GuestCheckoutInput{
+		ClientKey:          "pickup-client-2",
+		Lines:              []finance.CartLineInput{{StorefrontProductID: sfProd.ID, Quantity: "1"}},
+		CustomerName:       "Amaka",
+		CustomerPhone:      "+2348055556666",
+		DeliveryMethod:     "pickup",
+		PickupPointID:      pickupOutlet.ID,
+		PaymentMethod:      "cod",
+		PolicyAcknowledged: true,
+		IdempotencyKey:     fmt.Sprintf("pk-cod-%d", time.Now().UnixNano()),
+	})
+	require.NoError(t, err)
+	require.Equal(t, "pickup", *conf2.HoldType)
+
+	ordersAll, _ := svc.ListMerchantOrders(ctx, ws, "", 0)
+	var codOrdID int64
+	var codVer int32
+	for _, ord := range ordersAll {
+		if ord.OrderReference == conf2.OrderReference {
+			codOrdID = ord.ID
+			codVer = ord.Version
+			break
+		}
+	}
+	codCollected, err := svc.CollectStorefrontOrder(ctx, ws, user, codOrdID, finance.CollectStorefrontOrderInput{
+		ExpectedVersion: codVer,
+		PickupCode:      *conf2.PickupCode,
+		MoneyAccountID:  cashAcc.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "paid", codCollected.PaymentStatus)
+	require.Equal(t, "fulfilled", codCollected.FulfilmentStatus)
+
+	var totDebits, totCredits int64
+	require.NoError(t, pool.QueryRow(ctx, `SELECT COALESCE(sum(debit_minor),0), COALESCE(sum(credit_minor),0) FROM ledger_lines WHERE workspace_id=$1`, ws).Scan(&totDebits, &totCredits))
+	require.Equal(t, totDebits, totCredits)
+	require.Greater(t, totDebits, int64(0))
+}
+
+func sfBoolPtr(b bool) *bool    { return &b }
+func sfStrPtr(s string) *string { return &s }

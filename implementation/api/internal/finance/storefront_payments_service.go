@@ -18,10 +18,10 @@ import (
 )
 
 var (
-	ErrProviderNotAvailable = errors.New("payment provider is not configured or available")
+	ErrProviderNotAvailable    = errors.New("payment provider is not configured or available")
 	ErrInvalidWebhookSignature = errors.New("invalid webhook signature")
-	ErrPaymentAttemptNotFound = errors.New("payment attempt not found")
-	ErrPaymentAmountMismatch  = errors.New("payment amount does not match expected attempt")
+	ErrPaymentAttemptNotFound  = errors.New("payment attempt not found")
+	ErrPaymentAmountMismatch   = errors.New("payment amount does not match expected attempt")
 )
 
 type MerchantPayoutAccountView struct {
@@ -34,18 +34,21 @@ type MerchantPayoutAccountView struct {
 }
 
 type StorefrontPaymentSettingsView struct {
-	PayoutAccount              *MerchantPayoutAccountView `json:"payout_account"`
-	AvailableProviders         []string                   `json:"available_providers"`
-	PaymentBankTransferEnabled bool                       `json:"payment_bank_transfer_enabled"`
-	PaymentCardEnabled         bool                       `json:"payment_card_enabled"`
-	PaymentManualTransferEnabled bool                     `json:"payment_manual_transfer_enabled"`
-	PaymentCodEnabled          bool                       `json:"payment_cod_enabled"`
-	FeeBearer                  string                     `json:"fee_bearer"`
-	HoldPaymentMinutes         int32                      `json:"hold_payment_minutes"`
-	HoldManualTransferHours    int32                      `json:"hold_manual_transfer_hours"`
-	HoldConfirmationHours      int32                      `json:"hold_confirmation_hours"`
-	HoldPickupHours            int32                      `json:"hold_pickup_hours"`
-	CommissionPercent          float64                    `json:"commission_percent"`
+	PayoutAccount                *MerchantPayoutAccountView `json:"payout_account"`
+	AvailableProviders           []string                   `json:"available_providers"`
+	PaymentBankTransferEnabled   bool                       `json:"payment_bank_transfer_enabled"`
+	PaymentCardEnabled           bool                       `json:"payment_card_enabled"`
+	PaymentManualTransferEnabled bool                       `json:"payment_manual_transfer_enabled"`
+	PaymentCodEnabled            bool                       `json:"payment_cod_enabled"`
+	FeeBearer                    string                     `json:"fee_bearer"`
+	HoldPaymentMinutes           int32                      `json:"hold_payment_minutes"`
+	HoldManualTransferHours      int32                      `json:"hold_manual_transfer_hours"`
+	HoldConfirmationHours        int32                      `json:"hold_confirmation_hours"`
+	HoldPickupHours              int32                      `json:"hold_pickup_hours"`
+	CommissionPercent            float64                    `json:"commission_percent"`
+	ManualBankName               *string                    `json:"manual_bank_name,omitempty"`
+	ManualBankAccountNumber      *string                    `json:"manual_bank_account_number,omitempty"`
+	ManualBankAccountName        *string                    `json:"manual_bank_account_name,omitempty"`
 }
 
 type UpdateStorefrontPaymentSettingsInput struct {
@@ -58,6 +61,9 @@ type UpdateStorefrontPaymentSettingsInput struct {
 	HoldManualTransferHours      *int32  `json:"hold_manual_transfer_hours"`
 	HoldConfirmationHours        *int32  `json:"hold_confirmation_hours"`
 	HoldPickupHours              *int32  `json:"hold_pickup_hours"`
+	ManualBankName               *string `json:"manual_bank_name"`
+	ManualBankAccountNumber      *string `json:"manual_bank_account_number"`
+	ManualBankAccountName        *string `json:"manual_bank_account_name"`
 }
 
 type SavePayoutAccountInput struct {
@@ -191,18 +197,23 @@ func (s *Service) GetStorefrontPaymentSettings(ctx context.Context, wsID int64) 
 	}
 
 	var payoutView *MerchantPayoutAccountView
-	payoutAcc, pErr := s.queries.GetMerchantPayoutAccount(ctx, db.GetMerchantPayoutAccountParams{
-		WorkspaceID: wsID,
-		Provider:    "paystack",
-	})
-	if pErr == nil {
+	if accounts, lErr := s.queries.ListMerchantPayoutAccounts(ctx, wsID); lErr == nil && len(accounts) > 0 {
+		chosen := accounts[0]
+		for _, a := range accounts {
+			if a.Status == "active" {
+				chosen = a
+				if _, ok := s.storefrontPaymentProviders[a.Provider]; ok {
+					break
+				}
+			}
+		}
 		payoutView = &MerchantPayoutAccountView{
-			ID:                 payoutAcc.ID,
-			Provider:           payoutAcc.Provider,
-			BankCode:           payoutAcc.BankCode,
-			AccountNumberLast4: payoutAcc.AccountNumberLast4,
-			AccountName:        payoutAcc.AccountName,
-			Status:             payoutAcc.Status,
+			ID:                 chosen.ID,
+			Provider:           chosen.Provider,
+			BankCode:           chosen.BankCode,
+			AccountNumberLast4: chosen.AccountNumberLast4,
+			AccountName:        chosen.AccountName,
+			Status:             chosen.Status,
 		}
 	}
 
@@ -227,6 +238,9 @@ func (s *Service) GetStorefrontPaymentSettings(ctx context.Context, wsID int64) 
 		HoldConfirmationHours:        settings.HoldConfirmationHours,
 		HoldPickupHours:              settings.HoldPickupHours,
 		CommissionPercent:            s.platformCommissionPercent,
+		ManualBankName:               nullableText(settings.ManualBankName),
+		ManualBankAccountNumber:      nullableText(settings.ManualBankAccountNumber),
+		ManualBankAccountName:        nullableText(settings.ManualBankAccountName),
 	}, nil
 }
 
@@ -300,6 +314,31 @@ func (s *Service) UpdateStorefrontPaymentSettings(ctx context.Context, wsID int6
 		return StorefrontPaymentSettingsView{}, err
 	}
 
+	if in.ManualBankName != nil || in.ManualBankAccountNumber != nil || in.ManualBankAccountName != nil {
+		mBank := settings.ManualBankName
+		if in.ManualBankName != nil {
+			mBank = optionalPgText(sanitizePublicText(*in.ManualBankName, 120))
+		}
+		mAcctNo := settings.ManualBankAccountNumber
+		if in.ManualBankAccountNumber != nil {
+			mAcctNo = optionalPgText(sanitizePublicText(*in.ManualBankAccountNumber, 40))
+		}
+		mAcctName := settings.ManualBankAccountName
+		if in.ManualBankAccountName != nil {
+			mAcctName = optionalPgText(sanitizePublicText(*in.ManualBankAccountName, 160))
+		}
+		if _, mbErr := s.queries.UpdateStorefrontManualBankDetails(ctx, db.UpdateStorefrontManualBankDetailsParams{
+			WorkspaceID:             wsID,
+			StorefrontID:            sf.ID,
+			ManualBankName:          mBank,
+			ManualBankAccountNumber: mAcctNo,
+			ManualBankAccountName:   mAcctName,
+		}); mbErr != nil {
+			return StorefrontPaymentSettingsView{}, mbErr
+		}
+	}
+
+	invalidateStorefrontCache(sf.Slug)
 	return s.GetStorefrontPaymentSettings(ctx, wsID)
 }
 
@@ -718,6 +757,9 @@ func (s *Service) MarkStorefrontOrderPaid(ctx context.Context, attempt db.Storef
 
 // MarkStorefrontOrderPaidManual handles "Mark paid" for manual bank transfers and "Collected" for COD/pickup.
 func (s *Service) MarkStorefrontOrderPaidManual(ctx context.Context, wsID, orderID, moneyAccountID int64, notes string) error {
+	if moneyAccountID <= 0 {
+		return errors.New("money account is required")
+	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -725,11 +767,21 @@ func (s *Service) MarkStorefrontOrderPaidManual(ctx context.Context, wsID, order
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := s.queries.WithTx(tx)
 
+	if _, err := q.GetMoneyAccountByID(ctx, db.GetMoneyAccountByIDParams{ID: moneyAccountID, WorkspaceID: wsID}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrForbiddenAccount
+		}
+		return err
+	}
+
 	order, err := q.GetStorefrontOrderForUpdate(ctx, db.GetStorefrontOrderForUpdateParams{
 		WorkspaceID: wsID,
 		ID:          orderID,
 	})
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
 		return err
 	}
 	if order.PaymentStatus == "paid" {

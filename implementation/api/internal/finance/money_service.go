@@ -31,11 +31,11 @@ var (
 )
 
 type Service struct {
-	pool              *pgxpool.Pool
-	queries           *db.Queries
-	planLimitChecker  PlanLimitChecker
-	evidenceUploader  EvidenceUploadAuthorizer
-	dnsLookupTXT      func(string) ([]string, error)
+	pool                       *pgxpool.Pool
+	queries                    *db.Queries
+	planLimitChecker           PlanLimitChecker
+	evidenceUploader           EvidenceUploadAuthorizer
+	dnsLookupTXT               func(string) ([]string, error)
 	aiOrchestrator             *ai.Orchestrator
 	paymentProvider            billing.PaymentProvider
 	emailProvider              notify.EmailProvider

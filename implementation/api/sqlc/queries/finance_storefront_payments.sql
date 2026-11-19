@@ -220,3 +220,138 @@ JOIN storefronts sf ON sf.id = o.storefront_id
 WHERE o.shopper_id = $1
   AND (sqlc.narg('storefront_slug')::text IS NULL OR lower(btrim(sf.slug)) = lower(btrim(sqlc.narg('storefront_slug')::text)))
 ORDER BY o.id DESC;
+
+-- name: UpdateStorefrontOrderCheckoutMeta :one
+UPDATE storefront_orders
+SET hold_type = $3,
+    reservation_expires_at = $4,
+    processing_fee_minor = $5,
+    pickup_code = $6,
+    pickup_point_id = $7,
+    public_token_enc = $8,
+    rate_token = $9,
+    courier_name = $10,
+    courier_service_code = $11,
+    courier_id = $12,
+    commercial_status = $13,
+    fulfilment_status = $14,
+    payment_status = $15,
+    shopper_id = COALESCE($16, shopper_id),
+    updated_at = now()
+WHERE workspace_id = $1 AND id = $2
+RETURNING *;
+
+-- name: UpdateStorefrontOrderCourierFull :one
+UPDATE storefront_orders
+SET courier_name = COALESCE($3, courier_name),
+    courier_tracking_number = $4,
+    courier_status = $5,
+    courier_booking_error = $6,
+    courier_tracking_url = $7,
+    updated_at = now()
+WHERE workspace_id = $1 AND id = $2
+RETURNING *;
+
+-- name: GetStorefrontOrderByTrackingNumber :one
+SELECT * FROM storefront_orders
+WHERE courier_tracking_number = $1
+LIMIT 1;
+
+-- name: UpdateStorefrontManualBankDetails :one
+UPDATE storefront_settings
+SET manual_bank_name = $3,
+    manual_bank_account_number = $4,
+    manual_bank_account_name = $5,
+    version = version + 1,
+    updated_at = now()
+WHERE workspace_id = $1 AND storefront_id = $2
+RETURNING *;
+
+-- name: GetStorefrontShippingRateCache :one
+SELECT * FROM storefront_shipping_rate_cache
+WHERE cache_key = $1 AND expires_at > now();
+
+-- name: GetStorefrontShippingRateByToken :one
+SELECT * FROM storefront_shipping_rate_cache
+WHERE storefront_id = $1 AND request_token = $2 AND expires_at > now()
+ORDER BY expires_at DESC
+LIMIT 1;
+
+-- name: UpsertStorefrontShippingRateCache :one
+INSERT INTO storefront_shipping_rate_cache (
+    cache_key, workspace_id, storefront_id, request_token, rates_json, expires_at
+) VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (cache_key) DO UPDATE
+SET request_token = EXCLUDED.request_token,
+    rates_json = EXCLUDED.rates_json,
+    expires_at = EXCLUDED.expires_at,
+    created_at = now()
+RETURNING *;
+
+-- name: DeleteExpiredShippingRateCache :exec
+DELETE FROM storefront_shipping_rate_cache
+WHERE expires_at <= now();
+
+-- name: CreateShopperLoginCodeWithLink :one
+INSERT INTO shopper_login_codes (shopper_email, code_hash, link_token_hash, expires_at, ip_hash)
+VALUES (lower(btrim($1)), $2, $3, $4, $5)
+RETURNING *;
+
+-- name: GetShopperLoginCodeByLinkHash :one
+SELECT * FROM shopper_login_codes
+WHERE link_token_hash = $1
+ORDER BY created_at DESC
+LIMIT 1;
+
+-- name: UpdateShopperDetails :one
+UPDATE shoppers
+SET name = COALESCE($2, name),
+    phone = COALESCE($3, phone),
+    saved_addresses = COALESCE($4, saved_addresses),
+    last_seen_at = now()
+WHERE id = $1
+RETURNING *;
+
+-- name: CountRecentShopperCodesByEmail :one
+SELECT count(*)::bigint FROM shopper_login_codes
+WHERE lower(btrim(shopper_email)) = lower(btrim($1))
+  AND created_at >= now() - interval '10 minutes';
+
+-- name: CountRecentShopperCodesByIP :one
+SELECT count(*)::bigint FROM shopper_login_codes
+WHERE ip_hash = $1
+  AND created_at >= now() - interval '10 minutes';
+
+-- name: UpdateProductWeightGrams :exec
+UPDATE products
+SET weight_grams = $3, updated_at = now()
+WHERE workspace_id = $1 AND id = $2;
+
+-- name: UpdateProductVariantWeightGrams :exec
+UPDATE product_variants
+SET weight_grams = $3, updated_at = now()
+WHERE workspace_id = $1 AND id = $2;
+
+-- name: ListStorefrontProductWeights :many
+SELECT sp.id AS storefront_product_id,
+       sp.product_id,
+       sp.variant_id,
+       sp.public_title,
+       sp.public_price_minor,
+       p.weight_grams AS product_weight_grams,
+       pv.weight_grams AS variant_weight_grams
+FROM storefront_products sp
+JOIN products p ON p.id = sp.product_id AND p.workspace_id = sp.workspace_id
+LEFT JOIN product_variants pv ON pv.id = sp.variant_id AND pv.workspace_id = sp.workspace_id
+WHERE sp.storefront_id = $1 AND sp.id = ANY($2::bigint[]);
+
+-- name: UpdateStorefrontOrderPackedReady :one
+UPDATE storefront_orders
+SET fulfilment_status = 'packed',
+    version = version + 1,
+    updated_at = now()
+WHERE workspace_id = $1 AND id = $2 AND version = $3
+  AND commercial_status = 'confirmed'
+  AND fulfilment_status = 'reserved'
+  AND delivery_method = 'pickup'
+RETURNING *;

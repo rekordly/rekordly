@@ -140,7 +140,7 @@ func TestStorefrontSetupProjectionCartCheckoutConfirmFulfilAndLedger(t *testing.
 	require.NoError(t, pool.QueryRow(ctx, `SELECT reserved_quantity::text FROM inventory_balances WHERE workspace_id=$1 AND product_id=$2`, ws, item.ID).Scan(&reservedAfterCart))
 	require.Equal(t, "0.0000", reservedAfterCart)
 
-	// 3. Guest checkout creates order request without reserving stock or posting GL
+	// 3. Guest checkout holds stock immediately (launch checkout contract)
 	checkout, err := svc.SubmitGuestCheckout(ctx, "kola-footwear", false, finance.GuestCheckoutInput{
 		ClientKey:          "10.0.0.5",
 		CartToken:          cart.CartToken,
@@ -153,8 +153,8 @@ func TestStorefrontSetupProjectionCartCheckoutConfirmFulfilAndLedger(t *testing.
 		IdempotencyKey:     "bp09-checkout-1",
 	})
 	require.NoError(t, err)
-	require.Equal(t, "request_received", checkout.CommercialStatus)
-	require.Equal(t, "unreserved", checkout.FulfilmentStatus)
+	require.Equal(t, "confirmed", checkout.CommercialStatus)
+	require.Equal(t, "reserved", checkout.FulfilmentStatus)
 	require.Equal(t, "31500", checkout.TotalMinor)
 	require.NotEmpty(t, checkout.StatusToken)
 
@@ -172,63 +172,26 @@ func TestStorefrontSetupProjectionCartCheckoutConfirmFulfilAndLedger(t *testing.
 	require.NoError(t, err)
 	require.Equal(t, checkout.OrderReference, checkoutDup.OrderReference)
 
-	// Still zero reservation
+	// 3 units reserved atomically on checkout
 	require.NoError(t, pool.QueryRow(ctx, `SELECT reserved_quantity::text FROM inventory_balances WHERE workspace_id=$1 AND product_id=$2`, ws, item.ID).Scan(&reservedAfterCart))
-	require.Equal(t, "0.0000", reservedAfterCart)
+	require.Equal(t, "3.0000", reservedAfterCart)
 
-	// 4. Merchant reviews & requests price/fee change -> version conflict if stale ack -> customer acks
+	// 4. Merchant lists and packs confirmed order
 	ordersList, err := svc.ListMerchantOrders(ctx, ws, "", 0)
 	require.NoError(t, err)
 	require.Len(t, ordersList, 1)
 	orderID := ordersList[0].ID
 
-	revOrder, err := svc.RequestOrderChange(ctx, ws, user, orderID, finance.RequestOrderChangeInput{
-		ExpectedVersion:    1,
-		DeliveryFee:        "20",
-		PaymentArrangement: "Bank transfer before dispatch",
-		ChangeSummary:      "Updated delivery fee to 20 NGN for Ikeja dispatch",
-		RequiresAck:        true,
-	})
+	// Packing is a workflow marker only; the reservation remains in place until fulfilment.
+	confirmed, err := svc.PackStorefrontOrder(ctx, ws, user, orderID, ordersList[0].Version)
 	require.NoError(t, err)
-	require.Equal(t, "quote_changes_requested", revOrder.CommercialStatus)
-	require.Equal(t, "32000", revOrder.TotalMinor)
-
-	// Cannot confirm before customer ack
-	_, err = svc.ConfirmStorefrontOrder(ctx, ws, user, orderID, finance.ConfirmOrderInput{ExpectedVersion: revOrder.Version, OutletID: outletID})
-	require.Error(t, err)
-
-	// Stale ack fails
-	_, err = svc.AcknowledgePublicOrderChanges(ctx, checkout.StatusToken, 1)
-	require.ErrorIs(t, err, finance.ErrOrderVersionConflict)
-
-	// Valid ack transitions back to needs_review
-	pubAcked, err := svc.AcknowledgePublicOrderChanges(ctx, checkout.StatusToken, revOrder.Version)
-	require.NoError(t, err)
-	require.Equal(t, "needs_review", pubAcked.CommercialStatus)
-	require.False(t, pubAcked.RequiresCustomerAck)
-
-	// 5. Merchant confirms order -> atomically reserves 3 units
-	confirmed, err := svc.ConfirmStorefrontOrder(ctx, ws, user, orderID, finance.ConfirmOrderInput{
-		ExpectedVersion: pubAcked.Version,
-		OutletID:        outletID,
-	})
-	require.NoError(t, err)
-	require.Equal(t, "confirmed", confirmed.CommercialStatus)
-	require.Equal(t, "reserved", confirmed.FulfilmentStatus)
-
+	require.Equal(t, "packed", confirmed.FulfilmentStatus)
 	var reservedNow string
 	require.NoError(t, pool.QueryRow(ctx, `SELECT reserved_quantity::text FROM inventory_balances WHERE workspace_id=$1 AND product_id=$2`, ws, item.ID).Scan(&reservedNow))
 	require.Equal(t, "3.0000", reservedNow)
 
-	// Packing is a workflow marker only; the reservation remains in place until fulfilment.
-	confirmed, err = svc.PackStorefrontOrder(ctx, ws, user, orderID, confirmed.Version)
-	require.NoError(t, err)
-	require.Equal(t, "packed", confirmed.FulfilmentStatus)
-	require.NoError(t, pool.QueryRow(ctx, `SELECT reserved_quantity::text FROM inventory_balances WHERE workspace_id=$1 AND product_id=$2`, ws, item.ID).Scan(&reservedNow))
-	require.Equal(t, "3.0000", reservedNow)
-
-	// Second competing order requesting 3 units (only 2 left available) must fail with ErrInsufficientStock on confirm!
-	checkout2, err := svc.SubmitGuestCheckout(ctx, "kola-footwear", false, finance.GuestCheckoutInput{
+	// Second competing order requesting 3 units (only 2 left available) must fail immediately at checkout!
+	_, err = svc.SubmitGuestCheckout(ctx, "kola-footwear", false, finance.GuestCheckoutInput{
 		ClientKey:          "10.0.0.6",
 		Lines:              []finance.CartLineInput{{StorefrontProductID: pubProd.ID, Quantity: "3"}},
 		CustomerName:       "Tunde",
@@ -237,14 +200,8 @@ func TestStorefrontSetupProjectionCartCheckoutConfirmFulfilAndLedger(t *testing.
 		PolicyAcknowledged: true,
 		IdempotencyKey:     "bp09-checkout-2",
 	})
-	require.NoError(t, err)
-	orders2, _ := svc.ListMerchantOrders(ctx, ws, "request_received", 0)
-	_, err = svc.ConfirmStorefrontOrder(ctx, ws, user, orders2[0].ID, finance.ConfirmOrderInput{ExpectedVersion: 1, OutletID: outletID})
-	require.ErrorIs(t, err, finance.ErrInsufficientStock)
-
-	// Cancel order 2 cleanly (before confirmation -> no stock impact)
-	_, err = svc.CancelPublicOrderBeforeConfirm(ctx, checkout2.StatusToken, "Found closer pickup")
-	require.NoError(t, err)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "only 2 left")
 
 	// 6. Fulfil confirmed order 1 -> consumes reservation, issues stock & posts balanced weighted-average COGS (3 * 40.00 = 12000)
 	fulfilled, err := svc.FulfilStorefrontOrder(ctx, ws, user, orderID, finance.FulfilStorefrontOrderInput{
@@ -447,9 +404,7 @@ func TestStorefrontCartRestoreReturnAndReservationExpiry(t *testing.T) {
 	require.Len(t, orders, 1)
 	o1 := orders[0]
 
-	confirmed, err := svc.ConfirmStorefrontOrder(ctx, ws, user, o1.ID, finance.ConfirmOrderInput{ExpectedVersion: o1.Version, OutletID: outletID})
-	require.NoError(t, err)
-	fulfilled, err := svc.FulfilStorefrontOrder(ctx, ws, user, o1.ID, finance.FulfilStorefrontOrderInput{ExpectedVersion: confirmed.Version})
+	fulfilled, err := svc.FulfilStorefrontOrder(ctx, ws, user, o1.ID, finance.FulfilStorefrontOrderInput{ExpectedVersion: o1.Version})
 	require.NoError(t, err)
 	require.Equal(t, "fulfilled", fulfilled.FulfilmentStatus)
 
@@ -473,11 +428,9 @@ func TestStorefrontCartRestoreReturnAndReservationExpiry(t *testing.T) {
 		IdempotencyKey:     "bp09-gaps-co2",
 	})
 	require.NoError(t, err)
-	orders2, err := svc.ListMerchantOrders(ctx, ws, "request_received", 0)
+	orders2, err := svc.ListMerchantOrders(ctx, ws, "confirmed", 0)
 	require.NoError(t, err)
 	require.Len(t, orders2, 1)
-	_, err = svc.ConfirmStorefrontOrder(ctx, ws, user, orders2[0].ID, finance.ConfirmOrderInput{ExpectedVersion: orders2[0].Version, OutletID: outletID})
-	require.NoError(t, err)
 	_, err = pool.Exec(ctx, `UPDATE storefront_orders SET reservation_expires_at = now() - interval '1 hour' WHERE id=$1`, orders2[0].ID)
 	require.NoError(t, err)
 

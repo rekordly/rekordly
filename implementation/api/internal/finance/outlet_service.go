@@ -19,34 +19,40 @@ var (
 )
 
 type CreateOutletInput struct {
-	Name         string `json:"name" binding:"required"`
-	LocationType string `json:"location_type"` // outlet, warehouse, store, other
-	Code         string `json:"code"`
-	Address      string `json:"address"`
-	Phone        string `json:"phone"`
-	IsDefault    bool   `json:"is_default"`
+	Name          string `json:"name" binding:"required"`
+	LocationType  string `json:"location_type"` // outlet, warehouse, store, other
+	Code          string `json:"code"`
+	Address       string `json:"address"`
+	Phone         string `json:"phone"`
+	IsDefault     bool   `json:"is_default"`
+	IsPickupPoint bool   `json:"is_pickup_point"`
+	PickupNote    string `json:"pickup_note"`
 }
 
 type UpdateOutletInput struct {
-	Name         *string `json:"name"`
-	LocationType *string `json:"location_type"`
-	Code         *string `json:"code"`
-	Address      *string `json:"address"`
-	Phone        *string `json:"phone"`
-	IsDefault    *bool   `json:"is_default"`
-	IsActive     *bool   `json:"is_active"`
+	Name          *string `json:"name"`
+	LocationType  *string `json:"location_type"`
+	Code          *string `json:"code"`
+	Address       *string `json:"address"`
+	Phone         *string `json:"phone"`
+	IsDefault     *bool   `json:"is_default"`
+	IsActive      *bool   `json:"is_active"`
+	IsPickupPoint *bool   `json:"is_pickup_point"`
+	PickupNote    *string `json:"pickup_note"`
 }
 
 type OutletView struct {
-	ID           int64   `json:"id"`
-	WorkspaceID  int64   `json:"workspace_id"`
-	Name         string  `json:"name"`
-	LocationType string  `json:"location_type"`
-	Code         *string `json:"code,omitempty"`
-	Address      *string `json:"address,omitempty"`
-	Phone        *string `json:"phone,omitempty"`
-	IsDefault    bool    `json:"is_default"`
-	IsActive     bool    `json:"is_active"`
+	ID            int64   `json:"id"`
+	WorkspaceID   int64   `json:"workspace_id"`
+	Name          string  `json:"name"`
+	LocationType  string  `json:"location_type"`
+	Code          *string `json:"code,omitempty"`
+	Address       *string `json:"address,omitempty"`
+	Phone         *string `json:"phone,omitempty"`
+	IsDefault     bool    `json:"is_default"`
+	IsActive      bool    `json:"is_active"`
+	IsPickupPoint bool    `json:"is_pickup_point"`
+	PickupNote    string  `json:"pickup_note"`
 }
 
 func outletViewFromDB(l db.InventoryLocation) OutletView {
@@ -64,15 +70,17 @@ func outletViewFromDB(l db.InventoryLocation) OutletView {
 		phone = &p
 	}
 	return OutletView{
-		ID:           l.ID,
-		WorkspaceID:  l.WorkspaceID,
-		Name:         l.Name,
-		LocationType: l.LocationType,
-		Code:         code,
-		Address:      address,
-		Phone:        phone,
-		IsDefault:    l.IsDefault,
-		IsActive:     l.IsActive,
+		ID:            l.ID,
+		WorkspaceID:   l.WorkspaceID,
+		Name:          l.Name,
+		LocationType:  l.LocationType,
+		Code:          code,
+		Address:       address,
+		Phone:         phone,
+		IsDefault:     l.IsDefault,
+		IsActive:      l.IsActive,
+		IsPickupPoint: l.IsPickupPoint,
+		PickupNote:    l.PickupNote,
 	}
 }
 
@@ -175,6 +183,23 @@ func (s *Service) CreateOutlet(ctx context.Context, workspaceID, userID int64, i
 			return OutletView{}, ErrOutletCodeConflict
 		}
 		return OutletView{}, fmt.Errorf("create inventory location: %w", err)
+	}
+
+	if in.IsPickupPoint || strings.TrimSpace(in.PickupNote) != "" {
+		note := strings.TrimSpace(in.PickupNote)
+		if len(note) > 500 {
+			note = note[:500]
+		}
+		if updatedLoc, err := qtx.SetLocationPickupPoint(ctx, db.SetLocationPickupPointParams{
+			WorkspaceID:   workspaceID,
+			ID:            loc.ID,
+			IsPickupPoint: in.IsPickupPoint,
+			PickupNote:    note,
+		}); err == nil {
+			loc = updatedLoc
+		} else {
+			return OutletView{}, err
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -345,6 +370,30 @@ func (s *Service) UpdateOutlet(ctx context.Context, workspaceID, outletID int64,
 			return OutletView{}, ErrOutletCodeConflict
 		}
 		return OutletView{}, err
+	}
+
+	if in.IsPickupPoint != nil || in.PickupNote != nil {
+		isPP := updated.IsPickupPoint
+		if in.IsPickupPoint != nil {
+			isPP = *in.IsPickupPoint
+		}
+		note := updated.PickupNote
+		if in.PickupNote != nil {
+			note = strings.TrimSpace(*in.PickupNote)
+			if len(note) > 500 {
+				note = note[:500]
+			}
+		}
+		if locPP, ppErr := qtx.SetLocationPickupPoint(ctx, db.SetLocationPickupPointParams{
+			WorkspaceID:   workspaceID,
+			ID:            outletID,
+			IsPickupPoint: isPP,
+			PickupNote:    note,
+		}); ppErr == nil {
+			updated = locPP
+		} else {
+			return OutletView{}, ppErr
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {

@@ -22,6 +22,7 @@ func (h *Handler) RegisterPublicStorefrontRoutes(g *gin.RouterGroup) {
 	g.POST("/public/storefronts/:slug/analytics/checkout-started", h.trackPublicCheckoutStarted)
 
 	g.GET("/public/orders/:token", h.getPublicOrderStatus)
+	g.POST("/public/orders/:token/verify-payment", h.verifyPublicOrderPayment)
 	g.POST("/public/orders/:token/messages", h.postPublicOrderMessage)
 	g.POST("/public/orders/:token/acknowledge", h.acknowledgePublicOrderChanges)
 	g.POST("/public/orders/:token/cancel", h.cancelPublicOrderBeforeConfirm)
@@ -33,7 +34,7 @@ func (h *Handler) getPublicStorefrontByHost(c *gin.Context) {
 	if strings.TrimSpace(host) == "" {
 		host = c.Request.Host
 	}
- proj, err := h.service.GetPublicStorefrontProjection(storefrontRequestContext(c), host, true, c.Query("q"), c.Query("collection"))
+	proj, err := h.service.GetPublicStorefrontProjection(storefrontRequestContext(c), host, true, c.Query("q"), c.Query("collection"))
 	if err != nil {
 		h.storefrontError(c, err)
 		return
@@ -108,7 +109,10 @@ func storefrontRequestContext(c *gin.Context) context.Context {
 }
 
 func (h *Handler) trackPublicCheckoutStarted(c *gin.Context) {
-	if err := h.service.TrackStorefrontCheckoutStarted(storefrontRequestContext(c), c.Param("slug")); err != nil { h.storefrontError(c, err); return }
+	if err := h.service.TrackStorefrontCheckoutStarted(storefrontRequestContext(c), c.Param("slug")); err != nil {
+		h.storefrontError(c, err)
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"tracked": true}})
 }
 
@@ -173,6 +177,15 @@ func (h *Handler) submitGuestCheckout(c *gin.Context) {
 
 func (h *Handler) getPublicOrderStatus(c *gin.Context) {
 	order, err := h.service.GetPublicOrderStatus(c.Request.Context(), c.Param("token"))
+	if err != nil {
+		h.storefrontError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"order": order}})
+}
+
+func (h *Handler) verifyPublicOrderPayment(c *gin.Context) {
+	order, err := h.service.VerifyPublicOrderPayment(c.Request.Context(), c.Param("token"))
 	if err != nil {
 		h.storefrontError(c, err)
 		return
