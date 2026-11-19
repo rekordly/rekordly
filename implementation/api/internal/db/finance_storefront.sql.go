@@ -451,7 +451,7 @@ INSERT INTO storefront_orders (
     preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time,
     customer_note, policy_acknowledged, policy_version, idempotency_key
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
-RETURNING id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url
+RETURNING id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url, payment_attention_reason, payment_attention_message
 `
 
 type CreateStorefrontOrderParams struct {
@@ -565,6 +565,8 @@ func (q *Queries) CreateStorefrontOrder(ctx context.Context, arg CreateStorefron
 		&i.CourierServiceCode,
 		&i.CourierID,
 		&i.CourierTrackingUrl,
+		&i.PaymentAttentionReason,
+		&i.PaymentAttentionMessage,
 	)
 	return i, err
 }
@@ -1130,7 +1132,7 @@ func (q *Queries) GetStorefrontDomainForUpdate(ctx context.Context, arg GetStore
 }
 
 const getStorefrontOrderByID = `-- name: GetStorefrontOrderByID :one
-SELECT id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url FROM storefront_orders
+SELECT id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url, payment_attention_reason, payment_attention_message FROM storefront_orders
 WHERE workspace_id = $1 AND id = $2
 `
 
@@ -1196,12 +1198,14 @@ func (q *Queries) GetStorefrontOrderByID(ctx context.Context, arg GetStorefrontO
 		&i.CourierServiceCode,
 		&i.CourierID,
 		&i.CourierTrackingUrl,
+		&i.PaymentAttentionReason,
+		&i.PaymentAttentionMessage,
 	)
 	return i, err
 }
 
 const getStorefrontOrderByIdempotency = `-- name: GetStorefrontOrderByIdempotency :one
-SELECT id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url FROM storefront_orders
+SELECT id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url, payment_attention_reason, payment_attention_message FROM storefront_orders
 WHERE workspace_id = $1 AND idempotency_key = $2
 `
 
@@ -1267,12 +1271,14 @@ func (q *Queries) GetStorefrontOrderByIdempotency(ctx context.Context, arg GetSt
 		&i.CourierServiceCode,
 		&i.CourierID,
 		&i.CourierTrackingUrl,
+		&i.PaymentAttentionReason,
+		&i.PaymentAttentionMessage,
 	)
 	return i, err
 }
 
 const getStorefrontOrderByPublicTokenHash = `-- name: GetStorefrontOrderByPublicTokenHash :one
-SELECT id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url FROM storefront_orders
+SELECT id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url, payment_attention_reason, payment_attention_message FROM storefront_orders
 WHERE public_token_hash = $1
 `
 
@@ -1333,12 +1339,14 @@ func (q *Queries) GetStorefrontOrderByPublicTokenHash(ctx context.Context, publi
 		&i.CourierServiceCode,
 		&i.CourierID,
 		&i.CourierTrackingUrl,
+		&i.PaymentAttentionReason,
+		&i.PaymentAttentionMessage,
 	)
 	return i, err
 }
 
 const getStorefrontOrderForUpdate = `-- name: GetStorefrontOrderForUpdate :one
-SELECT id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url FROM storefront_orders
+SELECT id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url, payment_attention_reason, payment_attention_message FROM storefront_orders
 WHERE workspace_id = $1 AND id = $2
 FOR UPDATE
 `
@@ -1405,12 +1413,14 @@ func (q *Queries) GetStorefrontOrderForUpdate(ctx context.Context, arg GetStoref
 		&i.CourierServiceCode,
 		&i.CourierID,
 		&i.CourierTrackingUrl,
+		&i.PaymentAttentionReason,
+		&i.PaymentAttentionMessage,
 	)
 	return i, err
 }
 
 const getStorefrontOrderForUpdateByPublicHash = `-- name: GetStorefrontOrderForUpdateByPublicHash :one
-SELECT id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url FROM storefront_orders
+SELECT id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url, payment_attention_reason, payment_attention_message FROM storefront_orders
 WHERE public_token_hash = $1
 FOR UPDATE
 `
@@ -1472,6 +1482,8 @@ func (q *Queries) GetStorefrontOrderForUpdateByPublicHash(ctx context.Context, p
 		&i.CourierServiceCode,
 		&i.CourierID,
 		&i.CourierTrackingUrl,
+		&i.PaymentAttentionReason,
+		&i.PaymentAttentionMessage,
 	)
 	return i, err
 }
@@ -2438,7 +2450,7 @@ func (q *Queries) ListStorefrontOrderVersions(ctx context.Context, orderID int64
 }
 
 const listStorefrontOrders = `-- name: ListStorefrontOrders :many
-SELECT id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url FROM storefront_orders
+SELECT id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url, payment_attention_reason, payment_attention_message FROM storefront_orders
 WHERE workspace_id = $1
   AND ($3::text IS NULL OR commercial_status = $3)
   AND ($4::bigint IS NULL OR outlet_id = $4)
@@ -2521,6 +2533,8 @@ func (q *Queries) ListStorefrontOrders(ctx context.Context, arg ListStorefrontOr
 			&i.CourierServiceCode,
 			&i.CourierID,
 			&i.CourierTrackingUrl,
+			&i.PaymentAttentionReason,
+			&i.PaymentAttentionMessage,
 		); err != nil {
 			return nil, err
 		}
@@ -2537,7 +2551,7 @@ UPDATE storefront_orders
 SET fulfilment_status = 'packed', version = version + 1, updated_at = now()
 WHERE workspace_id = $1 AND id = $2 AND version = $3
   AND commercial_status = 'confirmed' AND fulfilment_status = 'reserved'
-RETURNING id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url
+RETURNING id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url, payment_attention_reason, payment_attention_message
 `
 
 type MarkStorefrontOrderPackedParams struct {
@@ -2603,6 +2617,8 @@ func (q *Queries) MarkStorefrontOrderPacked(ctx context.Context, arg MarkStorefr
 		&i.CourierServiceCode,
 		&i.CourierID,
 		&i.CourierTrackingUrl,
+		&i.PaymentAttentionReason,
+		&i.PaymentAttentionMessage,
 	)
 	return i, err
 }

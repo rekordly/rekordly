@@ -3362,6 +3362,8 @@ type StorefrontOrder struct {
 	CourierServiceCode      pgtype.Text        `json:"courier_service_code"`
 	CourierID               pgtype.Text        `json:"courier_id"`
 	CourierTrackingUrl      pgtype.Text        `json:"courier_tracking_url"`
+	PaymentAttentionReason  pgtype.Text        `json:"payment_attention_reason"`
+	PaymentAttentionMessage pgtype.Text        `json:"payment_attention_message"`
 }
 
 type StorefrontOrderEvent struct {
@@ -3433,6 +3435,7 @@ type StorefrontPaymentAttempt struct {
 	PaidAt               pgtype.Timestamptz `json:"paid_at"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	ReceivedAmountMinor  pgtype.Int8        `json:"received_amount_minor"`
 }
 
 type StorefrontProduct struct {

@@ -18,6 +18,7 @@ func (h *Handler) RegisterStorefrontOrderRoutes(g *gin.RouterGroup) {
 	g.POST("/orders/:id/commands/ready-for-pickup", h.readyForPickupStorefrontOrder)
 	g.POST("/orders/:id/commands/collect", h.collectStorefrontOrder)
 	g.POST("/orders/:id/commands/mark-paid", h.markStorefrontOrderPaidManual)
+	g.POST("/orders/:id/commands/resolve-payment-attention", h.resolveStorefrontOrderPaymentAttention)
 	g.POST("/orders/:id/commands/fulfil", h.fulfilStorefrontOrder)
 	g.POST("/orders/:id/commands/cancel", h.cancelStorefrontOrder)
 	g.POST("/orders/:id/commands/decline", h.declineStorefrontOrder)
@@ -361,6 +362,25 @@ func (h *Handler) markStorefrontOrderPaidManual(c *gin.Context) {
 		return
 	}
 	order, err := h.service.GetMerchantOrder(c.Request.Context(), ws.WorkspaceID, id)
+	if err != nil {
+		h.storefrontError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"order": order}})
+}
+
+func (h *Handler) resolveStorefrontOrderPaymentAttention(c *gin.Context) {
+	ws, ok := businessPermission(c, "orders.confirm", "orders.cancel", "orders.fulfil")
+	if !ok {
+		return
+	}
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	var in ResolvePaymentAttentionInput
+	if err != nil || id <= 0 || c.ShouldBindJSON(&in) != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": "Invalid payment resolution request"}})
+		return
+	}
+	order, err := h.service.ResolveStorefrontOrderPaymentAttention(c.Request.Context(), ws.WorkspaceID, ws.UserID, id, in)
 	if err != nil {
 		h.storefrontError(c, err)
 		return

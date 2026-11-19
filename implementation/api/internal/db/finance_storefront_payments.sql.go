@@ -9,7 +9,183 @@ import (
 	"context"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/shopspring/decimal"
 )
+
+const cancelStorefrontOrderByCustomer = `-- name: CancelStorefrontOrderByCustomer :one
+UPDATE storefront_orders
+SET commercial_status = 'cancelled', decline_or_cancel_reason = $3, version = version + 1, updated_at = now()
+WHERE workspace_id = $1 AND id = $2
+RETURNING id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url, payment_attention_reason, payment_attention_message
+`
+
+type CancelStorefrontOrderByCustomerParams struct {
+	WorkspaceID           int64       `json:"workspace_id"`
+	ID                    int64       `json:"id"`
+	DeclineOrCancelReason pgtype.Text `json:"decline_or_cancel_reason"`
+}
+
+func (q *Queries) CancelStorefrontOrderByCustomer(ctx context.Context, arg CancelStorefrontOrderByCustomerParams) (StorefrontOrder, error) {
+	row := q.db.QueryRow(ctx, cancelStorefrontOrderByCustomer, arg.WorkspaceID, arg.ID, arg.DeclineOrCancelReason)
+	var i StorefrontOrder
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.StorefrontID,
+		&i.OrderReference,
+		&i.PublicTokenHash,
+		&i.CustomerID,
+		&i.OutletID,
+		&i.CommercialStatus,
+		&i.FulfilmentStatus,
+		&i.PaymentStatus,
+		&i.Version,
+		&i.Currency,
+		&i.CurrencyExponent,
+		&i.SubtotalMinor,
+		&i.TaxMinor,
+		&i.DeliveryFeeMinor,
+		&i.TotalMinor,
+		&i.DeliveryMethod,
+		&i.CustomerName,
+		&i.CustomerPhone,
+		&i.CustomerEmail,
+		&i.OrganizationName,
+		&i.PreferredContactMethod,
+		&i.DeliveryAddress,
+		&i.DeliveryLandmark,
+		&i.PreferredDeliveryTime,
+		&i.CustomerNote,
+		&i.PolicyAcknowledged,
+		&i.PolicyVersion,
+		&i.PaymentArrangement,
+		&i.LinkedInvoiceID,
+		&i.LinkedSaleID,
+		&i.LinkedInvoiceShareToken,
+		&i.DeclineOrCancelReason,
+		&i.ReservationExpiresAt,
+		&i.IdempotencyKey,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeliveryAreaID,
+		&i.HoldType,
+		&i.ProcessingFeeMinor,
+		&i.PickupCode,
+		&i.PickupPointID,
+		&i.CourierName,
+		&i.CourierTrackingNumber,
+		&i.CourierStatus,
+		&i.CourierBookingError,
+		&i.RateToken,
+		&i.ShopperID,
+		&i.PublicTokenEnc,
+		&i.CourierServiceCode,
+		&i.CourierID,
+		&i.CourierTrackingUrl,
+		&i.PaymentAttentionReason,
+		&i.PaymentAttentionMessage,
+	)
+	return i, err
+}
+
+const confirmStorefrontOrderRecord = `-- name: ConfirmStorefrontOrderRecord :one
+UPDATE storefront_orders
+SET outlet_id = $3,
+    commercial_status = 'confirmed',
+    fulfilment_status = 'reserved',
+    payment_status = $4,
+    delivery_fee_minor = $5,
+    total_minor = $6,
+    payment_arrangement = $7,
+    reservation_expires_at = $8,
+    version = version + 1,
+    updated_at = now()
+WHERE workspace_id = $1 AND id = $2
+RETURNING id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url, payment_attention_reason, payment_attention_message
+`
+
+type ConfirmStorefrontOrderRecordParams struct {
+	WorkspaceID          int64              `json:"workspace_id"`
+	ID                   int64              `json:"id"`
+	OutletID             pgtype.Int8        `json:"outlet_id"`
+	PaymentStatus        string             `json:"payment_status"`
+	DeliveryFeeMinor     int64              `json:"delivery_fee_minor"`
+	TotalMinor           int64              `json:"total_minor"`
+	PaymentArrangement   pgtype.Text        `json:"payment_arrangement"`
+	ReservationExpiresAt pgtype.Timestamptz `json:"reservation_expires_at"`
+}
+
+func (q *Queries) ConfirmStorefrontOrderRecord(ctx context.Context, arg ConfirmStorefrontOrderRecordParams) (StorefrontOrder, error) {
+	row := q.db.QueryRow(ctx, confirmStorefrontOrderRecord,
+		arg.WorkspaceID,
+		arg.ID,
+		arg.OutletID,
+		arg.PaymentStatus,
+		arg.DeliveryFeeMinor,
+		arg.TotalMinor,
+		arg.PaymentArrangement,
+		arg.ReservationExpiresAt,
+	)
+	var i StorefrontOrder
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.StorefrontID,
+		&i.OrderReference,
+		&i.PublicTokenHash,
+		&i.CustomerID,
+		&i.OutletID,
+		&i.CommercialStatus,
+		&i.FulfilmentStatus,
+		&i.PaymentStatus,
+		&i.Version,
+		&i.Currency,
+		&i.CurrencyExponent,
+		&i.SubtotalMinor,
+		&i.TaxMinor,
+		&i.DeliveryFeeMinor,
+		&i.TotalMinor,
+		&i.DeliveryMethod,
+		&i.CustomerName,
+		&i.CustomerPhone,
+		&i.CustomerEmail,
+		&i.OrganizationName,
+		&i.PreferredContactMethod,
+		&i.DeliveryAddress,
+		&i.DeliveryLandmark,
+		&i.PreferredDeliveryTime,
+		&i.CustomerNote,
+		&i.PolicyAcknowledged,
+		&i.PolicyVersion,
+		&i.PaymentArrangement,
+		&i.LinkedInvoiceID,
+		&i.LinkedSaleID,
+		&i.LinkedInvoiceShareToken,
+		&i.DeclineOrCancelReason,
+		&i.ReservationExpiresAt,
+		&i.IdempotencyKey,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeliveryAreaID,
+		&i.HoldType,
+		&i.ProcessingFeeMinor,
+		&i.PickupCode,
+		&i.PickupPointID,
+		&i.CourierName,
+		&i.CourierTrackingNumber,
+		&i.CourierStatus,
+		&i.CourierBookingError,
+		&i.RateToken,
+		&i.ShopperID,
+		&i.PublicTokenEnc,
+		&i.CourierServiceCode,
+		&i.CourierID,
+		&i.CourierTrackingUrl,
+		&i.PaymentAttentionReason,
+		&i.PaymentAttentionMessage,
+	)
+	return i, err
+}
 
 const countRecentShopperCodesByEmail = `-- name: CountRecentShopperCodesByEmail :one
 SELECT count(*)::bigint FROM shopper_login_codes
@@ -35,6 +211,118 @@ func (q *Queries) CountRecentShopperCodesByIP(ctx context.Context, ipHash string
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const createClearingMoneyAccount = `-- name: CreateClearingMoneyAccount :one
+INSERT INTO money_accounts (workspace_id, name, account_type, currency, currency_exponent)
+VALUES ($1, $2, 'clearing', $3, $4)
+RETURNING id, workspace_id, name, account_type, currency, currency_exponent, opening_balance_minor, current_balance_minor, is_active, created_at, updated_at, institution_name, masked_reference, display_order, icon, color, archived_at, version
+`
+
+type CreateClearingMoneyAccountParams struct {
+	WorkspaceID      int64  `json:"workspace_id"`
+	Name             string `json:"name"`
+	Currency         string `json:"currency"`
+	CurrencyExponent int32  `json:"currency_exponent"`
+}
+
+func (q *Queries) CreateClearingMoneyAccount(ctx context.Context, arg CreateClearingMoneyAccountParams) (MoneyAccount, error) {
+	row := q.db.QueryRow(ctx, createClearingMoneyAccount,
+		arg.WorkspaceID,
+		arg.Name,
+		arg.Currency,
+		arg.CurrencyExponent,
+	)
+	var i MoneyAccount
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Name,
+		&i.AccountType,
+		&i.Currency,
+		&i.CurrencyExponent,
+		&i.OpeningBalanceMinor,
+		&i.CurrentBalanceMinor,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.InstitutionName,
+		&i.MaskedReference,
+		&i.DisplayOrder,
+		&i.Icon,
+		&i.Color,
+		&i.ArchivedAt,
+		&i.Version,
+	)
+	return i, err
+}
+
+const createPayoutMoneyTransaction = `-- name: CreatePayoutMoneyTransaction :one
+INSERT INTO money_transactions (
+    workspace_id, direction, status, amount_minor, currency, currency_exponent,
+    effective_date, money_account_id, destination_account_id, purpose, notes, reference, idempotency_key, posted_at
+) VALUES (
+    $1, 'transfer', 'posted', $2, $3, $4, $5, $6, $7, 'payout', $8, $9, $10, now()
+) RETURNING id, workspace_id, direction, status, amount_minor, currency, currency_exponent, effective_date, money_account_id, destination_account_id, category_id, counterparty_name, purpose, notes, reference, idempotency_key, is_void, voided_at, void_reason, reversal_of_id, created_by_user_id, posted_at, created_at, updated_at, outlet_id, tags, version
+`
+
+type CreatePayoutMoneyTransactionParams struct {
+	WorkspaceID          int64       `json:"workspace_id"`
+	AmountMinor          int64       `json:"amount_minor"`
+	Currency             string      `json:"currency"`
+	CurrencyExponent     int32       `json:"currency_exponent"`
+	EffectiveDate        pgtype.Date `json:"effective_date"`
+	MoneyAccountID       pgtype.Int8 `json:"money_account_id"`
+	DestinationAccountID pgtype.Int8 `json:"destination_account_id"`
+	Notes                pgtype.Text `json:"notes"`
+	Reference            pgtype.Text `json:"reference"`
+	IdempotencyKey       pgtype.Text `json:"idempotency_key"`
+}
+
+func (q *Queries) CreatePayoutMoneyTransaction(ctx context.Context, arg CreatePayoutMoneyTransactionParams) (MoneyTransaction, error) {
+	row := q.db.QueryRow(ctx, createPayoutMoneyTransaction,
+		arg.WorkspaceID,
+		arg.AmountMinor,
+		arg.Currency,
+		arg.CurrencyExponent,
+		arg.EffectiveDate,
+		arg.MoneyAccountID,
+		arg.DestinationAccountID,
+		arg.Notes,
+		arg.Reference,
+		arg.IdempotencyKey,
+	)
+	var i MoneyTransaction
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Direction,
+		&i.Status,
+		&i.AmountMinor,
+		&i.Currency,
+		&i.CurrencyExponent,
+		&i.EffectiveDate,
+		&i.MoneyAccountID,
+		&i.DestinationAccountID,
+		&i.CategoryID,
+		&i.CounterpartyName,
+		&i.Purpose,
+		&i.Notes,
+		&i.Reference,
+		&i.IdempotencyKey,
+		&i.IsVoid,
+		&i.VoidedAt,
+		&i.VoidReason,
+		&i.ReversalOfID,
+		&i.CreatedByUserID,
+		&i.PostedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.OutletID,
+		&i.Tags,
+		&i.Version,
+	)
+	return i, err
 }
 
 const createShopperLoginCode = `-- name: CreateShopperLoginCode :one
@@ -139,7 +427,7 @@ INSERT INTO storefront_payment_attempts (
     workspace_id, order_id, provider, method, reference, amount_minor, fee_minor, commission_minor,
     virtual_account_number, bank_name, expires_at, status
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-RETURNING id, workspace_id, order_id, provider, method, reference, amount_minor, fee_minor, commission_minor, virtual_account_number, bank_name, expires_at, status, raw_event, paid_at, created_at, updated_at
+RETURNING id, workspace_id, order_id, provider, method, reference, amount_minor, fee_minor, commission_minor, virtual_account_number, bank_name, expires_at, status, raw_event, paid_at, created_at, updated_at, received_amount_minor
 `
 
 type CreateStorefrontPaymentAttemptParams struct {
@@ -191,8 +479,26 @@ func (q *Queries) CreateStorefrontPaymentAttempt(ctx context.Context, arg Create
 		&i.PaidAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReceivedAmountMinor,
 	)
 	return i, err
+}
+
+const decrementStorefrontOrderLineFulfilled = `-- name: DecrementStorefrontOrderLineFulfilled :exec
+UPDATE storefront_order_lines
+SET fulfilled_quantity = fulfilled_quantity - $3
+WHERE workspace_id = $1 AND id = $2
+`
+
+type DecrementStorefrontOrderLineFulfilledParams struct {
+	WorkspaceID       int64           `json:"workspace_id"`
+	ID                int64           `json:"id"`
+	FulfilledQuantity decimal.Decimal `json:"fulfilled_quantity"`
+}
+
+func (q *Queries) DecrementStorefrontOrderLineFulfilled(ctx context.Context, arg DecrementStorefrontOrderLineFulfilledParams) error {
+	_, err := q.db.Exec(ctx, decrementStorefrontOrderLineFulfilled, arg.WorkspaceID, arg.ID, arg.FulfilledQuantity)
+	return err
 }
 
 const deleteExpiredShippingRateCache = `-- name: DeleteExpiredShippingRateCache :exec
@@ -215,8 +521,108 @@ func (q *Queries) DeleteShopperSession(ctx context.Context, tokenHash string) er
 	return err
 }
 
+const expirePendingStorefrontPaymentAttempts = `-- name: ExpirePendingStorefrontPaymentAttempts :exec
+UPDATE storefront_payment_attempts
+SET status = 'expired', updated_at = now()
+WHERE workspace_id = $1 AND order_id = $2 AND status = 'pending'
+`
+
+type ExpirePendingStorefrontPaymentAttemptsParams struct {
+	WorkspaceID int64 `json:"workspace_id"`
+	OrderID     int64 `json:"order_id"`
+}
+
+func (q *Queries) ExpirePendingStorefrontPaymentAttempts(ctx context.Context, arg ExpirePendingStorefrontPaymentAttemptsParams) error {
+	_, err := q.db.Exec(ctx, expirePendingStorefrontPaymentAttempts, arg.WorkspaceID, arg.OrderID)
+	return err
+}
+
+const finalizeStorefrontOrderPayment = `-- name: FinalizeStorefrontOrderPayment :one
+UPDATE storefront_orders
+SET payment_status = 'paid',
+    linked_sale_id = COALESCE($3, linked_sale_id),
+    commercial_status = 'confirmed',
+    fulfilment_status = CASE WHEN fulfilment_status = 'unreserved' THEN 'reserved' ELSE fulfilment_status END,
+    reservation_expires_at = NULL,
+    payment_attention_reason = NULL,
+    payment_attention_message = NULL,
+    version = version + 1,
+    updated_at = now()
+WHERE workspace_id = $1 AND id = $2
+RETURNING id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url, payment_attention_reason, payment_attention_message
+`
+
+type FinalizeStorefrontOrderPaymentParams struct {
+	WorkspaceID  int64       `json:"workspace_id"`
+	ID           int64       `json:"id"`
+	LinkedSaleID pgtype.Int8 `json:"linked_sale_id"`
+}
+
+func (q *Queries) FinalizeStorefrontOrderPayment(ctx context.Context, arg FinalizeStorefrontOrderPaymentParams) (StorefrontOrder, error) {
+	row := q.db.QueryRow(ctx, finalizeStorefrontOrderPayment, arg.WorkspaceID, arg.ID, arg.LinkedSaleID)
+	var i StorefrontOrder
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.StorefrontID,
+		&i.OrderReference,
+		&i.PublicTokenHash,
+		&i.CustomerID,
+		&i.OutletID,
+		&i.CommercialStatus,
+		&i.FulfilmentStatus,
+		&i.PaymentStatus,
+		&i.Version,
+		&i.Currency,
+		&i.CurrencyExponent,
+		&i.SubtotalMinor,
+		&i.TaxMinor,
+		&i.DeliveryFeeMinor,
+		&i.TotalMinor,
+		&i.DeliveryMethod,
+		&i.CustomerName,
+		&i.CustomerPhone,
+		&i.CustomerEmail,
+		&i.OrganizationName,
+		&i.PreferredContactMethod,
+		&i.DeliveryAddress,
+		&i.DeliveryLandmark,
+		&i.PreferredDeliveryTime,
+		&i.CustomerNote,
+		&i.PolicyAcknowledged,
+		&i.PolicyVersion,
+		&i.PaymentArrangement,
+		&i.LinkedInvoiceID,
+		&i.LinkedSaleID,
+		&i.LinkedInvoiceShareToken,
+		&i.DeclineOrCancelReason,
+		&i.ReservationExpiresAt,
+		&i.IdempotencyKey,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeliveryAreaID,
+		&i.HoldType,
+		&i.ProcessingFeeMinor,
+		&i.PickupCode,
+		&i.PickupPointID,
+		&i.CourierName,
+		&i.CourierTrackingNumber,
+		&i.CourierStatus,
+		&i.CourierBookingError,
+		&i.RateToken,
+		&i.ShopperID,
+		&i.PublicTokenEnc,
+		&i.CourierServiceCode,
+		&i.CourierID,
+		&i.CourierTrackingUrl,
+		&i.PaymentAttentionReason,
+		&i.PaymentAttentionMessage,
+	)
+	return i, err
+}
+
 const getLatestPaymentAttemptByOrder = `-- name: GetLatestPaymentAttemptByOrder :one
-SELECT id, workspace_id, order_id, provider, method, reference, amount_minor, fee_minor, commission_minor, virtual_account_number, bank_name, expires_at, status, raw_event, paid_at, created_at, updated_at FROM storefront_payment_attempts
+SELECT id, workspace_id, order_id, provider, method, reference, amount_minor, fee_minor, commission_minor, virtual_account_number, bank_name, expires_at, status, raw_event, paid_at, created_at, updated_at, received_amount_minor FROM storefront_payment_attempts
 WHERE workspace_id = $1 AND order_id = $2
 ORDER BY id DESC
 LIMIT 1
@@ -248,6 +654,7 @@ func (q *Queries) GetLatestPaymentAttemptByOrder(ctx context.Context, arg GetLat
 		&i.PaidAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReceivedAmountMinor,
 	)
 	return i, err
 }
@@ -328,8 +735,25 @@ func (q *Queries) GetPaymentWebhookEvent(ctx context.Context, arg GetPaymentWebh
 	return i, err
 }
 
+const getProductKindByID = `-- name: GetProductKindByID :one
+SELECT kind FROM products
+WHERE workspace_id = $1 AND id = $2
+`
+
+type GetProductKindByIDParams struct {
+	WorkspaceID int64 `json:"workspace_id"`
+	ID          int64 `json:"id"`
+}
+
+func (q *Queries) GetProductKindByID(ctx context.Context, arg GetProductKindByIDParams) (string, error) {
+	row := q.db.QueryRow(ctx, getProductKindByID, arg.WorkspaceID, arg.ID)
+	var kind string
+	err := row.Scan(&kind)
+	return kind, err
+}
+
 const getPublicPaymentAttemptByOrder = `-- name: GetPublicPaymentAttemptByOrder :one
-SELECT id, workspace_id, order_id, provider, method, reference, amount_minor, fee_minor, commission_minor, virtual_account_number, bank_name, expires_at, status, raw_event, paid_at, created_at, updated_at FROM storefront_payment_attempts
+SELECT id, workspace_id, order_id, provider, method, reference, amount_minor, fee_minor, commission_minor, virtual_account_number, bank_name, expires_at, status, raw_event, paid_at, created_at, updated_at, received_amount_minor FROM storefront_payment_attempts
 WHERE order_id = $1
 ORDER BY id DESC
 LIMIT 1
@@ -356,6 +780,7 @@ func (q *Queries) GetPublicPaymentAttemptByOrder(ctx context.Context, orderID in
 		&i.PaidAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReceivedAmountMinor,
 	)
 	return i, err
 }
@@ -459,7 +884,7 @@ func (q *Queries) GetShopperSession(ctx context.Context, tokenHash string) (GetS
 }
 
 const getStorefrontOrderByTrackingNumber = `-- name: GetStorefrontOrderByTrackingNumber :one
-SELECT id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url FROM storefront_orders
+SELECT id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url, payment_attention_reason, payment_attention_message FROM storefront_orders
 WHERE courier_tracking_number = $1
 LIMIT 1
 `
@@ -521,12 +946,14 @@ func (q *Queries) GetStorefrontOrderByTrackingNumber(ctx context.Context, courie
 		&i.CourierServiceCode,
 		&i.CourierID,
 		&i.CourierTrackingUrl,
+		&i.PaymentAttentionReason,
+		&i.PaymentAttentionMessage,
 	)
 	return i, err
 }
 
 const getStorefrontPaymentAttemptByReference = `-- name: GetStorefrontPaymentAttemptByReference :one
-SELECT id, workspace_id, order_id, provider, method, reference, amount_minor, fee_minor, commission_minor, virtual_account_number, bank_name, expires_at, status, raw_event, paid_at, created_at, updated_at FROM storefront_payment_attempts
+SELECT id, workspace_id, order_id, provider, method, reference, amount_minor, fee_minor, commission_minor, virtual_account_number, bank_name, expires_at, status, raw_event, paid_at, created_at, updated_at, received_amount_minor FROM storefront_payment_attempts
 WHERE reference = $1
 `
 
@@ -551,12 +978,13 @@ func (q *Queries) GetStorefrontPaymentAttemptByReference(ctx context.Context, re
 		&i.PaidAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReceivedAmountMinor,
 	)
 	return i, err
 }
 
 const getStorefrontPaymentAttemptByReferenceForUpdate = `-- name: GetStorefrontPaymentAttemptByReferenceForUpdate :one
-SELECT id, workspace_id, order_id, provider, method, reference, amount_minor, fee_minor, commission_minor, virtual_account_number, bank_name, expires_at, status, raw_event, paid_at, created_at, updated_at FROM storefront_payment_attempts
+SELECT id, workspace_id, order_id, provider, method, reference, amount_minor, fee_minor, commission_minor, virtual_account_number, bank_name, expires_at, status, raw_event, paid_at, created_at, updated_at, received_amount_minor FROM storefront_payment_attempts
 WHERE reference = $1
 FOR UPDATE
 `
@@ -582,6 +1010,7 @@ func (q *Queries) GetStorefrontPaymentAttemptByReferenceForUpdate(ctx context.Co
 		&i.PaidAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReceivedAmountMinor,
 	)
 	return i, err
 }
@@ -700,6 +1129,43 @@ func (q *Queries) LinkOrdersToShopperByEmail(ctx context.Context, arg LinkOrders
 	return err
 }
 
+const listExpiredStorefrontOrders = `-- name: ListExpiredStorefrontOrders :many
+SELECT workspace_id, id
+FROM storefront_orders
+WHERE commercial_status IN ('confirmed', 'request_received')
+  AND fulfilment_status IN ('reserved', 'packed')
+  AND payment_status IN ('unpaid', 'not_requested')
+  AND reservation_expires_at IS NOT NULL
+  AND reservation_expires_at < now()
+ORDER BY reservation_expires_at ASC
+LIMIT 100
+`
+
+type ListExpiredStorefrontOrdersRow struct {
+	WorkspaceID int64 `json:"workspace_id"`
+	ID          int64 `json:"id"`
+}
+
+func (q *Queries) ListExpiredStorefrontOrders(ctx context.Context) ([]ListExpiredStorefrontOrdersRow, error) {
+	rows, err := q.db.Query(ctx, listExpiredStorefrontOrders)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListExpiredStorefrontOrdersRow{}
+	for rows.Next() {
+		var i ListExpiredStorefrontOrdersRow
+		if err := rows.Scan(&i.WorkspaceID, &i.ID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMerchantPayoutAccounts = `-- name: ListMerchantPayoutAccounts :many
 SELECT id, workspace_id, provider, bank_code, account_number_last4, account_name, subaccount_ref, status, created_at, updated_at FROM merchant_payout_accounts
 WHERE workspace_id = $1
@@ -738,7 +1204,7 @@ func (q *Queries) ListMerchantPayoutAccounts(ctx context.Context, workspaceID in
 }
 
 const listShopperOrders = `-- name: ListShopperOrders :many
-SELECT o.id, o.workspace_id, o.storefront_id, o.order_reference, o.public_token_hash, o.customer_id, o.outlet_id, o.commercial_status, o.fulfilment_status, o.payment_status, o.version, o.currency, o.currency_exponent, o.subtotal_minor, o.tax_minor, o.delivery_fee_minor, o.total_minor, o.delivery_method, o.customer_name, o.customer_phone, o.customer_email, o.organization_name, o.preferred_contact_method, o.delivery_address, o.delivery_landmark, o.preferred_delivery_time, o.customer_note, o.policy_acknowledged, o.policy_version, o.payment_arrangement, o.linked_invoice_id, o.linked_sale_id, o.linked_invoice_share_token, o.decline_or_cancel_reason, o.reservation_expires_at, o.idempotency_key, o.created_at, o.updated_at, o.delivery_area_id, o.hold_type, o.processing_fee_minor, o.pickup_code, o.pickup_point_id, o.courier_name, o.courier_tracking_number, o.courier_status, o.courier_booking_error, o.rate_token, o.shopper_id, o.public_token_enc, o.courier_service_code, o.courier_id, o.courier_tracking_url, sf.name AS storefront_name, sf.slug AS storefront_slug
+SELECT o.id, o.workspace_id, o.storefront_id, o.order_reference, o.public_token_hash, o.customer_id, o.outlet_id, o.commercial_status, o.fulfilment_status, o.payment_status, o.version, o.currency, o.currency_exponent, o.subtotal_minor, o.tax_minor, o.delivery_fee_minor, o.total_minor, o.delivery_method, o.customer_name, o.customer_phone, o.customer_email, o.organization_name, o.preferred_contact_method, o.delivery_address, o.delivery_landmark, o.preferred_delivery_time, o.customer_note, o.policy_acknowledged, o.policy_version, o.payment_arrangement, o.linked_invoice_id, o.linked_sale_id, o.linked_invoice_share_token, o.decline_or_cancel_reason, o.reservation_expires_at, o.idempotency_key, o.created_at, o.updated_at, o.delivery_area_id, o.hold_type, o.processing_fee_minor, o.pickup_code, o.pickup_point_id, o.courier_name, o.courier_tracking_number, o.courier_status, o.courier_booking_error, o.rate_token, o.shopper_id, o.public_token_enc, o.courier_service_code, o.courier_id, o.courier_tracking_url, o.payment_attention_reason, o.payment_attention_message, sf.name AS storefront_name, sf.slug AS storefront_slug
 FROM storefront_orders o
 JOIN storefronts sf ON sf.id = o.storefront_id
 WHERE o.shopper_id = $1
@@ -805,6 +1271,8 @@ type ListShopperOrdersRow struct {
 	CourierServiceCode      pgtype.Text        `json:"courier_service_code"`
 	CourierID               pgtype.Text        `json:"courier_id"`
 	CourierTrackingUrl      pgtype.Text        `json:"courier_tracking_url"`
+	PaymentAttentionReason  pgtype.Text        `json:"payment_attention_reason"`
+	PaymentAttentionMessage pgtype.Text        `json:"payment_attention_message"`
 	StorefrontName          string             `json:"storefront_name"`
 	StorefrontSlug          string             `json:"storefront_slug"`
 }
@@ -872,6 +1340,8 @@ func (q *Queries) ListShopperOrders(ctx context.Context, arg ListShopperOrdersPa
 			&i.CourierServiceCode,
 			&i.CourierID,
 			&i.CourierTrackingUrl,
+			&i.PaymentAttentionReason,
+			&i.PaymentAttentionMessage,
 			&i.StorefrontName,
 			&i.StorefrontSlug,
 		); err != nil {
@@ -995,6 +1465,22 @@ func (q *Queries) ListStorefrontProductWeights(ctx context.Context, arg ListStor
 	return items, nil
 }
 
+const makeOrderReservationsFirm = `-- name: MakeOrderReservationsFirm :exec
+UPDATE stock_reservations
+SET expires_at = NULL, updated_at = now()
+WHERE workspace_id = $1 AND order_id = $2 AND status = 'active'
+`
+
+type MakeOrderReservationsFirmParams struct {
+	WorkspaceID int64       `json:"workspace_id"`
+	OrderID     pgtype.Int8 `json:"order_id"`
+}
+
+func (q *Queries) MakeOrderReservationsFirm(ctx context.Context, arg MakeOrderReservationsFirmParams) error {
+	_, err := q.db.Exec(ctx, makeOrderReservationsFirm, arg.WorkspaceID, arg.OrderID)
+	return err
+}
+
 const markShopperLoginCodeUsed = `-- name: MarkShopperLoginCodeUsed :one
 UPDATE shopper_login_codes
 SET used_at = now()
@@ -1015,6 +1501,90 @@ func (q *Queries) MarkShopperLoginCodeUsed(ctx context.Context, id int64) (Shopp
 		&i.IpHash,
 		&i.CreatedAt,
 		&i.LinkTokenHash,
+	)
+	return i, err
+}
+
+const resolveStorefrontOrderCancelWithRefund = `-- name: ResolveStorefrontOrderCancelWithRefund :one
+UPDATE storefront_orders
+SET commercial_status = 'cancelled',
+    fulfilment_status = 'unreserved',
+    payment_status = 'refunded',
+    decline_or_cancel_reason = $3,
+    reservation_expires_at = NULL,
+    payment_attention_reason = NULL,
+    payment_attention_message = NULL,
+    version = version + 1,
+    updated_at = now()
+WHERE workspace_id = $1 AND id = $2
+RETURNING id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url, payment_attention_reason, payment_attention_message
+`
+
+type ResolveStorefrontOrderCancelWithRefundParams struct {
+	WorkspaceID           int64       `json:"workspace_id"`
+	ID                    int64       `json:"id"`
+	DeclineOrCancelReason pgtype.Text `json:"decline_or_cancel_reason"`
+}
+
+func (q *Queries) ResolveStorefrontOrderCancelWithRefund(ctx context.Context, arg ResolveStorefrontOrderCancelWithRefundParams) (StorefrontOrder, error) {
+	row := q.db.QueryRow(ctx, resolveStorefrontOrderCancelWithRefund, arg.WorkspaceID, arg.ID, arg.DeclineOrCancelReason)
+	var i StorefrontOrder
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.StorefrontID,
+		&i.OrderReference,
+		&i.PublicTokenHash,
+		&i.CustomerID,
+		&i.OutletID,
+		&i.CommercialStatus,
+		&i.FulfilmentStatus,
+		&i.PaymentStatus,
+		&i.Version,
+		&i.Currency,
+		&i.CurrencyExponent,
+		&i.SubtotalMinor,
+		&i.TaxMinor,
+		&i.DeliveryFeeMinor,
+		&i.TotalMinor,
+		&i.DeliveryMethod,
+		&i.CustomerName,
+		&i.CustomerPhone,
+		&i.CustomerEmail,
+		&i.OrganizationName,
+		&i.PreferredContactMethod,
+		&i.DeliveryAddress,
+		&i.DeliveryLandmark,
+		&i.PreferredDeliveryTime,
+		&i.CustomerNote,
+		&i.PolicyAcknowledged,
+		&i.PolicyVersion,
+		&i.PaymentArrangement,
+		&i.LinkedInvoiceID,
+		&i.LinkedSaleID,
+		&i.LinkedInvoiceShareToken,
+		&i.DeclineOrCancelReason,
+		&i.ReservationExpiresAt,
+		&i.IdempotencyKey,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeliveryAreaID,
+		&i.HoldType,
+		&i.ProcessingFeeMinor,
+		&i.PickupCode,
+		&i.PickupPointID,
+		&i.CourierName,
+		&i.CourierTrackingNumber,
+		&i.CourierStatus,
+		&i.CourierBookingError,
+		&i.RateToken,
+		&i.ShopperID,
+		&i.PublicTokenEnc,
+		&i.CourierServiceCode,
+		&i.CourierID,
+		&i.CourierTrackingUrl,
+		&i.PaymentAttentionReason,
+		&i.PaymentAttentionMessage,
 	)
 	return i, err
 }
@@ -1061,6 +1631,108 @@ func (q *Queries) SetLocationPickupPoint(ctx context.Context, arg SetLocationPic
 	return i, err
 }
 
+const setStorefrontOrderLineReservationID = `-- name: SetStorefrontOrderLineReservationID :exec
+UPDATE storefront_order_lines
+SET reservation_id = $3
+WHERE workspace_id = $1 AND id = $2
+`
+
+type SetStorefrontOrderLineReservationIDParams struct {
+	WorkspaceID   int64       `json:"workspace_id"`
+	ID            int64       `json:"id"`
+	ReservationID pgtype.Int8 `json:"reservation_id"`
+}
+
+func (q *Queries) SetStorefrontOrderLineReservationID(ctx context.Context, arg SetStorefrontOrderLineReservationIDParams) error {
+	_, err := q.db.Exec(ctx, setStorefrontOrderLineReservationID, arg.WorkspaceID, arg.ID, arg.ReservationID)
+	return err
+}
+
+const setStorefrontOrderPaymentAttention = `-- name: SetStorefrontOrderPaymentAttention :one
+UPDATE storefront_orders
+SET payment_status = 'paid_needs_attention',
+    payment_attention_reason = $3,
+    payment_attention_message = $4,
+    updated_at = now()
+WHERE workspace_id = $1 AND id = $2
+RETURNING id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url, payment_attention_reason, payment_attention_message
+`
+
+type SetStorefrontOrderPaymentAttentionParams struct {
+	WorkspaceID             int64       `json:"workspace_id"`
+	ID                      int64       `json:"id"`
+	PaymentAttentionReason  pgtype.Text `json:"payment_attention_reason"`
+	PaymentAttentionMessage pgtype.Text `json:"payment_attention_message"`
+}
+
+func (q *Queries) SetStorefrontOrderPaymentAttention(ctx context.Context, arg SetStorefrontOrderPaymentAttentionParams) (StorefrontOrder, error) {
+	row := q.db.QueryRow(ctx, setStorefrontOrderPaymentAttention,
+		arg.WorkspaceID,
+		arg.ID,
+		arg.PaymentAttentionReason,
+		arg.PaymentAttentionMessage,
+	)
+	var i StorefrontOrder
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.StorefrontID,
+		&i.OrderReference,
+		&i.PublicTokenHash,
+		&i.CustomerID,
+		&i.OutletID,
+		&i.CommercialStatus,
+		&i.FulfilmentStatus,
+		&i.PaymentStatus,
+		&i.Version,
+		&i.Currency,
+		&i.CurrencyExponent,
+		&i.SubtotalMinor,
+		&i.TaxMinor,
+		&i.DeliveryFeeMinor,
+		&i.TotalMinor,
+		&i.DeliveryMethod,
+		&i.CustomerName,
+		&i.CustomerPhone,
+		&i.CustomerEmail,
+		&i.OrganizationName,
+		&i.PreferredContactMethod,
+		&i.DeliveryAddress,
+		&i.DeliveryLandmark,
+		&i.PreferredDeliveryTime,
+		&i.CustomerNote,
+		&i.PolicyAcknowledged,
+		&i.PolicyVersion,
+		&i.PaymentArrangement,
+		&i.LinkedInvoiceID,
+		&i.LinkedSaleID,
+		&i.LinkedInvoiceShareToken,
+		&i.DeclineOrCancelReason,
+		&i.ReservationExpiresAt,
+		&i.IdempotencyKey,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeliveryAreaID,
+		&i.HoldType,
+		&i.ProcessingFeeMinor,
+		&i.PickupCode,
+		&i.PickupPointID,
+		&i.CourierName,
+		&i.CourierTrackingNumber,
+		&i.CourierStatus,
+		&i.CourierBookingError,
+		&i.RateToken,
+		&i.ShopperID,
+		&i.PublicTokenEnc,
+		&i.CourierServiceCode,
+		&i.CourierID,
+		&i.CourierTrackingUrl,
+		&i.PaymentAttentionReason,
+		&i.PaymentAttentionMessage,
+	)
+	return i, err
+}
+
 const touchShopperSession = `-- name: TouchShopperSession :exec
 UPDATE shopper_sessions
 SET last_seen_at = now()
@@ -1089,6 +1761,63 @@ func (q *Queries) UpdateOrderShopperID(ctx context.Context, arg UpdateOrderShopp
 	return err
 }
 
+const updatePaymentAttemptSettlement = `-- name: UpdatePaymentAttemptSettlement :one
+UPDATE storefront_payment_attempts
+SET status = $3,
+    fee_minor = COALESCE($4, fee_minor),
+    commission_minor = COALESCE($5, commission_minor),
+    received_amount_minor = COALESCE($6, received_amount_minor),
+    raw_event = COALESCE($7, raw_event),
+    paid_at = CASE WHEN $3 = 'paid' AND paid_at IS NULL THEN now() ELSE paid_at END,
+    updated_at = now()
+WHERE workspace_id = $1 AND id = $2
+RETURNING id, workspace_id, order_id, provider, method, reference, amount_minor, fee_minor, commission_minor, virtual_account_number, bank_name, expires_at, status, raw_event, paid_at, created_at, updated_at, received_amount_minor
+`
+
+type UpdatePaymentAttemptSettlementParams struct {
+	WorkspaceID         int64       `json:"workspace_id"`
+	ID                  int64       `json:"id"`
+	Status              string      `json:"status"`
+	FeeMinor            int64       `json:"fee_minor"`
+	CommissionMinor     int64       `json:"commission_minor"`
+	ReceivedAmountMinor pgtype.Int8 `json:"received_amount_minor"`
+	RawEvent            []byte      `json:"raw_event"`
+}
+
+func (q *Queries) UpdatePaymentAttemptSettlement(ctx context.Context, arg UpdatePaymentAttemptSettlementParams) (StorefrontPaymentAttempt, error) {
+	row := q.db.QueryRow(ctx, updatePaymentAttemptSettlement,
+		arg.WorkspaceID,
+		arg.ID,
+		arg.Status,
+		arg.FeeMinor,
+		arg.CommissionMinor,
+		arg.ReceivedAmountMinor,
+		arg.RawEvent,
+	)
+	var i StorefrontPaymentAttempt
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.OrderID,
+		&i.Provider,
+		&i.Method,
+		&i.Reference,
+		&i.AmountMinor,
+		&i.FeeMinor,
+		&i.CommissionMinor,
+		&i.VirtualAccountNumber,
+		&i.BankName,
+		&i.ExpiresAt,
+		&i.Status,
+		&i.RawEvent,
+		&i.PaidAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ReceivedAmountMinor,
+	)
+	return i, err
+}
+
 const updatePaymentAttemptStatus = `-- name: UpdatePaymentAttemptStatus :one
 UPDATE storefront_payment_attempts
 SET status = $2,
@@ -1096,7 +1825,7 @@ SET status = $2,
     paid_at = CASE WHEN $2 = 'paid' AND paid_at IS NULL THEN now() ELSE paid_at END,
     updated_at = now()
 WHERE id = $1
-RETURNING id, workspace_id, order_id, provider, method, reference, amount_minor, fee_minor, commission_minor, virtual_account_number, bank_name, expires_at, status, raw_event, paid_at, created_at, updated_at
+RETURNING id, workspace_id, order_id, provider, method, reference, amount_minor, fee_minor, commission_minor, virtual_account_number, bank_name, expires_at, status, raw_event, paid_at, created_at, updated_at, received_amount_minor
 `
 
 type UpdatePaymentAttemptStatusParams struct {
@@ -1126,6 +1855,7 @@ func (q *Queries) UpdatePaymentAttemptStatus(ctx context.Context, arg UpdatePaym
 		&i.PaidAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReceivedAmountMinor,
 	)
 	return i, err
 }
@@ -1164,6 +1894,23 @@ func (q *Queries) UpdateProductWeightGrams(ctx context.Context, arg UpdateProduc
 	return err
 }
 
+const updateSaleSource = `-- name: UpdateSaleSource :exec
+UPDATE sales
+SET source = $3, updated_at = now()
+WHERE workspace_id = $1 AND id = $2
+`
+
+type UpdateSaleSourceParams struct {
+	WorkspaceID int64  `json:"workspace_id"`
+	ID          int64  `json:"id"`
+	Source      string `json:"source"`
+}
+
+func (q *Queries) UpdateSaleSource(ctx context.Context, arg UpdateSaleSourceParams) error {
+	_, err := q.db.Exec(ctx, updateSaleSource, arg.WorkspaceID, arg.ID, arg.Source)
+	return err
+}
+
 const updateShopperDetails = `-- name: UpdateShopperDetails :one
 UPDATE shoppers
 SET name = COALESCE($2, name),
@@ -1199,6 +1946,23 @@ func (q *Queries) UpdateShopperDetails(ctx context.Context, arg UpdateShopperDet
 		&i.LastSeenAt,
 	)
 	return i, err
+}
+
+const updateStockReservationQuantity = `-- name: UpdateStockReservationQuantity :exec
+UPDATE stock_reservations
+SET quantity = $3, updated_at = now()
+WHERE workspace_id = $1 AND id = $2
+`
+
+type UpdateStockReservationQuantityParams struct {
+	WorkspaceID int64           `json:"workspace_id"`
+	ID          int64           `json:"id"`
+	Quantity    decimal.Decimal `json:"quantity"`
+}
+
+func (q *Queries) UpdateStockReservationQuantity(ctx context.Context, arg UpdateStockReservationQuantityParams) error {
+	_, err := q.db.Exec(ctx, updateStockReservationQuantity, arg.WorkspaceID, arg.ID, arg.Quantity)
+	return err
 }
 
 const updateStorefrontManualBankDetails = `-- name: UpdateStorefrontManualBankDetails :one
@@ -1299,6 +2063,168 @@ func (q *Queries) UpdateStorefrontManualBankDetails(ctx context.Context, arg Upd
 	return i, err
 }
 
+const updateStorefrontOrderAckReviewed = `-- name: UpdateStorefrontOrderAckReviewed :one
+UPDATE storefront_orders
+SET commercial_status = 'needs_review', version = version + 1, updated_at = now()
+WHERE workspace_id = $1 AND id = $2
+RETURNING id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url, payment_attention_reason, payment_attention_message
+`
+
+type UpdateStorefrontOrderAckReviewedParams struct {
+	WorkspaceID int64 `json:"workspace_id"`
+	ID          int64 `json:"id"`
+}
+
+func (q *Queries) UpdateStorefrontOrderAckReviewed(ctx context.Context, arg UpdateStorefrontOrderAckReviewedParams) (StorefrontOrder, error) {
+	row := q.db.QueryRow(ctx, updateStorefrontOrderAckReviewed, arg.WorkspaceID, arg.ID)
+	var i StorefrontOrder
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.StorefrontID,
+		&i.OrderReference,
+		&i.PublicTokenHash,
+		&i.CustomerID,
+		&i.OutletID,
+		&i.CommercialStatus,
+		&i.FulfilmentStatus,
+		&i.PaymentStatus,
+		&i.Version,
+		&i.Currency,
+		&i.CurrencyExponent,
+		&i.SubtotalMinor,
+		&i.TaxMinor,
+		&i.DeliveryFeeMinor,
+		&i.TotalMinor,
+		&i.DeliveryMethod,
+		&i.CustomerName,
+		&i.CustomerPhone,
+		&i.CustomerEmail,
+		&i.OrganizationName,
+		&i.PreferredContactMethod,
+		&i.DeliveryAddress,
+		&i.DeliveryLandmark,
+		&i.PreferredDeliveryTime,
+		&i.CustomerNote,
+		&i.PolicyAcknowledged,
+		&i.PolicyVersion,
+		&i.PaymentArrangement,
+		&i.LinkedInvoiceID,
+		&i.LinkedSaleID,
+		&i.LinkedInvoiceShareToken,
+		&i.DeclineOrCancelReason,
+		&i.ReservationExpiresAt,
+		&i.IdempotencyKey,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeliveryAreaID,
+		&i.HoldType,
+		&i.ProcessingFeeMinor,
+		&i.PickupCode,
+		&i.PickupPointID,
+		&i.CourierName,
+		&i.CourierTrackingNumber,
+		&i.CourierStatus,
+		&i.CourierBookingError,
+		&i.RateToken,
+		&i.ShopperID,
+		&i.PublicTokenEnc,
+		&i.CourierServiceCode,
+		&i.CourierID,
+		&i.CourierTrackingUrl,
+		&i.PaymentAttentionReason,
+		&i.PaymentAttentionMessage,
+	)
+	return i, err
+}
+
+const updateStorefrontOrderCancelledOrDeclined = `-- name: UpdateStorefrontOrderCancelledOrDeclined :one
+UPDATE storefront_orders
+SET commercial_status = $3,
+    fulfilment_status = 'unreserved',
+    decline_or_cancel_reason = $4,
+    reservation_expires_at = NULL,
+    version = version + 1,
+    updated_at = now()
+WHERE workspace_id = $1 AND id = $2
+RETURNING id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url, payment_attention_reason, payment_attention_message
+`
+
+type UpdateStorefrontOrderCancelledOrDeclinedParams struct {
+	WorkspaceID           int64       `json:"workspace_id"`
+	ID                    int64       `json:"id"`
+	CommercialStatus      string      `json:"commercial_status"`
+	DeclineOrCancelReason pgtype.Text `json:"decline_or_cancel_reason"`
+}
+
+func (q *Queries) UpdateStorefrontOrderCancelledOrDeclined(ctx context.Context, arg UpdateStorefrontOrderCancelledOrDeclinedParams) (StorefrontOrder, error) {
+	row := q.db.QueryRow(ctx, updateStorefrontOrderCancelledOrDeclined,
+		arg.WorkspaceID,
+		arg.ID,
+		arg.CommercialStatus,
+		arg.DeclineOrCancelReason,
+	)
+	var i StorefrontOrder
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.StorefrontID,
+		&i.OrderReference,
+		&i.PublicTokenHash,
+		&i.CustomerID,
+		&i.OutletID,
+		&i.CommercialStatus,
+		&i.FulfilmentStatus,
+		&i.PaymentStatus,
+		&i.Version,
+		&i.Currency,
+		&i.CurrencyExponent,
+		&i.SubtotalMinor,
+		&i.TaxMinor,
+		&i.DeliveryFeeMinor,
+		&i.TotalMinor,
+		&i.DeliveryMethod,
+		&i.CustomerName,
+		&i.CustomerPhone,
+		&i.CustomerEmail,
+		&i.OrganizationName,
+		&i.PreferredContactMethod,
+		&i.DeliveryAddress,
+		&i.DeliveryLandmark,
+		&i.PreferredDeliveryTime,
+		&i.CustomerNote,
+		&i.PolicyAcknowledged,
+		&i.PolicyVersion,
+		&i.PaymentArrangement,
+		&i.LinkedInvoiceID,
+		&i.LinkedSaleID,
+		&i.LinkedInvoiceShareToken,
+		&i.DeclineOrCancelReason,
+		&i.ReservationExpiresAt,
+		&i.IdempotencyKey,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeliveryAreaID,
+		&i.HoldType,
+		&i.ProcessingFeeMinor,
+		&i.PickupCode,
+		&i.PickupPointID,
+		&i.CourierName,
+		&i.CourierTrackingNumber,
+		&i.CourierStatus,
+		&i.CourierBookingError,
+		&i.RateToken,
+		&i.ShopperID,
+		&i.PublicTokenEnc,
+		&i.CourierServiceCode,
+		&i.CourierID,
+		&i.CourierTrackingUrl,
+		&i.PaymentAttentionReason,
+		&i.PaymentAttentionMessage,
+	)
+	return i, err
+}
+
 const updateStorefrontOrderCheckoutMeta = `-- name: UpdateStorefrontOrderCheckoutMeta :one
 UPDATE storefront_orders
 SET hold_type = $3,
@@ -1317,7 +2243,7 @@ SET hold_type = $3,
     shopper_id = COALESCE($16, shopper_id),
     updated_at = now()
 WHERE workspace_id = $1 AND id = $2
-RETURNING id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url
+RETURNING id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url, payment_attention_reason, payment_attention_message
 `
 
 type UpdateStorefrontOrderCheckoutMetaParams struct {
@@ -1413,6 +2339,8 @@ func (q *Queries) UpdateStorefrontOrderCheckoutMeta(ctx context.Context, arg Upd
 		&i.CourierServiceCode,
 		&i.CourierID,
 		&i.CourierTrackingUrl,
+		&i.PaymentAttentionReason,
+		&i.PaymentAttentionMessage,
 	)
 	return i, err
 }
@@ -1425,7 +2353,7 @@ SET courier_name = $3,
     courier_booking_error = $6,
     updated_at = now()
 WHERE workspace_id = $1 AND id = $2
-RETURNING id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url
+RETURNING id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url, payment_attention_reason, payment_attention_message
 `
 
 type UpdateStorefrontOrderCourierParams struct {
@@ -1501,6 +2429,8 @@ func (q *Queries) UpdateStorefrontOrderCourier(ctx context.Context, arg UpdateSt
 		&i.CourierServiceCode,
 		&i.CourierID,
 		&i.CourierTrackingUrl,
+		&i.PaymentAttentionReason,
+		&i.PaymentAttentionMessage,
 	)
 	return i, err
 }
@@ -1514,7 +2444,7 @@ SET courier_name = COALESCE($3, courier_name),
     courier_tracking_url = $7,
     updated_at = now()
 WHERE workspace_id = $1 AND id = $2
-RETURNING id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url
+RETURNING id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url, payment_attention_reason, payment_attention_message
 `
 
 type UpdateStorefrontOrderCourierFullParams struct {
@@ -1592,6 +2522,110 @@ func (q *Queries) UpdateStorefrontOrderCourierFull(ctx context.Context, arg Upda
 		&i.CourierServiceCode,
 		&i.CourierID,
 		&i.CourierTrackingUrl,
+		&i.PaymentAttentionReason,
+		&i.PaymentAttentionMessage,
+	)
+	return i, err
+}
+
+const updateStorefrontOrderCustomerID = `-- name: UpdateStorefrontOrderCustomerID :exec
+UPDATE storefront_orders
+SET customer_id = $3, updated_at = now()
+WHERE workspace_id = $1 AND id = $2
+`
+
+type UpdateStorefrontOrderCustomerIDParams struct {
+	WorkspaceID int64       `json:"workspace_id"`
+	ID          int64       `json:"id"`
+	CustomerID  pgtype.Int8 `json:"customer_id"`
+}
+
+func (q *Queries) UpdateStorefrontOrderCustomerID(ctx context.Context, arg UpdateStorefrontOrderCustomerIDParams) error {
+	_, err := q.db.Exec(ctx, updateStorefrontOrderCustomerID, arg.WorkspaceID, arg.ID, arg.CustomerID)
+	return err
+}
+
+const updateStorefrontOrderFulfilmentResult = `-- name: UpdateStorefrontOrderFulfilmentResult :one
+UPDATE storefront_orders
+SET fulfilment_status = $3,
+    commercial_status = $4,
+    version = version + 1,
+    updated_at = now()
+WHERE workspace_id = $1 AND id = $2
+RETURNING id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url, payment_attention_reason, payment_attention_message
+`
+
+type UpdateStorefrontOrderFulfilmentResultParams struct {
+	WorkspaceID      int64  `json:"workspace_id"`
+	ID               int64  `json:"id"`
+	FulfilmentStatus string `json:"fulfilment_status"`
+	CommercialStatus string `json:"commercial_status"`
+}
+
+func (q *Queries) UpdateStorefrontOrderFulfilmentResult(ctx context.Context, arg UpdateStorefrontOrderFulfilmentResultParams) (StorefrontOrder, error) {
+	row := q.db.QueryRow(ctx, updateStorefrontOrderFulfilmentResult,
+		arg.WorkspaceID,
+		arg.ID,
+		arg.FulfilmentStatus,
+		arg.CommercialStatus,
+	)
+	var i StorefrontOrder
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.StorefrontID,
+		&i.OrderReference,
+		&i.PublicTokenHash,
+		&i.CustomerID,
+		&i.OutletID,
+		&i.CommercialStatus,
+		&i.FulfilmentStatus,
+		&i.PaymentStatus,
+		&i.Version,
+		&i.Currency,
+		&i.CurrencyExponent,
+		&i.SubtotalMinor,
+		&i.TaxMinor,
+		&i.DeliveryFeeMinor,
+		&i.TotalMinor,
+		&i.DeliveryMethod,
+		&i.CustomerName,
+		&i.CustomerPhone,
+		&i.CustomerEmail,
+		&i.OrganizationName,
+		&i.PreferredContactMethod,
+		&i.DeliveryAddress,
+		&i.DeliveryLandmark,
+		&i.PreferredDeliveryTime,
+		&i.CustomerNote,
+		&i.PolicyAcknowledged,
+		&i.PolicyVersion,
+		&i.PaymentArrangement,
+		&i.LinkedInvoiceID,
+		&i.LinkedSaleID,
+		&i.LinkedInvoiceShareToken,
+		&i.DeclineOrCancelReason,
+		&i.ReservationExpiresAt,
+		&i.IdempotencyKey,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeliveryAreaID,
+		&i.HoldType,
+		&i.ProcessingFeeMinor,
+		&i.PickupCode,
+		&i.PickupPointID,
+		&i.CourierName,
+		&i.CourierTrackingNumber,
+		&i.CourierStatus,
+		&i.CourierBookingError,
+		&i.RateToken,
+		&i.ShopperID,
+		&i.PublicTokenEnc,
+		&i.CourierServiceCode,
+		&i.CourierID,
+		&i.CourierTrackingUrl,
+		&i.PaymentAttentionReason,
+		&i.PaymentAttentionMessage,
 	)
 	return i, err
 }
@@ -1603,7 +2637,7 @@ SET hold_type = $3,
     processing_fee_minor = $5,
     updated_at = now()
 WHERE workspace_id = $1 AND id = $2
-RETURNING id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url
+RETURNING id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url, payment_attention_reason, payment_attention_message
 `
 
 type UpdateStorefrontOrderHoldParams struct {
@@ -1677,8 +2711,33 @@ func (q *Queries) UpdateStorefrontOrderHold(ctx context.Context, arg UpdateStore
 		&i.CourierServiceCode,
 		&i.CourierID,
 		&i.CourierTrackingUrl,
+		&i.PaymentAttentionReason,
+		&i.PaymentAttentionMessage,
 	)
 	return i, err
+}
+
+const updateStorefrontOrderLinkedInvoice = `-- name: UpdateStorefrontOrderLinkedInvoice :exec
+UPDATE storefront_orders
+SET linked_invoice_id = $3, payment_status = $4, updated_at = now()
+WHERE workspace_id = $1 AND id = $2
+`
+
+type UpdateStorefrontOrderLinkedInvoiceParams struct {
+	WorkspaceID     int64       `json:"workspace_id"`
+	ID              int64       `json:"id"`
+	LinkedInvoiceID pgtype.Int8 `json:"linked_invoice_id"`
+	PaymentStatus   string      `json:"payment_status"`
+}
+
+func (q *Queries) UpdateStorefrontOrderLinkedInvoice(ctx context.Context, arg UpdateStorefrontOrderLinkedInvoiceParams) error {
+	_, err := q.db.Exec(ctx, updateStorefrontOrderLinkedInvoice,
+		arg.WorkspaceID,
+		arg.ID,
+		arg.LinkedInvoiceID,
+		arg.PaymentStatus,
+	)
+	return err
 }
 
 const updateStorefrontOrderPackedReady = `-- name: UpdateStorefrontOrderPackedReady :one
@@ -1690,7 +2749,7 @@ WHERE workspace_id = $1 AND id = $2 AND version = $3
   AND commercial_status = 'confirmed'
   AND fulfilment_status = 'reserved'
   AND delivery_method = 'pickup'
-RETURNING id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url
+RETURNING id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url, payment_attention_reason, payment_attention_message
 `
 
 type UpdateStorefrontOrderPackedReadyParams struct {
@@ -1756,8 +2815,27 @@ func (q *Queries) UpdateStorefrontOrderPackedReady(ctx context.Context, arg Upda
 		&i.CourierServiceCode,
 		&i.CourierID,
 		&i.CourierTrackingUrl,
+		&i.PaymentAttentionReason,
+		&i.PaymentAttentionMessage,
 	)
 	return i, err
+}
+
+const updateStorefrontOrderPaymentArrangement = `-- name: UpdateStorefrontOrderPaymentArrangement :exec
+UPDATE storefront_orders
+SET payment_arrangement = $3, updated_at = now()
+WHERE workspace_id = $1 AND id = $2
+`
+
+type UpdateStorefrontOrderPaymentArrangementParams struct {
+	WorkspaceID        int64       `json:"workspace_id"`
+	ID                 int64       `json:"id"`
+	PaymentArrangement pgtype.Text `json:"payment_arrangement"`
+}
+
+func (q *Queries) UpdateStorefrontOrderPaymentArrangement(ctx context.Context, arg UpdateStorefrontOrderPaymentArrangementParams) error {
+	_, err := q.db.Exec(ctx, updateStorefrontOrderPaymentArrangement, arg.WorkspaceID, arg.ID, arg.PaymentArrangement)
+	return err
 }
 
 const updateStorefrontOrderPaymentStatus = `-- name: UpdateStorefrontOrderPaymentStatus :one
@@ -1766,7 +2844,7 @@ SET payment_status = $3,
     linked_sale_id = COALESCE($4, linked_sale_id),
     updated_at = now()
 WHERE workspace_id = $1 AND id = $2
-RETURNING id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url
+RETURNING id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url, payment_attention_reason, payment_attention_message
 `
 
 type UpdateStorefrontOrderPaymentStatusParams struct {
@@ -1838,6 +2916,8 @@ func (q *Queries) UpdateStorefrontOrderPaymentStatus(ctx context.Context, arg Up
 		&i.CourierServiceCode,
 		&i.CourierID,
 		&i.CourierTrackingUrl,
+		&i.PaymentAttentionReason,
+		&i.PaymentAttentionMessage,
 	)
 	return i, err
 }
@@ -1848,7 +2928,7 @@ SET pickup_code = $3,
     pickup_point_id = $4,
     updated_at = now()
 WHERE workspace_id = $1 AND id = $2
-RETURNING id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url
+RETURNING id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url, payment_attention_reason, payment_attention_message
 `
 
 type UpdateStorefrontOrderPickupCodeParams struct {
@@ -1920,6 +3000,107 @@ func (q *Queries) UpdateStorefrontOrderPickupCode(ctx context.Context, arg Updat
 		&i.CourierServiceCode,
 		&i.CourierID,
 		&i.CourierTrackingUrl,
+		&i.PaymentAttentionReason,
+		&i.PaymentAttentionMessage,
+	)
+	return i, err
+}
+
+const updateStorefrontOrderRevision = `-- name: UpdateStorefrontOrderRevision :one
+UPDATE storefront_orders
+SET commercial_status = $3,
+    version = $4,
+    subtotal_minor = $5,
+    delivery_fee_minor = $6,
+    total_minor = $7,
+    delivery_method = $8,
+    payment_arrangement = $9,
+    updated_at = now()
+WHERE workspace_id = $1 AND id = $2
+RETURNING id, workspace_id, storefront_id, order_reference, public_token_hash, customer_id, outlet_id, commercial_status, fulfilment_status, payment_status, version, currency, currency_exponent, subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method, customer_name, customer_phone, customer_email, organization_name, preferred_contact_method, delivery_address, delivery_landmark, preferred_delivery_time, customer_note, policy_acknowledged, policy_version, payment_arrangement, linked_invoice_id, linked_sale_id, linked_invoice_share_token, decline_or_cancel_reason, reservation_expires_at, idempotency_key, created_at, updated_at, delivery_area_id, hold_type, processing_fee_minor, pickup_code, pickup_point_id, courier_name, courier_tracking_number, courier_status, courier_booking_error, rate_token, shopper_id, public_token_enc, courier_service_code, courier_id, courier_tracking_url, payment_attention_reason, payment_attention_message
+`
+
+type UpdateStorefrontOrderRevisionParams struct {
+	WorkspaceID        int64       `json:"workspace_id"`
+	ID                 int64       `json:"id"`
+	CommercialStatus   string      `json:"commercial_status"`
+	Version            int32       `json:"version"`
+	SubtotalMinor      int64       `json:"subtotal_minor"`
+	DeliveryFeeMinor   int64       `json:"delivery_fee_minor"`
+	TotalMinor         int64       `json:"total_minor"`
+	DeliveryMethod     string      `json:"delivery_method"`
+	PaymentArrangement pgtype.Text `json:"payment_arrangement"`
+}
+
+func (q *Queries) UpdateStorefrontOrderRevision(ctx context.Context, arg UpdateStorefrontOrderRevisionParams) (StorefrontOrder, error) {
+	row := q.db.QueryRow(ctx, updateStorefrontOrderRevision,
+		arg.WorkspaceID,
+		arg.ID,
+		arg.CommercialStatus,
+		arg.Version,
+		arg.SubtotalMinor,
+		arg.DeliveryFeeMinor,
+		arg.TotalMinor,
+		arg.DeliveryMethod,
+		arg.PaymentArrangement,
+	)
+	var i StorefrontOrder
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.StorefrontID,
+		&i.OrderReference,
+		&i.PublicTokenHash,
+		&i.CustomerID,
+		&i.OutletID,
+		&i.CommercialStatus,
+		&i.FulfilmentStatus,
+		&i.PaymentStatus,
+		&i.Version,
+		&i.Currency,
+		&i.CurrencyExponent,
+		&i.SubtotalMinor,
+		&i.TaxMinor,
+		&i.DeliveryFeeMinor,
+		&i.TotalMinor,
+		&i.DeliveryMethod,
+		&i.CustomerName,
+		&i.CustomerPhone,
+		&i.CustomerEmail,
+		&i.OrganizationName,
+		&i.PreferredContactMethod,
+		&i.DeliveryAddress,
+		&i.DeliveryLandmark,
+		&i.PreferredDeliveryTime,
+		&i.CustomerNote,
+		&i.PolicyAcknowledged,
+		&i.PolicyVersion,
+		&i.PaymentArrangement,
+		&i.LinkedInvoiceID,
+		&i.LinkedSaleID,
+		&i.LinkedInvoiceShareToken,
+		&i.DeclineOrCancelReason,
+		&i.ReservationExpiresAt,
+		&i.IdempotencyKey,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeliveryAreaID,
+		&i.HoldType,
+		&i.ProcessingFeeMinor,
+		&i.PickupCode,
+		&i.PickupPointID,
+		&i.CourierName,
+		&i.CourierTrackingNumber,
+		&i.CourierStatus,
+		&i.CourierBookingError,
+		&i.RateToken,
+		&i.ShopperID,
+		&i.PublicTokenEnc,
+		&i.CourierServiceCode,
+		&i.CourierID,
+		&i.CourierTrackingUrl,
+		&i.PaymentAttentionReason,
+		&i.PaymentAttentionMessage,
 	)
 	return i, err
 }

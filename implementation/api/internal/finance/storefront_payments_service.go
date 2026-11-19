@@ -415,6 +415,37 @@ func (s *Service) UpdateStorefrontPaymentSettings(ctx context.Context, wsID int6
 	return s.GetStorefrontPaymentSettings(ctx, wsID)
 }
 
+func webhookEventKey(ev payments.Event) string {
+	evType := strings.ToLower(strings.TrimSpace(ev.Type))
+	if evType == "" {
+		evType = strings.ToLower(strings.TrimSpace(ev.Status))
+	}
+	ref := strings.TrimSpace(ev.Reference)
+	if id := strings.TrimSpace(ev.ProviderEventID); id != "" {
+		return fmt.Sprintf("%s:%s:%s", evType, id, ref)
+	}
+	return fmt.Sprintf("%s:%s", evType, ref)
+}
+
+func computeCommissionMinor(amountMinor int64, commissionPercent float64) int64 {
+	if amountMinor <= 0 || commissionPercent <= 0 {
+		return 0
+	}
+	return decimal.NewFromInt(amountMinor).
+		Mul(decimal.NewFromFloat(commissionPercent)).
+		Div(decimal.NewFromInt(100)).
+		Round(0).
+		IntPart()
+}
+
+func formatDisplayMoney(currency string, minor int64, exponent int) string {
+	major := FormatMinorToMajor(minor, exponent)
+	if strings.EqualFold(strings.TrimSpace(currency), "NGN") {
+		return "₦" + major
+	}
+	return strings.ToUpper(strings.TrimSpace(currency)) + " " + major
+}
+
 func (s *Service) HandlePaymentWebhook(ctx context.Context, providerKey string, rawBody []byte, headers http.Header) error {
 	p, err := s.getPaymentProvider(providerKey)
 	if err != nil {
@@ -428,13 +459,14 @@ func (s *Service) HandlePaymentWebhook(ctx context.Context, providerKey string, 
 }
 
 func (s *Service) processStorefrontPaymentEvent(ctx context.Context, providerKey string, event payments.Event) error {
+	evKey := webhookEventKey(event)
+
 	attempt, err := s.queries.GetStorefrontPaymentAttemptByReference(ctx, event.Reference)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			// Record unknown reference idempotently and accept
 			_, _ = s.queries.InsertPaymentWebhookEvent(ctx, db.InsertPaymentWebhookEventParams{
 				Provider: providerKey,
-				EventID:  event.Reference,
+				EventID:  evKey,
 				Outcome:  "ignored_unknown_reference",
 			})
 			return nil
@@ -444,54 +476,105 @@ func (s *Service) processStorefrontPaymentEvent(ctx context.Context, providerKey
 	if attempt.Provider != providerKey {
 		return nil
 	}
-	if event.Status == "paid" && event.AmountMinor != attempt.AmountMinor {
-		return ErrPaymentAmountMismatch
-	}
-
-	// Idempotent webhook tracking (keyed on provider + reference after validation)
-	recorded, err := s.queries.InsertPaymentWebhookEvent(ctx, db.InsertPaymentWebhookEventParams{
-		Provider: providerKey,
-		EventID:  event.Reference,
-		Outcome:  "processed",
-	})
-	if errors.Is(err, pgx.ErrNoRows) || (err == nil && recorded.ID == 0) {
-		return nil // already processed, idempotent 200
-	}
-	if err != nil {
-		return err
-	}
 
 	if event.Status == "failed" || event.Status == "rejected" {
-		_, _ = s.queries.UpdatePaymentAttemptStatus(ctx, db.UpdatePaymentAttemptStatusParams{
-			ID:       attempt.ID,
-			Status:   "rejected",
-			RawEvent: event.Raw,
+		tx, err := s.pool.Begin(ctx)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = tx.Rollback(ctx) }()
+		q := s.queries.WithTx(tx)
+
+		recorded, err := q.InsertPaymentWebhookEvent(ctx, db.InsertPaymentWebhookEventParams{
+			Provider: providerKey,
+			EventID:  evKey,
+			Outcome:  "rejected",
 		})
-		return nil
+		if errors.Is(err, pgx.ErrNoRows) || (err == nil && recorded.ID == 0) {
+			return nil // already processed idempotently
+		}
+		if err != nil {
+			return err
+		}
+
+		lockedAttempt, err := q.GetStorefrontPaymentAttemptByReferenceForUpdate(ctx, attempt.Reference)
+		if err != nil {
+			return err
+		}
+		if lockedAttempt.Status == "pending" {
+			if _, err := q.UpdatePaymentAttemptSettlement(ctx, db.UpdatePaymentAttemptSettlementParams{
+				WorkspaceID:         lockedAttempt.WorkspaceID,
+				ID:                  lockedAttempt.ID,
+				Status:              "rejected",
+				FeeMinor:            lockedAttempt.FeeMinor,
+				CommissionMinor:     lockedAttempt.CommissionMinor,
+				ReceivedAmountMinor: lockedAttempt.ReceivedAmountMinor,
+				RawEvent:            event.Raw,
+			}); err != nil {
+				return err
+			}
+		}
+		return tx.Commit(ctx)
 	}
 
 	if event.Status == "paid" {
 		attempt.FeeMinor = event.FeeMinor
 		attempt.RawEvent = event.Raw
-		return s.MarkStorefrontOrderPaid(ctx, attempt)
+		return s.markStorefrontOrderPaidInternal(ctx, attempt, event.AmountMinor, providerKey, evKey)
 	}
 
 	return nil
 }
 
 // MarkStorefrontOrderPaid runs in one atomic transaction:
-// 1. Marks the attempt paid and the order paid
-// 2. Turns the hold firm
-// 3. Creates or links the Sale with source = online_store
-// 4. Posts balanced ledger entries (Clearing, Fees, Revenue, Tax)
-// 5. Writes order event and sends customer email
+// 1. Records webhook idempotency (when called from a webhook) in the same transaction
+// 2. Guards against duplicate payments and wrong amounts
+// 3. Re-holds only inactive stock lines and turns active holds firm
+// 4. Creates or links the Sale with source = online_store
+// 5. Posts balanced ledger entries (Clearing, Processing Fee, Rekordly Commission, Revenue, Tax)
+// 6. Writes order event and sends customer email
 func (s *Service) MarkStorefrontOrderPaid(ctx context.Context, attempt db.StorefrontPaymentAttempt) error {
+	return s.markStorefrontOrderPaidInternal(ctx, attempt, attempt.AmountMinor, attempt.Provider, "")
+}
+
+func (s *Service) markStorefrontOrderPaidInternal(
+	ctx context.Context,
+	attemptIn db.StorefrontPaymentAttempt,
+	receivedAmountMinor int64,
+	webhookProvider string,
+	webhookEventID string,
+) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := s.queries.WithTx(tx)
+
+	if webhookEventID != "" {
+		recorded, wErr := q.InsertPaymentWebhookEvent(ctx, db.InsertPaymentWebhookEventParams{
+			Provider: webhookProvider,
+			EventID:  webhookEventID,
+			Outcome:  "processed",
+		})
+		if errors.Is(wErr, pgx.ErrNoRows) || (wErr == nil && recorded.ID == 0) {
+			return nil // already processed idempotently
+		}
+		if wErr != nil {
+			return wErr
+		}
+	}
+
+	attempt, err := q.GetStorefrontPaymentAttemptByReferenceForUpdate(ctx, attemptIn.Reference)
+	if err != nil {
+		return err
+	}
+	if attemptIn.FeeMinor > 0 {
+		attempt.FeeMinor = attemptIn.FeeMinor
+	}
+	if len(attemptIn.RawEvent) > 0 {
+		attempt.RawEvent = attemptIn.RawEvent
+	}
 
 	order, err := q.GetStorefrontOrderForUpdate(ctx, db.GetStorefrontOrderForUpdateParams{
 		WorkspaceID: attempt.WorkspaceID,
@@ -501,24 +584,132 @@ func (s *Service) MarkStorefrontOrderPaid(ctx context.Context, attempt db.Storef
 		return err
 	}
 
-	if order.PaymentStatus == "paid" && attempt.Status == "paid" {
-		return nil // Idempotent replay
+	if receivedAmountMinor <= 0 {
+		receivedAmountMinor = attempt.AmountMinor
 	}
 
-	// Check late payment after expiry
-	now := time.Now().UTC()
-	isExpired := order.CommercialStatus == "cancelled" || (order.ReservationExpiresAt.Valid && order.ReservationExpiresAt.Time.Before(now))
-	if isExpired {
-		// Attempt to re-hold stock
-		lines, lErr := q.ListStorefrontOrderLines(ctx, order.ID)
-		if lErr != nil {
-			return lErr
+	// Same attempt already marked paid -> idempotent replay
+	if attempt.Status == "paid" && (order.PaymentStatus == "paid" || order.LinkedSaleID.Valid) {
+		if webhookEventID != "" {
+			return tx.Commit(ctx)
 		}
-		stockAvailable := true
-		for _, l := range lines {
-			if l.ProductKind != "stock_tracked" || l.ConfirmedQuantity.IsZero() {
+		return nil
+	}
+
+	// B8: Never post revenue twice when order is already paid (manual Mark paid or another attempt)
+	if order.PaymentStatus == "paid" || order.LinkedSaleID.Valid {
+		dupMsg := "Paid twice: refund one"
+		if _, err := q.UpdatePaymentAttemptSettlement(ctx, db.UpdatePaymentAttemptSettlementParams{
+			WorkspaceID:         attempt.WorkspaceID,
+			ID:                  attempt.ID,
+			Status:              "duplicate_payment",
+			FeeMinor:            attempt.FeeMinor,
+			CommissionMinor:     attempt.CommissionMinor,
+			ReceivedAmountMinor: pgtype.Int8{Int64: receivedAmountMinor, Valid: true},
+			RawEvent:            attempt.RawEvent,
+		}); err != nil {
+			return err
+		}
+		if _, err := q.SetStorefrontOrderPaymentAttention(ctx, db.SetStorefrontOrderPaymentAttentionParams{
+			WorkspaceID:             attempt.WorkspaceID,
+			ID:                      order.ID,
+			PaymentAttentionReason:  optionalPgText("duplicate_payment"),
+			PaymentAttentionMessage: optionalPgText(dupMsg),
+		}); err != nil {
+			return err
+		}
+		if _, err := q.CreateStorefrontOrderEvent(ctx, db.CreateStorefrontOrderEventParams{
+			WorkspaceID:     attempt.WorkspaceID,
+			OrderID:         order.ID,
+			EventType:       "duplicate_payment",
+			ActorType:       "system",
+			CustomerVisible: false,
+			Message:         optionalPgText(fmt.Sprintf("%s (ref: %s via %s)", dupMsg, attempt.Reference, attempt.Provider)),
+		}); err != nil {
+			return err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return err
+		}
+		s.notifyStorefrontWorkspace(ctx, attempt.WorkspaceID, fmt.Sprintf("Duplicate payment on %s", order.OrderReference), dupMsg)
+		return nil
+	}
+
+	// B7 & B11: Wrong amount by bank transfer (or attempt mismatch with order total)
+	if receivedAmountMinor != order.TotalMinor || attempt.AmountMinor != order.TotalMinor {
+		paidDisp := formatDisplayMoney(order.Currency, receivedAmountMinor, int(order.CurrencyExponent))
+		orderDisp := formatDisplayMoney(order.Currency, order.TotalMinor, int(order.CurrencyExponent))
+		mismatchMsg := fmt.Sprintf("Customer paid %s, order is %s: refund the difference or ask for the rest", paidDisp, orderDisp)
+
+		if _, err := q.UpdatePaymentAttemptSettlement(ctx, db.UpdatePaymentAttemptSettlementParams{
+			WorkspaceID:         attempt.WorkspaceID,
+			ID:                  attempt.ID,
+			Status:              "paid_wrong_amount",
+			FeeMinor:            attempt.FeeMinor,
+			CommissionMinor:     attempt.CommissionMinor,
+			ReceivedAmountMinor: pgtype.Int8{Int64: receivedAmountMinor, Valid: true},
+			RawEvent:            attempt.RawEvent,
+		}); err != nil {
+			return err
+		}
+		if _, err := q.SetStorefrontOrderPaymentAttention(ctx, db.SetStorefrontOrderPaymentAttentionParams{
+			WorkspaceID:             attempt.WorkspaceID,
+			ID:                      order.ID,
+			PaymentAttentionReason:  optionalPgText("wrong_amount"),
+			PaymentAttentionMessage: optionalPgText(mismatchMsg),
+		}); err != nil {
+			return err
+		}
+		if _, err := q.CreateStorefrontOrderEvent(ctx, db.CreateStorefrontOrderEventParams{
+			WorkspaceID:     attempt.WorkspaceID,
+			OrderID:         order.ID,
+			EventType:       "payment_wrong_amount",
+			ActorType:       "system",
+			CustomerVisible: true,
+			Message:         optionalPgText(mismatchMsg),
+		}); err != nil {
+			return err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return err
+		}
+		s.notifyStorefrontWorkspace(ctx, attempt.WorkspaceID, fmt.Sprintf("Wrong amount paid on %s", order.OrderReference), mismatchMsg)
+		return nil
+	}
+
+	// B9: Check per-line reservations and re-hold ONLY lines whose reservation is no longer active.
+	lines, err := q.ListStorefrontOrderLines(ctx, order.ID)
+	if err != nil {
+		return err
+	}
+	sort.Slice(lines, func(i, j int) bool {
+		if lines[i].ProductID != lines[j].ProductID {
+			return lines[i].ProductID < lines[j].ProductID
+		}
+		return lines[i].VariantID.Int64 < lines[j].VariantID.Int64
+	})
+
+	var linesToRehold []db.StorefrontOrderLine
+	for _, l := range lines {
+		if l.ProductKind != "stock_tracked" || l.ConfirmedQuantity.IsZero() {
+			continue
+		}
+		if l.ReservationID.Valid {
+			res, rErr := q.GetStockReservationForUpdate(ctx, db.GetStockReservationForUpdateParams{
+				WorkspaceID: attempt.WorkspaceID,
+				ID:          l.ReservationID.Int64,
+			})
+			if rErr == nil && res.Status == "active" {
+				// Still active! Do not double-reserve; MakeOrderReservationsFirm will make it firm.
 				continue
 			}
+		}
+		linesToRehold = append(linesToRehold, l)
+	}
+
+	if len(linesToRehold) > 0 {
+		stockAvailable := true
+		for _, l := range linesToRehold {
 			bal, bErr := q.GetInventoryBalanceForUpdate(ctx, db.GetInventoryBalanceForUpdateParams{
 				WorkspaceID: attempt.WorkspaceID,
 				LocationID:  order.OutletID.Int64,
@@ -537,41 +728,54 @@ func (s *Service) MarkStorefrontOrderPaid(ctx context.Context, attempt db.Storef
 		}
 
 		if !stockAvailable {
-			// Do NOT oversell. Flag paid_needs_attention
-			_, _ = q.UpdatePaymentAttemptStatus(ctx, db.UpdatePaymentAttemptStatusParams{
-				ID:       attempt.ID,
-				Status:   "paid",
-				RawEvent: attempt.RawEvent,
-			})
-			_, _ = q.UpdateStorefrontOrderPaymentStatus(ctx, db.UpdateStorefrontOrderPaymentStatusParams{
-				WorkspaceID:   attempt.WorkspaceID,
-				ID:            order.ID,
-				PaymentStatus: "paid_needs_attention",
-				LinkedSaleID:  pgtype.Int8{Valid: false},
-			})
-			_, _ = q.CreateStorefrontOrderEvent(ctx, db.CreateStorefrontOrderEventParams{
+			lateMsg := "Late payment received after reservation expired, but stock is unavailable. Merchant attention required (refund or restock)."
+			if _, err := q.UpdatePaymentAttemptSettlement(ctx, db.UpdatePaymentAttemptSettlementParams{
+				WorkspaceID:         attempt.WorkspaceID,
+				ID:                  attempt.ID,
+				Status:              "paid",
+				FeeMinor:            attempt.FeeMinor,
+				CommissionMinor:     attempt.CommissionMinor,
+				ReceivedAmountMinor: pgtype.Int8{Int64: receivedAmountMinor, Valid: true},
+				RawEvent:            attempt.RawEvent,
+			}); err != nil {
+				return err
+			}
+			if _, err := q.SetStorefrontOrderPaymentAttention(ctx, db.SetStorefrontOrderPaymentAttentionParams{
+				WorkspaceID:             attempt.WorkspaceID,
+				ID:                      order.ID,
+				PaymentAttentionReason:  optionalPgText("late_payment_out_of_stock"),
+				PaymentAttentionMessage: optionalPgText(lateMsg),
+			}); err != nil {
+				return err
+			}
+			if _, err := q.CreateStorefrontOrderEvent(ctx, db.CreateStorefrontOrderEventParams{
 				WorkspaceID:     attempt.WorkspaceID,
 				OrderID:         order.ID,
 				EventType:       "payment_needs_attention",
 				ActorType:       "system",
 				CustomerVisible: true,
-				Message:         optionalPgText("Late payment received after reservation expired, but stock is unavailable. Merchant attention required (refund or restock)."),
-			})
-			return tx.Commit(ctx)
+				Message:         optionalPgText(lateMsg),
+			}); err != nil {
+				return err
+			}
+			if err := tx.Commit(ctx); err != nil {
+				return err
+			}
+			s.notifyStorefrontWorkspace(ctx, attempt.WorkspaceID, fmt.Sprintf("Late payment needs attention on %s", order.OrderReference), lateMsg)
+			return nil
 		}
 
-		// Re-reserve stock
-		for _, l := range lines {
-			if l.ProductKind != "stock_tracked" || l.ConfirmedQuantity.IsZero() {
-				continue
-			}
-			bal, _ := q.GetInventoryBalanceForUpdate(ctx, db.GetInventoryBalanceForUpdateParams{
+		for _, l := range linesToRehold {
+			bal, bErr := q.GetInventoryBalanceForUpdate(ctx, db.GetInventoryBalanceForUpdateParams{
 				WorkspaceID: attempt.WorkspaceID,
 				LocationID:  order.OutletID.Int64,
 				ProductID:   l.ProductID,
 				VariantID:   l.VariantID,
 			})
-			_, _ = q.UpdateInventoryBalanceQuantities(ctx, db.UpdateInventoryBalanceQuantitiesParams{
+			if bErr != nil {
+				return bErr
+			}
+			if _, err := q.UpdateInventoryBalanceQuantities(ctx, db.UpdateInventoryBalanceQuantitiesParams{
 				WorkspaceID:       attempt.WorkspaceID,
 				LocationID:        order.OutletID.Int64,
 				ProductID:         l.ProductID,
@@ -580,8 +784,10 @@ func (s *Service) MarkStorefrontOrderPaid(ctx context.Context, attempt db.Storef
 				ReservedQuantity:  bal.ReservedQuantity.Add(l.ConfirmedQuantity),
 				InTransitQuantity: bal.InTransitQuantity,
 				ValueOnHandMinor:  bal.ValueOnHandMinor,
-			})
-			res, _ := q.CreateStockReservation(ctx, db.CreateStockReservationParams{
+			}); err != nil {
+				return err
+			}
+			res, rErr := q.CreateStockReservation(ctx, db.CreateStockReservationParams{
 				WorkspaceID:    attempt.WorkspaceID,
 				LocationID:     order.OutletID.Int64,
 				ProductID:      l.ProductID,
@@ -591,238 +797,81 @@ func (s *Service) MarkStorefrontOrderPaid(ctx context.Context, attempt db.Storef
 				Status:         "active",
 				ExpiresAt:      pgtype.Timestamptz{Valid: false}, // firm hold
 				Notes:          pgtype.Text{String: "Re-reserved for paid order " + order.OrderReference, Valid: true},
-				IdempotencyKey: pgtype.Text{String: fmt.Sprintf("sf-order-%d-line-%d-rehold", order.ID, l.ID), Valid: true},
+				IdempotencyKey: pgtype.Text{String: fmt.Sprintf("sf-order-%d-line-%d-rehold-%d", order.ID, l.ID, attempt.ID), Valid: true},
 			})
-			_, _ = q.UpdateStorefrontOrderLineReservation(ctx, db.UpdateStorefrontOrderLineReservationParams{
+			if rErr != nil {
+				return rErr
+			}
+			if _, err := q.UpdateStorefrontOrderLineReservation(ctx, db.UpdateStorefrontOrderLineReservationParams{
 				ID:                l.ID,
 				ReservationID:     pgtype.Int8{Int64: res.ID, Valid: true},
 				ConfirmedQuantity: l.ConfirmedQuantity,
 				UnitPriceMinor:    l.UnitPriceMinor,
 				LineTotalMinor:    l.LineTotalMinor,
-			})
-		}
-	}
-
-	// 1. Mark attempt paid
-	_, err = q.UpdatePaymentAttemptStatus(ctx, db.UpdatePaymentAttemptStatusParams{
-		ID:       attempt.ID,
-		Status:   "paid",
-		RawEvent: attempt.RawEvent,
-	})
-	if err != nil {
-		return err
-	}
-
-	// 2. Turn hold firm (expires_at = null)
-	_, _ = tx.Exec(ctx, `
-		UPDATE stock_reservations
-		SET expires_at = NULL, updated_at = now()
-		WHERE workspace_id = $1 AND order_id = $2 AND status = 'active'
-	`, attempt.WorkspaceID, order.ID)
-
-	// 3. Create or link Sale with source = 'online_store'
-	var sale db.Sale
-	existingSale, sErr := q.GetSaleByStorefrontOrder(ctx, db.GetSaleByStorefrontOrderParams{
-		WorkspaceID:       attempt.WorkspaceID,
-		StorefrontOrderID: pgtype.Int8{Int64: order.ID, Valid: true},
-	})
-	if sErr == nil {
-		sale = existingSale
-	} else if errors.Is(sErr, pgx.ErrNoRows) {
-		saleDate := time.Now().UTC()
-		if order.CreatedAt.Valid {
-			saleDate = order.CreatedAt.Time.UTC()
-		}
-		newSale, err := q.CreateStorefrontOrderSale(ctx, db.CreateStorefrontOrderSaleParams{
-			WorkspaceID:       attempt.WorkspaceID,
-			CustomerID:        order.CustomerID,
-			CustomerName:      order.CustomerName,
-			SaleDate:          pgtype.Date{Time: saleDate, Valid: true},
-			TotalAmountMinor:  order.TotalMinor,
-			PaidAmountMinor:   order.TotalMinor,
-			Currency:          order.Currency,
-			CurrencyExponent:  order.CurrencyExponent,
-			Notes:             pgtype.Text{String: "Paid online store order " + order.OrderReference, Valid: true},
-			Reference:         pgtype.Text{String: order.OrderReference, Valid: true},
-			IdempotencyKey:    pgtype.Text{String: fmt.Sprintf("online-store-order-%d", order.ID), Valid: true},
-			CreatedByUserID:   pgtype.Int8{Valid: false},
-			StorefrontOrderID: pgtype.Int8{Int64: order.ID, Valid: true},
-		})
-		if err != nil {
-			return err
-		}
-		_, _ = tx.Exec(ctx, `UPDATE sales SET source = 'online_store' WHERE id = $1`, newSale.ID)
-		sale = newSale
-
-		lines, err := q.ListStorefrontOrderLines(ctx, order.ID)
-		if err != nil {
-			return err
-		}
-		for _, line := range lines {
-			if line.ConfirmedQuantity.IsZero() {
-				continue
-			}
-			if _, err := q.CreateStorefrontOrderSaleItem(ctx, db.CreateStorefrontOrderSaleItemParams{
-				WorkspaceID:    attempt.WorkspaceID,
-				SaleID:         sale.ID,
-				ProductID:      pgtype.Int8{Int64: line.ProductID, Valid: line.ProductID > 0},
-				VariantID:      line.VariantID,
-				Description:    line.TitleSnapshot,
-				Quantity:       line.ConfirmedQuantity,
-				UnitPriceMinor: line.UnitPriceMinor,
-				AmountMinor:    line.LineTotalMinor,
 			}); err != nil {
 				return err
 			}
 		}
-	} else {
-		return sErr
 	}
 
-	// 4. Posts the money:
-	// Find or create Clearing money account
-	clearingName := fmt.Sprintf("Payment provider clearing (%s)", strings.Title(attempt.Provider))
-	var clearingAccID int64
-	err = tx.QueryRow(ctx, `SELECT id FROM money_accounts WHERE workspace_id = $1 AND name = $2`, attempt.WorkspaceID, clearingName).Scan(&clearingAccID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		err = tx.QueryRow(ctx, `
-			INSERT INTO money_accounts (workspace_id, name, account_type, currency)
-			VALUES ($1, $2, 'clearing', $3)
-			RETURNING id
-		`, attempt.WorkspaceID, clearingName, order.Currency).Scan(&clearingAccID)
-	}
-	if err != nil {
-		return fmt.Errorf("clearing money account: %w", err)
+	commissionMinor := attempt.CommissionMinor
+	if commissionMinor == 0 && s.platformCommissionPercent > 0 {
+		commissionMinor = computeCommissionMinor(attempt.AmountMinor, s.platformCommissionPercent)
 	}
 
-	// Ledger Entry
-	ledgerEntry, err := q.CreateLedgerEntry(ctx, db.CreateLedgerEntryParams{
-		WorkspaceID:      attempt.WorkspaceID,
-		SourceType:       "sale",
-		SourceID:         sale.ID,
-		EntryDate:        pgtype.Date{Time: time.Now().UTC(), Valid: true},
-		Currency:         order.Currency,
-		CurrencyExponent: order.CurrencyExponent,
-		Description:      optionalPgText(fmt.Sprintf("Storefront order %s payment (%s)", order.OrderReference, attempt.Provider)),
-	})
-	if err != nil {
-		return fmt.Errorf("create ledger entry: %w", err)
+	// 1. Mark attempt paid
+	if _, err := q.UpdatePaymentAttemptSettlement(ctx, db.UpdatePaymentAttemptSettlementParams{
+		WorkspaceID:         attempt.WorkspaceID,
+		ID:                  attempt.ID,
+		Status:              "paid",
+		FeeMinor:            attempt.FeeMinor,
+		CommissionMinor:     commissionMinor,
+		ReceivedAmountMinor: pgtype.Int8{Int64: receivedAmountMinor, Valid: true},
+		RawEvent:            attempt.RawEvent,
+	}); err != nil {
+		return err
 	}
 
-	// Fee calculations:
-	// If merchant bears fee:
-	// Debit Clearing: attempt.AmountMinor - attempt.FeeMinor
-	// Debit Expense: attempt.FeeMinor
-	// Credit Revenue: order.TotalMinor - order.TaxMinor
-	// Credit Tax: order.TaxMinor
-	// If customer bears fee:
-	// Customer total paid includes fee: order.TotalMinor = items + deliv + fee.
-	// Net in clearing = attempt.AmountMinor - attempt.FeeMinor = items + deliv.
-	// Debit Clearing: netAmount
-	// Credit Revenue: netAmount - tax
-	// Credit Tax: tax
-	netMinor := attempt.AmountMinor - attempt.FeeMinor
-	if netMinor < 0 {
-		netMinor = 0
+	// 2. Turn all active holds firm (expires_at = NULL)
+	if err := q.MakeOrderReservationsFirm(ctx, db.MakeOrderReservationsFirmParams{
+		WorkspaceID: attempt.WorkspaceID,
+		OrderID:     pgtype.Int8{Int64: order.ID, Valid: true},
+	}); err != nil {
+		return err
 	}
 
-	// Debit: Clearing account
-	if netMinor > 0 {
-		if _, err := q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{
-			LedgerEntryID: ledgerEntry.ID,
-			WorkspaceID:   attempt.WorkspaceID,
-			AccountID:     pgtype.Int8{Int64: clearingAccID, Valid: true},
-			AccountClass:  "asset",
-			DebitMinor:    netMinor,
-			CreditMinor:   0,
-			Description:   optionalPgText(fmt.Sprintf("Net settlement to %s clearing", attempt.Provider)),
-		}); err != nil {
-			return fmt.Errorf("debit clearing: %w", err)
-		}
-	}
-
-	// Debit: Processing fee expense if fee > 0
-	if attempt.FeeMinor > 0 && order.ProcessingFeeMinor == 0 {
-		// Merchant bore the fee
-		if _, err := q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{
-			LedgerEntryID: ledgerEntry.ID,
-			WorkspaceID:   attempt.WorkspaceID,
-			AccountID:     pgtype.Int8{Valid: false},
-			AccountClass:  "expense",
-			DebitMinor:    attempt.FeeMinor,
-			CreditMinor:   0,
-			Description:   optionalPgText(fmt.Sprintf("Payment processing fee (%s)", attempt.Provider)),
-		}); err != nil {
-			return fmt.Errorf("debit fee: %w", err)
-		}
-	}
-
-	// Credit: Sales Revenue & Tax
-	taxMinor := order.TaxMinor
-	revenueMinor := order.TotalMinor - taxMinor
-	if order.ProcessingFeeMinor > 0 {
-		// Customer paid the fee, so revenue is total minus fee minus tax
-		revenueMinor = order.TotalMinor - order.ProcessingFeeMinor - taxMinor
-	}
-	if revenueMinor > 0 {
-		if _, err := q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{
-			LedgerEntryID: ledgerEntry.ID,
-			WorkspaceID:   attempt.WorkspaceID,
-			AccountID:     pgtype.Int8{Valid: false},
-			AccountClass:  "revenue",
-			DebitMinor:    0,
-			CreditMinor:   revenueMinor,
-			Description:   optionalPgText("Online store sales revenue"),
-		}); err != nil {
-			return fmt.Errorf("credit revenue: %w", err)
-		}
-	}
-	if taxMinor > 0 {
-		if _, err := q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{
-			LedgerEntryID: ledgerEntry.ID,
-			WorkspaceID:   attempt.WorkspaceID,
-			AccountID:     pgtype.Int8{Valid: false},
-			AccountClass:  "liability",
-			DebitMinor:    0,
-			CreditMinor:   taxMinor,
-			Description:   optionalPgText("Sales tax payable"),
-		}); err != nil {
-			return fmt.Errorf("credit tax: %w", err)
-		}
-	}
-
-	// Update clearing balance
-	_, _ = tx.Exec(ctx, `
-		UPDATE money_accounts
-		SET current_balance_minor = current_balance_minor + $1, updated_at = now()
-		WHERE id = $2
-	`, netMinor, clearingAccID)
-
-	// 5. Update Order status
-	_, err = q.UpdateStorefrontOrderPaymentStatus(ctx, db.UpdateStorefrontOrderPaymentStatusParams{
-		WorkspaceID:   attempt.WorkspaceID,
-		ID:            order.ID,
-		PaymentStatus: "paid",
-		LinkedSaleID:  pgtype.Int8{Int64: sale.ID, Valid: true},
-	})
+	// 3. Create or link Sale + post balanced ledger entries
+	sale, err := s.postOnlineStoreProviderSaleAndLedgerTx(ctx, q, order, lines, attempt.Provider, attempt.Reference, attempt.AmountMinor, attempt.FeeMinor, commissionMinor)
 	if err != nil {
 		return err
 	}
-	_, _ = tx.Exec(ctx, `
-		UPDATE storefront_orders
-		SET commercial_status = 'confirmed', reservation_expires_at = NULL, updated_at = now()
-		WHERE workspace_id = $1 AND id = $2
-	`, attempt.WorkspaceID, order.ID)
 
-	// Order event
-	_, _ = q.CreateStorefrontOrderEvent(ctx, db.CreateStorefrontOrderEventParams{
+	// 4. Update Order status (re-opening cancelled order to confirmed/reserved, clearing expiry & attention)
+	if _, err := q.FinalizeStorefrontOrderPayment(ctx, db.FinalizeStorefrontOrderPaymentParams{
+		WorkspaceID:  attempt.WorkspaceID,
+		ID:           order.ID,
+		LinkedSaleID: pgtype.Int8{Int64: sale.ID, Valid: true},
+	}); err != nil {
+		return err
+	}
+
+	// 5. Order event
+	if _, err := q.CreateStorefrontOrderEvent(ctx, db.CreateStorefrontOrderEventParams{
 		WorkspaceID:     attempt.WorkspaceID,
 		OrderID:         order.ID,
 		EventType:       "payment_confirmed",
 		ActorType:       "system",
 		CustomerVisible: true,
 		Message:         optionalPgText(fmt.Sprintf("Payment received via %s. Reference: %s", attempt.Provider, attempt.Reference)),
-	})
+	}); err != nil {
+		return err
+	}
+
+	if s.beforeMarkPaidCommitHook != nil {
+		if hErr := s.beforeMarkPaidCommitHook(ctx, order.ID); hErr != nil {
+			return hErr
+		}
+	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return err
@@ -833,16 +882,502 @@ func (s *Service) MarkStorefrontOrderPaid(ctx context.Context, attempt db.Storef
 		_ = s.BookStorefrontShipment(ctx, attempt.WorkspaceID, order.ID)
 	}
 
-	// Async email notification if email is configured
+	// B12: Receipt email amount formatted with order's currency exponent
 	if s.emailProvider != nil && order.CustomerEmail.Valid && strings.TrimSpace(order.CustomerEmail.String) != "" {
+		formattedTotal := FormatMinorToMajor(order.TotalMinor, int(order.CurrencyExponent))
 		_, _ = s.emailProvider.SendEmail(ctx, notify.SendEmailRequest{
 			To:       order.CustomerEmail.String,
 			Subject:  fmt.Sprintf("Payment Confirmed: Order %s", order.OrderReference),
-			HTMLBody: fmt.Sprintf("<p>Hi %s,</p><p>We have received your payment for order <strong>%s</strong>.</p><p>Total: %s %s</p>", order.CustomerName, order.OrderReference, order.Currency, decimal.NewFromInt(order.TotalMinor).Div(decimal.NewFromInt(100)).StringFixed(2)),
+			HTMLBody: fmt.Sprintf("<p>Hi %s,</p><p>We have received your payment for order <strong>%s</strong>.</p><p>Total: %s %s</p>", order.CustomerName, order.OrderReference, order.Currency, formattedTotal),
 		})
 	}
 
 	return nil
+}
+
+func (s *Service) postOnlineStoreProviderSaleAndLedgerTx(
+	ctx context.Context,
+	q *db.Queries,
+	order db.StorefrontOrder,
+	lines []db.StorefrontOrderLine,
+	provider string,
+	reference string,
+	grossPaidMinor int64,
+	feeMinor int64,
+	commissionMinor int64,
+) (db.Sale, error) {
+	if grossPaidMinor <= 0 {
+		return db.Sale{}, errors.New("paid amount must be positive")
+	}
+	var sale db.Sale
+	existingSale, sErr := q.GetSaleByStorefrontOrder(ctx, db.GetSaleByStorefrontOrderParams{
+		WorkspaceID:       order.WorkspaceID,
+		StorefrontOrderID: pgtype.Int8{Int64: order.ID, Valid: true},
+	})
+	if sErr == nil {
+		sale = existingSale
+	} else if errors.Is(sErr, pgx.ErrNoRows) {
+		saleDate := time.Now().UTC()
+		if order.CreatedAt.Valid {
+			saleDate = order.CreatedAt.Time.UTC()
+		}
+		newSale, err := q.CreateStorefrontOrderSale(ctx, db.CreateStorefrontOrderSaleParams{
+			WorkspaceID:       order.WorkspaceID,
+			CustomerID:        order.CustomerID,
+			CustomerName:      order.CustomerName,
+			SaleDate:          pgtype.Date{Time: saleDate, Valid: true},
+			TotalAmountMinor:  grossPaidMinor,
+			PaidAmountMinor:   grossPaidMinor,
+			Currency:          order.Currency,
+			CurrencyExponent:  order.CurrencyExponent,
+			Notes:             pgtype.Text{String: "Paid online store order " + order.OrderReference, Valid: true},
+			Reference:         pgtype.Text{String: order.OrderReference, Valid: true},
+			IdempotencyKey:    pgtype.Text{String: fmt.Sprintf("online-store-order-%d", order.ID), Valid: true},
+			CreatedByUserID:   pgtype.Int8{Valid: false},
+			StorefrontOrderID: pgtype.Int8{Int64: order.ID, Valid: true},
+		})
+		if err != nil {
+			return db.Sale{}, err
+		}
+		if err := q.UpdateSaleSource(ctx, db.UpdateSaleSourceParams{
+			WorkspaceID: order.WorkspaceID,
+			ID:          newSale.ID,
+			Source:      "online_store",
+		}); err != nil {
+			return db.Sale{}, err
+		}
+		sale = newSale
+
+		for _, line := range lines {
+			if line.ConfirmedQuantity.IsZero() {
+				continue
+			}
+			if _, err := q.CreateStorefrontOrderSaleItem(ctx, db.CreateStorefrontOrderSaleItemParams{
+				WorkspaceID:    order.WorkspaceID,
+				SaleID:         sale.ID,
+				ProductID:      pgtype.Int8{Int64: line.ProductID, Valid: line.ProductID > 0},
+				VariantID:      line.VariantID,
+				Description:    line.TitleSnapshot,
+				Quantity:       line.ConfirmedQuantity,
+				UnitPriceMinor: line.UnitPriceMinor,
+				AmountMinor:    line.LineTotalMinor,
+			}); err != nil {
+				return db.Sale{}, err
+			}
+		}
+	} else {
+		return db.Sale{}, sErr
+	}
+
+	// Find or create Clearing money account via sqlc
+	clearingName := fmt.Sprintf("Payment provider clearing (%s)", strings.Title(provider))
+	clearingAcc, err := q.GetMoneyAccountByName(ctx, db.GetMoneyAccountByNameParams{
+		WorkspaceID: order.WorkspaceID,
+		Lower:       clearingName,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		clearingAcc, err = q.CreateClearingMoneyAccount(ctx, db.CreateClearingMoneyAccountParams{
+			WorkspaceID:      order.WorkspaceID,
+			Name:             clearingName,
+			Currency:         order.Currency,
+			CurrencyExponent: order.CurrencyExponent,
+		})
+	}
+	if err != nil {
+		return db.Sale{}, fmt.Errorf("clearing money account: %w", err)
+	}
+
+	ledgerEntry, err := q.CreateLedgerEntry(ctx, db.CreateLedgerEntryParams{
+		WorkspaceID:      order.WorkspaceID,
+		SourceType:       "sale",
+		SourceID:         sale.ID,
+		EntryDate:        pgtype.Date{Time: time.Now().UTC(), Valid: true},
+		Currency:         order.Currency,
+		CurrencyExponent: order.CurrencyExponent,
+		Description:      optionalPgText(fmt.Sprintf("Storefront order %s payment (%s %s)", order.OrderReference, provider, reference)),
+	})
+	if err != nil {
+		return db.Sale{}, fmt.Errorf("create ledger entry: %w", err)
+	}
+
+	clearingNet := grossPaidMinor - feeMinor - commissionMinor
+	if clearingNet < 0 {
+		return db.Sale{}, ErrLedgerUnbalanced
+	}
+
+	var totalDebits, totalCredits int64
+
+	// Debit: Clearing account (Asset)
+	if clearingNet > 0 {
+		if _, err := q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{
+			LedgerEntryID: ledgerEntry.ID,
+			WorkspaceID:   order.WorkspaceID,
+			AccountID:     pgtype.Int8{Int64: clearingAcc.ID, Valid: true},
+			AccountClass:  "asset",
+			DebitMinor:    clearingNet,
+			CreditMinor:   0,
+			Description:   optionalPgText(fmt.Sprintf("Net settlement to %s clearing", provider)),
+		}); err != nil {
+			return db.Sale{}, fmt.Errorf("debit clearing: %w", err)
+		}
+		totalDebits += clearingNet
+	}
+
+	// Debit: Provider processing fee (Expense)
+	if feeMinor > 0 {
+		if _, err := q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{
+			LedgerEntryID: ledgerEntry.ID,
+			WorkspaceID:   order.WorkspaceID,
+			AccountID:     pgtype.Int8{Valid: false},
+			AccountClass:  "expense",
+			DebitMinor:    feeMinor,
+			CreditMinor:   0,
+			Description:   optionalPgText(fmt.Sprintf("Payment processing fee (%s)", provider)),
+		}); err != nil {
+			return db.Sale{}, fmt.Errorf("debit fee: %w", err)
+		}
+		totalDebits += feeMinor
+	}
+
+	// B11: Debit: Rekordly commission (Expense)
+	if commissionMinor > 0 {
+		if _, err := q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{
+			LedgerEntryID: ledgerEntry.ID,
+			WorkspaceID:   order.WorkspaceID,
+			AccountID:     pgtype.Int8{Valid: false},
+			AccountClass:  "expense",
+			DebitMinor:    commissionMinor,
+			CreditMinor:   0,
+			Description:   optionalPgText("Rekordly commission"),
+		}); err != nil {
+			return db.Sale{}, fmt.Errorf("debit commission: %w", err)
+		}
+		totalDebits += commissionMinor
+	}
+
+	// Credit: Sales Revenue, Fee Recovery (if customer bore fee), and Tax
+	taxMinor := order.TaxMinor
+	if taxMinor > grossPaidMinor {
+		taxMinor = 0
+	}
+	feeRecoveryMinor := order.ProcessingFeeMinor
+	if feeRecoveryMinor < 0 || feeRecoveryMinor > (grossPaidMinor-taxMinor) {
+		feeRecoveryMinor = 0
+	}
+	revenueMinor := grossPaidMinor - feeRecoveryMinor - taxMinor
+
+	if revenueMinor > 0 {
+		if _, err := q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{
+			LedgerEntryID: ledgerEntry.ID,
+			WorkspaceID:   order.WorkspaceID,
+			AccountID:     pgtype.Int8{Valid: false},
+			AccountClass:  "revenue",
+			DebitMinor:    0,
+			CreditMinor:   revenueMinor,
+			Description:   optionalPgText("Online store sales revenue"),
+		}); err != nil {
+			return db.Sale{}, fmt.Errorf("credit revenue: %w", err)
+		}
+		totalCredits += revenueMinor
+	}
+	if feeRecoveryMinor > 0 {
+		if _, err := q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{
+			LedgerEntryID: ledgerEntry.ID,
+			WorkspaceID:   order.WorkspaceID,
+			AccountID:     pgtype.Int8{Valid: false},
+			AccountClass:  "revenue",
+			DebitMinor:    0,
+			CreditMinor:   feeRecoveryMinor,
+			Description:   optionalPgText("Payment processing fee recovery"),
+		}); err != nil {
+			return db.Sale{}, fmt.Errorf("credit fee recovery: %w", err)
+		}
+		totalCredits += feeRecoveryMinor
+	}
+	if taxMinor > 0 {
+		if _, err := q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{
+			LedgerEntryID: ledgerEntry.ID,
+			WorkspaceID:   order.WorkspaceID,
+			AccountID:     pgtype.Int8{Valid: false},
+			AccountClass:  "liability",
+			DebitMinor:    0,
+			CreditMinor:   taxMinor,
+			Description:   optionalPgText("Sales tax payable"),
+		}); err != nil {
+			return db.Sale{}, fmt.Errorf("credit tax: %w", err)
+		}
+		totalCredits += taxMinor
+	}
+
+	if totalDebits != totalCredits {
+		return db.Sale{}, ErrLedgerUnbalanced
+	}
+
+	if _, err := q.UpdateMoneyAccountBalance(ctx, db.UpdateMoneyAccountBalanceParams{
+		ID:                  clearingAcc.ID,
+		WorkspaceID:         order.WorkspaceID,
+		CurrentBalanceMinor: clearingNet,
+	}); err != nil {
+		return db.Sale{}, fmt.Errorf("update clearing balance: %w", err)
+	}
+
+	return sale, nil
+}
+
+type ResolvePaymentAttentionInput struct {
+	Action string `json:"action" binding:"required"` // "accept_as_paid" | "cancel_with_refund"
+	Note   string `json:"note"`
+}
+
+func (s *Service) ResolveStorefrontOrderPaymentAttention(ctx context.Context, wsID, userID, orderID int64, in ResolvePaymentAttentionInput) (MerchantOrderView, error) {
+	action := strings.ToLower(strings.TrimSpace(in.Action))
+	if action != "accept_as_paid" && action != "cancel_with_refund" {
+		return MerchantOrderView{}, errors.New("action must be accept_as_paid or cancel_with_refund")
+	}
+	cleanNote := sanitizePublicText(in.Note, 400)
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return MerchantOrderView{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := s.queries.WithTx(tx)
+
+	order, err := q.GetStorefrontOrderForUpdate(ctx, db.GetStorefrontOrderForUpdateParams{
+		WorkspaceID: wsID,
+		ID:          orderID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return MerchantOrderView{}, ErrNotFound
+	}
+	if err != nil {
+		return MerchantOrderView{}, err
+	}
+	if order.PaymentStatus != "paid_needs_attention" {
+		return MerchantOrderView{}, errors.New("order does not require payment attention resolution")
+	}
+
+	lines, err := q.ListStorefrontOrderLines(ctx, order.ID)
+	if err != nil {
+		return MerchantOrderView{}, err
+	}
+	sort.Slice(lines, func(i, j int) bool {
+		if lines[i].ProductID != lines[j].ProductID {
+			return lines[i].ProductID < lines[j].ProductID
+		}
+		return lines[i].VariantID.Int64 < lines[j].VariantID.Int64
+	})
+
+	if action == "cancel_with_refund" {
+		if cleanNote == "" {
+			cleanNote = "Order cancelled by merchant; refund noted"
+		}
+		for _, l := range lines {
+			if !l.ReservationID.Valid {
+				continue
+			}
+			res, rErr := q.GetStockReservationForUpdate(ctx, db.GetStockReservationForUpdateParams{
+				WorkspaceID: wsID,
+				ID:          l.ReservationID.Int64,
+			})
+			if rErr != nil || res.Status != "active" {
+				continue
+			}
+			bal, bErr := q.GetInventoryBalanceForUpdate(ctx, db.GetInventoryBalanceForUpdateParams{
+				WorkspaceID: wsID,
+				LocationID:  res.LocationID,
+				ProductID:   res.ProductID,
+				VariantID:   res.VariantID,
+			})
+			if bErr != nil && !errors.Is(bErr, pgx.ErrNoRows) {
+				return MerchantOrderView{}, bErr
+			}
+			if bErr == nil {
+				newRes := bal.ReservedQuantity.Sub(res.Quantity)
+				if newRes.IsNegative() {
+					newRes = decimal.Zero
+				}
+				if _, err := q.UpdateInventoryBalanceQuantities(ctx, db.UpdateInventoryBalanceQuantitiesParams{
+					WorkspaceID:       wsID,
+					LocationID:        res.LocationID,
+					ProductID:         res.ProductID,
+					VariantID:         res.VariantID,
+					QuantityOnHand:    bal.QuantityOnHand,
+					ReservedQuantity:  newRes,
+					InTransitQuantity: bal.InTransitQuantity,
+					ValueOnHandMinor:  bal.ValueOnHandMinor,
+				}); err != nil {
+					return MerchantOrderView{}, err
+				}
+			}
+			if _, err := q.UpdateStockReservationStatus(ctx, db.UpdateStockReservationStatusParams{
+				WorkspaceID: wsID,
+				ID:          res.ID,
+				Status:      "released",
+			}); err != nil {
+				return MerchantOrderView{}, err
+			}
+		}
+
+		updated, err := q.ResolveStorefrontOrderCancelWithRefund(ctx, db.ResolveStorefrontOrderCancelWithRefundParams{
+			WorkspaceID:           wsID,
+			ID:                    order.ID,
+			DeclineOrCancelReason: optionalPgText(cleanNote),
+		})
+		if err != nil {
+			return MerchantOrderView{}, err
+		}
+		if _, err := q.CreateStorefrontOrderEvent(ctx, db.CreateStorefrontOrderEventParams{
+			WorkspaceID:     wsID,
+			OrderID:         order.ID,
+			EventType:       "order_cancelled",
+			ActorType:       "merchant",
+			ActorUserID:     pgtype.Int8{Int64: userID, Valid: userID > 0},
+			CustomerVisible: true,
+			Message:         optionalPgText("Order cancelled with refund note: " + cleanNote),
+		}); err != nil {
+			return MerchantOrderView{}, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return MerchantOrderView{}, err
+		}
+		invalidateStorefrontCache("")
+		return s.buildMerchantOrderDetail(ctx, updated)
+	}
+
+	// action == "accept_as_paid"
+	// Ensure stock is held for all tracked lines
+	for _, l := range lines {
+		if l.ProductKind != "stock_tracked" || l.ConfirmedQuantity.IsZero() {
+			continue
+		}
+		if l.ReservationID.Valid {
+			res, rErr := q.GetStockReservationForUpdate(ctx, db.GetStockReservationForUpdateParams{
+				WorkspaceID: wsID,
+				ID:          l.ReservationID.Int64,
+			})
+			if rErr == nil && res.Status == "active" {
+				continue
+			}
+		}
+		bal, bErr := q.GetInventoryBalanceForUpdate(ctx, db.GetInventoryBalanceForUpdateParams{
+			WorkspaceID: wsID,
+			LocationID:  order.OutletID.Int64,
+			ProductID:   l.ProductID,
+			VariantID:   l.VariantID,
+		})
+		if bErr != nil || bal.QuantityOnHand.Sub(bal.ReservedQuantity).LessThan(l.ConfirmedQuantity) {
+			return MerchantOrderView{}, fmt.Errorf("%w: %s is out of stock", ErrInsufficientStock, l.TitleSnapshot)
+		}
+		if _, err := q.UpdateInventoryBalanceQuantities(ctx, db.UpdateInventoryBalanceQuantitiesParams{
+			WorkspaceID:       wsID,
+			LocationID:        order.OutletID.Int64,
+			ProductID:         l.ProductID,
+			VariantID:         l.VariantID,
+			QuantityOnHand:    bal.QuantityOnHand,
+			ReservedQuantity:  bal.ReservedQuantity.Add(l.ConfirmedQuantity),
+			InTransitQuantity: bal.InTransitQuantity,
+			ValueOnHandMinor:  bal.ValueOnHandMinor,
+		}); err != nil {
+			return MerchantOrderView{}, err
+		}
+		res, rErr := q.CreateStockReservation(ctx, db.CreateStockReservationParams{
+			WorkspaceID:    wsID,
+			LocationID:     order.OutletID.Int64,
+			ProductID:      l.ProductID,
+			VariantID:      l.VariantID,
+			OrderID:        pgtype.Int8{Int64: order.ID, Valid: true},
+			Quantity:       l.ConfirmedQuantity,
+			Status:         "active",
+			ExpiresAt:      pgtype.Timestamptz{Valid: false},
+			Notes:          pgtype.Text{String: "Reserved on payment attention resolution " + order.OrderReference, Valid: true},
+			IdempotencyKey: pgtype.Text{String: fmt.Sprintf("sf-order-%d-line-%d-resolve", order.ID, l.ID), Valid: true},
+		})
+		if rErr != nil {
+			return MerchantOrderView{}, rErr
+		}
+		if _, err := q.UpdateStorefrontOrderLineReservation(ctx, db.UpdateStorefrontOrderLineReservationParams{
+			ID:                l.ID,
+			ReservationID:     pgtype.Int8{Int64: res.ID, Valid: true},
+			ConfirmedQuantity: l.ConfirmedQuantity,
+			UnitPriceMinor:    l.UnitPriceMinor,
+			LineTotalMinor:    l.LineTotalMinor,
+		}); err != nil {
+			return MerchantOrderView{}, err
+		}
+	}
+
+	if err := q.MakeOrderReservationsFirm(ctx, db.MakeOrderReservationsFirmParams{
+		WorkspaceID: wsID,
+		OrderID:     pgtype.Int8{Int64: order.ID, Valid: true},
+	}); err != nil {
+		return MerchantOrderView{}, err
+	}
+
+	var linkedSaleID pgtype.Int8 = order.LinkedSaleID
+	if !linkedSaleID.Valid {
+		att, aErr := q.GetLatestPaymentAttemptByOrder(ctx, db.GetLatestPaymentAttemptByOrderParams{
+			WorkspaceID: wsID,
+			OrderID:     order.ID,
+		})
+		if aErr != nil {
+			return MerchantOrderView{}, aErr
+		}
+		settledAmount := order.TotalMinor
+		if att.ReceivedAmountMinor.Valid && att.ReceivedAmountMinor.Int64 > 0 {
+			settledAmount = att.ReceivedAmountMinor.Int64
+		}
+		commMinor := att.CommissionMinor
+		if commMinor == 0 && s.platformCommissionPercent > 0 {
+			commMinor = computeCommissionMinor(settledAmount, s.platformCommissionPercent)
+		}
+		if _, err := q.UpdatePaymentAttemptSettlement(ctx, db.UpdatePaymentAttemptSettlementParams{
+			WorkspaceID:         wsID,
+			ID:                  att.ID,
+			Status:              "paid",
+			FeeMinor:            att.FeeMinor,
+			CommissionMinor:     commMinor,
+			ReceivedAmountMinor: pgtype.Int8{Int64: settledAmount, Valid: true},
+			RawEvent:            att.RawEvent,
+		}); err != nil {
+			return MerchantOrderView{}, err
+		}
+		sale, sErr := s.postOnlineStoreProviderSaleAndLedgerTx(ctx, q, order, lines, att.Provider, att.Reference, settledAmount, att.FeeMinor, commMinor)
+		if sErr != nil {
+			return MerchantOrderView{}, sErr
+		}
+		linkedSaleID = pgtype.Int8{Int64: sale.ID, Valid: true}
+	}
+
+	updated, err := q.FinalizeStorefrontOrderPayment(ctx, db.FinalizeStorefrontOrderPaymentParams{
+		WorkspaceID:  wsID,
+		ID:           order.ID,
+		LinkedSaleID: linkedSaleID,
+	})
+	if err != nil {
+		return MerchantOrderView{}, err
+	}
+
+	resolveMsg := "Payment attention resolved by merchant (accepted as paid)."
+	if cleanNote != "" {
+		resolveMsg += " Note: " + cleanNote
+	}
+	if _, err := q.CreateStorefrontOrderEvent(ctx, db.CreateStorefrontOrderEventParams{
+		WorkspaceID:     wsID,
+		OrderID:         order.ID,
+		EventType:       "payment_attention_resolved",
+		ActorType:       "merchant",
+		ActorUserID:     pgtype.Int8{Int64: userID, Valid: userID > 0},
+		CustomerVisible: true,
+		Message:         optionalPgText(resolveMsg),
+	}); err != nil {
+		return MerchantOrderView{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return MerchantOrderView{}, err
+	}
+	invalidateStorefrontCache("")
+	return s.buildMerchantOrderDetail(ctx, updated)
 }
 
 // MarkStorefrontOrderPaidManual handles "Mark paid" for manual bank transfers and "Collected" for COD/pickup.
@@ -874,16 +1409,17 @@ func (s *Service) MarkStorefrontOrderPaidManual(ctx context.Context, wsID, order
 		}
 		return err
 	}
-	if order.PaymentStatus == "paid" {
+	if order.PaymentStatus == "paid" || order.LinkedSaleID.Valid {
 		return nil
 	}
 
-	// Turn hold firm
-	_, _ = tx.Exec(ctx, `
-		UPDATE stock_reservations
-		SET expires_at = NULL, updated_at = now()
-		WHERE workspace_id = $1 AND order_id = $2 AND status = 'active'
-	`, wsID, order.ID)
+	// Turn hold firm via sqlc (checked error)
+	if err := q.MakeOrderReservationsFirm(ctx, db.MakeOrderReservationsFirmParams{
+		WorkspaceID: wsID,
+		OrderID:     pgtype.Int8{Int64: order.ID, Valid: true},
+	}); err != nil {
+		return err
+	}
 
 	// Create Sale
 	saleDate := time.Now().UTC()
@@ -908,7 +1444,13 @@ func (s *Service) MarkStorefrontOrderPaidManual(ctx context.Context, wsID, order
 	if err != nil {
 		return err
 	}
-	_, _ = tx.Exec(ctx, `UPDATE sales SET source = 'online_store' WHERE id = $1`, sale.ID)
+	if err := q.UpdateSaleSource(ctx, db.UpdateSaleSourceParams{
+		WorkspaceID: wsID,
+		ID:          sale.ID,
+		Source:      "online_store",
+	}); err != nil {
+		return err
+	}
 
 	lines, err := q.ListStorefrontOrderLines(ctx, order.ID)
 	if err != nil {
@@ -989,41 +1531,39 @@ func (s *Service) MarkStorefrontOrderPaidManual(ctx context.Context, wsID, order
 		}
 	}
 
-	// Update money account balance
-	_, _ = tx.Exec(ctx, `
-		UPDATE money_accounts
-		SET current_balance_minor = current_balance_minor + $1, updated_at = now()
-		WHERE id = $2 AND workspace_id = $3
-	`, order.TotalMinor, moneyAccountID, wsID)
-
-	_, err = q.UpdateStorefrontOrderPaymentStatus(ctx, db.UpdateStorefrontOrderPaymentStatusParams{
-		WorkspaceID:   wsID,
-		ID:            order.ID,
-		PaymentStatus: "paid",
-		LinkedSaleID:  pgtype.Int8{Int64: sale.ID, Valid: true},
-	})
-	if err != nil {
+	// Update money account balance via sqlc (checked error)
+	if _, err := q.UpdateMoneyAccountBalance(ctx, db.UpdateMoneyAccountBalanceParams{
+		ID:                  moneyAccountID,
+		WorkspaceID:         wsID,
+		CurrentBalanceMinor: order.TotalMinor,
+	}); err != nil {
 		return err
 	}
-	_, _ = tx.Exec(ctx, `
-		UPDATE storefront_orders
-		SET commercial_status = 'confirmed', reservation_expires_at = NULL, updated_at = now()
-		WHERE workspace_id = $1 AND id = $2
-	`, wsID, order.ID)
 
-	// Create order event
+	// Finalize order payment status & clear reservation_expires_at via sqlc (checked error)
+	if _, err := q.FinalizeStorefrontOrderPayment(ctx, db.FinalizeStorefrontOrderPaymentParams{
+		WorkspaceID:  wsID,
+		ID:           order.ID,
+		LinkedSaleID: pgtype.Int8{Int64: sale.ID, Valid: true},
+	}); err != nil {
+		return err
+	}
+
+	// Create order event (checked error)
 	msg := "Payment confirmed manually by merchant."
 	if notes != "" {
 		msg += " Note: " + notes
 	}
-	_, _ = q.CreateStorefrontOrderEvent(ctx, db.CreateStorefrontOrderEventParams{
+	if _, err := q.CreateStorefrontOrderEvent(ctx, db.CreateStorefrontOrderEventParams{
 		WorkspaceID:     wsID,
 		OrderID:         order.ID,
 		EventType:       "payment_confirmed",
 		ActorType:       "merchant",
 		CustomerVisible: true,
 		Message:         optionalPgText(msg),
-	})
+	}); err != nil {
+		return err
+	}
 
 	return tx.Commit(ctx)
 }
@@ -1046,44 +1586,46 @@ func (s *Service) RecordPayoutFromProvider(ctx context.Context, wsID int64, in R
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := s.queries.WithTx(tx)
 
-	var clearingAccID int64
-	var currency string
-	err = tx.QueryRow(ctx, `SELECT id, currency FROM money_accounts WHERE workspace_id = $1 AND name = $2`, wsID, clearingName).Scan(&clearingAccID, &currency)
+	clearingAcc, err := q.GetMoneyAccountByName(ctx, db.GetMoneyAccountByNameParams{
+		WorkspaceID: wsID,
+		Lower:       clearingName,
+	})
 	if err != nil {
 		return fmt.Errorf("clearing account not found: %w", err)
 	}
 
-	var destID int64
-	err = tx.QueryRow(ctx, `SELECT id FROM money_accounts WHERE workspace_id = $1 AND id = $2`, wsID, in.DestinationAccID).Scan(&destID)
+	destAcc, err := q.GetMoneyAccountByID(ctx, db.GetMoneyAccountByIDParams{
+		ID:          in.DestinationAccID,
+		WorkspaceID: wsID,
+	})
 	if err != nil {
 		return fmt.Errorf("destination money account not found: %w", err)
 	}
 
-	// Create money_transaction transfer
 	txnDate := time.Now().UTC()
-	var txnID int64
-	err = tx.QueryRow(ctx, `
-		INSERT INTO money_transactions (
-			workspace_id, direction, status, amount_minor, currency, currency_exponent,
-			effective_date, money_account_id, destination_account_id, purpose, notes, reference, idempotency_key
-		) VALUES (
-			$1, 'transfer', 'posted', $2, $3, 2, $4, $5, $6, 'payout', $7, $8, $9
-		) RETURNING id
-	`, wsID, in.AmountMinor, currency, txnDate, clearingAccID, destID, optionalPgText(in.Notes), optionalPgText(in.Reference), optionalPgText(in.IdempotencyKey)).Scan(&txnID)
+	txn, err := q.CreatePayoutMoneyTransaction(ctx, db.CreatePayoutMoneyTransactionParams{
+		WorkspaceID:          wsID,
+		AmountMinor:          in.AmountMinor,
+		Currency:             clearingAcc.Currency,
+		CurrencyExponent:     clearingAcc.CurrencyExponent,
+		EffectiveDate:        pgtype.Date{Time: txnDate, Valid: true},
+		MoneyAccountID:       pgtype.Int8{Int64: clearingAcc.ID, Valid: true},
+		DestinationAccountID: pgtype.Int8{Int64: destAcc.ID, Valid: true},
+		Notes:                optionalPgText(in.Notes),
+		Reference:            optionalPgText(in.Reference),
+		IdempotencyKey:       optionalPgText(in.IdempotencyKey),
+	})
 	if err != nil {
 		return err
 	}
 
-	// Balanced ledger entry:
-	// Debit: Destination bank account (Asset +)
-	// Credit: Clearing account (Asset -)
 	entry, err := q.CreateLedgerEntry(ctx, db.CreateLedgerEntryParams{
 		WorkspaceID:      wsID,
 		SourceType:       "money_transaction",
-		SourceID:         txnID,
+		SourceID:         txn.ID,
 		EntryDate:        pgtype.Date{Time: txnDate, Valid: true},
-		Currency:         currency,
-		CurrencyExponent: 2,
+		Currency:         clearingAcc.Currency,
+		CurrencyExponent: clearingAcc.CurrencyExponent,
 		Description:      optionalPgText(fmt.Sprintf("Payout from %s to bank", provider)),
 	})
 	if err != nil {
@@ -1094,7 +1636,7 @@ func (s *Service) RecordPayoutFromProvider(ctx context.Context, wsID int64, in R
 	if _, err := q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{
 		LedgerEntryID: entry.ID,
 		WorkspaceID:   wsID,
-		AccountID:     pgtype.Int8{Int64: destID, Valid: true},
+		AccountID:     pgtype.Int8{Int64: destAcc.ID, Valid: true},
 		AccountClass:  "asset",
 		DebitMinor:    in.AmountMinor,
 		CreditMinor:   0,
@@ -1107,7 +1649,7 @@ func (s *Service) RecordPayoutFromProvider(ctx context.Context, wsID int64, in R
 	if _, err := q.CreateLedgerLine(ctx, db.CreateLedgerLineParams{
 		LedgerEntryID: entry.ID,
 		WorkspaceID:   wsID,
-		AccountID:     pgtype.Int8{Int64: clearingAccID, Valid: true},
+		AccountID:     pgtype.Int8{Int64: clearingAcc.ID, Valid: true},
 		AccountClass:  "asset",
 		DebitMinor:    0,
 		CreditMinor:   in.AmountMinor,
@@ -1116,9 +1658,21 @@ func (s *Service) RecordPayoutFromProvider(ctx context.Context, wsID int64, in R
 		return err
 	}
 
-	// Update account balances
-	_, _ = tx.Exec(ctx, `UPDATE money_accounts SET current_balance_minor = current_balance_minor - $1 WHERE id = $2`, in.AmountMinor, clearingAccID)
-	_, _ = tx.Exec(ctx, `UPDATE money_accounts SET current_balance_minor = current_balance_minor + $1 WHERE id = $2`, in.AmountMinor, destID)
+	// Update account balances via sqlc (checked errors)
+	if _, err := q.UpdateMoneyAccountBalance(ctx, db.UpdateMoneyAccountBalanceParams{
+		ID:                  clearingAcc.ID,
+		WorkspaceID:         wsID,
+		CurrentBalanceMinor: -in.AmountMinor,
+	}); err != nil {
+		return err
+	}
+	if _, err := q.UpdateMoneyAccountBalance(ctx, db.UpdateMoneyAccountBalanceParams{
+		ID:                  destAcc.ID,
+		WorkspaceID:         wsID,
+		CurrentBalanceMinor: in.AmountMinor,
+	}); err != nil {
+		return err
+	}
 
 	return tx.Commit(ctx)
 }

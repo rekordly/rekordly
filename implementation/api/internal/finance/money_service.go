@@ -44,9 +44,16 @@ type Service struct {
 	storefrontPaymentProviders map[string]payments.Provider
 	shippingClient             shipping.Client
 	platformCommissionPercent  float64
+	beforeMarkPaidCommitHook   func(ctx context.Context, orderID int64) error
 }
 
 type ServiceOption func(*Service)
+
+func WithBeforeMarkPaidCommitHook(fn func(ctx context.Context, orderID int64) error) ServiceOption {
+	return func(service *Service) {
+		service.beforeMarkPaidCommitHook = fn
+	}
+}
 
 func WithShippingClient(client shipping.Client) ServiceOption {
 	return func(service *Service) {

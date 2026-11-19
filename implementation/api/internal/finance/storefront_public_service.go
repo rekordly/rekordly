@@ -1088,7 +1088,7 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 	baseTotal := subVal.IntPart() + delivMinor
 	processingFeeMinor := int64(0)
 	if settings.FeeBearer == "customer" && (payMethod == "virtual_account" || payMethod == "card") {
-		fee := int64(float64(baseTotal) * 0.015)
+		fee := decimal.NewFromInt(baseTotal).Mul(decimal.NewFromInt(15)).Div(decimal.NewFromInt(1000)).Round(0).IntPart()
 		if fee > 200000 {
 			fee = 200000
 		}
@@ -1237,7 +1237,13 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 	}); err != nil {
 		return GuestCheckoutConfirmation{}, fmt.Errorf("update storefront order hold: %w", err)
 	}
-	_, _ = tx.Exec(ctx, `UPDATE storefront_orders SET payment_arrangement = $2 WHERE id = $1`, order.ID, payMethod)
+	if err := q.UpdateStorefrontOrderPaymentArrangement(ctx, db.UpdateStorefrontOrderPaymentArrangementParams{
+		WorkspaceID:        proj.internalWS,
+		ID:                 order.ID,
+		PaymentArrangement: optionalPgText(payMethod),
+	}); err != nil {
+		return GuestCheckoutConfirmation{}, fmt.Errorf("update payment arrangement: %w", err)
+	}
 
 	if err := linkMatchingOrderCustomer(ctx, tx, proj.internalWS, order.ID, custEmail, custPhone); err != nil {
 		return GuestCheckoutConfirmation{}, err
@@ -1306,7 +1312,13 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 			return GuestCheckoutConfirmation{}, err
 		}
 		if resID, has := reservationsByLine[idx]; has {
-			_, _ = tx.Exec(ctx, `UPDATE storefront_order_lines SET reservation_id = $2 WHERE id = $1`, ol.ID, resID)
+			if err := q.SetStorefrontOrderLineReservationID(ctx, db.SetStorefrontOrderLineReservationIDParams{
+				WorkspaceID:   proj.internalWS,
+				ID:            ol.ID,
+				ReservationID: pgtype.Int8{Int64: resID, Valid: true},
+			}); err != nil {
+				return GuestCheckoutConfirmation{}, err
+			}
 		}
 		createdLines = append(createdLines, ol)
 	}
@@ -1349,6 +1361,7 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 			return GuestCheckoutConfirmation{}, fmt.Errorf("merchant payout account configuration error: %w", decErr)
 		}
 		attemptRef := fmt.Sprintf("att_%s_%d", orderRef, time.Now().UnixNano()%1000000)
+		commissionMinor := computeCommissionMinor(finalTotal, s.platformCommissionPercent)
 		if payMethod == "virtual_account" {
 			va, vaErr := chosenProvider.CreateOrderVirtualAccount(ctx, payments.OrderPaymentRequest{
 				OrderID:                   order.ID,
@@ -1376,7 +1389,7 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 				Reference:            attemptRef,
 				AmountMinor:          finalTotal,
 				FeeMinor:             0,
-				CommissionMinor:      0,
+				CommissionMinor:      commissionMinor,
 				VirtualAccountNumber: pgtype.Text{String: va.AccountNumber, Valid: true},
 				BankName:             pgtype.Text{String: va.BankName, Valid: true},
 				ExpiresAt:            pgtype.Timestamptz{Time: holdExpiresAt, Valid: true},
@@ -1415,7 +1428,7 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 				Reference:       attemptRef,
 				AmountMinor:     finalTotal,
 				FeeMinor:        0,
-				CommissionMinor: 0,
+				CommissionMinor: commissionMinor,
 				ExpiresAt:       pgtype.Timestamptz{Time: holdExpiresAt, Valid: true},
 				Status:          "pending",
 			}); aErr != nil {
@@ -1741,11 +1754,8 @@ func (s *Service) VerifyPublicOrderPayment(ctx context.Context, rawToken string)
 		return s.buildPublicOrderStatusView(ctx, o)
 	}
 	if res.Status == "paid" {
-		if res.AmountMinor != att.AmountMinor {
-			return PublicOrderStatusView{}, ErrPaymentAmountMismatch
-		}
 		att.FeeMinor = res.FeeMinor
-		if err := s.MarkStorefrontOrderPaid(ctx, att); err != nil {
+		if err := s.markStorefrontOrderPaidInternal(ctx, att, res.AmountMinor, att.Provider, ""); err != nil {
 			return PublicOrderStatusView{}, err
 		}
 		o, err = s.queries.GetStorefrontOrderByID(ctx, db.GetStorefrontOrderByIDParams{WorkspaceID: o.WorkspaceID, ID: o.ID})
@@ -1780,11 +1790,10 @@ func (s *Service) AcknowledgePublicOrderChanges(ctx context.Context, rawToken st
 	}); err != nil {
 		return PublicOrderStatusView{}, errors.New("no unacknowledged order changes at this version")
 	}
-	var updated db.StorefrontOrder
-	if _, err := tx.Exec(ctx, `UPDATE storefront_orders SET commercial_status='needs_review', version=version+1, updated_at=now() WHERE id=$1`, o.ID); err != nil {
-		return PublicOrderStatusView{}, err
-	}
-	updated, err = q.GetStorefrontOrderByID(ctx, db.GetStorefrontOrderByIDParams{WorkspaceID: o.WorkspaceID, ID: o.ID})
+	updated, err := q.UpdateStorefrontOrderAckReviewed(ctx, db.UpdateStorefrontOrderAckReviewedParams{
+		WorkspaceID: o.WorkspaceID,
+		ID:          o.ID,
+	})
 	if err != nil {
 		return PublicOrderStatusView{}, err
 	}
@@ -1829,10 +1838,11 @@ func (s *Service) CancelPublicOrderBeforeConfirm(ctx context.Context, rawToken, 
 	default:
 		return PublicOrderStatusView{}, ErrOrderAlreadyHandled
 	}
-	if _, err := tx.Exec(ctx, `UPDATE storefront_orders SET commercial_status='cancelled', decline_or_cancel_reason=$2, version=version+1, updated_at=now() WHERE id=$1`, o.ID, cleanReason); err != nil {
-		return PublicOrderStatusView{}, err
-	}
-	updated, err := q.GetStorefrontOrderByID(ctx, db.GetStorefrontOrderByIDParams{WorkspaceID: o.WorkspaceID, ID: o.ID})
+	updated, err := q.CancelStorefrontOrderByCustomer(ctx, db.CancelStorefrontOrderByCustomerParams{
+		WorkspaceID:           o.WorkspaceID,
+		ID:                    o.ID,
+		DeclineOrCancelReason: optionalPgText(cleanReason),
+	})
 	if err != nil {
 		return PublicOrderStatusView{}, err
 	}

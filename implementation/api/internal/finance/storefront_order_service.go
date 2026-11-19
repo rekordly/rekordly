@@ -73,13 +73,15 @@ type MerchantOrderView struct {
 	PickupPointID         *int64                       `json:"pickup_point_id,omitempty"`
 	CourierName           *string                      `json:"courier_name,omitempty"`
 	CourierTrackingNumber *string                      `json:"courier_tracking_number,omitempty"`
-	CourierStatus         *string                      `json:"courier_status,omitempty"`
-	CourierBookingError   *string                      `json:"courier_booking_error,omitempty"`
-	CourierTrackingURL    *string                      `json:"courier_tracking_url,omitempty"`
-	CreatedAt             string                       `json:"created_at"`
-	Lines                 []MerchantOrderLineView      `json:"lines,omitempty"`
-	Events                []PublicOrderEventView       `json:"events,omitempty"`
-	SuggestedCustomers    []MerchantOrderCustomerMatch `json:"suggested_customers,omitempty"`
+	CourierStatus           *string                      `json:"courier_status,omitempty"`
+	CourierBookingError     *string                      `json:"courier_booking_error,omitempty"`
+	CourierTrackingURL      *string                      `json:"courier_tracking_url,omitempty"`
+	PaymentAttentionReason  *string                      `json:"payment_attention_reason,omitempty"`
+	PaymentAttentionMessage *string                      `json:"payment_attention_message,omitempty"`
+	CreatedAt               string                       `json:"created_at"`
+	Lines                   []MerchantOrderLineView      `json:"lines,omitempty"`
+	Events                  []PublicOrderEventView       `json:"events,omitempty"`
+	SuggestedCustomers      []MerchantOrderCustomerMatch `json:"suggested_customers,omitempty"`
 }
 
 func merchantOrderHeader(o db.StorefrontOrder) MerchantOrderView {
@@ -89,40 +91,42 @@ func merchantOrderHeader(o db.StorefrontOrder) MerchantOrderView {
 		holdExp = &s
 	}
 	return MerchantOrderView{
-		ID:                    o.ID,
-		OrderReference:        o.OrderReference,
-		CustomerID:            nullableInt8(o.CustomerID),
-		OutletID:              nullableInt8(o.OutletID),
-		CommercialStatus:      o.CommercialStatus,
-		FulfilmentStatus:      o.FulfilmentStatus,
-		PaymentStatus:         o.PaymentStatus,
-		Version:               o.Version,
-		Currency:              o.Currency,
-		CurrencyExponent:      o.CurrencyExponent,
-		SubtotalMinor:         fmt.Sprint(o.SubtotalMinor),
-		DeliveryFeeMinor:      fmt.Sprint(o.DeliveryFeeMinor),
-		ProcessingFeeMinor:    fmt.Sprint(o.ProcessingFeeMinor),
-		TotalMinor:            fmt.Sprint(o.TotalMinor),
-		DeliveryMethod:        o.DeliveryMethod,
-		CustomerName:          o.CustomerName,
-		CustomerPhone:         nullableText(o.CustomerPhone),
-		CustomerEmail:         nullableText(o.CustomerEmail),
-		OrganizationName:      nullableText(o.OrganizationName),
-		DeliveryAddress:       nullableText(o.DeliveryAddress),
-		CustomerNote:          nullableText(o.CustomerNote),
-		PaymentArrangement:    nullableText(o.PaymentArrangement),
-		LinkedInvoiceID:       nullableInt8(o.LinkedInvoiceID),
-		DeclineOrCancelReason: nullableText(o.DeclineOrCancelReason),
-		HoldType:              nullableText(o.HoldType),
-		ReservationExpiresAt:  holdExp,
-		PickupCode:            nullableText(o.PickupCode),
-		PickupPointID:         nullableInt8(o.PickupPointID),
-		CourierName:           nullableText(o.CourierName),
-		CourierTrackingNumber: nullableText(o.CourierTrackingNumber),
-		CourierStatus:         nullableText(o.CourierStatus),
-		CourierBookingError:   nullableText(o.CourierBookingError),
-		CourierTrackingURL:    nullableText(o.CourierTrackingUrl),
-		CreatedAt:             o.CreatedAt.Time.UTC().Format(time.RFC3339),
+		ID:                      o.ID,
+		OrderReference:          o.OrderReference,
+		CustomerID:              nullableInt8(o.CustomerID),
+		OutletID:                nullableInt8(o.OutletID),
+		CommercialStatus:        o.CommercialStatus,
+		FulfilmentStatus:        o.FulfilmentStatus,
+		PaymentStatus:           o.PaymentStatus,
+		Version:                 o.Version,
+		Currency:                o.Currency,
+		CurrencyExponent:        o.CurrencyExponent,
+		SubtotalMinor:           fmt.Sprint(o.SubtotalMinor),
+		DeliveryFeeMinor:        fmt.Sprint(o.DeliveryFeeMinor),
+		ProcessingFeeMinor:      fmt.Sprint(o.ProcessingFeeMinor),
+		TotalMinor:              fmt.Sprint(o.TotalMinor),
+		DeliveryMethod:          o.DeliveryMethod,
+		CustomerName:            o.CustomerName,
+		CustomerPhone:           nullableText(o.CustomerPhone),
+		CustomerEmail:           nullableText(o.CustomerEmail),
+		OrganizationName:        nullableText(o.OrganizationName),
+		DeliveryAddress:         nullableText(o.DeliveryAddress),
+		CustomerNote:            nullableText(o.CustomerNote),
+		PaymentArrangement:      nullableText(o.PaymentArrangement),
+		LinkedInvoiceID:         nullableInt8(o.LinkedInvoiceID),
+		DeclineOrCancelReason:   nullableText(o.DeclineOrCancelReason),
+		HoldType:                nullableText(o.HoldType),
+		ReservationExpiresAt:    holdExp,
+		PickupCode:              nullableText(o.PickupCode),
+		PickupPointID:           nullableInt8(o.PickupPointID),
+		CourierName:             nullableText(o.CourierName),
+		CourierTrackingNumber:   nullableText(o.CourierTrackingNumber),
+		CourierStatus:           nullableText(o.CourierStatus),
+		CourierBookingError:     nullableText(o.CourierBookingError),
+		CourierTrackingURL:      nullableText(o.CourierTrackingUrl),
+		PaymentAttentionReason:  nullableText(o.PaymentAttentionReason),
+		PaymentAttentionMessage: nullableText(o.PaymentAttentionMessage),
+		CreatedAt:               o.CreatedAt.Time.UTC().Format(time.RFC3339),
 	}
 }
 
@@ -357,12 +361,17 @@ func (s *Service) RequestOrderChange(ctx context.Context, ws, user, orderID int6
 		payArr = optionalPgText(sanitizePublicText(in.PaymentArrangement, 300))
 	}
 
-	if _, err := tx.Exec(ctx, `
-		UPDATE storefront_orders
-		SET commercial_status=$2, version=$3, subtotal_minor=$4, delivery_fee_minor=$5, total_minor=$6,
-		    delivery_method=$7, payment_arrangement=$8, updated_at=now()
-		WHERE id=$1
-	`, o.ID, nextStatus, newVersion, subtotal, delivFee, total, delivMethod, payArr); err != nil {
+	if _, err := q.UpdateStorefrontOrderRevision(ctx, db.UpdateStorefrontOrderRevisionParams{
+		WorkspaceID:        ws,
+		ID:                 o.ID,
+		CommercialStatus:   nextStatus,
+		Version:            newVersion,
+		SubtotalMinor:      subtotal,
+		DeliveryFeeMinor:   delivFee,
+		TotalMinor:         total,
+		DeliveryMethod:     delivMethod,
+		PaymentArrangement: payArr,
+	}); err != nil {
 		return MerchantOrderView{}, err
 	}
 	snapBytes, _ := json.Marshal(map[string]any{"total_minor": total, "lines": updatedLines})
@@ -546,7 +555,7 @@ func (s *Service) CollectStorefrontOrder(ctx context.Context, ws, user, orderID 
 	if err != nil {
 		return MerchantOrderView{}, err
 	}
-	_, _ = s.queries.CreateStorefrontOrderEvent(ctx, db.CreateStorefrontOrderEventParams{
+	if _, err := s.queries.CreateStorefrontOrderEvent(ctx, db.CreateStorefrontOrderEventParams{
 		WorkspaceID:     ws,
 		OrderID:         orderID,
 		EventType:       "order_collected",
@@ -554,7 +563,9 @@ func (s *Service) CollectStorefrontOrder(ctx context.Context, ws, user, orderID 
 		ActorUserID:     pgtype.Int8{Int64: user, Valid: user > 0},
 		CustomerVisible: true,
 		Message:         optionalPgText("Order handed over and collected at pickup."),
-	})
+	}); err != nil {
+		return MerchantOrderView{}, err
+	}
 	return s.GetMerchantOrder(ctx, ws, view.ID)
 }
 
@@ -886,7 +897,11 @@ func (s *Service) FulfilStorefrontOrder(ctx context.Context, ws, user, orderID i
 				}
 			} else {
 				remRes := res.Quantity.Sub(fulfilQty)
-				if _, err := tx.Exec(ctx, `UPDATE stock_reservations SET quantity=$3, updated_at=now() WHERE workspace_id=$1 AND id=$2`, ws, res.ID, remRes); err != nil {
+				if err := q.UpdateStockReservationQuantity(ctx, db.UpdateStockReservationQuantityParams{
+					WorkspaceID: ws,
+					ID:          res.ID,
+					Quantity:    remRes,
+				}); err != nil {
 					return MerchantOrderView{}, err
 				}
 			}
@@ -968,7 +983,13 @@ func (s *Service) FulfilStorefrontOrder(ctx context.Context, ws, user, orderID i
 		nextFulfilmentStatus = "fulfilled"
 		nextCommercialStatus = "completed"
 	}
-	if _, err := tx.Exec(ctx, `UPDATE storefront_orders SET fulfilment_status=$2, commercial_status=$3, version=version+1, updated_at=now() WHERE id=$1`, o.ID, nextFulfilmentStatus, nextCommercialStatus); err != nil {
+	updated, err := q.UpdateStorefrontOrderFulfilmentResult(ctx, db.UpdateStorefrontOrderFulfilmentResultParams{
+		WorkspaceID:      ws,
+		ID:               o.ID,
+		FulfilmentStatus: nextFulfilmentStatus,
+		CommercialStatus: nextCommercialStatus,
+	})
+	if err != nil {
 		return MerchantOrderView{}, err
 	}
 	actorType := "merchant"
@@ -992,10 +1013,6 @@ func (s *Service) FulfilStorefrontOrder(ctx context.Context, ws, user, orderID i
 		EventType:    "order_fulfilled",
 	})
 
-	updated, err := q.GetStorefrontOrderByID(ctx, db.GetStorefrontOrderByIDParams{WorkspaceID: ws, ID: o.ID})
-	if err != nil {
-		return MerchantOrderView{}, err
-	}
 	if err := tx.Commit(ctx); err != nil {
 		return MerchantOrderView{}, err
 	}
@@ -1052,12 +1069,15 @@ func (s *Service) DeclineOrCancelStorefrontOrder(ctx context.Context, ws, user, 
 			ProductID:   res.ProductID,
 			VariantID:   res.VariantID,
 		})
+		if bErr != nil && !errors.Is(bErr, pgx.ErrNoRows) {
+			return MerchantOrderView{}, bErr
+		}
 		if bErr == nil {
 			newRes := bal.ReservedQuantity.Sub(res.Quantity)
 			if newRes.IsNegative() {
 				newRes = decimal.Zero
 			}
-			_, _ = q.UpdateInventoryBalanceQuantities(ctx, db.UpdateInventoryBalanceQuantitiesParams{
+			if _, err := q.UpdateInventoryBalanceQuantities(ctx, db.UpdateInventoryBalanceQuantitiesParams{
 				WorkspaceID:       ws,
 				LocationID:        res.LocationID,
 				ProductID:         res.ProductID,
@@ -1066,11 +1086,15 @@ func (s *Service) DeclineOrCancelStorefrontOrder(ctx context.Context, ws, user, 
 				ReservedQuantity:  newRes,
 				InTransitQuantity: bal.InTransitQuantity,
 				ValueOnHandMinor:  bal.ValueOnHandMinor,
-			})
+			}); err != nil {
+				return MerchantOrderView{}, err
+			}
 		}
-		_, _ = q.UpdateStockReservationStatus(ctx, db.UpdateStockReservationStatusParams{
+		if _, err := q.UpdateStockReservationStatus(ctx, db.UpdateStockReservationStatusParams{
 			WorkspaceID: ws, ID: res.ID, Status: "released",
-		})
+		}); err != nil {
+			return MerchantOrderView{}, err
+		}
 	}
 
 	nextStatus := "cancelled"
@@ -1079,7 +1103,13 @@ func (s *Service) DeclineOrCancelStorefrontOrder(ctx context.Context, ws, user, 
 		nextStatus = "declined"
 		evAnalytic = "order_declined"
 	}
-	if _, err := tx.Exec(ctx, `UPDATE storefront_orders SET commercial_status=$2, fulfilment_status='unreserved', decline_or_cancel_reason=$3, version=version+1, updated_at=now() WHERE id=$1`, o.ID, nextStatus, cleanReason); err != nil {
+	updated, err := q.UpdateStorefrontOrderCancelledOrDeclined(ctx, db.UpdateStorefrontOrderCancelledOrDeclinedParams{
+		WorkspaceID:           ws,
+		ID:                    o.ID,
+		CommercialStatus:      nextStatus,
+		DeclineOrCancelReason: optionalPgText(cleanReason),
+	})
+	if err != nil {
 		return MerchantOrderView{}, err
 	}
 	actorType := "merchant"
@@ -1102,10 +1132,6 @@ func (s *Service) DeclineOrCancelStorefrontOrder(ctx context.Context, ws, user, 
 		StorefrontID: o.StorefrontID,
 		EventType:    evAnalytic,
 	})
-	updated, err := q.GetStorefrontOrderByID(ctx, db.GetStorefrontOrderByIDParams{WorkspaceID: ws, ID: o.ID})
-	if err != nil {
-		return MerchantOrderView{}, err
-	}
 	if err := tx.Commit(ctx); err != nil {
 		return MerchantOrderView{}, err
 	}
@@ -1142,7 +1168,11 @@ func (s *Service) LinkOrCreateOrderCustomer(ctx context.Context, ws, orderID, co
 		}
 		targetID = created.ID
 	}
-	if _, err := s.pool.Exec(ctx, `UPDATE storefront_orders SET customer_id=$2, updated_at=now() WHERE workspace_id=$1 AND id=$3`, ws, targetID, o.ID); err != nil {
+	if err := s.queries.UpdateStorefrontOrderCustomerID(ctx, db.UpdateStorefrontOrderCustomerIDParams{
+		WorkspaceID: ws,
+		ID:          o.ID,
+		CustomerID:  pgtype.Int8{Int64: targetID, Valid: true},
+	}); err != nil {
 		return MerchantOrderView{}, err
 	}
 	updated, err := s.queries.GetStorefrontOrderByID(ctx, db.GetStorefrontOrderByIDParams{WorkspaceID: ws, ID: o.ID})
@@ -1221,8 +1251,15 @@ func (s *Service) ConvertOrderToInvoice(ctx context.Context, ws, user, orderID i
 	if !asProforma && payStatus == "not_requested" {
 		payStatus = "unpaid"
 	}
-	_, _ = s.pool.Exec(ctx, `UPDATE storefront_orders SET linked_invoice_id=$2, payment_status=$3, updated_at=now() WHERE workspace_id=$1 AND id=$4`, ws, inv.Invoice.ID, payStatus, o.ID)
-	_, _ = s.queries.CreateStorefrontOrderEvent(ctx, db.CreateStorefrontOrderEventParams{
+	if err := s.queries.UpdateStorefrontOrderLinkedInvoice(ctx, db.UpdateStorefrontOrderLinkedInvoiceParams{
+		WorkspaceID:     ws,
+		ID:              o.ID,
+		LinkedInvoiceID: pgtype.Int8{Int64: inv.Invoice.ID, Valid: true},
+		PaymentStatus:   payStatus,
+	}); err != nil {
+		return MerchantOrderView{}, err
+	}
+	if _, err := s.queries.CreateStorefrontOrderEvent(ctx, db.CreateStorefrontOrderEventParams{
 		WorkspaceID:     ws,
 		OrderID:         o.ID,
 		EventType:       "linked_" + docKind,
@@ -1230,7 +1267,9 @@ func (s *Service) ConvertOrderToInvoice(ctx context.Context, ws, user, orderID i
 		ActorUserID:     pgtype.Int8{Int64: user, Valid: true},
 		CustomerVisible: true,
 		Message:         pgtype.Text{String: fmt.Sprintf("Linked %s #%d", docKind, inv.Invoice.ID), Valid: true},
-	})
+	}); err != nil {
+		return MerchantOrderView{}, err
+	}
 	updated, err := s.queries.GetStorefrontOrderByID(ctx, db.GetStorefrontOrderByIDParams{WorkspaceID: ws, ID: o.ID})
 	if err != nil {
 		return MerchantOrderView{}, err
@@ -1345,8 +1384,11 @@ func (s *Service) ReturnStorefrontOrder(ctx context.Context, ws, user, orderID i
 		if retQty.GreaterThan(l.FulfilledQuantity) {
 			return MerchantOrderView{}, fmt.Errorf("return quantity exceeds fulfilled quantity on line %s", l.TitleSnapshot)
 		}
-		var prodKind string
-		if err := tx.QueryRow(ctx, `SELECT kind FROM products WHERE workspace_id=$1 AND id=$2`, ws, l.ProductID).Scan(&prodKind); err != nil {
+		prodKind, err := q.GetProductKindByID(ctx, db.GetProductKindByIDParams{
+			WorkspaceID: ws,
+			ID:          l.ProductID,
+		})
+		if err != nil {
 			return MerchantOrderView{}, err
 		}
 		if prodKind == "stock_tracked" {
@@ -1354,6 +1396,7 @@ func (s *Service) ReturnStorefrontOrder(ctx context.Context, ws, user, orderID i
 				WorkspaceID: ws,
 				LocationID:  o.OutletID.Int64,
 				ProductID:   l.ProductID,
+				VariantID:   l.VariantID,
 			})
 			if err != nil {
 				return MerchantOrderView{}, err
@@ -1367,6 +1410,7 @@ func (s *Service) ReturnStorefrontOrder(ctx context.Context, ws, user, orderID i
 				WorkspaceID:       ws,
 				LocationID:        o.OutletID.Int64,
 				ProductID:         l.ProductID,
+				VariantID:         l.VariantID,
 				QuantityOnHand:    bal.QuantityOnHand.Add(retQty),
 				ReservedQuantity:  bal.ReservedQuantity,
 				InTransitQuantity: bal.InTransitQuantity,
@@ -1389,7 +1433,11 @@ func (s *Service) ReturnStorefrontOrder(ctx context.Context, ws, user, orderID i
 				return MerchantOrderView{}, err
 			}
 		}
-		if _, err := tx.Exec(ctx, `UPDATE storefront_order_lines SET fulfilled_quantity = fulfilled_quantity - $2 WHERE id = $1`, l.ID, retQty); err != nil {
+		if err := q.DecrementStorefrontOrderLineFulfilled(ctx, db.DecrementStorefrontOrderLineFulfilledParams{
+			WorkspaceID:       ws,
+			ID:                l.ID,
+			FulfilledQuantity: retQty,
+		}); err != nil {
 			return MerchantOrderView{}, err
 		}
 	}
@@ -1418,50 +1466,31 @@ func (s *Service) ReturnStorefrontOrder(ctx context.Context, ws, user, orderID i
 }
 
 func (s *Service) ExpireStaleStorefrontReservations(ctx context.Context) (int, error) {
-	rows, err := s.pool.Query(ctx, `
-		SELECT workspace_id, id
-		FROM storefront_orders
-		WHERE commercial_status IN ('confirmed', 'request_received')
-		  AND fulfilment_status = 'reserved'
-		  AND payment_status IN ('unpaid', 'not_requested')
-		  AND reservation_expires_at IS NOT NULL
-		  AND reservation_expires_at < now()
-		ORDER BY reservation_expires_at ASC
-		LIMIT 100
-	`)
+	targets, err := s.queries.ListExpiredStorefrontOrders(ctx)
 	if err != nil {
 		return 0, err
 	}
-	type target struct {
-		ws int64
-		id int64
-	}
-	var targets []target
-	for rows.Next() {
-		var t target
-		if err := rows.Scan(&t.ws, &t.id); err == nil {
-			targets = append(targets, t)
-		}
-	}
-	rows.Close()
 
 	expired := 0
 	for _, t := range targets {
-		if _, err := s.DeclineOrCancelStorefrontOrder(ctx, t.ws, 0, t.id, "cancel", "Payment hold expired"); err == nil {
+		if _, err := s.DeclineOrCancelStorefrontOrder(ctx, t.WorkspaceID, 0, t.ID, "cancel", "Payment hold expired"); err == nil {
 			expired++
-			_, _ = s.pool.Exec(ctx, `
-				UPDATE storefront_payment_attempts
-				SET status = 'expired', updated_at = now()
-				WHERE workspace_id = $1 AND order_id = $2 AND status = 'pending'
-			`, t.ws, t.id)
-			_, _ = s.queries.CreateStorefrontOrderEvent(ctx, db.CreateStorefrontOrderEventParams{
-				WorkspaceID:     t.ws,
-				OrderID:         t.id,
+			if err := s.queries.ExpirePendingStorefrontPaymentAttempts(ctx, db.ExpirePendingStorefrontPaymentAttemptsParams{
+				WorkspaceID: t.WorkspaceID,
+				OrderID:     t.ID,
+			}); err != nil {
+				return expired, err
+			}
+			if _, err := s.queries.CreateStorefrontOrderEvent(ctx, db.CreateStorefrontOrderEventParams{
+				WorkspaceID:     t.WorkspaceID,
+				OrderID:         t.ID,
 				EventType:       "hold_expired",
 				ActorType:       "system",
 				CustomerVisible: true,
 				Message:         optionalPgText("Checkout stock hold expired. Order cancelled."),
-			})
+			}); err != nil {
+				return expired, err
+			}
 		}
 	}
 	return expired, nil

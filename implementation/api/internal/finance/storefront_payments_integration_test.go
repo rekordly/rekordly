@@ -1287,13 +1287,13 @@ func TestStorefrontSquadProviderWebhookAndUnsupportedMethodHiding(t *testing.T) 
 	router.ServeHTTP(wBad, reqBad)
 	require.Equal(t, http.StatusUnauthorized, wBad.Code)
 
-	// 2. Valid signature but amount mismatch -> rejected (400), order stays unpaid
-	mismatchPayload := []byte(fmt.Sprintf(`{"Event":"charge_successful","TransactionRef":"%s","Body":{"transaction_ref":"%s","amount":%d,"transaction_status":"Success"}}`, attemptRef, attemptRef, attemptAmt-1000))
-	reqMismatch := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/payments/squad", bytes.NewReader(mismatchPayload))
-	reqMismatch.Header.Set("x-squad-encrypted-body", signSquad(mismatchPayload))
-	wMismatch := httptest.NewRecorder()
-	router.ServeHTTP(wMismatch, reqMismatch)
-	require.Equal(t, http.StatusBadRequest, wMismatch.Code)
+	// 2. Valid signature for failed charge first -> 200, attempt rejected, order stays unpaid (and does not block subsequent charge_successful on same ref)
+	failedPayload := []byte(fmt.Sprintf(`{"Event":"charge_failed","TransactionRef":"%s","Body":{"transaction_ref":"%s","amount":%d,"transaction_status":"Failed"}}`, attemptRef, attemptRef, attemptAmt))
+	reqFailed := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/payments/squad", bytes.NewReader(failedPayload))
+	reqFailed.Header.Set("x-squad-encrypted-body", signSquad(failedPayload))
+	wFailed := httptest.NewRecorder()
+	router.ServeHTTP(wFailed, reqFailed)
+	require.Equal(t, http.StatusOK, wFailed.Code)
 
 	// 3. Valid Squad webhook with exact amount -> 200, order paid, sale + balanced ledger created
 	goodPayload := []byte(fmt.Sprintf(`{"Event":"charge_successful","TransactionRef":"%s","Body":{"transaction_ref":"%s","amount":%d,"merchant_amount":%d,"transaction_status":"Success"}}`, attemptRef, attemptRef, attemptAmt, attemptAmt-150))
@@ -1877,4 +1877,290 @@ func TestUnifiedPaystackWebhookAndOrderCommandRoutes(t *testing.T) {
 	okPrefixW := httptest.NewRecorder()
 	r.ServeHTTP(okPrefixW, okPrefixReq)
 	require.Equal(t, http.StatusOK, okPrefixW.Code)
+}
+
+func TestPaymentSafetyWebhookRollbackWrongAmountDuplicateLateAndCommission(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	ws, user := createTestWorkspace(t, pool, "b5-b12-safety")
+	wsOther, otherUser := createTestWorkspace(t, pool, "b5-b12-other")
+	q := db.New(pool)
+
+	var failOrderIDOnce int64
+	emailSpy := &spyEmailProvider{}
+	svc := finance.NewService(
+		pool,
+		finance.WithStorefrontPaymentProvider(&mockPaymentProvider{key: "paystack"}),
+		finance.WithPlatformCommissionPercent(5.0),
+		finance.WithEmailProvider(emailSpy, "http://localhost:3000/share"),
+		finance.WithBeforeMarkPaidCommitHook(func(ctx context.Context, orderID int64) error {
+			if failOrderIDOnce != 0 && orderID == failOrderIDOnce {
+				failOrderIDOnce = 0 // fail once, succeed on retry
+				return errors.New("simulated transient commit failure")
+			}
+			return nil
+		}),
+	)
+
+	outlet, err := svc.CreateOutlet(ctx, ws, user, finance.CreateOutletInput{
+		Name: "Safety Outlet", LocationType: "outlet", Address: "1 Safety Way, Lagos", IsDefault: true, IsPickupPoint: true,
+	})
+	require.NoError(t, err)
+
+	item, err := svc.CreateCatalogueItem(ctx, ws, user, finance.CreateCatalogueItemInput{
+		Name: "Tracked Camera", Kind: "stock_tracked", SellingPrice: "10000", Currency: "NGN",
+		IdempotencyKey: fmt.Sprintf("b5-item-%d", time.Now().UnixNano()),
+	})
+	require.NoError(t, err)
+	vars, err := svc.ListProductVariants(ctx, ws, item.ID)
+	require.NoError(t, err)
+	variantID := vars[0].ID
+
+	_, err = svc.CreateOpeningStock(ctx, ws, user, finance.CreateOpeningStockInput{
+		ProductID: item.ID, LocationID: outlet.ID, EffectiveOn: "2026-11-11",
+		Quantity: "20", UnitCost: "4000", Currency: "NGN", Reason: "B5 opening stock",
+		IdempotencyKey: fmt.Sprintf("b5-open-%d", time.Now().UnixNano()),
+	})
+	require.NoError(t, err)
+
+	slug := fmt.Sprintf("b5-store-%d", time.Now().UnixNano()%1000000)
+	_, err = svc.CreateStorefront(ctx, ws, user, finance.CreateStorefrontInput{
+		Name: "Safety Store", Slug: slug, DefaultOutletID: &outlet.ID, Currency: "NGN",
+	})
+	require.NoError(t, err)
+	_, err = svc.UpdateStorefrontSettings(ctx, ws, finance.UpdateStorefrontSettingsInput{
+		ContactPhone: "+2348099990000", ContactEmail: "safety@example.com", Address: "1 Safety Way",
+		DeliveryMethods: []string{"pickup"},
+	})
+	require.NoError(t, err)
+	sfProd, err := svc.UpsertStorefrontProduct(ctx, ws, variantID, finance.PublishCatalogueVariantInput{IsPublished: true})
+	require.NoError(t, err)
+	_, err = svc.SavePayoutAccount(ctx, ws, finance.SavePayoutAccountInput{
+		Provider: "paystack", BankCode: "058", AccountNumber: "0123456789", AccountName: "Safety Biz",
+	})
+	require.NoError(t, err)
+	_, err = svc.UpdateStorefrontPaymentSettings(ctx, ws, finance.UpdateStorefrontPaymentSettingsInput{
+		PaymentBankTransferEnabled:   sfBoolPtr(true),
+		PaymentCardEnabled:           sfBoolPtr(true),
+		PaymentManualTransferEnabled: sfBoolPtr(true),
+	})
+	require.NoError(t, err)
+	_, err = svc.PublishStorefront(ctx, ws, true)
+	require.NoError(t, err)
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	var actWS, actUser int64 = ws, user
+	h := finance.NewHandler(svc, func(c *gin.Context) {
+		c.Set(finance.ContextWorkspaceKey, finance.WorkspaceContext{
+			WorkspaceID: actWS,
+			UserID:      actUser,
+			Kind:        "business",
+			Permissions: []string{"orders.confirm", "orders.cancel", "orders.fulfil", "orders.view"},
+		})
+		c.Next()
+	})
+	h.RegisterRoutes(r.Group("/api/v1"))
+
+	newVAOrder := func(tag string, qty string) (int64, string, int64) {
+		conf, cErr := svc.SubmitGuestCheckout(ctx, slug, false, finance.GuestCheckoutInput{
+			ClientKey: "b5-cli-" + tag, CustomerName: "Buyer " + tag, CustomerEmail: tag + "@example.com", CustomerPhone: "+2348012345678",
+			DeliveryMethod: "pickup", PickupPointID: outlet.ID, PaymentMethod: "virtual_account", PolicyAcknowledged: true,
+			IdempotencyKey: fmt.Sprintf("b5-ord-%s-%d", tag, time.Now().UnixNano()),
+			Lines:          []finance.CartLineInput{{StorefrontProductID: sfProd.ID, Quantity: qty}},
+		})
+		require.NoError(t, cErr)
+		var ordID, amt int64
+		var ref string
+		require.NoError(t, pool.QueryRow(ctx, `
+			SELECT o.id, a.reference, a.amount_minor
+			FROM storefront_orders o
+			JOIN storefront_payment_attempts a ON a.order_id = o.id
+			WHERE o.workspace_id = $1 AND o.order_reference = $2
+		`, ws, conf.OrderReference).Scan(&ordID, &ref, &amt))
+		return ordID, ref, amt
+	}
+
+	postPaystackWH := func(event string, ref string, amount, fees int64) *httptest.ResponseRecorder {
+		payload := []byte(fmt.Sprintf(`{"event":%q,"data":{"reference":%q,"amount":%d,"fees":%d,"status":"success"}}`, event, ref, amount, fees))
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/paystack", bytes.NewReader(payload))
+		req.Header.Set("x-paystack-signature", signMockWebhook(payload))
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		return w
+	}
+
+	// --- B5 + B11 + B12: Webhook failure rolls back payment_webhook_events; retry succeeds & posts 5% commission balanced ledger + formatted receipt ---
+	ord1, ref1, amt1 := newVAOrder("rollback", "1")
+	require.Equal(t, int64(1000000), amt1) // NGN 10,000.00
+	failOrderIDOnce = ord1
+
+	wFail := postPaystackWH("charge.success", ref1, amt1, 15000)
+	require.Equal(t, http.StatusBadRequest, wFail.Code, "first attempt should fail via simulated commit hook")
+
+	var whCount int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM payment_webhook_events WHERE provider = 'paystack' AND event_id LIKE '%' || $1`, ref1).Scan(&whCount))
+	require.Equal(t, 0, whCount, "failed webhook must roll back payment_webhook_events row so retry works")
+
+	// Provider retry succeeds!
+	wRetry := postPaystackWH("charge.success", ref1, amt1, 15000)
+	require.Equal(t, http.StatusOK, wRetry.Code, wRetry.Body.String())
+
+	var paySt1 string
+	var saleID1 *int64
+	require.NoError(t, pool.QueryRow(ctx, `SELECT payment_status, linked_sale_id FROM storefront_orders WHERE id = $1`, ord1).Scan(&paySt1, &saleID1))
+	require.Equal(t, "paid", paySt1)
+	require.NotNil(t, saleID1)
+
+	// B11: Verify 5% commission line (50000 kobo) and debits == credits (1000000 kobo)
+	var totDeb, totCred, commDebit, clearingDebit int64
+	require.NoError(t, pool.QueryRow(ctx, `
+		SELECT COALESCE(sum(ll.debit_minor), 0),
+		       COALESCE(sum(ll.credit_minor), 0),
+		       COALESCE(sum(ll.debit_minor) FILTER (WHERE ll.description = 'Rekordly commission'), 0),
+		       COALESCE(sum(ll.debit_minor) FILTER (WHERE ll.account_class = 'asset'), 0)
+		FROM ledger_lines ll
+		JOIN ledger_entries le ON le.id = ll.ledger_entry_id
+		WHERE le.workspace_id = $1 AND le.source_type = 'sale' AND le.source_id = $2
+	`, ws, *saleID1).Scan(&totDeb, &totCred, &commDebit, &clearingDebit))
+	require.Equal(t, int64(1000000), totDeb)
+	require.Equal(t, int64(1000000), totCred)
+	require.Equal(t, int64(50000), commDebit, "5% Rekordly commission must be posted as an expense line")
+	require.Equal(t, int64(935000), clearingDebit, "clearing receives amount - fee - commission")
+
+	// B12: Verify receipt email formatted with FormatMinorToMajor
+	require.GreaterOrEqual(t, emailSpy.count(), 1)
+	require.Contains(t, emailSpy.last().HTMLBody, "NGN 10000.00")
+
+	// --- B6: bank.transfer.rejected followed by charge.success on the SAME reference ---
+	ord2, ref2, amt2 := newVAOrder("rej-then-ok", "1")
+	wRej := postPaystackWH("bank.transfer.rejected", ref2, amt2, 0)
+	require.Equal(t, http.StatusOK, wRej.Code)
+	var attSt2 string
+	require.NoError(t, pool.QueryRow(ctx, `SELECT status FROM storefront_payment_attempts WHERE reference = $1`, ref2).Scan(&attSt2))
+	require.Equal(t, "rejected", attSt2)
+
+	wSuccAfterRej := postPaystackWH("charge.success", ref2, amt2, 15000)
+	require.Equal(t, http.StatusOK, wSuccAfterRej.Code)
+	var ordSt2 string
+	require.NoError(t, pool.QueryRow(ctx, `SELECT payment_status FROM storefront_orders WHERE id = $1`, ord2).Scan(&ordSt2))
+	require.Equal(t, "paid", ordSt2, "charge.success after bank.transfer.rejected on same reference must be processed")
+
+	// --- B7: Wrong amount by bank transfer -> HTTP 200, paid_wrong_amount, no revenue, paid_needs_attention, merchant resolve ---
+	ord3, ref3, amt3 := newVAOrder("wrong-amt-accept", "1")
+	wWrong := postPaystackWH("charge.success", ref3, amt3-250000, 10000) // paid ₦7,500 instead of ₦10,000
+	require.Equal(t, http.StatusOK, wWrong.Code, "wrong amount must return 200 so provider does not retry forever")
+
+	var attSt3 string
+	var recvAmt3 *int64
+	require.NoError(t, pool.QueryRow(ctx, `SELECT status, received_amount_minor FROM storefront_payment_attempts WHERE reference = $1`, ref3).Scan(&attSt3, &recvAmt3))
+	require.Equal(t, "paid_wrong_amount", attSt3)
+	require.NotNil(t, recvAmt3)
+	require.Equal(t, int64(750000), *recvAmt3)
+
+	mOrd3, err := svc.GetMerchantOrder(ctx, ws, ord3)
+	require.NoError(t, err)
+	require.Equal(t, "paid_needs_attention", mOrd3.PaymentStatus)
+	require.Nil(t, mOrd3.LinkedSaleID, "wrong amount must not post a sale before merchant resolution")
+	require.NotNil(t, mOrd3.PaymentAttentionReason)
+	require.Equal(t, "wrong_amount", *mOrd3.PaymentAttentionReason)
+	require.NotNil(t, mOrd3.PaymentAttentionMessage)
+	require.Contains(t, *mOrd3.PaymentAttentionMessage, "Customer paid ₦7500.00, order is ₦10000.00")
+
+	// Cross-workspace isolation on resolve-payment-attention -> 404
+	actWS, actUser = wsOther, otherUser
+	crossResReq := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/orders/%d/commands/resolve-payment-attention", ord3), bytes.NewReader([]byte(`{"action":"accept_as_paid"}`)))
+	crossResReq.Header.Set("Content-Type", "application/json")
+	crossResW := httptest.NewRecorder()
+	r.ServeHTTP(crossResW, crossResReq)
+	require.Equal(t, http.StatusNotFound, crossResW.Code)
+	actWS, actUser = ws, user
+
+	// Merchant accepts wrong-amount payment as paid -> posts balanced sale for received amount
+	okResReq := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/orders/%d/commands/resolve-payment-attention", ord3), bytes.NewReader([]byte(`{"action":"accept_as_paid","note":"Customer granted discount"}`)))
+	okResReq.Header.Set("Content-Type", "application/json")
+	okResW := httptest.NewRecorder()
+	r.ServeHTTP(okResW, okResReq)
+	require.Equal(t, http.StatusOK, okResW.Code, okResW.Body.String())
+
+	mOrd3Resolved, err := svc.GetMerchantOrder(ctx, ws, ord3)
+	require.NoError(t, err)
+	require.Equal(t, "paid", mOrd3Resolved.PaymentStatus)
+	require.NotNil(t, mOrd3Resolved.LinkedSaleID)
+	require.Nil(t, mOrd3Resolved.PaymentAttentionReason)
+
+	// Second wrong-amount order resolved via cancel_with_refund -> releases stock & marks cancelled/refunded
+	ord3Cancel, ref3Cancel, amt3Cancel := newVAOrder("wrong-amt-cancel", "1")
+	require.Equal(t, http.StatusOK, postPaystackWH("charge.success", ref3Cancel, amt3Cancel-500000, 5000).Code)
+	cancelResView, err := svc.ResolveStorefrontOrderPaymentAttention(ctx, ws, user, ord3Cancel, finance.ResolvePaymentAttentionInput{
+		Action: "cancel_with_refund",
+		Note:   "Refunded ₦5,000 to customer account",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "cancelled", cancelResView.CommercialStatus)
+	require.Equal(t, "refunded", cancelResView.PaymentStatus)
+	require.Equal(t, "unreserved", cancelResView.FulfilmentStatus)
+
+	// --- B8: Paid twice (duplicate payment by second attempt) -> flagged duplicate_payment, revenue posted ONCE, ledger balances ---
+	ord4, ref4A, amt4 := newVAOrder("dup-pay", "1")
+	require.Equal(t, http.StatusOK, postPaystackWH("charge.success", ref4A, amt4, 15000).Code)
+
+	ref4B := fmt.Sprintf("att_dup_second_%d", time.Now().UnixNano())
+	_, err = q.CreateStorefrontPaymentAttempt(ctx, db.CreateStorefrontPaymentAttemptParams{
+		WorkspaceID:     ws,
+		OrderID:         ord4,
+		Provider:        "paystack",
+		Method:          "card",
+		Reference:       ref4B,
+		AmountMinor:     amt4,
+		FeeMinor:        15000,
+		CommissionMinor: 50000,
+		ExpiresAt:       pgtype.Timestamptz{Time: time.Now().UTC().Add(15 * time.Minute), Valid: true},
+		Status:          "pending",
+	})
+	require.NoError(t, err)
+
+	wDup := postPaystackWH("charge.success", ref4B, amt4, 15000)
+	require.Equal(t, http.StatusOK, wDup.Code, wDup.Body.String())
+
+	var att4BStatus string
+	require.NoError(t, pool.QueryRow(ctx, `SELECT status FROM storefront_payment_attempts WHERE reference = $1`, ref4B).Scan(&att4BStatus))
+	require.Equal(t, "duplicate_payment", att4BStatus)
+
+	var saleCount4 int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM sales WHERE workspace_id = $1 AND storefront_order_id = $2`, ws, ord4).Scan(&saleCount4))
+	require.Equal(t, 1, saleCount4, "duplicate payment must never create a second Sale or post revenue twice")
+
+	mOrd4, err := svc.GetMerchantOrder(ctx, ws, ord4)
+	require.NoError(t, err)
+	require.Equal(t, "paid_needs_attention", mOrd4.PaymentStatus)
+	require.NotNil(t, mOrd4.PaymentAttentionReason)
+	require.Equal(t, "duplicate_payment", *mOrd4.PaymentAttentionReason)
+	require.NotNil(t, mOrd4.PaymentAttentionMessage)
+	require.Equal(t, "Paid twice: refund one", *mOrd4.PaymentAttentionMessage)
+
+	// --- B9: Late payment arriving AFTER reservation_expires_at but BEFORE expiry job runs must NOT double-reserve ---
+	var resBefore decimal.Decimal
+	require.NoError(t, pool.QueryRow(ctx, `SELECT reserved_quantity FROM inventory_balances WHERE workspace_id = $1 AND location_id = $2 AND product_id = $3 AND variant_id = $4`, ws, outlet.ID, item.ID, variantID).Scan(&resBefore))
+
+	ord5, ref5, amt5 := newVAOrder("late-active-hold", "2")
+
+	var resDuringHold decimal.Decimal
+	require.NoError(t, pool.QueryRow(ctx, `SELECT reserved_quantity FROM inventory_balances WHERE workspace_id = $1 AND location_id = $2 AND product_id = $3 AND variant_id = $4`, ws, outlet.ID, item.ID, variantID).Scan(&resDuringHold))
+	require.True(t, resBefore.Add(decimal.NewFromInt(2)).Equal(resDuringHold), "checkout must reserve 2 units")
+
+	// Backdate reservation_expires_at into the past WITHOUT running ExpireStaleStorefrontReservations (hold is still 'active')
+	_, err = pool.Exec(ctx, `UPDATE storefront_orders SET reservation_expires_at = now() - interval '20 minutes' WHERE id = $1`, ord5)
+	require.NoError(t, err)
+
+	wLateActive := postPaystackWH("charge.success", ref5, amt5, 15000)
+	require.Equal(t, http.StatusOK, wLateActive.Code, wLateActive.Body.String())
+
+	var resAfterLatePaid decimal.Decimal
+	require.NoError(t, pool.QueryRow(ctx, `SELECT reserved_quantity FROM inventory_balances WHERE workspace_id = $1 AND location_id = $2 AND product_id = $3 AND variant_id = $4`, ws, outlet.ID, item.ID, variantID).Scan(&resAfterLatePaid))
+	require.True(t, resDuringHold.Equal(resAfterLatePaid), "late payment on still-active hold must make hold firm and NOT double reserved_quantity")
+
+	var firmExp *time.Time
+	require.NoError(t, pool.QueryRow(ctx, `SELECT expires_at FROM stock_reservations WHERE workspace_id = $1 AND order_id = $2`, ws, ord5).Scan(&firmExp))
+	require.Nil(t, firmExp, "active hold must become firm (expires_at = NULL)")
 }
