@@ -2164,3 +2164,222 @@ func TestPaymentSafetyWebhookRollbackWrongAmountDuplicateLateAndCommission(t *te
 	require.NoError(t, pool.QueryRow(ctx, `SELECT expires_at FROM stock_reservations WHERE workspace_id = $1 AND order_id = $2`, ws, ord5).Scan(&firmExp))
 	require.Nil(t, firmExp, "active hold must become firm (expires_at = NULL)")
 }
+
+func TestPayOnDeliveryConfirmSurvivesExpiryPickupWindowAndVariantsConfirm(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	ws, user := createTestWorkspace(t, pool, "c13-c14-pod-variants")
+
+	svc := finance.NewService(pool)
+
+	outlet1, err := svc.CreateOutlet(ctx, ws, user, finance.CreateOutletInput{
+		Name: "Ikeja Outlet", LocationType: "outlet", Address: "10 Ikeja Way", IsDefault: true, IsPickupPoint: true,
+	})
+	require.NoError(t, err)
+	outlet2, err := svc.CreateOutlet(ctx, ws, user, finance.CreateOutletInput{
+		Name: "Lekki Outlet", LocationType: "outlet", Address: "20 Lekki Way", IsDefault: false, IsPickupPoint: true,
+	})
+	require.NoError(t, err)
+
+	// Product with 2 variants across 2 outlets
+	var prodID, varA, varB int64
+	require.NoError(t, pool.QueryRow(ctx, `
+		INSERT INTO products (workspace_id, name, kind, unit_name, status, show_on_store, idempotency_key)
+		VALUES ($1, 'Designer Sneaker', 'stock_tracked', 'pair', 'active', true, $2)
+		RETURNING id
+	`, ws, fmt.Sprintf("c13-prod-%d", time.Now().UnixNano())).Scan(&prodID))
+	require.NoError(t, pool.QueryRow(ctx, `
+		INSERT INTO product_variants (workspace_id, product_id, name, is_default, is_active, currency, currency_exponent, selling_price_minor)
+		VALUES ($1, $2, 'Size 41', true, true, 'NGN', 2, 3000000)
+		RETURNING id
+	`, ws, prodID).Scan(&varA))
+	require.NoError(t, pool.QueryRow(ctx, `
+		INSERT INTO product_variants (workspace_id, product_id, name, is_default, is_active, currency, currency_exponent, selling_price_minor)
+		VALUES ($1, $2, 'Size 43', false, true, 'NGN', 2, 3200000)
+		RETURNING id
+	`, ws, prodID).Scan(&varB))
+
+	// Stock balances:
+	// Outlet 1: VarA = 5, VarB = 5
+	// Outlet 2: VarA = 0, VarB = 4
+	_, err = pool.Exec(ctx, `
+		INSERT INTO inventory_balances (workspace_id, location_id, product_id, variant_id, quantity_on_hand, reserved_quantity, value_on_hand_minor)
+		VALUES
+			($1, $2, $4, $5, 5, 0, 5000000),
+			($1, $2, $4, $6, 5, 0, 5000000),
+			($1, $3, $4, $5, 0, 0, 0),
+			($1, $3, $4, $6, 4, 0, 4000000)
+	`, ws, outlet1.ID, outlet2.ID, prodID, varA, varB)
+	require.NoError(t, err)
+
+	slug := fmt.Sprintf("pod-var-store-%d", time.Now().UnixNano()%1000000)
+	_, err = svc.CreateStorefront(ctx, ws, user, finance.CreateStorefrontInput{
+		Name: "POD & Variants Store", Slug: slug, DefaultOutletID: &outlet1.ID, Currency: "NGN",
+	})
+	require.NoError(t, err)
+	_, err = svc.UpdateStorefrontSettings(ctx, ws, finance.UpdateStorefrontSettingsInput{
+		ContactPhone: "+2348055556666", ContactEmail: "pod@example.com", Address: "10 Ikeja Way",
+		DeliveryMethods: []string{"merchant_delivery", "pickup"},
+	})
+	require.NoError(t, err)
+	_, err = svc.UpdateStorefrontPaymentSettings(ctx, ws, finance.UpdateStorefrontPaymentSettingsInput{
+		PaymentCodEnabled:            sfBoolPtr(true),
+		PaymentManualTransferEnabled: sfBoolPtr(true),
+	})
+	require.NoError(t, err)
+	sfProdA, err := svc.UpsertStorefrontProduct(ctx, ws, varA, finance.PublishCatalogueVariantInput{IsPublished: true})
+	require.NoError(t, err)
+	sfProdB, err := svc.UpsertStorefrontProduct(ctx, ws, varB, finance.PublishCatalogueVariantInput{IsPublished: true})
+	require.NoError(t, err)
+	_, err = svc.PublishStorefront(ctx, ws, true)
+	require.NoError(t, err)
+
+	// --- C13: Pay-on-delivery checkout starts in request_received with 2h awaiting_confirmation hold ---
+	podConf1, err := svc.SubmitGuestCheckout(ctx, slug, false, finance.GuestCheckoutInput{
+		ClientKey: "pod-c1", CustomerName: "POD Confirmed Buyer", CustomerPhone: "+2348011112222", CustomerEmail: "pod1@example.com",
+		DeliveryMethod: "merchant_delivery", DeliveryAddress: "15 Allen Ave, Ikeja", PaymentMethod: "cod",
+		PolicyAcknowledged: true, IdempotencyKey: fmt.Sprintf("pod-1-%d", time.Now().UnixNano()),
+		Lines: []finance.CartLineInput{{StorefrontProductID: sfProdA.ID, Quantity: "1"}},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "request_received", podConf1.CommercialStatus, "POD delivery checkout must set commercial_status = request_received")
+	require.NotNil(t, podConf1.HoldType)
+	require.Equal(t, "awaiting_confirmation", *podConf1.HoldType)
+	require.NotNil(t, podConf1.HoldExpiresAt)
+
+	var podOrd1ID int64
+	require.NoError(t, pool.QueryRow(ctx, `SELECT id FROM storefront_orders WHERE workspace_id = $1 AND order_reference = $2`, ws, podConf1.OrderReference).Scan(&podOrd1ID))
+
+	// Check reserved_quantity on (outlet1, varA) is 1 right after checkout
+	var resOut1VarA decimal.Decimal
+	require.NoError(t, pool.QueryRow(ctx, `SELECT reserved_quantity FROM inventory_balances WHERE workspace_id = $1 AND location_id = $2 AND product_id = $3 AND variant_id = $4`, ws, outlet1.ID, prodID, varA).Scan(&resOut1VarA))
+	require.True(t, decimal.NewFromInt(1).Equal(resOut1VarA))
+
+	// Merchant confirms POD order 1 within 2h -> makes existing hold firm (clears expiry) without reserving again!
+	podDetail1, err := svc.GetMerchantOrder(ctx, ws, podOrd1ID)
+	require.NoError(t, err)
+	confirmedPod1, err := svc.ConfirmStorefrontOrder(ctx, ws, user, podOrd1ID, finance.ConfirmOrderInput{
+		ExpectedVersion: podDetail1.Version,
+		OutletID:        outlet1.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "confirmed", confirmedPod1.CommercialStatus)
+	require.Nil(t, confirmedPod1.ReservationExpiresAt, "confirming POD order must clear reservation_expires_at so expiry job will not cancel it")
+
+	require.NoError(t, pool.QueryRow(ctx, `SELECT reserved_quantity FROM inventory_balances WHERE workspace_id = $1 AND location_id = $2 AND product_id = $3 AND variant_id = $4`, ws, outlet1.ID, prodID, varA).Scan(&resOut1VarA))
+	require.True(t, decimal.NewFromInt(1).Equal(resOut1VarA), "ConfirmStorefrontOrder on order with checkout hold must NOT reserve a second time")
+
+	// Place a second POD order that is NOT confirmed by the merchant
+	podConf2, err := svc.SubmitGuestCheckout(ctx, slug, false, finance.GuestCheckoutInput{
+		ClientKey: "pod-c2", CustomerName: "POD Unconfirmed Buyer", CustomerPhone: "+2348011113333", CustomerEmail: "pod2@example.com",
+		DeliveryMethod: "merchant_delivery", DeliveryAddress: "22 Opebi Rd, Ikeja", PaymentMethod: "cod",
+		PolicyAcknowledged: true, IdempotencyKey: fmt.Sprintf("pod-2-%d", time.Now().UnixNano()),
+		Lines: []finance.CartLineInput{{StorefrontProductID: sfProdA.ID, Quantity: "1"}},
+	})
+	require.NoError(t, err)
+	var podOrd2ID int64
+	require.NoError(t, pool.QueryRow(ctx, `SELECT id FROM storefront_orders WHERE workspace_id = $1 AND order_reference = $2`, ws, podConf2.OrderReference).Scan(&podOrd2ID))
+
+	// Simulate 2+ hours passing on unconfirmed POD order 2 and run expiry sweep
+	_, err = pool.Exec(ctx, `UPDATE storefront_orders SET reservation_expires_at = now() - interval '5 minutes' WHERE id = $1`, podOrd2ID)
+	require.NoError(t, err)
+
+	_, err = svc.ExpireStaleStorefrontReservations(ctx)
+	require.NoError(t, err)
+
+	// Confirmed POD order 1 SURVIVES; unconfirmed POD order 2 is CANCELLED and its stock released
+	afterPod1, err := svc.GetMerchantOrder(ctx, ws, podOrd1ID)
+	require.NoError(t, err)
+	require.Equal(t, "confirmed", afterPod1.CommercialStatus, "confirmed POD order must survive expiry job")
+
+	afterPod2, err := svc.GetMerchantOrder(ctx, ws, podOrd2ID)
+	require.NoError(t, err)
+	require.Equal(t, "cancelled", afterPod2.CommercialStatus, "unconfirmed POD order must be cancelled after 2h")
+
+	require.NoError(t, pool.QueryRow(ctx, `SELECT reserved_quantity FROM inventory_balances WHERE workspace_id = $1 AND location_id = $2 AND product_id = $3 AND variant_id = $4`, ws, outlet1.ID, prodID, varA).Scan(&resOut1VarA))
+	require.True(t, decimal.NewFromInt(1).Equal(resOut1VarA), "unconfirmed POD order's reservation must be released while confirmed POD order's 1 unit stays reserved")
+
+	// --- C13: Pickup order keeps pickup window on Ready for pickup; manual Mark paid clears expiry ---
+	pickupConf, err := svc.SubmitGuestCheckout(ctx, slug, false, finance.GuestCheckoutInput{
+		ClientKey: "pk-c1", CustomerName: "Pickup Buyer", CustomerPhone: "+2348011114444", CustomerEmail: "pk@example.com",
+		DeliveryMethod: "pickup", PickupPointID: outlet1.ID, PaymentMethod: "cod",
+		PolicyAcknowledged: true, IdempotencyKey: fmt.Sprintf("pk-1-%d", time.Now().UnixNano()),
+		Lines: []finance.CartLineInput{{StorefrontProductID: sfProdA.ID, Quantity: "1"}},
+	})
+	require.NoError(t, err)
+	var pickupOrdID int64
+	require.NoError(t, pool.QueryRow(ctx, `SELECT id FROM storefront_orders WHERE workspace_id = $1 AND order_reference = $2`, ws, pickupConf.OrderReference).Scan(&pickupOrdID))
+
+	pkOrd, err := svc.GetMerchantOrder(ctx, ws, pickupOrdID)
+	require.NoError(t, err)
+	readyOrd, err := svc.ReadyForPickupStorefrontOrder(ctx, ws, user, pickupOrdID, pkOrd.Version)
+	require.NoError(t, err)
+	require.Equal(t, "packed", readyOrd.FulfilmentStatus)
+	require.NotNil(t, readyOrd.ReservationExpiresAt, "Ready for pickup must preserve the pickup window expiry until collected")
+
+	// Manual transfer order: Mark paid clears reservation_expires_at
+	manualConf, err := svc.SubmitGuestCheckout(ctx, slug, false, finance.GuestCheckoutInput{
+		ClientKey: "man-c1", CustomerName: "Manual Transfer Buyer", CustomerPhone: "+2348011115555", CustomerEmail: "man@example.com",
+		DeliveryMethod: "merchant_delivery", DeliveryAddress: "88 Victoria Island", PaymentMethod: "manual_transfer",
+		PolicyAcknowledged: true, IdempotencyKey: fmt.Sprintf("man-1-%d", time.Now().UnixNano()),
+		Lines: []finance.CartLineInput{{StorefrontProductID: sfProdA.ID, Quantity: "1"}},
+	})
+	require.NoError(t, err)
+	var manualOrdID, bankAccID int64
+	require.NoError(t, pool.QueryRow(ctx, `SELECT id FROM storefront_orders WHERE workspace_id = $1 AND order_reference = $2`, ws, manualConf.OrderReference).Scan(&manualOrdID))
+	require.NoError(t, pool.QueryRow(ctx, `INSERT INTO money_accounts (workspace_id, name, account_type, currency) VALUES ($1, 'Zenith Bank', 'bank', 'NGN') RETURNING id`, ws).Scan(&bankAccID))
+
+	require.NoError(t, svc.MarkStorefrontOrderPaidManual(ctx, ws, manualOrdID, bankAccID, "Bank transfer verified"))
+	manAfter, err := svc.GetMerchantOrder(ctx, ws, manualOrdID)
+	require.NoError(t, err)
+	require.Equal(t, "paid", manAfter.PaymentStatus)
+	require.Nil(t, manAfter.ReservationExpiresAt, "manual Mark paid must clear reservation_expires_at")
+
+	// --- C14: ConfirmStorefrontOrder respects per-variant stock at the selected outlet ---
+	// Create an unreserved request_received order for Variant B (Size 43), qty 2, and confirm it at Outlet 2
+	// Note: at Outlet 2, Variant A has 0 stock while Variant B has 4 stock!
+	var varOrderID int64
+	require.NoError(t, pool.QueryRow(ctx, `
+		INSERT INTO storefront_orders (
+			workspace_id, storefront_id, order_reference, public_token_hash, outlet_id,
+			commercial_status, fulfilment_status, payment_status, currency, currency_exponent,
+			subtotal_minor, tax_minor, delivery_fee_minor, total_minor, delivery_method,
+			customer_name, customer_phone, idempotency_key
+		) VALUES (
+			$1, (SELECT id FROM storefronts WHERE workspace_id = $1), 'ORD-VAR-C14', 'hash-var-c14', $2,
+			'request_received', 'unreserved', 'unpaid', 'NGN', 2,
+			6400000, 0, 0, 6400000, 'merchant_delivery',
+			'Variant Buyer', '+2348099991111', $3
+		) RETURNING id
+	`, ws, outlet2.ID, fmt.Sprintf("idemp-var-c14-%d", time.Now().UnixNano())).Scan(&varOrderID))
+
+	_, err = pool.Exec(ctx, `
+		INSERT INTO storefront_order_lines (
+			workspace_id, order_id, storefront_product_id, product_id, variant_id,
+			product_kind, title_snapshot, variant_snapshot, unit_name,
+			requested_quantity, confirmed_quantity, unit_price_minor, line_total_minor
+		) VALUES (
+			$1, $2, $3, $4, $5,
+			'stock_tracked', 'Designer Sneaker', 'Size 43', 'pair',
+			2, 2, 3200000, 6400000
+		)
+	`, ws, varOrderID, sfProdB.ID, prodID, varB)
+	require.NoError(t, err)
+
+	confirmedVarOrd, err := svc.ConfirmStorefrontOrder(ctx, ws, user, varOrderID, finance.ConfirmOrderInput{
+		ExpectedVersion: 1,
+		OutletID:        outlet2.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "confirmed", confirmedVarOrd.CommercialStatus)
+	require.Equal(t, "reserved", confirmedVarOrd.FulfilmentStatus)
+
+	var resOut2VarA, resOut2VarB, resOut1VarB decimal.Decimal
+	require.NoError(t, pool.QueryRow(ctx, `SELECT reserved_quantity FROM inventory_balances WHERE workspace_id = $1 AND location_id = $2 AND product_id = $3 AND variant_id = $4`, ws, outlet2.ID, prodID, varA).Scan(&resOut2VarA))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT reserved_quantity FROM inventory_balances WHERE workspace_id = $1 AND location_id = $2 AND product_id = $3 AND variant_id = $4`, ws, outlet2.ID, prodID, varB).Scan(&resOut2VarB))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT reserved_quantity FROM inventory_balances WHERE workspace_id = $1 AND location_id = $2 AND product_id = $3 AND variant_id = $4`, ws, outlet1.ID, prodID, varB).Scan(&resOut1VarB))
+
+	require.True(t, resOut2VarA.IsZero(), "Variant A at Outlet 2 must remain 0 reserved")
+	require.True(t, decimal.NewFromInt(2).Equal(resOut2VarB), "Variant B at Outlet 2 must have 2 reserved")
+	require.True(t, resOut1VarB.IsZero(), "Variant B at Outlet 1 must remain 0 reserved")
+}

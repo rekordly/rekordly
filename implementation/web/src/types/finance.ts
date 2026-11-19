@@ -1701,6 +1701,8 @@ export interface MerchantOrder {
   courier_status?: string | null;
   courier_booking_error?: string | null;
   courier_tracking_url?: string | null;
+  payment_attention_reason?: "wrong_amount" | "duplicate_payment" | "late_payment_out_of_stock" | null;
+  payment_attention_message?: string | null;
   created_at: string;
   lines?: MerchantOrderLine[];
   events?: PublicOrderEvent[];

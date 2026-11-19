@@ -1217,6 +1217,10 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 	if in.ShopperID > 0 {
 		shopperParam = pgtype.Int8{Int64: in.ShopperID, Valid: true}
 	}
+	commercialStatus := "confirmed"
+	if holdType == "awaiting_confirmation" {
+		commercialStatus = "request_received"
+	}
 	if _, err := q.UpdateStorefrontOrderCheckoutMeta(ctx, db.UpdateStorefrontOrderCheckoutMetaParams{
 		WorkspaceID:          proj.internalWS,
 		ID:                   order.ID,
@@ -1230,7 +1234,7 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 		CourierName:          courierName,
 		CourierServiceCode:   courierServiceCode,
 		CourierID:            courierID,
-		CommercialStatus:     "confirmed",
+		CommercialStatus:     commercialStatus,
 		FulfilmentStatus:     "reserved",
 		PaymentStatus:        "unpaid",
 		ShopperID:            shopperParam,
@@ -1451,11 +1455,13 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 		StorefrontID: proj.internalID,
 		EventType:    "checkout_submitted",
 	})
-	_ = q.InsertStorefrontAnalyticsEvent(ctx, db.InsertStorefrontAnalyticsEventParams{
-		WorkspaceID:  proj.internalWS,
-		StorefrontID: proj.internalID,
-		EventType:    "order_confirmed",
-	})
+	if commercialStatus == "confirmed" {
+		_ = q.InsertStorefrontAnalyticsEvent(ctx, db.InsertStorefrontAnalyticsEventParams{
+			WorkspaceID:  proj.internalWS,
+			StorefrontID: proj.internalID,
+			EventType:    "order_confirmed",
+		})
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return GuestCheckoutConfirmation{}, err
 	}
@@ -1474,16 +1480,20 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 	`, proj.internalWS, fmt.Sprintf("New order %s", orderRef), fmt.Sprintf("%s placed an order totaling %s %s", custName, FormatMinorToMajorMust(fmt.Sprint(finalTotal), int(order.CurrencyExponent)), order.Currency))
 
 	expStr := holdExpiresAt.Format(time.RFC3339)
+	confirmMsg := "Order placed successfully. Please complete payment before the hold expires."
+	if commercialStatus == "request_received" {
+		confirmMsg = "Order received. Waiting for the store to confirm before the hold expires."
+	}
 	return GuestCheckoutConfirmation{
 		OrderReference:     orderRef,
 		StatusToken:        rawStatusToken,
-		CommercialStatus:   "confirmed",
+		CommercialStatus:   commercialStatus,
 		FulfilmentStatus:   "reserved",
 		PaymentStatus:      "unpaid",
 		Currency:           order.Currency,
 		TotalMinor:         fmt.Sprint(finalTotal),
 		ProcessingFeeMinor: processingFeeMinor,
-		Message:            "Order placed successfully. Please complete payment before the hold expires.",
+		Message:            confirmMsg,
 		HoldType:           &holdType,
 		HoldExpiresAt:      &expStr,
 		VirtualAccount:     publicVA,

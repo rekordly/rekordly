@@ -2,7 +2,8 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { CheckCircle, Package, CreditCard, CurrencyDollar, Truck, User, Phone, EnvelopeSimple, MapPin, Receipt, Warning, QrCode } from "@phosphor-icons/react";
+import { CheckCircle, Package, CreditCard, CurrencyDollar, Truck, User, Phone, EnvelopeSimple, MapPin, Receipt, QrCode } from "@phosphor-icons/react";
+import { Alert } from "@/components/ui/alert";
 import { AppButton } from "@/components/ui/app-button";
 import { AppInput } from "@/components/ui/app-input";
 import { AppSelect } from "@/components/ui/app-select";
@@ -20,6 +21,13 @@ import { hasWorkspacePermission, useActiveWorkspace } from "@/stores/workspace-s
 import type { ExternalMessage } from "@/types/finance";
 import { useState } from "react";
 
+function formatExpiryTime(iso?: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
 function OrderContent({ workspaceId, id }: WorkspaceInfo & { id: number }) {
   const router = useRouter();
   const active = useActiveWorkspace();
@@ -29,7 +37,7 @@ function OrderContent({ workspaceId, id }: WorkspaceInfo & { id: number }) {
   const query = useQuery({ queryKey: [...moneyKeys.workspace(workspaceId), "storefront-order", id], queryFn: () => financeApi.getMerchantOrder(workspaceId, id) });
   const outlets = useQuery({ queryKey: [...moneyKeys.workspace(workspaceId), "outlets"], queryFn: () => financeApi.listOutlets(workspaceId) });
   const accountsQuery = useQuery({ queryKey: [...moneyKeys.workspace(workspaceId), "accounts"], queryFn: () => moneyApi.listAccounts({ workspaceId }) });
-  const [action, setAction] = useState<"cancel" | "decline" | "return" | "revision" | null>(null);
+  const [action, setAction] = useState<"cancel" | "decline" | "return" | "revision" | "refund_cancel" | null>(null);
   const [collectOpen, setCollectOpen] = useState(false);
   const [pickupCodeInput, setPickupCodeInput] = useState("");
   const [markPaidOpen, setMarkPaidOpen] = useState(false);
@@ -51,6 +59,11 @@ function OrderContent({ workspaceId, id }: WorkspaceInfo & { id: number }) {
     (body: { money_account_id: number; notes?: string }) => financeApi.markStorefrontOrderPaid(workspaceId, id, body),
     { success: "Order marked paid", onDone: () => { setMarkPaidOpen(false); setPaidNote(""); after(); } },
   );
+  const resolveAttention = useFinanceAction(
+    workspaceId,
+    (body: { action: "accept_as_paid" | "cancel_with_refund"; note?: string }) => financeApi.resolveStorefrontPaymentAttention(workspaceId, id, body),
+    { success: "Payment attention resolved", onDone: () => { setAction(null); after(); } },
+  );
   const retryCourier = useFinanceAction(
     workspaceId,
     () => financeApi.retryStorefrontCourierBooking(workspaceId, id),
@@ -66,6 +79,17 @@ function OrderContent({ workspaceId, id }: WorkspaceInfo & { id: number }) {
   const money = (minor: string) => formatMinorAmount(minor, order.currency, order.currency_exponent);
   const moneyAccountOptions = (accountsQuery.data ?? []).filter((a) => a.account_type !== "clearing").map((a) => ({ key: String(a.id), label: `${a.name} (${a.account_type})` }));
   const isPickup = order.delivery_method === "pickup";
+  const isPodAwaitingConfirm = ["request_received", "needs_review"].includes(status) && (order.hold_type === "awaiting_confirmation" || order.payment_arrangement === "cod") && Boolean(order.reservation_expires_at);
+  const statusNode = (
+    <div className="flex flex-col items-start gap-1">
+      <StatusBadge status={status} />
+      {isPodAwaitingConfirm ? (
+        <span className="text-xs text-muted">
+          Cancels automatically at {formatExpiryTime(order.reservation_expires_at)} if not confirmed
+        </span>
+      ) : null}
+    </div>
+  );
   const primary = canConfirm && ["request_received", "needs_review"].includes(status)
     ? <AppButton startContent={<CheckCircle />} label="Confirm order" isLoading={confirm.isPending} onPress={() => confirm.mutate({ expected_version: order.version, outlet_id: order.outlet_id ?? outlets.data?.find((outlet) => outlet.is_default)?.id ?? outlets.data?.[0]?.id ?? 0, payment_arrangement: order.payment_arrangement ?? "" })} />
     : canFulfil && isPickup && status === "confirmed" && order.fulfilment_status === "reserved"
@@ -81,7 +105,7 @@ function OrderContent({ workspaceId, id }: WorkspaceInfo & { id: number }) {
     const fresh = await financeApi.getMerchantOrder(workspaceId, id);
     return (fresh.events ?? []).map((event, index) => ({ id: index + 1, document_type: "storefront_order", document_id: id, sender_type: event.actor_type === "customer" ? "guest" : "team", sender_name: event.actor_type === "customer" ? order.customer_name : "Store", message: event.message || event.event_type, created_at: event.created_at }));
   };
-  return <><DocumentShell stickyColumns back={{ href: "/store/orders", label: "Store orders" }} title={order.order_reference} subtitle={"Order from " + order.customer_name + " · " + formatDate(order.created_at)} status={<StatusBadge status={status} />} actions={<><DocumentChat label="Messages" workspaceId={workspaceId} docType="storefront_order" docId={id} partyName={order.customer_name} senderName="Store" fetchMessages={loadMessages} sendMessage={async (message) => { await financeApi.postMerchantOrderMessage(workspaceId, id, message, true); }} /><DocumentActions primary={primary} more={[
+  return <><DocumentShell stickyColumns back={{ href: "/store/orders", label: "Store orders" }} title={order.order_reference} subtitle={"Order from " + order.customer_name + " · " + formatDate(order.created_at)} status={statusNode} actions={<><DocumentChat label="Messages" workspaceId={workspaceId} docType="storefront_order" docId={id} partyName={order.customer_name} senderName="Store" fetchMessages={loadMessages} sendMessage={async (message) => { await financeApi.postMerchantOrderMessage(workspaceId, id, message, true); }} /><DocumentActions primary={primary} more={[
     canFulfil && isPickup && status === "confirmed" && order.fulfilment_status === "reserved" && {key:"ready_pickup",label:"Ready for pickup",onClick:()=>readyPickup.mutate(order.version)},
     canFulfil && isPickup && status === "confirmed" && ["packed","partially_fulfilled"].includes(order.fulfilment_status) && {key:"collect_pickup",label:"Collected (code)",onClick:()=>{setPickupCodeInput("");setSelectedAccountId((cur)=>cur||moneyAccountOptions[0]?.key||"");setCollectOpen(true);}},
     order.payment_status !== "paid" && !["declined","cancelled"].includes(status) && {key:"mark_paid",label:"Mark paid",onClick:()=>{setSelectedAccountId((cur)=>cur||moneyAccountOptions[0]?.key||"");setPaidNote("");setMarkPaidOpen(true);}},
@@ -108,18 +132,57 @@ function OrderContent({ workspaceId, id }: WorkspaceInfo & { id: number }) {
       ]} />
     </>}>
     {order.courier_booking_error ? (
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-900">
-        <div className="flex items-start gap-3">
-          <Warning size={20} className="mt-0.5 shrink-0" />
-          <div>
-            <p className="font-medium">Courier booking failed</p>
-            <p className="mt-0.5 text-rose-800">{order.courier_booking_error}</p>
+      <Alert
+        status="error"
+        title="Courier booking failed"
+        description={
+          <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+            <span>{order.courier_booking_error}</span>
+            <AppButton size="sm" variant="secondary" label={retryCourier.isPending ? "Retrying..." : "Retry courier booking"} isLoading={retryCourier.isPending} onPress={() => retryCourier.mutate(undefined)} />
           </div>
-        </div>
-        <AppButton size="sm" variant="secondary" label={retryCourier.isPending ? "Retrying..." : "Retry courier booking"} isLoading={retryCourier.isPending} onPress={() => retryCourier.mutate(undefined)} />
-      </div>
+        }
+      />
     ) : null}
-    {status === "paid_needs_attention" ? <div className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"><Warning size={20} className="mt-0.5 shrink-0" /><div><p className="font-medium">Payment received after hold expired</p><p className="mt-1 text-amber-800">Check current item stock before confirming or fulfilling this order, or issue a refund if items sold out.</p></div></div> : null}
+    {order.payment_status === "paid_needs_attention" ? (
+      <Alert
+        status="warning"
+        title={
+          order.payment_attention_reason === "wrong_amount"
+            ? "Wrong payment amount received"
+            : order.payment_attention_reason === "duplicate_payment"
+              ? "Paid twice: refund one"
+              : "Payment received after hold expired"
+        }
+        description={
+          <div className="mt-1 space-y-2.5">
+            <p>
+              {order.payment_attention_message ||
+                "Check current item stock or payment details before confirming or fulfilling this order, or cancel with a refund note."}
+            </p>
+            {(canConfirm || canCancel) ? (
+              <div className="flex flex-wrap items-center gap-2">
+                {canConfirm ? (
+                  <AppButton
+                    size="sm"
+                    label={resolveAttention.isPending ? "Saving..." : "Accept as paid"}
+                    isLoading={resolveAttention.isPending}
+                    onPress={() => resolveAttention.mutate({ action: "accept_as_paid" })}
+                  />
+                ) : null}
+                {canCancel ? (
+                  <AppButton
+                    size="sm"
+                    variant="secondary"
+                    label="Cancel with refund note"
+                    onPress={() => setAction("refund_cancel")}
+                  />
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        }
+      />
+    ) : null}
     <CardFrame><CardHeader title="Order items" icon={Package} /><div className="mt-4"><ItemsTable rows={order.lines ?? []} rowKey={(line) => line.id} columns={[{ key: "title", label: "Item", render: (line) => <div><span className="font-medium">{line.title}</span>{line.variant_name ? <p className="mt-1 text-xs text-muted">{line.variant_name}</p> : null}</div> }, { key: "requested", label: "Requested", align: "right", render: (line) => Number(line.requested_quantity) }, { key: "confirmed", label: "Confirmed", align: "right", render: (line) => Number(line.confirmed_quantity) }, { key: "delivered", label: "Delivered", align: "right", render: (line) => Number(line.fulfilled_quantity) }, { key: "total", label: "Total", align: "right", render: (line) => money(line.line_total_minor) }]} card={(line) => ({ title: line.title, sub: "Requested " + Number(line.requested_quantity) + " · Delivered " + Number(line.fulfilled_quantity), amount: money(line.line_total_minor) })} total={{ label: "Order total", amount: money(order.total_minor) }} /></div></CardFrame>
     {order.customer_note ? <CardFrame><CardHeader title="Customer note" icon={User} /><p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-muted">{order.customer_note}</p></CardFrame> : null}
     {order.linked_sale_id ? <AppButton variant="secondary" label={"View sale #" + order.linked_sale_id} onPress={() => router.push("/sales?source=online_store")} /> : null}
@@ -138,8 +201,9 @@ function OrderContent({ workspaceId, id }: WorkspaceInfo & { id: number }) {
       <AppInput label="Note (optional)" value={paidNote} onChange={(e) => setPaidNote(e.target.value)} placeholder="e.g. Bank transfer ref or cash receipt" maxLength={240} />
     </div>
   </SideSheet>
-  {action ? <OrderReasonModal key={action} title={action === "cancel" ? "Cancel order" : action === "decline" ? "Decline request" : action === "return" ? "Record return" : "Request order changes"} confirmLabel={action === "revision" ? "Send requested changes" : action === "return" ? "Record return" : action === "decline" ? "Decline request" : "Cancel order"} required danger={action === "cancel" || action === "decline"} onClose={() => setAction(null)} onSubmit={async (reason) => {
-    if (action === "revision") await change.mutateAsync({ expected_version: order.version, change_summary: reason, requires_customer_ack: true });
+  {action ? <OrderReasonModal key={action} title={action === "refund_cancel" ? "Cancel order with refund note" : action === "cancel" ? "Cancel order" : action === "decline" ? "Decline request" : action === "return" ? "Record return" : "Request order changes"} confirmLabel={action === "refund_cancel" ? "Cancel and record refund note" : action === "revision" ? "Send requested changes" : action === "return" ? "Record return" : action === "decline" ? "Decline request" : "Cancel order"} required danger={action === "cancel" || action === "decline" || action === "refund_cancel"} onClose={() => setAction(null)} onSubmit={async (reason) => {
+    if (action === "refund_cancel") await resolveAttention.mutateAsync({ action: "cancel_with_refund", note: reason });
+    else if (action === "revision") await change.mutateAsync({ expected_version: order.version, change_summary: reason, requires_customer_ack: true });
     else if (action === "return") await recordReturn.mutateAsync({ reason });
     else await cancel.mutateAsync({ kind: action, reason });
   }} /> : null}</>;

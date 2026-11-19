@@ -620,15 +620,22 @@ func (s *Service) ConfirmStorefrontOrder(ctx context.Context, ws, user, orderID 
 	if err != nil {
 		return MerchantOrderView{}, err
 	}
-	// Deterministic lock order on product_id to prevent deadlocks
-	sort.Slice(lines, func(i, j int) bool { return lines[i].ProductID < lines[j].ProductID })
+	// Deterministic lock order on (product_id, variant_id) to prevent deadlocks
+	sort.Slice(lines, func(i, j int) bool {
+		if lines[i].ProductID != lines[j].ProductID {
+			return lines[i].ProductID < lines[j].ProductID
+		}
+		return lines[i].VariantID.Int64 < lines[j].VariantID.Int64
+	})
 
-	var sf db.Storefront
-	_ = s.pool.QueryRow(ctx, `SELECT * FROM storefronts WHERE id=$1`, o.StorefrontID).Scan()
-	sf, _ = q.GetStorefrontByWorkspace(ctx, ws)
+	sf, err := q.GetStorefrontByWorkspace(ctx, ws)
+	if err != nil {
+		return MerchantOrderView{}, err
+	}
 
+	hadCheckoutHold := o.HoldType.Valid && o.HoldType.String == "awaiting_confirmation"
 	var expiresAt pgtype.Timestamptz
-	if sf.ReservationTtlHours > 0 {
+	if !hadCheckoutHold && sf.ReservationTtlHours > 0 {
 		expiresAt = pgtype.Timestamptz{Time: time.Now().UTC().Add(time.Duration(sf.ReservationTtlHours) * time.Hour), Valid: true}
 	}
 
@@ -636,10 +643,62 @@ func (s *Service) ConfirmStorefrontOrder(ctx context.Context, ws, user, orderID 
 		if l.ProductKind != "stock_tracked" || l.ConfirmedQuantity.IsZero() {
 			continue
 		}
+		if l.ReservationID.Valid {
+			existingRes, rErr := q.GetStockReservationForUpdate(ctx, db.GetStockReservationForUpdateParams{
+				WorkspaceID: ws,
+				ID:          l.ReservationID.Int64,
+			})
+			if rErr == nil && existingRes.Status == "active" {
+				if existingRes.LocationID == loc.ID {
+					// C13 & C14: Checkout already holds this line at the target outlet.
+					// Make the existing hold firm instead of reserving again!
+					hadCheckoutHold = true
+					continue
+				}
+				// Outlet was changed on confirm: release the old outlet's reservation first.
+				oldBal, obErr := q.GetInventoryBalanceForUpdate(ctx, db.GetInventoryBalanceForUpdateParams{
+					WorkspaceID: ws,
+					LocationID:  existingRes.LocationID,
+					ProductID:   existingRes.ProductID,
+					VariantID:   existingRes.VariantID,
+				})
+				if obErr != nil && !errors.Is(obErr, pgx.ErrNoRows) {
+					return MerchantOrderView{}, obErr
+				}
+				if obErr == nil {
+					newOldRes := oldBal.ReservedQuantity.Sub(existingRes.Quantity)
+					if newOldRes.IsNegative() {
+						newOldRes = decimal.Zero
+					}
+					if _, err := q.UpdateInventoryBalanceQuantities(ctx, db.UpdateInventoryBalanceQuantitiesParams{
+						WorkspaceID:       ws,
+						LocationID:        existingRes.LocationID,
+						ProductID:         existingRes.ProductID,
+						VariantID:         existingRes.VariantID,
+						QuantityOnHand:    oldBal.QuantityOnHand,
+						ReservedQuantity:  newOldRes,
+						InTransitQuantity: oldBal.InTransitQuantity,
+						ValueOnHandMinor:  oldBal.ValueOnHandMinor,
+					}); err != nil {
+						return MerchantOrderView{}, err
+					}
+				}
+				if _, err := q.UpdateStockReservationStatus(ctx, db.UpdateStockReservationStatusParams{
+					WorkspaceID: ws,
+					ID:          existingRes.ID,
+					Status:      "released",
+				}); err != nil {
+					return MerchantOrderView{}, err
+				}
+			}
+		}
+
+		// C14: Pass VariantID when locking and updating inventory_balances!
 		bal, bErr := q.GetInventoryBalanceForUpdate(ctx, db.GetInventoryBalanceForUpdateParams{
 			WorkspaceID: ws,
 			LocationID:  loc.ID,
 			ProductID:   l.ProductID,
+			VariantID:   l.VariantID,
 		})
 		if errors.Is(bErr, pgx.ErrNoRows) {
 			return MerchantOrderView{}, fmt.Errorf("%w: no stock available for %s at %s", ErrInsufficientStock, l.TitleSnapshot, loc.Name)
@@ -656,6 +715,7 @@ func (s *Service) ConfirmStorefrontOrder(ctx context.Context, ws, user, orderID 
 			WorkspaceID:       ws,
 			LocationID:        loc.ID,
 			ProductID:         l.ProductID,
+			VariantID:         l.VariantID,
 			QuantityOnHand:    bal.QuantityOnHand,
 			ReservedQuantity:  newReserved,
 			InTransitQuantity: bal.InTransitQuantity,
@@ -689,6 +749,16 @@ func (s *Service) ConfirmStorefrontOrder(ctx context.Context, ws, user, orderID 
 		}
 	}
 
+	if hadCheckoutHold {
+		expiresAt = pgtype.Timestamptz{Valid: false}
+		if err := q.MakeOrderReservationsFirm(ctx, db.MakeOrderReservationsFirmParams{
+			WorkspaceID: ws,
+			OrderID:     pgtype.Int8{Int64: o.ID, Valid: true},
+		}); err != nil {
+			return MerchantOrderView{}, err
+		}
+	}
+
 	delivFee := o.DeliveryFeeMinor
 	if strings.TrimSpace(in.DeliveryFee) != "" {
 		delivFee, err = parseOptionalNonNegativeMajor(in.DeliveryFee, int(o.CurrencyExponent))
@@ -696,23 +766,30 @@ func (s *Service) ConfirmStorefrontOrder(ctx context.Context, ws, user, orderID 
 			return MerchantOrderView{}, errors.New("delivery fee is invalid")
 		}
 	}
-	total := o.SubtotalMinor + delivFee
+	total := o.SubtotalMinor + delivFee + o.ProcessingFeeMinor
 	payArr := o.PaymentArrangement
 	if strings.TrimSpace(in.PaymentArrangement) != "" {
 		payArr = optionalPgText(sanitizePublicText(in.PaymentArrangement, 300))
 	}
-	payStatus := "not_requested"
-	if total > 0 && payArr.Valid && strings.TrimSpace(payArr.String) != "" {
-		payStatus = "unpaid"
+	payStatus := o.PaymentStatus
+	if payStatus == "" || payStatus == "not_requested" {
+		payStatus = "not_requested"
+		if total > 0 && payArr.Valid && strings.TrimSpace(payArr.String) != "" {
+			payStatus = "unpaid"
+		}
 	}
 
-	if _, err := tx.Exec(ctx, `
-		UPDATE storefront_orders
-		SET outlet_id=$2, commercial_status='confirmed', fulfilment_status='reserved', payment_status=$3,
-		    delivery_fee_minor=$4, total_minor=$5, payment_arrangement=$6, reservation_expires_at=$7,
-		    version=version+1, updated_at=now()
-		WHERE id=$1
-	`, o.ID, loc.ID, payStatus, delivFee, total, payArr, expiresAt); err != nil {
+	updated, err := q.ConfirmStorefrontOrderRecord(ctx, db.ConfirmStorefrontOrderRecordParams{
+		WorkspaceID:          ws,
+		ID:                   o.ID,
+		OutletID:             pgtype.Int8{Int64: loc.ID, Valid: true},
+		PaymentStatus:        payStatus,
+		DeliveryFeeMinor:     delivFee,
+		TotalMinor:           total,
+		PaymentArrangement:   payArr,
+		ReservationExpiresAt: expiresAt,
+	})
+	if err != nil {
 		return MerchantOrderView{}, err
 	}
 	msg := "Order confirmed and stock reserved."
@@ -736,10 +813,6 @@ func (s *Service) ConfirmStorefrontOrder(ctx context.Context, ws, user, orderID 
 		EventType:    "order_confirmed",
 	})
 
-	updated, err := q.GetStorefrontOrderByID(ctx, db.GetStorefrontOrderByIDParams{WorkspaceID: ws, ID: o.ID})
-	if err != nil {
-		return MerchantOrderView{}, err
-	}
 	if err := tx.Commit(ctx); err != nil {
 		return MerchantOrderView{}, err
 	}
