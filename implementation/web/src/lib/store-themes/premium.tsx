@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, ImageSquare, MagnifyingGlass, ShoppingBag } from "@phosphor-icons/react";
+import { ArrowRight, Check, ImageSquare, MagnifyingGlass, ShoppingBag } from "@phosphor-icons/react";
 import Image from "next/image";
 import Link from "next/link";
 import { useId, useState, type CSSProperties, type ReactNode } from "react";
@@ -77,15 +77,15 @@ export function PremiumShell({ model, family, children }: { model: ThemeRenderer
   const logo = brand.logo_url || store.logo_url;
   const style = {
     "--store-primary": palette.primary, "--store-accent": palette.accent, "--store-heading-font": heading.headingFamily,
-    "--premium-surface": studio ? "#f3eee7" : "#f1f3f4", "--store-muted": "#626661",
+    "--premium-button-text": readableOn(palette.primary), "--premium-surface": studio ? "#f3eee7" : "#f1f3f4", "--store-muted": "#626661",
     fontFamily: body.bodyFamily, background: studio ? "#fcfaf6" : "#fff", color: "#222822",
   } as CSSProperties;
   const cartLabel = "Cart (" + cartCount + ")";
   const cartContent = <><ShoppingBag size={21} /><span>{cartLabel}</span></>;
   return (
-    <div style={style}>
+    <div className="contents" style={style}>
       {sections.filter((section) => section.enabled && section.type === "announcement").map((section) => <AnnouncementSection key={section.id} section={section} />)}
-      <header className={studio ? "border-b border-black/10" : ""} style={studio ? undefined : { background: palette.primary, color: readableOn(palette.primary) }}>
+      <header className={studio ? "sticky top-0 z-30 border-b border-black/10 bg-[#fcfaf6]" : "sticky top-0 z-30"} style={studio ? undefined : { background: palette.primary, color: readableOn(palette.primary) }}>
         <div className={premiumWidth + (studio ? " grid grid-cols-[1fr_auto] items-center gap-4 py-5 sm:grid-cols-[1fr_1fr_auto]" : " grid grid-cols-[1fr_auto] items-center gap-4 py-4 md:grid-cols-[minmax(0,1fr)_minmax(0,3fr)_auto]")}>
           <Link href={base} className="flex min-w-0 items-center gap-2 text-xl font-semibold" style={headingFont}>
             {logo ? <Image src={logo} alt="" width={40} height={40} unoptimized className="size-10 shrink-0 object-contain" /> : null}
@@ -126,11 +126,20 @@ function listingVariant(variants: ThemeProduct[]) {
   return variants.find((item) => item.availability_state !== "out_of_stock") ?? variants[0];
 }
 
-export function PremiumGrid({ store, products, compact, onQuickAdd }: Pick<ThemeRendererProps, "store" | "onQuickAdd"> & { products: ThemeProduct[][]; compact: boolean }) {
+export function PremiumCartButton({ quantity = 0, onAdd, onView, compact = false }: { quantity?: number; onAdd: () => void; onView: () => void; compact?: boolean }) {
+  const inCart = quantity > 0;
+  return <button type="button" onClick={inCart ? onView : onAdd} className={["flex w-full items-center justify-center gap-2 rounded-lg border border-black/10 font-semibold", compact ? "mt-3 min-h-10 px-2 py-2 text-xs" : "min-h-12 px-4 py-3 text-sm", inCart ? "bg-[var(--premium-surface,#f1f3f4)] text-[#222822] hover:underline" : "bg-[var(--store-primary,#16453b)] text-[var(--premium-button-text,#fff)] hover:opacity-90"].join(" ")}>
+    {inCart ? <><Check size={16} aria-hidden="true" /> In cart ({quantity}) · View cart</> : <><ShoppingBag size={16} aria-hidden="true" /> Add to cart</>}
+  </button>;
+}
+
+export function PremiumGrid({ store, products, compact, onQuickAdd, cartQuantities, onCartClick }: Pick<ThemeRendererProps, "store" | "onQuickAdd" | "cartQuantities" | "onCartClick"> & { products: ThemeProduct[][]; compact: boolean }) {
   return (
     <ul className={compact ? "grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4" : "grid grid-cols-2 gap-x-4 gap-y-8 sm:gap-x-7 lg:grid-cols-3"}>
       {products.map((variants) => {
         const product = listingVariant(variants);
+        const quantity = variants.reduce((count, item) => count + (cartQuantities?.[item.id] ?? 0), 0);
+        const canQuickAdd = compact && variants.length === 1 && product.availability_state !== "out_of_stock" && product.availability_state !== "request_only" && !product.contact_only && onQuickAdd;
         return (
           <li key={product.product_id} className={compact ? "min-w-0 rounded-xl border border-black/10 bg-white p-2.5 sm:p-3" : "min-w-0"}>
             <Link href={productPath(store, product.id)} className="group block">
@@ -138,9 +147,10 @@ export function PremiumGrid({ store, products, compact, onQuickAdd }: Pick<Theme
               <h3 className="mt-3 break-words text-sm font-semibold group-hover:underline sm:text-base">{product.title}</h3>
               <p className="mt-1 text-sm">{formatMinorAmount(product.price_minor, product.currency, product.currency_exponent)}</p>
             </Link>
+            {quantity > 0 && !canQuickAdd ? <p className="mt-2 inline-flex items-center gap-1 rounded-full bg-[var(--premium-surface)] px-2 py-1 text-xs font-medium"><Check size={14} aria-hidden="true" /> In cart ({quantity})</p> : null}
             {product.availability_state === "out_of_stock" ? <p className="mt-1 text-xs text-[var(--store-muted)]">Sold out</p>
               : variants.length > 1 ? <p className="mt-1 text-xs text-[var(--store-muted)]">{variants.length} options</p>
-              : compact && onQuickAdd && !product.contact_only && product.availability_state !== "request_only" ? <button type="button" onClick={() => onQuickAdd(product.id)} className="mt-3 w-full rounded-md border border-black/15 px-2 py-2 text-xs font-semibold hover:bg-black/5">Add to cart</button> : null}
+              : canQuickAdd ? <PremiumCartButton compact quantity={onCartClick ? quantity : undefined} onAdd={() => canQuickAdd(product.id)} onView={onCartClick ?? (() => canQuickAdd(product.id))} /> : null}
           </li>
         );
       })}
@@ -149,7 +159,7 @@ export function PremiumGrid({ store, products, compact, onQuickAdd }: Pick<Theme
 }
 
 export function PremiumCatalogue({ model, compact }: { model: ThemeRendererProps; compact: boolean }) {
-  const { store, page, collectionSlug, searchQuery = "", onQuickAdd } = model;
+  const { store, page, collectionSlug, searchQuery = "", onQuickAdd, cartQuantities, onCartClick } = model;
   const [availability, setAvailability] = useState(false);
   const [searchCollection, setSearchCollection] = useState("");
   const [sort, setSort] = useState("featured");
@@ -203,7 +213,7 @@ export function PremiumCatalogue({ model, compact }: { model: ThemeRendererProps
               <option value="price-low">Price: low to high</option><option value="price-high">Price: high to low</option>
             </select>
           </div>
-          {groups.length ? <PremiumGrid store={store} products={groups.slice(0, limit)} compact={compact} onQuickAdd={onQuickAdd} />
+          {groups.length ? <PremiumGrid store={store} products={groups.slice(0, limit)} compact={compact} onQuickAdd={onQuickAdd} cartQuantities={cartQuantities} onCartClick={onCartClick} />
             : <div className="rounded-lg border border-black/10 p-7 text-sm">No products found. <Link className="underline" href={storePath(store) + "/shop"}>Browse all products</Link></div>}
           {groups.length > limit ? <button type="button" onClick={() => setLimit(limit + 24)} className="mx-auto mt-8 block rounded-md border border-black/20 px-5 py-2.5 text-sm">Load more</button> : null}
         </div>
@@ -241,7 +251,7 @@ export function PremiumFeatured({ model, compact }: { model: ThemeRendererProps;
       <h2 className="text-2xl font-semibold sm:text-4xl" style={headingFont}>{title}</h2>
       <Link className="inline-flex items-center gap-1.5 text-sm font-semibold hover:underline" href={storePath(store) + "/shop"}>Shop all <ArrowRight size={16} /></Link>
     </div>
-    <PremiumGrid store={store} products={products} compact={compact} onQuickAdd={model.onQuickAdd} />
+    <PremiumGrid store={store} products={products} compact={compact} onQuickAdd={model.onQuickAdd} cartQuantities={model.cartQuantities} onCartClick={model.onCartClick} />
   </section>;
 }
 

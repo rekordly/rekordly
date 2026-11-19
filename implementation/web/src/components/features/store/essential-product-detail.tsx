@@ -11,11 +11,11 @@ import { formatMinorAmount } from "@/lib/money";
 import { STORE_SURFACE, STORE_WRAP } from "@/lib/store-themes/layout";
 import type { PublicStorefrontProduct } from "@/types/finance";
 
-import { PremiumGrid } from "@/lib/store-themes/premium";
+import { PremiumCartButton, PremiumGrid } from "@/lib/store-themes/premium";
 import { PublicProductActions } from "./public-product-actions";
 import { ChoiceCards } from "@/components/ui/form-kit";
 
-export function EssentialProductDetail({ slug, product: initialProduct, products, layout = "essential", contact }: { slug: string; product: PublicStorefrontProduct; products: PublicStorefrontProduct[]; layout?: "essential" | "studio" | "market"; contact?: { phone?: string | null; email?: string | null } }) {
+export function EssentialProductDetail({ slug, product: initialProduct, products, layout = "essential", contact, cartQuantities, onAddToCart, onViewCart }: { slug: string; product: PublicStorefrontProduct; products: PublicStorefrontProduct[]; layout?: "essential" | "studio" | "market"; contact?: { phone?: string | null; email?: string | null }; cartQuantities?: Readonly<Record<number, number>>; onAddToCart?: (product: PublicStorefrontProduct) => void; onViewCart?: () => void }) {
   const [image, setImage] = useState(0);
   const [selectedID, setSelectedID] = useState(initialProduct.id);
   const variants = products.filter((item) => item.product_id === initialProduct.product_id);
@@ -98,7 +98,7 @@ export function EssentialProductDetail({ slug, product: initialProduct, products
 
           {product.contact_only ? <div className="rounded-lg border border-black/10 p-4 text-sm">
             {contactLink ? <a className="font-semibold underline underline-offset-4" href={contactLink}>Contact the store to order</a> : <p>Contact the store to order.</p>}
-          </div> : <PublicProductActions key={product.id} slug={slug} productID={product.id} priceMinor={product.price_minor} unavailable={soldOut} />}
+          </div> : !soldOut && onAddToCart && onViewCart ? <PremiumCartButton quantity={cartQuantities?.[product.id]} onAdd={() => onAddToCart(product)} onView={onViewCart} /> : <PublicProductActions key={product.id} slug={slug} productID={product.id} priceMinor={product.price_minor} unavailable={soldOut} />}
 
           <div className="divide-y divide-black/10 border-y border-black/10">
             {product.description ? (

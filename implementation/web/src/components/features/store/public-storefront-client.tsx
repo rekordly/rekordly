@@ -363,6 +363,7 @@ export function PublicStorefrontClient({ slug, page = "home", collectionSlug, pr
     }
   };
 
+  const cartQuantities = Object.fromEntries(cart.map((line) => [line.storefront_product_id, line.quantity]));
   const totalCount = cart.reduce((acc, i) => acc + i.quantity, 0);
 
   const productTools = (
@@ -400,7 +401,7 @@ export function PublicStorefrontClient({ slug, page = "home", collectionSlug, pr
   };
 
   return (
-    <div className={themeKey === "studio" ? "min-h-screen bg-[#fcfaf6]" : "min-h-screen bg-white"} style={{ "--store-primary": resolved.palette.primary, "--store-accent": resolved.palette.accent, "--premium-surface": themeKey === "studio" ? "#f3eee7" : "#f1f3f4", "--store-heading-font": resolved.heading.headingFamily, "--accent": resolved.palette.primary, "--primary": resolved.palette.primary, "--primary-foreground": readableOn(resolved.palette.primary), fontFamily: resolved.body.bodyFamily, color: "#252a27" } as React.CSSProperties}>
+    <div className={themeKey === "studio" ? "min-h-screen bg-[#fcfaf6]" : "min-h-screen bg-white"} style={{ "--store-primary": resolved.palette.primary, "--store-accent": resolved.palette.accent, "--premium-surface": themeKey === "studio" ? "#f3eee7" : "#f1f3f4", "--store-heading-font": resolved.heading.headingFamily, "--accent": resolved.palette.primary, "--primary": resolved.palette.primary, "--primary-foreground": readableOn(resolved.palette.primary), "--premium-button-text": readableOn(resolved.palette.primary), fontFamily: resolved.body.bodyFamily, color: "#252a27" } as React.CSSProperties}>
       <Renderer
         store={{ name: sf.name, slug: sf.slug, tagline: sf.tagline, description: sf.description, logo_url: brand.logo_url ?? sf.logo_url, banner_url: sf.banner_url, phone: sf.contact_phone, whatsapp_number: sf.whatsapp_number, address: sf.address, business_hours: sf.business_hours, products: sf.products.map((product) => ({ ...product, is_featured: product.is_featured ?? false })), collections: sf.collections }}
         brand={resolvedBrand}
@@ -418,6 +419,7 @@ export function PublicStorefrontClient({ slug, page = "home", collectionSlug, pr
         selectCollection={setSelectedCol}
         renderProduct={renderProduct}
         cartCount={totalCount}
+        cartQuantities={cartQuantities}
         onCartClick={trackCartVisit}
       />
 
@@ -429,7 +431,7 @@ export function PublicStorefrontClient({ slug, page = "home", collectionSlug, pr
         {cart.length ? <ul className="divide-y divide-border">{cart.map((line) => <li key={line.storefront_product_id} className="flex items-start justify-between gap-4 py-4"><div className="min-w-0"><p className="text-sm font-medium">{line.title}</p>{line.variant_name ? <p className="mt-1 text-xs text-muted">{line.variant_name}</p> : null}<p className="mt-2 text-xs text-muted">Quantity: {line.quantity}</p></div><span className="shrink-0 text-sm font-semibold">{formatMinorAmount((BigInt(line.price_minor) * BigInt(line.quantity)).toString(), sf.currency, sf.currency_exponent)}</span></li>)}</ul> : <div className="py-10 text-center"><ShoppingBag size={36} className="mx-auto text-muted" /><p className="mt-4 text-sm font-medium">Your cart is empty</p></div>}
       </SideSheet>
 
-      {page === "product" ? (() => { const product = sf.products.find((item) => item.id === productID); return product ? <EssentialProductDetail key={product.id} slug={slug} product={product} products={sf.products} contact={{ phone: sf.contact_phone, email: sf.contact_email }} layout={themeKey === "studio" || themeKey === "market" ? themeKey : "essential"} /> : <div className="mx-auto max-w-4xl px-5 py-16"><h1 className="text-2xl">Product unavailable</h1><Link href={`/s/${slug}/shop`} className="mt-4 block text-sm underline">Back to shop</Link></div>; })() : null}
+      {page === "product" ? (() => { const product = sf.products.find((item) => item.id === productID); return product ? <EssentialProductDetail key={product.id} slug={slug} product={product} products={sf.products} contact={{ phone: sf.contact_phone, email: sf.contact_email }} cartQuantities={cartQuantities} onViewCart={trackCartVisit} onAddToCart={themeKey === "studio" || themeKey === "market" ? (item) => { addToCart(item); setCartOpen(true); } : undefined} layout={themeKey === "studio" || themeKey === "market" ? themeKey : "essential"} /> : <div className="mx-auto max-w-4xl px-5 py-16"><h1 className="text-2xl">Product unavailable</h1><Link href={`/s/${slug}/shop`} className="mt-4 block text-sm underline">Back to shop</Link></div>; })() : null}
 
       {(["policies", "privacy", "returns", "terms", "delivery"] as const).includes(page as "policies" | "privacy" | "returns" | "terms" | "delivery") ? <PolicyPage page={page as "policies" | "privacy" | "returns" | "terms" | "delivery"} policies={[
         { key: "delivery", title: "Delivery", body: sf.delivery_guidance || sf.delivery_methods.join(", ") },

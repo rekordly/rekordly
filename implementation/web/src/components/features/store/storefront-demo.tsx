@@ -7,7 +7,7 @@ import { AppButton } from "@/components/ui/app-button";
 import { SideSheet } from "@/components/ui/side-sheet";
 import { formatMinorAmount } from "@/lib/money";
 import { createDefaultSections, STORE_THEMES, type BrandSettings, type ThemeProduct, type ThemeRendererProps, type ThemeStoreData } from "@/lib/store-themes";
-import { PremiumMedia, premiumWidth } from "@/lib/store-themes/premium";
+import { PremiumCartButton, PremiumMedia, premiumWidth } from "@/lib/store-themes/premium";
 
 export type DemoTheme = "studio" | "market";
 
@@ -59,7 +59,7 @@ function demoData(theme: DemoTheme): ThemeStoreData {
     is_featured: index < 4, collection_id: (index % collections.length) + 1,
   }));
   products.push({ ...products[0], id: 100, variant_name: theme === "studio" ? "Natural finish" : "Graphite", availability_state: "out_of_stock" });
-  return { name: example.name, slug: theme, path: base, description: example.copy, collections, products };
+  return { name: example.name, slug: theme, path: base, description: example.copy, phone: "+234 800 000 0000", email: "hello@example.com", address: theme === "studio" ? "Ikoyi, Lagos, Nigeria" : "Ikeja, Lagos, Nigeria", collections, products };
 }
 
 export function StorefrontDemo({ theme, page, value = "", query = "" }: { theme: DemoTheme; page: NonNullable<ThemeRendererProps["page"]>; value?: string; query?: string }) {
@@ -116,7 +116,7 @@ export function StorefrontDemo({ theme, page, value = "", query = "" }: { theme:
         <p>{STORE_THEMES[theme].name} demo</p>
         <div className="flex gap-4"><Link href="/store/templates" className="underline">Template library</Link><Link href={"/store/templates/customization/" + theme} className="font-semibold underline">Try this template</Link></div>
       </div>
-      <Renderer store={store} brand={example.brand} sections={sections} page={page} collectionSlug={page === "collection" ? value : undefined} searchQuery={query} cartCount={count} onCartClick={() => setCartOpen(true)} onQuickAdd={add} />
+      <Renderer store={store} brand={example.brand} sections={sections} page={page} collectionSlug={page === "collection" ? value : undefined} searchQuery={query} cartCount={count} cartQuantities={cart} onCartClick={() => setCartOpen(true)} onQuickAdd={add} />
       {page === "product" && selected ? <main className={premiumWidth + " grid gap-8 py-10 md:grid-cols-2"}>
         <PremiumMedia src={selected.image_urls[0]} alt={selected.title} className={theme === "studio" ? "aspect-[4/5] bg-[#f3eee7]" : "aspect-square rounded-xl bg-[#f1f3f4]"} />
         <div className="space-y-5 md:pt-8">
@@ -126,7 +126,7 @@ export function StorefrontDemo({ theme, page, value = "", query = "" }: { theme:
           {options.length > 1 ? <div className="flex flex-wrap gap-2" aria-label="Product options">
             {options.map((item) => <button type="button" key={item.id} onClick={() => setVariant(item.id)} aria-pressed={item.id === selected.id} className="rounded-lg border border-border px-4 py-2 text-sm aria-pressed:border-primary">{item.variant_name}</button>)}
           </div> : null}
-          <AppButton label={selected.availability_state === "out_of_stock" ? "Sold out" : "Add to cart"} isDisabled={selected.availability_state === "out_of_stock"} onPress={() => add(selected.id)} />
+          {selected.availability_state === "out_of_stock" ? <AppButton label="Sold out" isDisabled /> : <PremiumCartButton quantity={cart[selected.id]} onAdd={() => add(selected.id)} onView={() => setCartOpen(true)} />}
           <p className="text-sm text-muted">{selected.description}</p>
         </div>
       </main> : null}
@@ -137,12 +137,21 @@ export function StorefrontDemo({ theme, page, value = "", query = "" }: { theme:
         <Link href={base + "/shop"} className="mt-5 inline-block font-semibold underline">Continue shopping</Link>
       </main> : null}
       {page === "policies" ? <main className="mx-auto max-w-3xl px-4 py-12"><h1 className="text-3xl font-semibold">Store policies</h1><p className="mt-4">The merchant’s delivery, returns and privacy policies appear here.</p></main> : null}
-      <footer className="border-t border-border px-4 py-7 text-sm">
-        <nav className="mx-auto flex max-w-5xl flex-wrap gap-5" aria-label="Store information">
+      <footer className="border-t border-black/10 bg-[#f0f2ef] py-10 text-sm">
+        <div className={premiumWidth + " grid gap-8 sm:grid-cols-2"}>
+          <div className="space-y-3">
+            <h2 className="text-xl font-semibold">{store.name}</h2>
+            <address className="space-y-1 not-italic">
+              <p>{store.address}</p><p>{store.phone}</p><p>{store.email}</p>
+            </address>
+            <p className="text-xs text-[#586253]">Sample contact details</p>
+          </div>
+        <nav className="flex flex-wrap items-start gap-5 sm:justify-end" aria-label="Store information">
           <Link href={base + "/shop"} className="hover:underline">Shop</Link>
           <Link href={base + "/about"} className="hover:underline">About</Link>
           <Link href={base + "/policies"} className="hover:underline">Policies</Link>
         </nav>
+        </div>
       </footer>
       <SideSheet isOpen={cartOpen} onClose={() => setCartOpen(false)} title={"Your cart (" + count + ")"}
         footer={<AppButton label="View full cart" onPress={() => { setCartOpen(false); router.push(base + "/cart"); }} />}>

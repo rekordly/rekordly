@@ -113,6 +113,7 @@ export interface ThemeRendererProps {
   headerAction?: ReactNode;
   /** Items in the shopper's cart, shown on the header cart button. */
   cartCount?: number;
+  cartQuantities?: Readonly<Record<number, number>>;
   onCartClick?: () => void;
   selectCollection?: (slug: string) => void;
   page?: "home" | "shop" | "about" | "policies" | "privacy" | "returns" | "terms" | "delivery" | "cart" | "checkout" | "collection" | "product" | "search" | "orders";

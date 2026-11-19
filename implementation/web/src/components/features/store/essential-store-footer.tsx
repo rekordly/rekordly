@@ -53,8 +53,9 @@ export function EssentialStoreFooter({ store, brand, showContact = true }: { sto
         <div className="mt-12 grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.6fr_1fr_1fr_1fr]">
           <div className="space-y-5 text-[14px]">
             {store.description || store.tagline ? <p className="max-w-sm leading-6 opacity-80">{store.description || store.tagline}</p> : null}
-            {showContact ? (
+            {showContact && (store.email || store.phone || whatsapp || address) ? (
               <address className="space-y-3 not-italic">
+                <h2 className="text-[15px] font-semibold">Contact & address</h2>
                 {store.email ? <ContactLine href={`mailto:${store.email}`} icon={<EnvelopeSimple size={16} aria-hidden="true" />}>{store.email}</ContactLine> : null}
                 {store.phone ? <ContactLine href={`tel:${store.phone}`} icon={<Phone size={16} aria-hidden="true" />}>{store.phone}</ContactLine> : null}
                 {whatsapp ? <ContactLine href={`https://wa.me/${whatsapp}`} icon={<WhatsappLogo size={16} aria-hidden="true" />}>Chat on WhatsApp</ContactLine> : null}
