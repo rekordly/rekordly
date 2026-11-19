@@ -33,8 +33,8 @@ export function ShopperOrdersClient({ storeSlug, storeName }: { storeSlug?: stri
   const verifiedTokenRef = useRef("");
 
   const meQuery = useQuery({
-    queryKey: ["shopper-me"],
-    queryFn: () => financeApi.getShopperMe(),
+    queryKey: ["shopper-me", storeSlug ?? "all"],
+    queryFn: () => financeApi.getShopperMe(storeSlug),
     retry: false,
   });
 
@@ -55,7 +55,7 @@ export function ShopperOrdersClient({ storeSlug, storeName }: { storeSlug?: stri
   });
 
   const verifyMutation = useMutation({
-    mutationFn: (payload: { email?: string; code?: string; token?: string }) => financeApi.verifyShopperLogin(payload),
+    mutationFn: (payload: { email?: string; code?: string; token?: string }) => financeApi.verifyShopperLogin(payload, storeSlug),
     onSuccess: async () => {
       setErrorMsg("");
       setCode("");
@@ -74,7 +74,7 @@ export function ShopperOrdersClient({ storeSlug, storeName }: { storeSlug?: stri
   });
 
   const logoutMutation = useMutation({
-    mutationFn: () => financeApi.logoutShopper(),
+    mutationFn: () => financeApi.logoutShopper(storeSlug),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["shopper-me"] });
       await qc.invalidateQueries({ queryKey: ["shopper-orders"] });

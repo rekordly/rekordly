@@ -89,10 +89,23 @@ SET shipbubble_api_key = $3,
     shipbubble_strategy = $4,
     shipbubble_couriers = $5,
     default_weight_grams = $6,
+    shipbubble_webhook_token = $7,
     version = version + 1,
     updated_at = now()
 WHERE workspace_id = $1 AND storefront_id = $2
 RETURNING *;
+
+-- name: SetStorefrontShipbubbleWebhookToken :one
+UPDATE storefront_settings
+SET shipbubble_webhook_token = $3,
+    updated_at = now()
+WHERE workspace_id = $1 AND storefront_id = $2
+RETURNING *;
+
+-- name: GetStorefrontSettingsByShipbubbleWebhookToken :one
+SELECT * FROM storefront_settings
+WHERE shipbubble_webhook_token = $1
+LIMIT 1;
 
 -- name: UpdateStorefrontOrderHold :one
 UPDATE storefront_orders
@@ -255,6 +268,11 @@ RETURNING *;
 -- name: GetStorefrontOrderByTrackingNumber :one
 SELECT * FROM storefront_orders
 WHERE courier_tracking_number = $1
+LIMIT 1;
+
+-- name: GetStorefrontOrderByWorkspaceAndTrackingNumber :one
+SELECT * FROM storefront_orders
+WHERE workspace_id = $1 AND courier_tracking_number = $2
 LIMIT 1;
 
 -- name: UpdateStorefrontManualBankDetails :one
@@ -536,4 +554,37 @@ WHERE workspace_id = $1 AND id = $2;
 -- name: DecrementStorefrontOrderLineFulfilled :exec
 UPDATE storefront_order_lines
 SET fulfilled_quantity = fulfilled_quantity - $3
+WHERE workspace_id = $1 AND id = $2;
+
+-- name: ListAllMerchantPayoutAccountsForReencrypt :many
+SELECT id, workspace_id, subaccount_ref
+FROM merchant_payout_accounts
+WHERE subaccount_ref <> ''
+ORDER BY id;
+
+-- name: UpdateMerchantPayoutAccountSubaccountRef :exec
+UPDATE merchant_payout_accounts
+SET subaccount_ref = $3, updated_at = now()
+WHERE workspace_id = $1 AND id = $2;
+
+-- name: ListAllStorefrontSettingsShipbubbleKeysForReencrypt :many
+SELECT storefront_id, workspace_id, shipbubble_api_key
+FROM storefront_settings
+WHERE shipbubble_api_key IS NOT NULL AND shipbubble_api_key <> ''
+ORDER BY storefront_id;
+
+-- name: UpdateStorefrontSettingsShipbubbleKeyOnly :exec
+UPDATE storefront_settings
+SET shipbubble_api_key = $3, updated_at = now()
+WHERE workspace_id = $1 AND storefront_id = $2;
+
+-- name: ListAllStorefrontOrdersPublicTokensForReencrypt :many
+SELECT id, workspace_id, public_token_enc
+FROM storefront_orders
+WHERE public_token_enc IS NOT NULL AND public_token_enc <> ''
+ORDER BY id;
+
+-- name: UpdateStorefrontOrderPublicTokenEnc :exec
+UPDATE storefront_orders
+SET public_token_enc = $3, updated_at = now()
 WHERE workspace_id = $1 AND id = $2;

@@ -14,6 +14,7 @@ import (
 	"github.com/rekordly/rekordly-api/internal/auth"
 	"github.com/rekordly/rekordly-api/internal/billing"
 	"github.com/rekordly/rekordly-api/internal/config"
+	"github.com/rekordly/rekordly-api/internal/crypto"
 	"github.com/rekordly/rekordly-api/internal/database"
 	"github.com/rekordly/rekordly-api/internal/finance"
 	"github.com/rekordly/rekordly-api/internal/notify"
@@ -26,6 +27,10 @@ func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		logger.Error("configuration is invalid", "error", err)
+		os.Exit(1)
+	}
+	if err := crypto.SetKey(cfg.DataEncryptionKey); err != nil {
+		logger.Error("data encryption key is invalid", "error", err)
 		os.Exit(1)
 	}
 
@@ -77,6 +82,8 @@ func main() {
 		finance.WithPaymentProvider(paystack),
 		finance.WithEmailProvider(resend, cfg.GuestShareBaseURL),
 		finance.WithPlatformCommissionPercent(cfg.PlatformCommissionPercent),
+		finance.WithDataEncryptionKey(cfg.DataEncryptionKey),
+		finance.WithPublicAPIBaseURL(cfg.PublicAPIBaseURL),
 	}
 	if cfg.PaystackSecretKey != "" {
 		serviceOpts = append(serviceOpts, finance.WithStorefrontPaymentProvider(

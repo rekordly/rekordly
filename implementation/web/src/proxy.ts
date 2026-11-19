@@ -53,7 +53,7 @@ async function resolveStorefrontSlugFromHost(hostHeader: string | null): Promise
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
-  if (pathname === "/" || /^\/(shop|about|cart|policies|delivery|privacy|returns|terms|collections|products)(\/|$)/.test(pathname)) {
+  if (pathname === "/" || pathname === "/orders" || /^\/(shop|about|cart|policies|delivery|privacy|returns|terms|collections|products)(\/|$)/.test(pathname)) {
     const slug = await resolveStorefrontSlugFromHost(request.headers.get("host"));
     if (slug) {
       const targetPath = `/s/${encodeURIComponent(slug)}${pathname === "/" ? "" : pathname}${search}`;
@@ -67,7 +67,8 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith("/favicon") ||
     pathname.startsWith("/public") ||
     pathname.startsWith("/s") ||
-    pathname.startsWith("/orders/status") ||
+    pathname === "/orders" ||
+    pathname.startsWith("/orders/") ||
     pathname.startsWith("/purchase-orders/share") ||
     pathname.startsWith("/invitations") ||
     pathname.includes(".") ||

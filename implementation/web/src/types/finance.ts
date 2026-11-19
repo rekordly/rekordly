@@ -1742,6 +1742,7 @@ export interface StorefrontShipbubbleSettingsView {
   strategy: "cheapest" | "selected";
   selected_couriers: string[];
   default_weight_grams: number;
+  webhook_url?: string;
 }
 
 export interface ShipbubbleCourierInfo {

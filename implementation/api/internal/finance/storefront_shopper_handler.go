@@ -7,6 +7,10 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// ShopperSessionHeader is the server-to-server header used by the Next.js same-origin proxy
+// to forward the host-only rekordly_shopper_session cookie value to the Go API.
+const ShopperSessionHeader = "X-Shopper-Session-Token"
+
 func (h *Handler) registerPublicShopperRoutes(g *gin.RouterGroup) {
 	g.POST("/public/shopper/code", h.requestShopperCode)
 	g.POST("/public/shopper/verify", h.verifyShopperCode)
@@ -15,25 +19,8 @@ func (h *Handler) registerPublicShopperRoutes(g *gin.RouterGroup) {
 	g.POST("/public/shopper/logout", h.logoutShopper)
 }
 
-func setShopperSessionCookie(c *gin.Context, token string, maxAge int) {
-	isSecure := c.Request.TLS != nil || strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https")
-	http.SetCookie(c.Writer, &http.Cookie{
-		Name:     shopperSessionCookieName,
-		Value:    token,
-		Path:     "/",
-		MaxAge:   maxAge,
-		HttpOnly: true,
-		Secure:   isSecure,
-		SameSite: http.SameSiteLaxMode,
-	})
-}
-
-func readShopperSessionCookie(c *gin.Context) string {
-	cookie, err := c.Request.Cookie(shopperSessionCookieName)
-	if err != nil {
-		return ""
-	}
-	return cookie.Value
+func readShopperSessionHeader(c *gin.Context) string {
+	return strings.TrimSpace(c.GetHeader(ShopperSessionHeader))
 }
 
 func (h *Handler) requestShopperCode(c *gin.Context) {
@@ -64,12 +51,11 @@ func (h *Handler) verifyShopperCode(c *gin.Context) {
 		h.storefrontError(c, err)
 		return
 	}
-	setShopperSessionCookie(c, sessToken, 30*86400)
-	c.JSON(http.StatusOK, gin.H{"data": gin.H{"shopper": shopper}})
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"shopper": shopper, "session_token": sessToken}})
 }
 
 func (h *Handler) getShopperMe(c *gin.Context) {
-	shopper, err := h.service.GetShopperProfile(c.Request.Context(), readShopperSessionCookie(c))
+	shopper, err := h.service.GetShopperProfile(c.Request.Context(), readShopperSessionHeader(c))
 	if err != nil {
 		h.storefrontError(c, err)
 		return
@@ -78,7 +64,7 @@ func (h *Handler) getShopperMe(c *gin.Context) {
 }
 
 func (h *Handler) listShopperOrders(c *gin.Context) {
-	orders, err := h.service.ListShopperOrdersView(c.Request.Context(), readShopperSessionCookie(c), c.Query("store"))
+	orders, err := h.service.ListShopperOrdersView(c.Request.Context(), readShopperSessionHeader(c), c.Query("store"))
 	if err != nil {
 		h.storefrontError(c, err)
 		return
@@ -87,7 +73,6 @@ func (h *Handler) listShopperOrders(c *gin.Context) {
 }
 
 func (h *Handler) logoutShopper(c *gin.Context) {
-	_ = h.service.LogoutShopper(c.Request.Context(), readShopperSessionCookie(c))
-	setShopperSessionCookie(c, "", -1)
+	_ = h.service.LogoutShopper(c.Request.Context(), readShopperSessionHeader(c))
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"signed_out": true}})
 }

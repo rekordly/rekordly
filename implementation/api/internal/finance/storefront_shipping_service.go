@@ -34,6 +34,7 @@ type StorefrontShipbubbleSettingsView struct {
 	Strategy           string   `json:"strategy"`
 	SelectedCouriers   []string `json:"selected_couriers"`
 	DefaultWeightGrams int32    `json:"default_weight_grams"`
+	WebhookURL         string   `json:"webhook_url"`
 }
 
 type UpdateStorefrontShipbubbleSettingsInput struct {
@@ -74,10 +75,33 @@ func (s *Service) GetStorefrontShipbubbleSettings(ctx context.Context, wsID int6
 	if err != nil {
 		return StorefrontShipbubbleSettingsView{}, err
 	}
-	return buildShipbubbleSettingsView(st), nil
+	if st.ShipbubbleApiKey.Valid && strings.TrimSpace(st.ShipbubbleApiKey.String) != "" && (!st.ShipbubbleWebhookToken.Valid || strings.TrimSpace(st.ShipbubbleWebhookToken.String) == "") {
+		if tok, tokErr := randomHexToken(16); tokErr == nil && tok != "" {
+			if updatedSt, uErr := s.queries.SetStorefrontShipbubbleWebhookToken(ctx, db.SetStorefrontShipbubbleWebhookTokenParams{
+				WorkspaceID:            wsID,
+				StorefrontID:           sf.ID,
+				ShipbubbleWebhookToken: pgtype.Text{String: tok, Valid: true},
+			}); uErr == nil {
+				st = updatedSt
+			}
+		}
+	}
+	return s.buildShipbubbleSettingsView(st), nil
 }
 
-func buildShipbubbleSettingsView(st db.StorefrontSetting) StorefrontShipbubbleSettingsView {
+func (s *Service) shipbubbleWebhookURL(token string) string {
+	tok := strings.TrimSpace(token)
+	if tok == "" {
+		return ""
+	}
+	base := strings.TrimRight(strings.TrimSpace(s.publicAPIBaseURL), "/")
+	if base == "" {
+		base = "http://localhost:8080"
+	}
+	return base + "/api/v1/webhooks/shipbubble/" + tok
+}
+
+func (s *Service) buildShipbubbleSettingsView(st db.StorefrontSetting) StorefrontShipbubbleSettingsView {
 	var selected []string
 	if len(st.ShipbubbleCouriers) > 0 {
 		_ = json.Unmarshal(st.ShipbubbleCouriers, &selected)
@@ -95,12 +119,16 @@ func buildShipbubbleSettingsView(st db.StorefrontSetting) StorefrontShipbubbleSe
 	}
 	masked := ""
 	connected := false
+	webhookURL := ""
 	if st.ShipbubbleApiKey.Valid && strings.TrimSpace(st.ShipbubbleApiKey.String) != "" {
 		connected = true
 		if plain, decErr := crypto.Decrypt(st.ShipbubbleApiKey.String); decErr == nil {
 			masked = crypto.MaskSecret(plain)
 		} else {
 			masked = "****"
+		}
+		if st.ShipbubbleWebhookToken.Valid && strings.TrimSpace(st.ShipbubbleWebhookToken.String) != "" {
+			webhookURL = s.shipbubbleWebhookURL(st.ShipbubbleWebhookToken.String)
 		}
 	}
 	return StorefrontShipbubbleSettingsView{
@@ -109,6 +137,7 @@ func buildShipbubbleSettingsView(st db.StorefrontSetting) StorefrontShipbubbleSe
 		Strategy:           strategy,
 		SelectedCouriers:   selected,
 		DefaultWeightGrams: defaultWeight,
+		WebhookURL:         webhookURL,
 	}
 }
 
@@ -148,14 +177,23 @@ func (s *Service) UpdateStorefrontShipbubbleSettings(ctx context.Context, wsID i
 	}
 
 	encKey := st.ShipbubbleApiKey
+	webhookToken := st.ShipbubbleWebhookToken
 	if in.Disconnect {
 		encKey = pgtype.Text{Valid: false}
+		webhookToken = pgtype.Text{Valid: false}
 	} else if in.APIKey != nil && strings.TrimSpace(*in.APIKey) != "" {
 		enc, encErr := crypto.Encrypt(strings.TrimSpace(*in.APIKey))
 		if encErr != nil {
 			return StorefrontShipbubbleSettingsView{}, fmt.Errorf("encrypt shipbubble api key: %w", encErr)
 		}
 		encKey = pgtype.Text{String: enc, Valid: true}
+	}
+	if encKey.Valid && strings.TrimSpace(encKey.String) != "" && (!webhookToken.Valid || strings.TrimSpace(webhookToken.String) == "") {
+		tok, tokErr := randomHexToken(16)
+		if tokErr != nil {
+			return StorefrontShipbubbleSettingsView{}, fmt.Errorf("generate shipbubble webhook token: %w", tokErr)
+		}
+		webhookToken = pgtype.Text{String: tok, Valid: true}
 	}
 
 	couriersRaw := st.ShipbubbleCouriers
@@ -177,18 +215,19 @@ func (s *Service) UpdateStorefrontShipbubbleSettings(ctx context.Context, wsID i
 	}
 
 	updated, err := s.queries.UpdateStorefrontShipbubbleSettings(ctx, db.UpdateStorefrontShipbubbleSettingsParams{
-		WorkspaceID:        wsID,
-		StorefrontID:       sf.ID,
-		ShipbubbleApiKey:   encKey,
-		ShipbubbleStrategy: strategy,
-		ShipbubbleCouriers: couriersRaw,
-		DefaultWeightGrams: defaultWeight,
+		WorkspaceID:            wsID,
+		StorefrontID:           sf.ID,
+		ShipbubbleApiKey:       encKey,
+		ShipbubbleStrategy:     strategy,
+		ShipbubbleCouriers:     couriersRaw,
+		DefaultWeightGrams:     defaultWeight,
+		ShipbubbleWebhookToken: webhookToken,
 	})
 	if err != nil {
 		return StorefrontShipbubbleSettingsView{}, err
 	}
 	invalidateStorefrontCache(sf.Slug)
-	return buildShipbubbleSettingsView(updated), nil
+	return s.buildShipbubbleSettingsView(updated), nil
 }
 
 func (s *Service) TestStorefrontShipbubbleConnection(ctx context.Context, wsID int64, rawAPIKey string) ([]shipping.CourierInfo, error) {
@@ -614,44 +653,53 @@ func (s *Service) RetryStorefrontOrderCourierBooking(ctx context.Context, wsID, 
 	return s.buildMerchantOrderDetail(ctx, updated)
 }
 
-func (s *Service) HandleShipbubbleWebhook(ctx context.Context, rawBody []byte, headers http.Header) error {
-	var probe struct {
-		TrackingNumber string `json:"tracking_number"`
-		Data           struct {
-			TrackingNumber string `json:"tracking_number"`
-		} `json:"data"`
-	}
-	_ = json.Unmarshal(rawBody, &probe)
-	tracking := strings.TrimSpace(probe.Data.TrackingNumber)
-	if tracking == "" {
-		tracking = strings.TrimSpace(probe.TrackingNumber)
-	}
-	if tracking == "" {
+func (s *Service) HandleShipbubbleWebhook(ctx context.Context, webhookToken string, rawBody []byte, headers http.Header) error {
+	tok := strings.TrimSpace(webhookToken)
+	if tok == "" {
 		return ErrInvalidWebhookSignature
 	}
 
-	order, err := s.queries.GetStorefrontOrderByTrackingNumber(ctx, pgtype.Text{String: tracking, Valid: true})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrInvalidWebhookSignature
-	}
-	if err != nil {
-		return err
-	}
-	st, err := s.queries.GetStorefrontSettings(ctx, db.GetStorefrontSettingsParams{
-		StorefrontID: order.StorefrontID,
-		WorkspaceID:  order.WorkspaceID,
-	})
+	st, err := s.queries.GetStorefrontSettingsByShipbubbleWebhookToken(ctx, pgtype.Text{String: tok, Valid: true})
 	if err != nil || !st.ShipbubbleApiKey.Valid || strings.TrimSpace(st.ShipbubbleApiKey.String) == "" {
 		return ErrInvalidWebhookSignature
 	}
 	apiKey, decErr := crypto.Decrypt(st.ShipbubbleApiKey.String)
-	if decErr != nil {
+	if decErr != nil || strings.TrimSpace(apiKey) == "" {
 		return ErrInvalidWebhookSignature
 	}
 
 	ev, err := s.shipping().VerifyWebhook(apiKey, rawBody, headers)
 	if err != nil {
 		return ErrInvalidWebhookSignature
+	}
+
+	tracking := strings.TrimSpace(ev.TrackingNumber)
+	if tracking == "" {
+		var probe struct {
+			TrackingNumber string `json:"tracking_number"`
+			Data           struct {
+				TrackingNumber string `json:"tracking_number"`
+			} `json:"data"`
+		}
+		_ = json.Unmarshal(rawBody, &probe)
+		tracking = strings.TrimSpace(probe.Data.TrackingNumber)
+		if tracking == "" {
+			tracking = strings.TrimSpace(probe.TrackingNumber)
+		}
+	}
+	if tracking == "" {
+		return ErrInvalidWebhookSignature
+	}
+
+	order, err := s.queries.GetStorefrontOrderByWorkspaceAndTrackingNumber(ctx, db.GetStorefrontOrderByWorkspaceAndTrackingNumberParams{
+		WorkspaceID:           st.WorkspaceID,
+		CourierTrackingNumber: pgtype.Text{String: tracking, Valid: true},
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrInvalidWebhookSignature
+	}
+	if err != nil {
+		return err
 	}
 
 	eventID := fmt.Sprintf("sb:%d:%s:%s", order.ID, tracking, ev.Status)

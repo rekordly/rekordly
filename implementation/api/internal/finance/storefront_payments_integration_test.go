@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -1391,7 +1392,7 @@ func TestStorefrontShipbubbleRatesBookingAndWebhook(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
 	ws, user := createTestWorkspace(t, pool, "sf-shipbubble")
-	wsOther, _ := createTestWorkspace(t, pool, "sf-sb-other")
+	wsOther, otherUser := createTestWorkspace(t, pool, "sf-sb-other")
 
 	trkNum := fmt.Sprintf("TRK-LIVE-%d", time.Now().UnixNano())
 	shipMock := &mockShippingClient{failLabel: true, trackingNumber: trkNum}
@@ -1465,11 +1466,14 @@ func TestStorefrontShipbubbleRatesBookingAndWebhook(t *testing.T) {
 	require.True(t, sbView.Connected)
 	require.NotEqual(t, sbKey, sbView.APIKeyMasked)
 	require.Contains(t, sbView.APIKeyMasked, "8899")
+	require.Contains(t, sbView.WebhookURL, "/api/v1/webhooks/shipbubble/")
 
 	sbGet, err := svc.GetStorefrontShipbubbleSettings(ctx, ws)
 	require.NoError(t, err)
 	require.NotEqual(t, sbKey, sbGet.APIKeyMasked)
 	require.Equal(t, int32(500), sbGet.DefaultWeightGrams)
+	require.Equal(t, sbView.WebhookURL, sbGet.WebhookURL)
+	webhookPath := sbView.WebhookURL[strings.Index(sbView.WebhookURL, "/api/v1/webhooks/shipbubble/"):]
 
 	// Workspace isolation: wsOther has no storefront / cannot see ws Shipbubble config
 	_, err = svc.GetStorefrontShipbubbleSettings(ctx, wsOther)
@@ -1597,34 +1601,77 @@ func TestStorefrontShipbubbleRatesBookingAndWebhook(t *testing.T) {
 	require.NotNil(t, retried.CourierTrackingURL)
 	require.Nil(t, retried.CourierBookingError)
 
-	// 5. Shipbubble webhook signature check (wrong -> 401; valid picked_up -> delivered -> fulfils once & idempotent replay)
+	// 5. Shipbubble webhook signature & workspace token scoping check
 	signSB := func(raw []byte) string {
 		mac := hmac.New(sha512.New, []byte(sbKey))
 		mac.Write(raw)
 		return hex.EncodeToString(mac.Sum(nil))
 	}
 	pickupWH := []byte(fmt.Sprintf(`{"event":"shipment.status.changed","status":"picked_up","tracking_number":"%s","courier_name":"GIG Logistics"}`, trkNum))
-	reqSBWrong := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/shipbubble", bytes.NewReader(pickupWH))
+
+	// Old unscoped path /api/v1/webhooks/shipbubble does not exist (404)
+	reqSBOld := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/shipbubble", bytes.NewReader(pickupWH))
+	reqSBOld.Header.Set("x-ship-signature", signSB(pickupWH))
+	wSBOld := httptest.NewRecorder()
+	router.ServeHTTP(wSBOld, reqSBOld)
+	require.Equal(t, http.StatusNotFound, wSBOld.Code)
+
+	// Wrong token -> 401
+	reqSBBadTok := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/shipbubble/unknown_token_123", bytes.NewReader(pickupWH))
+	reqSBBadTok.Header.Set("x-ship-signature", signSB(pickupWH))
+	wSBBadTok := httptest.NewRecorder()
+	router.ServeHTTP(wSBBadTok, reqSBBadTok)
+	require.Equal(t, http.StatusUnauthorized, wSBBadTok.Code)
+
+	// Cross-workspace isolation: Workspace B with its own Shipbubble key & webhook token cannot update Workspace A's order
+	otherOutlet, err := svc.CreateOutlet(ctx, wsOther, otherUser, finance.CreateOutletInput{
+		Name: "Other Store", LocationType: "outlet", Address: "1 Other St, Lagos", IsDefault: true,
+	})
+	require.NoError(t, err)
+	_, err = svc.CreateStorefront(ctx, wsOther, otherUser, finance.CreateStorefrontInput{
+		Name: "Other Shop", Slug: fmt.Sprintf("other-sb-%d", time.Now().UnixNano()%1000000), DefaultOutletID: &otherOutlet.ID, Currency: "NGN",
+	})
+	require.NoError(t, err)
+	otherKey := "sb_live_other_workspace_key_7777"
+	otherSB, err := svc.UpdateStorefrontShipbubbleSettings(ctx, wsOther, finance.UpdateStorefrontShipbubbleSettingsInput{
+		APIKey:   &otherKey,
+		Strategy: "cheapest",
+	})
+	require.NoError(t, err)
+	otherWebhookPath := otherSB.WebhookURL[strings.Index(otherSB.WebhookURL, "/api/v1/webhooks/shipbubble/"):]
+	signOtherSB := func(raw []byte) string {
+		mac := hmac.New(sha512.New, []byte(otherKey))
+		mac.Write(raw)
+		return hex.EncodeToString(mac.Sum(nil))
+	}
+	reqCrossWS := httptest.NewRequest(http.MethodPost, otherWebhookPath, bytes.NewReader(pickupWH))
+	reqCrossWS.Header.Set("x-ship-signature", signOtherSB(pickupWH))
+	wCrossWS := httptest.NewRecorder()
+	router.ServeHTTP(wCrossWS, reqCrossWS)
+	require.Equal(t, http.StatusUnauthorized, wCrossWS.Code, "Workspace B's signed webhook must never touch Workspace A's order")
+
+	// Wrong signature on Workspace A's token -> 401
+	reqSBWrong := httptest.NewRequest(http.MethodPost, webhookPath, bytes.NewReader(pickupWH))
 	reqSBWrong.Header.Set("x-ship-signature", "deadbeef")
 	wSBWrong := httptest.NewRecorder()
 	router.ServeHTTP(wSBWrong, reqSBWrong)
 	require.Equal(t, http.StatusUnauthorized, wSBWrong.Code)
 
-	reqSBPickup := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/shipbubble", bytes.NewReader(pickupWH))
+	reqSBPickup := httptest.NewRequest(http.MethodPost, webhookPath, bytes.NewReader(pickupWH))
 	reqSBPickup.Header.Set("x-ship-signature", signSB(pickupWH))
 	wSBPickup := httptest.NewRecorder()
 	router.ServeHTTP(wSBPickup, reqSBPickup)
 	require.Equal(t, http.StatusOK, wSBPickup.Code)
 
 	delivWH := []byte(fmt.Sprintf(`{"event":"shipment.status.changed","status":"completed","tracking_number":"%s","courier_name":"GIG Logistics"}`, trkNum))
-	reqSBDeliv := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/shipbubble", bytes.NewReader(delivWH))
+	reqSBDeliv := httptest.NewRequest(http.MethodPost, webhookPath, bytes.NewReader(delivWH))
 	reqSBDeliv.Header.Set("x-ship-signature", signSB(delivWH))
 	wSBDeliv := httptest.NewRecorder()
 	router.ServeHTTP(wSBDeliv, reqSBDeliv)
 	require.Equal(t, http.StatusOK, wSBDeliv.Code)
 
 	// Replayed delivered webhook changes nothing
-	reqSBReplay := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/shipbubble", bytes.NewReader(delivWH))
+	reqSBReplay := httptest.NewRequest(http.MethodPost, webhookPath, bytes.NewReader(delivWH))
 	reqSBReplay.Header.Set("x-ship-signature", signSB(delivWH))
 	wSBReplay := httptest.NewRecorder()
 	router.ServeHTTP(wSBReplay, reqSBReplay)

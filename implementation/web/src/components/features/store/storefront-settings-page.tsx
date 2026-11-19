@@ -645,6 +645,30 @@ function SettingsContent({ workspaceId }: WorkspaceInfo) {
               onChange={(e) => set("default_weight_grams", Number(e.target.value))}
               description="Fallback weight when a product does not specify one."
             />
+            {shipbubbleSettings?.connected && shipbubbleSettings.webhook_url ? (
+              <div className="space-y-1.5 rounded-lg border border-default bg-surface p-2.5">
+                <p className="text-xs font-medium">Shipbubble webhook URL</p>
+                <p className="text-xs text-muted">
+                  Paste this workspace-scoped URL into your Shipbubble dashboard to receive live delivery status updates.
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <code className="min-w-0 flex-1 break-all rounded bg-default/40 px-2 py-1 text-xs">
+                    {shipbubbleSettings.webhook_url}
+                  </code>
+                  <AppButton
+                    size="sm"
+                    variant="secondary"
+                    label="Copy webhook URL"
+                    onPress={() => {
+                      if (typeof navigator !== "undefined" && navigator.clipboard) {
+                        void navigator.clipboard.writeText(shipbubbleSettings.webhook_url ?? "");
+                        toast.success("Shipbubble webhook URL copied");
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+            ) : null}
           </div>
           {field("default_delivery_fee", `Default delivery fee (${sf.currency})`)}
           <div className="space-y-2 pt-2">

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/rekordly/rekordly-api/internal/crypto"
 	"github.com/rekordly/rekordly-api/internal/finance"
 	"github.com/rekordly/rekordly-api/internal/notify"
 	"github.com/stretchr/testify/require"
@@ -210,28 +211,56 @@ func TestShopperIdentityTrackingSecurityAndIsolation(t *testing.T) {
 	require.Equal(t, http.StatusOK, wVerify.Code)
 	wReplayLink := postJSON("/api/v1/public/shopper/verify", map[string]any{"token": linkToken})
 	require.Equal(t, http.StatusUnauthorized, wReplayLink.Code, "used sign-in link token must not replay")
-	var sessionCookie *http.Cookie
 	for _, ck := range wVerify.Result().Cookies() {
-		if ck.Name == "rekordly_shopper_session" {
-			sessionCookie = ck
-			break
-		}
+		require.NotEqual(t, "rekordly_shopper_session", ck.Name, "Go API must never set rekordly_shopper_session cookie on API domain")
 	}
-	require.NotNil(t, sessionCookie)
-	require.True(t, sessionCookie.HttpOnly)
+	var verifyWrap struct {
+		Data struct {
+			Shopper      finance.ShopperProfileView `json:"shopper"`
+			SessionToken string                     `json:"session_token"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(wVerify.Body.Bytes(), &verifyWrap))
+	sessionToken := strings.TrimSpace(verifyWrap.Data.SessionToken)
+	require.NotEmpty(t, sessionToken, "verify must return session_token in JSON for Next.js proxy")
 
-	// 5. All stores vs ?store=slug scoping; zero cross-shopper leak
-	getWithCookie := func(path string, ck *http.Cookie) *httptest.ResponseRecorder {
+	// Direct browser Cookie header to Go API (without X-Shopper-Session-Token) must be rejected with 401
+	reqCookieOnly := httptest.NewRequest(http.MethodGet, "/api/v1/public/shopper/me", nil)
+	reqCookieOnly.AddCookie(&http.Cookie{Name: "rekordly_shopper_session", Value: sessionToken})
+	wCookieOnly := httptest.NewRecorder()
+	router.ServeHTTP(wCookieOnly, reqCookieOnly)
+	require.Equal(t, http.StatusUnauthorized, wCookieOnly.Code, "API-domain cookie without X-Shopper-Session-Token header must not authenticate")
+
+	reqOrdersCookieOnly := httptest.NewRequest(http.MethodGet, "/api/v1/public/shopper/orders", nil)
+	reqOrdersCookieOnly.AddCookie(&http.Cookie{Name: "rekordly_shopper_session", Value: sessionToken})
+	wOrdersCookieOnly := httptest.NewRecorder()
+	router.ServeHTTP(wOrdersCookieOnly, reqOrdersCookieOnly)
+	require.Equal(t, http.StatusUnauthorized, wOrdersCookieOnly.Code, "orders endpoint must reject API-domain cookie without X-Shopper-Session-Token header")
+
+	// 5. All stores vs ?store=slug scoping via X-Shopper-Session-Token header; zero cross-shopper leak
+	getWithSessionHeader := func(path string, tok string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
-		if ck != nil {
-			req.AddCookie(ck)
+		if tok != "" {
+			req.Header.Set(finance.ShopperSessionHeader, tok)
+		}
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		return w
+	}
+	postJSONWithSessionHeader := func(path string, payload any, tok string) *httptest.ResponseRecorder {
+		raw, _ := json.Marshal(payload)
+		req := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(raw))
+		req.RemoteAddr = testRemoteAddr
+		req.Header.Set("Content-Type", "application/json")
+		if tok != "" {
+			req.Header.Set(finance.ShopperSessionHeader, tok)
 		}
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 		return w
 	}
 
-	wAll := getWithCookie("/api/v1/public/shopper/orders", sessionCookie)
+	wAll := getWithSessionHeader("/api/v1/public/shopper/orders", sessionToken)
 	require.Equal(t, http.StatusOK, wAll.Code)
 	var allWrap struct {
 		Data struct {
@@ -245,7 +274,7 @@ func TestShopperIdentityTrackingSecurityAndIsolation(t *testing.T) {
 		require.NotContains(t, o.OrderURL, shopperEmail)
 	}
 
-	wScoped := getWithCookie("/api/v1/public/shopper/orders?store="+url.QueryEscape(slugA), sessionCookie)
+	wScoped := getWithSessionHeader("/api/v1/public/shopper/orders?store="+url.QueryEscape(slugA), sessionToken)
 	require.Equal(t, http.StatusOK, wScoped.Code)
 	var scopedWrap struct {
 		Data struct {
@@ -256,8 +285,8 @@ func TestShopperIdentityTrackingSecurityAndIsolation(t *testing.T) {
 	require.Len(t, scopedWrap.Data.Orders, 1)
 	require.Equal(t, slugA, scopedWrap.Data.Orders[0].StorefrontSlug)
 
-	// 6. Checkout with shopper cookie + save_details updates saved_addresses for prefill
-	wCheckout := postJSON("/api/v1/public/storefronts/"+slugA+"/checkout", map[string]any{
+	// 6. Checkout with X-Shopper-Session-Token + save_details updates saved_addresses for prefill
+	wCheckout := postJSONWithSessionHeader("/api/v1/public/storefronts/"+slugA+"/checkout", map[string]any{
 		"customer_name":       "Ada Obi",
 		"customer_phone":      "+2348099991234",
 		"customer_email":      shopperEmail,
@@ -268,10 +297,10 @@ func TestShopperIdentityTrackingSecurityAndIsolation(t *testing.T) {
 		"policy_acknowledged": true,
 		"idempotency_key":     fmt.Sprintf("shop-chk-%d", time.Now().UnixNano()),
 		"lines":               []map[string]any{{"storefront_product_id": prodA, "quantity": "1"}},
-	}, sessionCookie)
+	}, sessionToken)
 	require.Equal(t, http.StatusCreated, wCheckout.Code)
 
-	wMe := getWithCookie("/api/v1/public/shopper/me", sessionCookie)
+	wMe := getWithSessionHeader("/api/v1/public/shopper/me", sessionToken)
 	require.Equal(t, http.StatusOK, wMe.Code)
 	var meWrap struct {
 		Data struct {
@@ -282,9 +311,9 @@ func TestShopperIdentityTrackingSecurityAndIsolation(t *testing.T) {
 	require.Contains(t, meWrap.Data.Shopper.SavedAddresses, "42 Bourdillon Road, Ikoyi, Lagos")
 
 	// 7. Logout invalidates session
-	wOut := postJSON("/api/v1/public/shopper/logout", map[string]any{}, sessionCookie)
+	wOut := postJSONWithSessionHeader("/api/v1/public/shopper/logout", map[string]any{}, sessionToken)
 	require.Equal(t, http.StatusOK, wOut.Code)
-	wAfterOut := getWithCookie("/api/v1/public/shopper/orders", sessionCookie)
+	wAfterOut := getWithSessionHeader("/api/v1/public/shopper/orders", sessionToken)
 	require.Equal(t, http.StatusUnauthorized, wAfterOut.Code)
 
 	// 8. Workspace isolation & secret masking verification
@@ -307,4 +336,30 @@ func TestShopperIdentityTrackingSecurityAndIsolation(t *testing.T) {
 	require.NoError(t, err)
 	pvJSON, _ := json.Marshal(payView)
 	require.NotContains(t, string(pvJSON), "SUB_ACCT_MOCK_123")
+
+	// 9. ReencryptSecrets upgrades legacy unprefixed ciphertexts in DB to v1:-prefixed ciphertexts
+	// First ensure any rows from earlier tests in the shared test DB use LocalDevDefaultKey
+	_, _ = finance.ReencryptSecrets(ctx, pool, crypto.LegacyDefaultKey, crypto.LocalDevDefaultKey)
+	oldKey := crypto.LocalDevDefaultKey
+	newKey := "rotated-dedicated-encryption-key-32-bytes!!"
+	legacyEnc, err := crypto.EncryptSecret(sbSecret, oldKey)
+	require.NoError(t, err)
+	unprefixedHex := strings.TrimPrefix(legacyEnc, crypto.CiphertextVersionPrefix)
+	_, err = pool.Exec(ctx, `UPDATE storefront_settings SET shipbubble_api_key = $2 WHERE workspace_id = $1`, wsA, unprefixedHex)
+	require.NoError(t, err)
+
+	updatedRows, err := finance.ReencryptSecrets(ctx, pool, oldKey, newKey)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, updatedRows, 1)
+
+	var storedAfter string
+	require.NoError(t, pool.QueryRow(ctx, `SELECT shipbubble_api_key FROM storefront_settings WHERE workspace_id = $1`, wsA).Scan(&storedAfter))
+	require.True(t, strings.HasPrefix(storedAfter, "v1:"))
+	decAfter, err := crypto.DecryptSecret(storedAfter, newKey)
+	require.NoError(t, err)
+	require.Equal(t, sbSecret, decAfter)
+	// Restore test default key so subsequent tests in package continue cleanly
+	_, err = finance.ReencryptSecrets(ctx, pool, newKey, crypto.LocalDevDefaultKey)
+	require.NoError(t, err)
+	require.NoError(t, crypto.SetKey(crypto.LocalDevDefaultKey))
 }

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rekordly/rekordly-api/internal/crypto"
 	"github.com/spf13/viper"
 )
 
@@ -15,6 +16,8 @@ type Config struct {
 	Port                      string
 	DatabaseURL               string
 	JWTSigningSecret          string
+	DataEncryptionKey         string
+	PublicAPIBaseURL          string
 	CORSAllowedOrigins        []string
 	DatabaseMaxConns          int32
 	DatabaseMinConns          int32
@@ -96,11 +99,18 @@ func Load() (Config, error) {
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 
+	envName := strings.TrimSpace(v.GetString("ENVIRONMENT"))
+	if !v.IsSet("ENVIRONMENT") && strings.TrimSpace(v.GetString("ENV")) != "" {
+		envName = strings.TrimSpace(v.GetString("ENV"))
+	}
+
 	cfg := Config{
-		Environment:               v.GetString("ENVIRONMENT"),
+		Environment:               envName,
 		Port:                      v.GetString("PORT"),
 		DatabaseURL:               v.GetString("DATABASE_URL"),
 		JWTSigningSecret:          v.GetString("JWT_SIGNING_SECRET"),
+		DataEncryptionKey:         strings.TrimSpace(v.GetString("DATA_ENCRYPTION_KEY")),
+		PublicAPIBaseURL:          strings.TrimRight(strings.TrimSpace(v.GetString("PUBLIC_API_BASE_URL")), "/"),
 		CORSAllowedOrigins:        splitAndTrim(v.GetString("CORS_ALLOWED_ORIGINS")),
 		DatabaseMaxConns:          int32(v.GetInt("DATABASE_MAX_CONNS")),
 		DatabaseMinConns:          int32(v.GetInt("DATABASE_MIN_CONNS")),
@@ -150,6 +160,15 @@ func Load() (Config, error) {
 	if strings.TrimSpace(cfg.PaystackWebhookSecret) == "" {
 		cfg.PaystackWebhookSecret = cfg.PaystackSecretKey
 	}
+	if cfg.PublicAPIBaseURL == "" {
+		cfg.PublicAPIBaseURL = "http://localhost:" + cfg.Port
+	}
+
+	resolvedKey, err := validateAndResolveDataEncryptionKey(cfg.Environment, cfg.DataEncryptionKey, cfg.JWTSigningSecret)
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.DataEncryptionKey = resolvedKey
 
 	if cfg.DatabaseURL == "" {
 		return Config{}, fmt.Errorf("DATABASE_URL is required")
@@ -201,9 +220,37 @@ func Load() (Config, error) {
 	return cfg, nil
 }
 
+func validateAndResolveDataEncryptionKey(environment, dataEncryptionKey, jwtSigningSecret string) (string, error) {
+	env := strings.ToLower(strings.TrimSpace(environment))
+	key := strings.TrimSpace(dataEncryptionKey)
+	jwt := strings.TrimSpace(jwtSigningSecret)
+
+	if key != "" && jwt != "" && key == jwt {
+		return "", fmt.Errorf("DATA_ENCRYPTION_KEY must not reuse JWT_SIGNING_SECRET")
+	}
+
+	if env == "local" {
+		if key == "" {
+			return crypto.LocalDevDefaultKey, nil
+		}
+		if len(key) < crypto.MinKeyLength {
+			return "", fmt.Errorf("DATA_ENCRYPTION_KEY must be at least %d bytes", crypto.MinKeyLength)
+		}
+		return key, nil
+	}
+
+	if len(key) < crypto.MinKeyLength {
+		return "", fmt.Errorf("DATA_ENCRYPTION_KEY is required and must be at least %d bytes outside local", crypto.MinKeyLength)
+	}
+	return key, nil
+}
+
 func validateProductionConfig(cfg Config) error {
 	if strings.ToLower(strings.TrimSpace(cfg.Environment)) != "production" {
 		return nil
+	}
+	if _, err := validateAndResolveDataEncryptionKey(cfg.Environment, cfg.DataEncryptionKey, cfg.JWTSigningSecret); err != nil {
+		return err
 	}
 	if len(cfg.JWTSigningSecret) < 32 {
 		return fmt.Errorf("production requires JWT_SIGNING_SECRET >= 32 characters")

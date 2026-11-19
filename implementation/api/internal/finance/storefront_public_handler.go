@@ -171,7 +171,7 @@ func (h *Handler) submitGuestCheckout(c *gin.Context) {
 		in.IdempotencyKey = c.GetHeader("Idempotency-Key")
 	}
 	in.ClientKey = c.ClientIP()
-	if sessTok := readShopperSessionCookie(c); sessTok != "" {
+	if sessTok := readShopperSessionHeader(c); sessTok != "" {
 		if sid, sErr := h.service.ResolveShopperIDBySessionToken(c.Request.Context(), sessTok); sErr == nil {
 			in.ShopperID = sid
 		}

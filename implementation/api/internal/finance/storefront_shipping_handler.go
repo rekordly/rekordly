@@ -15,7 +15,7 @@ func (h *Handler) registerStorefrontShippingRoutes(g *gin.RouterGroup) {
 }
 
 func (h *Handler) RegisterStorefrontShippingWebhookRoutes(g *gin.RouterGroup) {
-	g.POST("/webhooks/shipbubble", h.shipbubbleWebhook)
+	g.POST("/webhooks/shipbubble/:token", h.shipbubbleWebhook)
 }
 
 func (h *Handler) getStorefrontShipbubbleSettings(c *gin.Context) {
@@ -104,7 +104,7 @@ func (h *Handler) shipbubbleWebhook(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "unable to read body"})
 		return
 	}
-	if err := h.service.HandleShipbubbleWebhook(c.Request.Context(), raw, c.Request.Header); err != nil {
+	if err := h.service.HandleShipbubbleWebhook(c.Request.Context(), c.Param("token"), raw, c.Request.Header); err != nil {
 		if err == ErrInvalidWebhookSignature {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid signature"})
 			return
