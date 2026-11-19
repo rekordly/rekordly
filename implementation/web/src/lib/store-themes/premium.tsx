@@ -105,6 +105,7 @@ export function PremiumShell({ model, family, children }: { model: ThemeRenderer
           {store.collections.filter((collection) => collection.slug).slice(0, studio ? 4 : 7).map((collection) => (
             <Link key={collection.id} href={collectionPath(store, collection.slug!)} className="hover:underline">{collection.name}</Link>
           ))}
+          {!store.path ? <Link href={base + "/orders"} className="hover:underline">Track my order</Link> : null}
           {sections.some((section) => section.type === "about" && section.enabled) ? <Link href={base + "/about"} className="hover:underline">About</Link> : null}
         </div>
       </nav>

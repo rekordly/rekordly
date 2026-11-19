@@ -281,6 +281,49 @@ function scopedPut<T>(workspaceId: number, path: string, body: unknown): Promise
   return apiClient.put<unknown, T>(path, body, { headers: workspaceHeaders(workspaceId) });
 }
 
+function inferStoreSlugFromLocation(explicitSlug?: string): string | undefined {
+  const trimmed = explicitSlug?.trim();
+  if (trimmed) return trimmed;
+  if (typeof window !== "undefined" && window.location?.pathname) {
+    const match = /^\/s\/([^/]+)/.exec(window.location.pathname);
+    if (match?.[1]) return decodeURIComponent(match[1]);
+  }
+  return undefined;
+}
+
+function shopperProxyBasePath(storeSlug?: string): string {
+  const slug = inferStoreSlugFromLocation(storeSlug);
+  return slug ? `/s/${encodeURIComponent(slug)}/api/shopper` : "/orders/api";
+}
+
+async function sameOriginShopperRequest<T>(
+  method: "GET" | "POST",
+  path: string,
+  body?: unknown,
+  headers?: Record<string, string>,
+): Promise<T> {
+  const res = await fetch(path, {
+    method,
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+      ...(method === "POST" ? { "Content-Type": "application/json" } : {}),
+      ...(headers ?? {}),
+    },
+    body: method === "POST" ? JSON.stringify(body ?? {}) : undefined,
+  });
+  let payload: { data?: T; error?: { code?: string; message?: string } } = {};
+  try {
+    payload = (await res.json()) as { data?: T; error?: { code?: string; message?: string } };
+  } catch {
+    payload = {};
+  }
+  if (!res.ok) {
+    throw new Error(payload.error?.message || `Request failed (${res.status})`);
+  }
+  return (payload.data ?? (payload as unknown as T)) as T;
+}
+
 export const RECORD_PAGE_SIZE = 25;
 
 export type RecordResource =
@@ -936,6 +979,14 @@ export const financeApi = {
     scopedPost<{ order: MerchantOrder }>(workspaceId, `/api/v1/orders/${id}/commands/messages`, { message, customer_visible: customerVisible }).then((r) => r.order),
   returnStorefrontOrder: (workspaceId: number, id: number, body: { reason: string; lines?: { order_line_id: number; quantity: string }[] }) =>
     scopedPost<{ order: MerchantOrder }>(workspaceId, `/api/v1/orders/${id}/commands/return`, body).then((r) => r.order),
+  readyForPickupStorefrontOrder: (workspaceId: number, id: number, expectedVersion: number) =>
+    scopedPost<{ order: MerchantOrder }>(workspaceId, `/api/v1/orders/${id}/commands/ready-for-pickup`, { expected_version: expectedVersion }).then((r) => r.order),
+  collectStorefrontOrder: (workspaceId: number, id: number, body: { expected_version: number; pickup_code: string; money_account_id?: number }) =>
+    scopedPost<{ order: MerchantOrder }>(workspaceId, `/api/v1/orders/${id}/commands/collect`, body).then((r) => r.order),
+  markStorefrontOrderPaid: (workspaceId: number, id: number, body: { money_account_id: number; notes?: string }) =>
+    scopedPost<{ order: MerchantOrder }>(workspaceId, `/api/v1/orders/${id}/commands/mark-paid`, body).then((r) => r.order),
+  resolveStorefrontPaymentAttention: (workspaceId: number, id: number, body: { action: "accept_as_paid" | "cancel_with_refund"; note?: string }) =>
+    scopedPost<{ order: MerchantOrder }>(workspaceId, `/api/v1/orders/${id}/commands/resolve-payment-attention`, body).then((r) => r.order),
   exportMerchantOrdersCsv: async (workspaceId: number) => {
     const base = API_BASE_URL;
     const res = await fetch(`${base}/api/v1/orders/export`, {
@@ -960,9 +1011,16 @@ export const financeApi = {
   trackPublicCheckoutStarted: (slug: string) =>
     apiClient.post<undefined, void>(`/api/v1/public/storefronts/${encodeURIComponent(slug)}/analytics/checkout-started`, undefined),
   submitGuestCheckout: (slug: string, body: unknown, idempotencyKey: string) =>
-    apiClient.post<unknown, { order: GuestCheckoutConfirmation }>(`/api/v1/public/storefronts/${encodeURIComponent(slug)}/checkout`, body, { headers: { "Idempotency-Key": idempotencyKey } }).then((r) => r.order),
+    sameOriginShopperRequest<{ order: GuestCheckoutConfirmation }>(
+      "POST",
+      `/s/${encodeURIComponent(slug)}/api/shopper/checkout`,
+      body,
+      { "Idempotency-Key": idempotencyKey },
+    ).then((r) => r.order),
   getPublicOrderStatus: (token: string) =>
     apiClient.get<{ order: PublicOrderStatus }>(`/api/v1/public/orders/${encodeURIComponent(token)}`).then((r) => r.order),
+  verifyPublicOrderPayment: (token: string) =>
+    apiClient.post<Record<string, never>, { order: PublicOrderStatus }>(`/api/v1/public/orders/${encodeURIComponent(token)}/verify-payment`, {}).then((r) => r.order),
   postPublicOrderMessage: (token: string, message: string) =>
     apiClient.post<{ message: string }, { order: PublicOrderStatus }>(`/api/v1/public/orders/${encodeURIComponent(token)}/messages`, { message }).then((r) => r.order),
   acknowledgePublicOrderChanges: (token: string, expectedVersion: number) =>
@@ -980,11 +1038,51 @@ export const financeApi = {
     scopedPost<{ payout_account: import("@/types/finance").MerchantPayoutAccountView }>(workspaceId, "/api/v1/storefront/payments/payout-account", body).then((r) => r.payout_account),
   recordStorefrontPayout: (workspaceId: number, body: unknown) =>
     scopedPost<{ status: string }>(workspaceId, "/api/v1/storefront/payments/record-payout", body),
+  // Shipbubble Courier Delivery
+  getStorefrontShipbubbleSettings: (workspaceId: number) =>
+    scopedGet<import("@/types/finance").StorefrontShipbubbleSettingsView>(workspaceId, "/api/v1/storefront/shipping/shipbubble"),
+  updateStorefrontShipbubbleSettings: (workspaceId: number, body: { api_key?: string; disconnect?: boolean; strategy?: "cheapest" | "selected"; selected_couriers?: string[]; default_weight_grams?: number }) =>
+    scopedPatch<import("@/types/finance").StorefrontShipbubbleSettingsView>(workspaceId, "/api/v1/storefront/shipping/shipbubble", body),
+  testStorefrontShipbubbleConnection: (workspaceId: number, apiKey?: string) =>
+    scopedPost<{ couriers: import("@/types/finance").ShipbubbleCourierInfo[] }>(workspaceId, "/api/v1/storefront/shipping/shipbubble/test", { api_key: apiKey ?? "" }).then((r) => r.couriers ?? []),
+  retryStorefrontCourierBooking: (workspaceId: number, orderId: number) =>
+    scopedPost<{ order: MerchantOrder }>(workspaceId, `/api/v1/orders/${orderId}/commands/retry-courier-booking`, {}).then((r) => r.order),
+  fetchPublicDeliveryRates: (slug: string, body: { address: string; name?: string; email?: string; phone?: string; lines: Array<{ storefront_product_id: number; quantity: string }> }) =>
+    apiClient.post<unknown, import("@/types/finance").PublicDeliveryRatesResponse>(`/api/v1/public/storefronts/${encodeURIComponent(slug)}/delivery-rates`, body),
 
   cancelPublicOrder: (token: string, reason?: string) =>
     apiClient.post<{ reason?: string }, { order: PublicOrderStatus }>(`/api/v1/public/orders/${encodeURIComponent(token)}/cancel`, { reason }).then((r) => r.order),
   requestPublicOrderReturn: (token: string, reason?: string) =>
     apiClient.post<{ reason?: string }, { order: PublicOrderStatus }>(`/api/v1/public/orders/${encodeURIComponent(token)}/return-request`, { reason }).then((r) => r.order),
+
+  // Passwordless Shopper Identity & Cross-Store Order Tracking (via same-origin Next.js proxy)
+  requestShopperCode: (email: string, storeSlug?: string) =>
+    sameOriginShopperRequest<{ message: string }>(
+      "POST",
+      `${shopperProxyBasePath(storeSlug)}/code`,
+      { email, store_slug: inferStoreSlugFromLocation(storeSlug) },
+    ),
+  verifyShopperLogin: (body: { email?: string; code?: string; token?: string }, storeSlug?: string) =>
+    sameOriginShopperRequest<{ shopper: import("@/types/finance").ShopperProfileView }>(
+      "POST",
+      `${shopperProxyBasePath(storeSlug)}/verify`,
+      body,
+    ).then((r) => r.shopper),
+  getShopperMe: (storeSlug?: string) =>
+    sameOriginShopperRequest<{ shopper: import("@/types/finance").ShopperProfileView }>(
+      "GET",
+      `${shopperProxyBasePath(storeSlug)}/me`,
+    ).then((r) => r.shopper),
+  listShopperOrders: (storeSlug?: string) => {
+    const resolvedSlug = inferStoreSlugFromLocation(storeSlug);
+    const base = shopperProxyBasePath(resolvedSlug);
+    const url = storeSlug ? `${base}/orders?store=${encodeURIComponent(storeSlug)}` : `${base}/orders`;
+    return sameOriginShopperRequest<{ orders: import("@/types/finance").ShopperOrderSummaryView[] }>("GET", url).then(
+      (r) => r.orders ?? [],
+    );
+  },
+  logoutShopper: (storeSlug?: string) =>
+    sameOriginShopperRequest<{ signed_out: boolean }>("POST", `${shopperProxyBasePath(storeSlug)}/logout`, {}),
 };
 
 /** Query keys are always namespaced by workspace so one space can never render another's rows. */

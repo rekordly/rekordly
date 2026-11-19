@@ -13,6 +13,7 @@ import (
 func (h *Handler) RegisterStorefrontRoutes(g *gin.RouterGroup) {
 	h.registerStorefrontDesignRoutes(g)
 	h.registerStorefrontPaymentRoutes(g)
+	h.registerStorefrontShippingRoutes(g)
 	g.POST("/storefront", h.createStorefront)
 	g.GET("/storefront", h.getMerchantStorefront)
 	g.GET("/storefront/settings", h.getMerchantStorefront)
@@ -53,8 +54,10 @@ func (h *Handler) storefrontError(c *gin.Context, err error) {
 		status, code = http.StatusNotFound, "PRODUCT_NOT_PUBLISHED"
 	case errors.Is(err, ErrCartItemChanged):
 		status, code = http.StatusConflict, "CART_ITEM_CHANGED"
-	case errors.Is(err, ErrCheckoutRateLimited):
+	case errors.Is(err, ErrCheckoutRateLimited), errors.Is(err, ErrShopperRateLimited):
 		status, code = http.StatusTooManyRequests, "CHECKOUT_RATE_LIMITED"
+	case errors.Is(err, ErrShopperCodeInvalid), errors.Is(err, ErrShopperUnauthenticated):
+		status, code = http.StatusUnauthorized, "SHOPPER_UNAUTHORIZED"
 	case errors.Is(err, ErrOrderVersionConflict):
 		status, code = http.StatusConflict, "ORDER_VERSION_CONFLICT"
 	case errors.Is(err, ErrStorefrontDesignVersionConflict):
@@ -132,7 +135,7 @@ func (h *Handler) updateStorefrontSettings(c *gin.Context) {
 		return
 	}
 	cardFields := map[string]map[string]bool{
-  "brand": {"brand": true},
+		"brand":    {"brand": true},
 		"details":  {"name": true, "slug": true, "contact_phone": true, "contact_email": true, "whatsapp_number": true, "address": true, "business_hours": true},
 		"delivery": {"delivery_methods": true, "delivery_guidance": true, "default_delivery_fee": true, "delivery_areas": true, "free_delivery_threshold": true},
 		"payments": {"checkout_require_email": true, "checkout_require_phone": true, "reservation_ttl_hours": true},
@@ -174,10 +177,10 @@ func (h *Handler) updateStorefrontSettings(c *gin.Context) {
 		"whatsapp_number": current.Settings.WhatsappNumber, "address": current.Settings.Address,
 		"business_hours": current.Settings.BusinessHours, "social_links": current.Settings.SocialLinks,
 		"delivery_methods": current.Settings.DeliveryMethods, "delivery_guidance": current.Settings.DeliveryGuidance,
-		"default_delivery_fee":   minorToMajorString(parseMinor(current.Settings.DefaultDeliveryFeeMinor), int(current.CurrencyExponent)),
+		"default_delivery_fee":    minorToMajorString(parseMinor(current.Settings.DefaultDeliveryFeeMinor), int(current.CurrencyExponent)),
 		"free_delivery_threshold": "",
-		"delivery_areas":         []StorefrontDeliveryAreaInput{},
-		"checkout_require_email": current.Settings.CheckoutRequireEmail, "checkout_require_phone": current.Settings.CheckoutRequirePhone,
+		"delivery_areas":          []StorefrontDeliveryAreaInput{},
+		"checkout_require_email":  current.Settings.CheckoutRequireEmail, "checkout_require_phone": current.Settings.CheckoutRequirePhone,
 		"return_policy": current.Settings.ReturnPolicy, "privacy_policy": current.Settings.PrivacyPolicy,
 		"terms_policy": current.Settings.TermsPolicy, "custom_policy": current.Settings.CustomPolicy,
 		"seo_title": current.Settings.SeoTitle, "seo_description": current.Settings.SeoDescription,
@@ -190,8 +193,18 @@ func (h *Handler) updateStorefrontSettings(c *gin.Context) {
 	}
 	areas := make([]StorefrontDeliveryAreaInput, 0, len(current.Settings.DeliveryAreas))
 	for _, area := range current.Settings.DeliveryAreas {
-		if !area.IsActive { continue }
-		areas = append(areas, StorefrontDeliveryAreaInput{ID: area.ID, Name: area.Name, Fee: minorToMajorString(parseMinor(area.FeeMinor), int(current.CurrencyExponent)), Description: area.Description})
+		if !area.IsActive {
+			continue
+		}
+		areas = append(areas, StorefrontDeliveryAreaInput{
+			ID:           area.ID,
+			Name:         area.Name,
+			Fee:          minorToMajorString(parseMinor(area.FeeMinor), int(current.CurrencyExponent)),
+			Description:  area.Description,
+			State:        area.State,
+			EstimateText: area.EstimateText,
+			OutletID:     area.OutletID,
+		})
 	}
 	base["delivery_areas"] = areas
 	for key, value := range patch {

@@ -71,6 +71,7 @@ export function SimpleStoreRenderer(props: ThemeRendererProps) {
     { href: `${base}/shop`, label: "Shop" },
     ...(hasAbout ? [{ href: `${base}/about`, label: "About" }] : []),
     { href: `${base}/policies`, label: "Customer care" },
+    { href: `${base}/orders`, label: "Track my order" },
   ];
 
   // Group variants into products, then apply the listing source and filters.

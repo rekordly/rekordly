@@ -1,11 +1,16 @@
 package finance_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/rekordly/rekordly-api/internal/db"
 	"github.com/rekordly/rekordly-api/internal/finance"
 	"github.com/stretchr/testify/require"
@@ -164,29 +169,106 @@ func TestProcurementD1D2D3Integration(t *testing.T) {
 	require.Equal(t, int64(0), unread2)
 
 	// D3: Document Files Attachment
-	// Attach file using uploaded file details ({ asset_id, file_name, mime_type, size_bytes })
+	// Attach file using uploaded file details ({ asset_id, file_name, mime_type, size_bytes, idempotency_key })
+	idempKey := fmt.Sprintf("idemp-po-file-%d", suffix)
+	assetID := fmt.Sprintf("evidence/%d/invoice.pdf", suffix)
 	docFile, err := svc.AttachDocumentFile(ctx, wsA, userA, "purchase_order", po.ID, finance.AttachDocumentFileInput{
-		AssetID:   fmt.Sprintf("evidence/%d/invoice.pdf", suffix),
-		FileName:  "invoice.pdf",
-		MimeType:  "application/pdf",
-		SizeBytes: 2048,
+		AssetID:        assetID,
+		FileName:       "invoice.pdf",
+		MimeType:       "application/pdf",
+		SizeBytes:      2048,
+		IdempotencyKey: idempKey,
 	})
 	require.NoError(t, err)
 	require.NotZero(t, docFile.ID)
 	require.NotZero(t, docFile.EvidenceID)
 	require.Equal(t, "invoice.pdf", docFile.FileName)
 
-	// Verify PO detail now includes the attached file
+	// Idempotency: Replay with the same idempotency_key returns the first DocumentFileView
+	replayFile, err := svc.AttachDocumentFile(ctx, wsA, userA, "purchase_order", po.ID, finance.AttachDocumentFileInput{
+		AssetID:        assetID,
+		FileName:       "invoice.pdf",
+		MimeType:       "application/pdf",
+		SizeBytes:      2048,
+		IdempotencyKey: idempKey,
+	})
+	require.NoError(t, err)
+	require.Equal(t, docFile.ID, replayFile.ID)
+	require.Equal(t, docFile.EvidenceID, replayFile.EvidenceID)
+	require.Equal(t, docFile.FileName, replayFile.FileName)
+
+	// Idempotency: Re-attaching the same asset_id without idempotency_key returns the existing link
+	replayAssetOnly, err := svc.AttachDocumentFile(ctx, wsA, userA, "purchase_order", po.ID, finance.AttachDocumentFileInput{
+		AssetID:   assetID,
+		FileName:  "invoice.pdf",
+		MimeType:  "application/pdf",
+		SizeBytes: 2048,
+	})
+	require.NoError(t, err)
+	require.Equal(t, docFile.ID, replayAssetOnly.ID)
+	require.Equal(t, docFile.EvidenceID, replayAssetOnly.EvidenceID)
+
+	// Idempotency: Re-attaching the same evidence_id to the same document returns the existing link
+	replayEvidenceOnly, err := svc.AttachDocumentFile(ctx, wsA, userA, "purchase_order", po.ID, finance.AttachDocumentFileInput{
+		EvidenceID: docFile.EvidenceID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, docFile.ID, replayEvidenceOnly.ID)
+	require.Equal(t, docFile.EvidenceID, replayEvidenceOnly.EvidenceID)
+
+	// Verify PO detail now includes the attached file (still exactly 1 file due to idempotency)
 	poWithFile, err := svc.GetPurchaseOrder(ctx, wsA, po.ID)
 	require.NoError(t, err)
 	require.Len(t, poWithFile.Files, 1)
 	require.Equal(t, "invoice.pdf", poWithFile.Files[0].FileName)
 
-	// Isolation: Workspace B cannot attach Workspace A's evidence asset
+	// Document existence check: Another workspace's document id gets 404 (ErrNotFound)
 	_, err = svc.AttachDocumentFile(ctx, wsB, userA, "purchase_order", po.ID, finance.AttachDocumentFileInput{
-		EvidenceID: docFile.EvidenceID,
+		AssetID:   fmt.Sprintf("evidence/%d/cross-ws.pdf", suffix),
+		FileName:  "cross-ws.pdf",
+		MimeType:  "application/pdf",
+		SizeBytes: 2048,
+	})
+	require.ErrorIs(t, err, finance.ErrNotFound)
+
+	// Non-existent document ID in wsA also gets 404 (ErrNotFound)
+	_, err = svc.AttachDocumentFile(ctx, wsA, userA, "purchase_order", 999999999, finance.AttachDocumentFileInput{
+		AssetID:   fmt.Sprintf("evidence/%d/non-existent.pdf", suffix),
+		FileName:  "non-existent.pdf",
+		MimeType:  "application/pdf",
+		SizeBytes: 2048,
+	})
+	require.ErrorIs(t, err, finance.ErrNotFound)
+
+	// Validation: Request with only an idempotency key and no asset_id gets 400 ("Upload the file first")
+	_, err = svc.AttachDocumentFile(ctx, wsA, userA, "purchase_order", po.ID, finance.AttachDocumentFileInput{
+		IdempotencyKey: fmt.Sprintf("only-key-%d", suffix),
 	})
 	require.Error(t, err)
+	require.Contains(t, err.Error(), "Upload the file first")
+
+	// Verify HTTP endpoint returns 400 for request with only idempotency_key and no asset_id
+	h := finance.NewHandler(svc, nil)
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Set(finance.ContextWorkspaceKey, finance.WorkspaceContext{
+			WorkspaceID: wsA,
+			UserID:      userA,
+			IsOwner:     true,
+		})
+		c.Next()
+	})
+	h.RegisterBlueprintsCompletionRoutes(r.Group(""))
+
+	reqBody, _ := json.Marshal(map[string]any{
+		"idempotency_key": fmt.Sprintf("http-only-key-%d", suffix),
+	})
+	httpReq := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/documents/purchase_order/%d/files", po.ID), bytes.NewReader(reqBody))
+	httpReq.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httpReq)
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	require.Contains(t, w.Body.String(), "Upload the file first")
 
 	// Same workspace can attach existing evidence_id to another document (e.g. supplier bill)
 	billFile, err := svc.AttachDocumentFile(ctx, wsA, userA, "supplier_bill", billID, finance.AttachDocumentFileInput{
@@ -194,6 +276,13 @@ func TestProcurementD1D2D3Integration(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotZero(t, billFile.ID)
+
+	// Replay re-attaching evidence_id to supplier_bill returns existing link
+	replayBillFile, err := svc.AttachDocumentFile(ctx, wsA, userA, "supplier_bill", billID, finance.AttachDocumentFileInput{
+		EvidenceID: docFile.EvidenceID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, billFile.ID, replayBillFile.ID)
 
 	// Delete file from PO
 	delCount, err := q.DeleteDocumentFile(ctx, db.DeleteDocumentFileParams{
@@ -217,8 +306,6 @@ func TestProcurementD1D2D3Integration(t *testing.T) {
 		DocumentID:   billID,
 		ID:           billFile.ID,
 	})
-	require.NoError(t, err)
-	require.Equal(t, int64(0), delWsB)
 	require.NoError(t, err)
 	require.Equal(t, int64(0), delWsB)
 }

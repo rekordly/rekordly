@@ -62,7 +62,7 @@ export function EssentialStoreFooter({ store, brand, showContact = true }: { sto
               </address>
             ) : null}
           </div>
-          <FooterLinks title="Links" links={[{ href: `${base}/shop`, label: "Shop" }, { href: `${base}/about`, label: "About us" }, { href: `${base}/cart`, label: "Cart" }]} />
+          <FooterLinks title="Links" links={[{ href: `${base}/shop`, label: "Shop" }, { href: `${base}/about`, label: "About us" }, { href: `${base}/cart`, label: "Cart" }, { href: `${base}/orders`, label: "Track my order" }]} />
           <FooterLinks
             title="Categories"
             links={store.collections.length ? store.collections.slice(0, 6).map((category) => ({ href: `${base}/collections/${encodeURIComponent(category.slug ?? String(category.id))}`, label: category.name })) : [{ href: `${base}/shop`, label: "All products" }]}

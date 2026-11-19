@@ -23,9 +23,9 @@ var ErrStorefrontDesignVersionConflict = errors.New("store design changed. Reloa
 var ErrStorefrontThemePurchaseRequired = errors.New("purchase this theme before publishing")
 
 type StorefrontBrand struct {
- Colors []string `json:"colors,omitempty"`
- HeadingFont string `json:"heading_font,omitempty"`
- BodyFont string `json:"body_font,omitempty"`
+	Colors          []string           `json:"colors,omitempty"`
+	HeadingFont     string             `json:"heading_font,omitempty"`
+	BodyFont        string             `json:"body_font,omitempty"`
 	LogoURL         string             `json:"logo_url,omitempty"`
 	FaviconURL      string             `json:"favicon_url,omitempty"`
 	Palette         string             `json:"palette"`
@@ -88,7 +88,7 @@ type StorefrontDesignView struct {
 	DraftThemeKey         string                        `json:"draft_theme_key"`
 	DraftBrand            json.RawMessage               `json:"draft_brand"`
 	DraftSections         json.RawMessage               `json:"draft_sections"`
-	ThemeDrafts json.RawMessage `json:"theme_drafts"`
+	ThemeDrafts           json.RawMessage               `json:"theme_drafts"`
 	Contact               map[string]any                `json:"contact"`
 	AvailableThemes       []StorefrontDesignThemeOption `json:"available_themes"`
 	HasUnpublishedChanges bool                          `json:"has_unpublished_changes"`
@@ -209,7 +209,9 @@ func validateStorefrontDesign(in StorefrontDesignInput) (StorefrontDesignInput, 
 		in.Brand.CustomColor = strings.ToUpper(in.Brand.CustomColor)
 	}
 	in.Brand.ResolvedPalette = nil
- if err := validateStoreBrand(&in.Brand); err != nil { return in, nil, nil, err }
+	if err := validateStoreBrand(&in.Brand); err != nil {
+		return in, nil, nil, err
+	}
 	logo, err := validateStoreImage(in.Brand.LogoURL)
 	if err != nil {
 		return in, nil, nil, err
@@ -245,10 +247,12 @@ func validateStorefrontDesign(in StorefrontDesignInput) (StorefrontDesignInput, 
 				return in, nil, nil, err
 			}
 		case "hero":
-   if productID, ok := section.Content["product_id"]; ok && productID != nil {
-    value, numeric := productID.(float64)
-    if !numeric || value < 1 || value != float64(int64(value)) { return in, nil, nil, errors.New("choose a valid featured product") }
-   }
+			if productID, ok := section.Content["product_id"]; ok && productID != nil {
+				value, numeric := productID.(float64)
+				if !numeric || value < 1 || value != float64(int64(value)) {
+					return in, nil, nil, errors.New("choose a valid featured product")
+				}
+			}
 			for key, max := range map[string]int{"heading": 80, "subheading": 180, "button_label": 28} {
 				if _, err := storefrontSectionText(section.Content, key, max); err != nil {
 					return in, nil, nil, err

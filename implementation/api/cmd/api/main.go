@@ -14,9 +14,11 @@ import (
 	"github.com/rekordly/rekordly-api/internal/auth"
 	"github.com/rekordly/rekordly-api/internal/billing"
 	"github.com/rekordly/rekordly-api/internal/config"
+	"github.com/rekordly/rekordly-api/internal/crypto"
 	"github.com/rekordly/rekordly-api/internal/database"
 	"github.com/rekordly/rekordly-api/internal/finance"
 	"github.com/rekordly/rekordly-api/internal/notify"
+	"github.com/rekordly/rekordly-api/internal/payments"
 	"github.com/rekordly/rekordly-api/internal/server"
 )
 
@@ -25,6 +27,10 @@ func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		logger.Error("configuration is invalid", "error", err)
+		os.Exit(1)
+	}
+	if err := crypto.SetKey(cfg.DataEncryptionKey); err != nil {
+		logger.Error("data encryption key is invalid", "error", err)
 		os.Exit(1)
 	}
 
@@ -66,8 +72,7 @@ func main() {
 	paystack := billing.NewPaystackProvider(cfg.PaystackSecretKey, cfg.PaystackWebhookSecret, cfg.PaystackBaseURL, 15*time.Second)
 	resend := notify.NewResendEmailProvider(cfg.ResendAPIKey, cfg.ResendBaseURL, cfg.EmailFrom, cfg.EmailWebhookSecret, 15*time.Second)
 
-	financeService := finance.NewService(
-		pool,
+	serviceOpts := []finance.ServiceOption{
 		finance.WithCloudinaryEvidence(finance.CloudinaryEvidenceConfig{
 			CloudName: cfg.CloudinaryCloudName,
 			APIKey:    cfg.CloudinaryAPIKey,
@@ -76,7 +81,22 @@ func main() {
 		finance.WithAIOrchestrator(aiOrch),
 		finance.WithPaymentProvider(paystack),
 		finance.WithEmailProvider(resend, cfg.GuestShareBaseURL),
-	)
+		finance.WithPlatformCommissionPercent(cfg.PlatformCommissionPercent),
+		finance.WithDataEncryptionKey(cfg.DataEncryptionKey),
+		finance.WithPublicAPIBaseURL(cfg.PublicAPIBaseURL),
+	}
+	if cfg.PaystackSecretKey != "" {
+		serviceOpts = append(serviceOpts, finance.WithStorefrontPaymentProvider(
+			payments.NewPaystackProvider(cfg.PaystackSecretKey, cfg.PaystackWebhookSecret, cfg.PaystackBaseURL, 15*time.Second),
+		))
+	}
+	if cfg.SquadSecretKey != "" {
+		serviceOpts = append(serviceOpts, finance.WithStorefrontPaymentProvider(
+			payments.NewSquadProvider(cfg.SquadSecretKey, cfg.SquadWebhookSecret, cfg.SquadBaseURL, 15*time.Second, payments.WithSquadDynamicVA(cfg.SquadDynamicVAEnabled)),
+		))
+	}
+
+	financeService := finance.NewService(pool, serviceOpts...)
 	financeAuthMiddleware := finance.AuthAndWorkspaceMiddleware(pool, authService)
 	financeHandler := finance.NewHandler(financeService, financeAuthMiddleware)
 

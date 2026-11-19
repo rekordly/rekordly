@@ -15,8 +15,10 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/rekordly/rekordly-api/internal/crypto"
 	"github.com/rekordly/rekordly-api/internal/db"
 	"github.com/rekordly/rekordly-api/internal/payments"
+	"github.com/rekordly/rekordly-api/internal/shipping"
 	"github.com/shopspring/decimal"
 )
 
@@ -76,50 +78,60 @@ type PublicProductView struct {
 }
 
 type PublicStorefrontProjection struct {
-	Name                    string                     `json:"name"`
-	Slug                    string                     `json:"slug"`
-	ThemeKey                string                     `json:"theme_key"`
-	Currency                string                     `json:"currency"`
-	CurrencyExponent        int32                      `json:"currency_exponent"`
-	Tagline                 *string                    `json:"tagline,omitempty"`
-	Description             *string                    `json:"description,omitempty"`
-	LogoURL                 *string                    `json:"logo_url,omitempty"`
-	BannerURL               *string                    `json:"banner_url,omitempty"`
-	PrimaryColor            string                     `json:"primary_color"`
-	AccentColor             string                     `json:"accent_color"`
-	BackgroundColor         string                     `json:"background_color"`
-	TextColor               string                     `json:"text_color"`
-	FontFamily              string                     `json:"font_family"`
-	Brand                   json.RawMessage            `json:"brand"`
-	Sections                []StorefrontSection        `json:"sections"`
-	SectionOrder            []string                   `json:"section_order"`
-	ContactPhone            *string                    `json:"contact_phone,omitempty"`
-	ContactEmail            *string                    `json:"contact_email,omitempty"`
-	WhatsappNumber          *string                    `json:"whatsapp_number,omitempty"`
-	Address                 *string                    `json:"address,omitempty"`
-	BusinessHours           map[string]string          `json:"business_hours"`
-	SocialLinks             map[string]string          `json:"social_links"`
-	DeliveryMethods         []string                   `json:"delivery_methods"`
-	DeliveryGuidance        *string                    `json:"delivery_guidance,omitempty"`
-	DefaultDeliveryFeeMinor string                     `json:"default_delivery_fee_minor"`
-	FreeDeliveryThresholdMinor *string                 `json:"free_delivery_threshold_minor,omitempty"`
-	DeliveryAreas           []StorefrontDeliveryAreaView `json:"delivery_areas"`
-	CheckoutRequireEmail    bool                       `json:"checkout_require_email"`
-	CheckoutRequirePhone    bool                       `json:"checkout_require_phone"`
-	ShowSoldOut             bool                       `json:"show_sold_out"`
-	ShowStockCount          bool                       `json:"show_stock_count"`
-	LowStockThreshold       int32                      `json:"low_stock_threshold"`
-	ReturnPolicy            *string                    `json:"return_policy,omitempty"`
-	PrivacyPolicy           *string                    `json:"privacy_policy,omitempty"`
-	TermsPolicy             *string                    `json:"terms_policy,omitempty"`
-	CustomPolicy            *string                    `json:"custom_policy,omitempty"`
-	SeoTitle                *string                    `json:"seo_title,omitempty"`
-	SeoDescription          *string                    `json:"seo_description,omitempty"`
-	SeoImageURL             *string                    `json:"seo_image_url,omitempty"`
-	SeoIndexable            bool                       `json:"seo_indexable"`
-	AvailabilityAsOf        string                     `json:"availability_as_of"`
-	Collections             []StorefrontCollectionView `json:"collections"`
-	Products                []PublicProductView        `json:"products"`
+	Name                         string                       `json:"name"`
+	Slug                         string                       `json:"slug"`
+	ThemeKey                     string                       `json:"theme_key"`
+	Currency                     string                       `json:"currency"`
+	CurrencyExponent             int32                        `json:"currency_exponent"`
+	Tagline                      *string                      `json:"tagline,omitempty"`
+	Description                  *string                      `json:"description,omitempty"`
+	LogoURL                      *string                      `json:"logo_url,omitempty"`
+	BannerURL                    *string                      `json:"banner_url,omitempty"`
+	PrimaryColor                 string                       `json:"primary_color"`
+	AccentColor                  string                       `json:"accent_color"`
+	BackgroundColor              string                       `json:"background_color"`
+	TextColor                    string                       `json:"text_color"`
+	FontFamily                   string                       `json:"font_family"`
+	Brand                        json.RawMessage              `json:"brand"`
+	Sections                     []StorefrontSection          `json:"sections"`
+	SectionOrder                 []string                     `json:"section_order"`
+	ContactPhone                 *string                      `json:"contact_phone,omitempty"`
+	ContactEmail                 *string                      `json:"contact_email,omitempty"`
+	WhatsappNumber               *string                      `json:"whatsapp_number,omitempty"`
+	Address                      *string                      `json:"address,omitempty"`
+	BusinessHours                map[string]string            `json:"business_hours"`
+	SocialLinks                  map[string]string            `json:"social_links"`
+	DeliveryMethods              []string                     `json:"delivery_methods"`
+	DeliveryGuidance             *string                      `json:"delivery_guidance,omitempty"`
+	DefaultDeliveryFeeMinor      string                       `json:"default_delivery_fee_minor"`
+	FreeDeliveryThresholdMinor   *string                      `json:"free_delivery_threshold_minor,omitempty"`
+	DeliveryAreas                []StorefrontDeliveryAreaView `json:"delivery_areas"`
+	PickupPoints                 []StorefrontPickupPointView  `json:"pickup_points"`
+	PaymentBankTransferEnabled   bool                         `json:"payment_bank_transfer_enabled"`
+	PaymentCardEnabled           bool                         `json:"payment_card_enabled"`
+	PaymentManualTransferEnabled bool                         `json:"payment_manual_transfer_enabled"`
+	PaymentCodEnabled            bool                         `json:"payment_cod_enabled"`
+	OnlinePaymentsReady          bool                         `json:"online_payments_ready"`
+	AvailablePaymentProviders    []string                     `json:"available_payment_providers"`
+	FeeBearer                    string                       `json:"fee_bearer"`
+	ShipbubbleEnabled            bool                         `json:"shipbubble_enabled"`
+	ManualBankDetails            *ManualBankDetailsView       `json:"manual_bank_details,omitempty"`
+	CheckoutRequireEmail         bool                         `json:"checkout_require_email"`
+	CheckoutRequirePhone         bool                         `json:"checkout_require_phone"`
+	ShowSoldOut                  bool                         `json:"show_sold_out"`
+	ShowStockCount               bool                         `json:"show_stock_count"`
+	LowStockThreshold            int32                        `json:"low_stock_threshold"`
+	ReturnPolicy                 *string                      `json:"return_policy,omitempty"`
+	PrivacyPolicy                *string                      `json:"privacy_policy,omitempty"`
+	TermsPolicy                  *string                      `json:"terms_policy,omitempty"`
+	CustomPolicy                 *string                      `json:"custom_policy,omitempty"`
+	SeoTitle                     *string                      `json:"seo_title,omitempty"`
+	SeoDescription               *string                      `json:"seo_description,omitempty"`
+	SeoImageURL                  *string                      `json:"seo_image_url,omitempty"`
+	SeoIndexable                 bool                         `json:"seo_indexable"`
+	AvailabilityAsOf             string                       `json:"availability_as_of"`
+	Collections                  []StorefrontCollectionView   `json:"collections"`
+	Products                     []PublicProductView          `json:"products"`
 	// Server-internal resolved fields hidden from public JSON
 	internalID        int64
 	internalWS        int64
@@ -127,11 +139,19 @@ type PublicStorefrontProjection struct {
 	internalSettingsV int32
 }
 
+type ManualBankDetailsView struct {
+	BankName      string `json:"bank_name"`
+	AccountNumber string `json:"account_number"`
+	AccountName   string `json:"account_name"`
+}
+
 type storefrontReferrerContextKey struct{}
 type storefrontVisitorContextKey struct{}
 
 func storefrontReferrerClass(ctx context.Context) string {
-	if class, ok := ctx.Value(storefrontReferrerContextKey{}).(string); ok && class != "" { return class }
+	if class, ok := ctx.Value(storefrontReferrerContextKey{}).(string); ok && class != "" {
+		return class
+	}
 	return "direct"
 }
 
@@ -142,12 +162,16 @@ func storefrontVisitorHash(ctx context.Context) string {
 
 func (s *Service) TrackStorefrontCheckoutStarted(ctx context.Context, slug string) error {
 	sf, err := s.resolveActiveStorefrontRow(ctx, slug, false)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	return s.queries.InsertStorefrontAnalyticsEvent(ctx, db.InsertStorefrontAnalyticsEventParams{WorkspaceID: sf.WorkspaceID, StorefrontID: sf.ID, EventType: "checkout_started", ReferrerClass: pgtype.Text{String: storefrontReferrerClass(ctx), Valid: true}})
 }
 
 func (s *Service) TrackStorefrontProductView(ctx context.Context, projection PublicStorefrontProjection, storefrontProductID int64) {
-	if storefrontProductID <= 0 || projection.internalID <= 0 { return }
+	if storefrontProductID <= 0 || projection.internalID <= 0 {
+		return
+	}
 	_ = s.queries.InsertStorefrontAnalyticsEvent(ctx, db.InsertStorefrontAnalyticsEventParams{WorkspaceID: projection.internalWS, StorefrontID: projection.internalID, EventType: "product_view", StorefrontProductID: pgtype.Int8{Int64: storefrontProductID, Valid: true}, ReferrerClass: pgtype.Text{String: storefrontReferrerClass(ctx), Valid: true}})
 }
 
@@ -316,9 +340,50 @@ func (s *Service) GetPublicStorefrontProjection(ctx context.Context, slugOrHost 
 		}
 		stView := settingsToView(st)
 		areas, areaErr := s.queries.GetActiveStorefrontDeliveryAreas(ctx, db.GetActiveStorefrontDeliveryAreasParams{WorkspaceID: sf.WorkspaceID, StorefrontID: sf.ID})
-		if areaErr != nil { return PublicStorefrontProjection{}, areaErr }
+		if areaErr != nil {
+			return PublicStorefrontProjection{}, areaErr
+		}
 		publicAreas := make([]StorefrontDeliveryAreaView, 0, len(areas))
-		for _, area := range areas { publicAreas = append(publicAreas, StorefrontDeliveryAreaView{ID: area.ID, Name: area.Name, FeeMinor: fmt.Sprint(area.FeeMinor), Description: area.Description, Position: area.Position, IsActive: true}) }
+		for _, area := range areas {
+			publicAreas = append(publicAreas, StorefrontDeliveryAreaView{
+				ID:           area.ID,
+				Name:         area.Name,
+				FeeMinor:     fmt.Sprint(area.FeeMinor),
+				Description:  area.Description,
+				Position:     area.Position,
+				IsActive:     true,
+				State:        nullableText(area.State),
+				EstimateText: area.EstimateText,
+				OutletID:     nullableInt8(area.OutletID),
+			})
+		}
+		ppRows, _ := s.queries.ListStorefrontPickupPoints(ctx, sf.WorkspaceID)
+		pickupPoints := make([]StorefrontPickupPointView, 0, len(ppRows))
+		for _, pp := range ppRows {
+			pickupPoints = append(pickupPoints, StorefrontPickupPointView{
+				ID:         pp.ID,
+				Name:       pp.Name,
+				Address:    nullableText(pp.Address),
+				Phone:      nullableText(pp.Phone),
+				PickupNote: pp.PickupNote,
+			})
+		}
+		payoutAccounts, _ := s.queries.ListMerchantPayoutAccounts(ctx, sf.WorkspaceID)
+		activeProviders := activeRegisteredProviders(payoutAccounts, s.storefrontPaymentProviders)
+		_, primaryProv := selectPrimaryPayoutAccount(payoutAccounts, s.storefrontPaymentProviders, "")
+		onlineReady := len(activeProviders) > 0
+		bankTransferSupported := onlineReady && payments.ProviderSupportsMethod(primaryProv, "virtual_account")
+		cardSupported := onlineReady && payments.ProviderSupportsMethod(primaryProv, "card")
+		onlineReady = onlineReady && (bankTransferSupported || cardSupported)
+		var manualBank *ManualBankDetailsView
+		if st.PaymentManualTransferEnabled && st.ManualBankAccountNumber.Valid && strings.TrimSpace(st.ManualBankAccountNumber.String) != "" {
+			manualBank = &ManualBankDetailsView{
+				BankName:      st.ManualBankName.String,
+				AccountNumber: st.ManualBankAccountNumber.String,
+				AccountName:   st.ManualBankAccountName.String,
+			}
+		}
+		shipbubbleOn := st.ShipbubbleApiKey.Valid && strings.TrimSpace(st.ShipbubbleApiKey.String) != ""
 		var brand StorefrontBrand
 		_ = json.Unmarshal(st.Brand, &brand)
 		brand.ResolvedPalette = resolveStorefrontPalette(brand)
@@ -329,54 +394,64 @@ func (s *Service) GetPublicStorefrontProjection(ctx context.Context, slugOrHost 
 			sections = []StorefrontSection{}
 		}
 		proj = PublicStorefrontProjection{
-			Name:                    sf.Name,
-			Slug:                    sf.Slug,
-			ThemeKey:                sf.ThemeKey,
-			Currency:                sf.Currency,
-			CurrencyExponent:        sf.CurrencyExponent,
-			Tagline:                 stView.Tagline,
-			Description:             stView.Description,
-			LogoURL:                 stView.LogoURL,
-			BannerURL:               stView.BannerURL,
-			PrimaryColor:            stView.PrimaryColor,
-			AccentColor:             stView.AccentColor,
-			BackgroundColor:         stView.BackgroundColor,
-			TextColor:               stView.TextColor,
-			FontFamily:              stView.FontFamily,
-			Brand:                   brandJSON,
-			Sections:                sections,
-			SectionOrder:            stView.SectionOrder,
-			ContactPhone:            stView.ContactPhone,
-			ContactEmail:            stView.ContactEmail,
-			WhatsappNumber:          stView.WhatsappNumber,
-			Address:                 stView.Address,
-			BusinessHours:           stView.BusinessHours,
-			SocialLinks:             stView.SocialLinks,
-			DeliveryMethods:         stView.DeliveryMethods,
-			DeliveryGuidance:        stView.DeliveryGuidance,
-			DefaultDeliveryFeeMinor: stView.DefaultDeliveryFeeMinor,
-			FreeDeliveryThresholdMinor: stView.FreeDeliveryThresholdMinor,
-			DeliveryAreas:           publicAreas,
-			CheckoutRequireEmail:    stView.CheckoutRequireEmail,
-			CheckoutRequirePhone:    stView.CheckoutRequirePhone,
-			ShowSoldOut:             stView.ShowSoldOut,
-			ShowStockCount:          stView.ShowStockCount,
-			LowStockThreshold:       stView.LowStockThreshold,
-			ReturnPolicy:            stView.ReturnPolicy,
-			PrivacyPolicy:           stView.PrivacyPolicy,
-			TermsPolicy:             stView.TermsPolicy,
-			CustomPolicy:            stView.CustomPolicy,
-			SeoTitle:                stView.SeoTitle,
-			SeoDescription:          stView.SeoDescription,
-			SeoImageURL:             stView.SeoImageURL,
-			SeoIndexable:            stView.SeoIndexable,
-			AvailabilityAsOf:        time.Now().UTC().Format(time.RFC3339),
-			Collections:             colViews,
-			Products:                prodViews,
-			internalID:              sf.ID,
-			internalWS:              sf.WorkspaceID,
-			internalOutletID:        sf.DefaultOutletID,
-			internalSettingsV:       stView.Version,
+			Name:                         sf.Name,
+			Slug:                         sf.Slug,
+			ThemeKey:                     sf.ThemeKey,
+			Currency:                     sf.Currency,
+			CurrencyExponent:             sf.CurrencyExponent,
+			Tagline:                      stView.Tagline,
+			Description:                  stView.Description,
+			LogoURL:                      stView.LogoURL,
+			BannerURL:                    stView.BannerURL,
+			PrimaryColor:                 stView.PrimaryColor,
+			AccentColor:                  stView.AccentColor,
+			BackgroundColor:              stView.BackgroundColor,
+			TextColor:                    stView.TextColor,
+			FontFamily:                   stView.FontFamily,
+			Brand:                        brandJSON,
+			Sections:                     sections,
+			SectionOrder:                 stView.SectionOrder,
+			ContactPhone:                 stView.ContactPhone,
+			ContactEmail:                 stView.ContactEmail,
+			WhatsappNumber:               stView.WhatsappNumber,
+			Address:                      stView.Address,
+			BusinessHours:                stView.BusinessHours,
+			SocialLinks:                  stView.SocialLinks,
+			DeliveryMethods:              stView.DeliveryMethods,
+			DeliveryGuidance:             stView.DeliveryGuidance,
+			DefaultDeliveryFeeMinor:      stView.DefaultDeliveryFeeMinor,
+			FreeDeliveryThresholdMinor:   stView.FreeDeliveryThresholdMinor,
+			DeliveryAreas:                publicAreas,
+			PickupPoints:                 pickupPoints,
+			PaymentBankTransferEnabled:   st.PaymentBankTransferEnabled && bankTransferSupported,
+			PaymentCardEnabled:           st.PaymentCardEnabled && cardSupported,
+			PaymentManualTransferEnabled: st.PaymentManualTransferEnabled,
+			PaymentCodEnabled:            st.PaymentCodEnabled,
+			OnlinePaymentsReady:          onlineReady,
+			AvailablePaymentProviders:    activeProviders,
+			FeeBearer:                    st.FeeBearer,
+			ShipbubbleEnabled:            shipbubbleOn,
+			ManualBankDetails:            manualBank,
+			CheckoutRequireEmail:         stView.CheckoutRequireEmail,
+			CheckoutRequirePhone:         stView.CheckoutRequirePhone,
+			ShowSoldOut:                  stView.ShowSoldOut,
+			ShowStockCount:               stView.ShowStockCount,
+			LowStockThreshold:            stView.LowStockThreshold,
+			ReturnPolicy:                 stView.ReturnPolicy,
+			PrivacyPolicy:                stView.PrivacyPolicy,
+			TermsPolicy:                  stView.TermsPolicy,
+			CustomPolicy:                 stView.CustomPolicy,
+			SeoTitle:                     stView.SeoTitle,
+			SeoDescription:               stView.SeoDescription,
+			SeoImageURL:                  stView.SeoImageURL,
+			SeoIndexable:                 stView.SeoIndexable,
+			AvailabilityAsOf:             time.Now().UTC().Format(time.RFC3339),
+			Collections:                  colViews,
+			Products:                     prodViews,
+			internalID:                   sf.ID,
+			internalWS:                   sf.WorkspaceID,
+			internalOutletID:             sf.DefaultOutletID,
+			internalSettingsV:            stView.Version,
 		}
 		storefrontCacheMu.Lock()
 		storefrontProjectionMap[cacheKey] = cachedStorefrontEntry{
@@ -397,7 +472,12 @@ func (s *Service) GetPublicStorefrontProjection(ctx context.Context, slugOrHost 
 	_ = s.queries.InsertStorefrontPageView(ctx, db.InsertStorefrontPageViewParams{WorkspaceID: proj.internalWS, StorefrontID: proj.internalID, ReferrerClass: pgtype.Text{String: referrer, Valid: true}, SearchQueryHash: searchHash, VisitorKeyHash: pgtype.Text{String: storefrontVisitorHash(ctx), Valid: storefrontVisitorHash(ctx) != ""}})
 	if collection := strings.TrimSpace(collectionSlug); collection != "" {
 		var collectionID int64
-		for _, item := range proj.Collections { if strings.EqualFold(item.Slug, collection) { collectionID = item.ID; break } }
+		for _, item := range proj.Collections {
+			if strings.EqualFold(item.Slug, collection) {
+				collectionID = item.ID
+				break
+			}
+		}
 		_ = s.queries.InsertStorefrontAnalyticsEvent(ctx, db.InsertStorefrontAnalyticsEventParams{WorkspaceID: proj.internalWS, StorefrontID: proj.internalID, EventType: "collection_view", CollectionID: pgtype.Int8{Int64: collectionID, Valid: collectionID > 0}, ReferrerClass: pgtype.Text{String: referrer, Valid: true}})
 	}
 	if qClean != "" {
@@ -543,18 +623,30 @@ func (s *Service) ValidateAndRecalculateCartWithArea(ctx context.Context, slugOr
 	if deliveryMethod == "merchant_delivery" {
 		if len(proj.DeliveryAreas) > 0 {
 			for _, area := range proj.DeliveryAreas {
-				if area.ID == deliveryAreaID { delivFee, _ = strconv.ParseInt(area.FeeMinor, 10, 64); selectedAreaName = area.Name; break }
+				if area.ID == deliveryAreaID {
+					delivFee, _ = strconv.ParseInt(area.FeeMinor, 10, 64)
+					selectedAreaName = area.Name
+					break
+				}
 			}
-			if deliveryAreaID <= 0 { return ValidatedCartView{}, proj, errors.New("choose a delivery area") }
-			if selectedAreaName == "" { return ValidatedCartView{}, proj, errors.New("that delivery area is no longer available") }
+			if deliveryAreaID <= 0 {
+				return ValidatedCartView{}, proj, errors.New("choose a delivery area")
+			}
+			if selectedAreaName == "" {
+				return ValidatedCartView{}, proj, errors.New("that delivery area is no longer available")
+			}
 		} else {
-			if deliveryAreaID > 0 { return ValidatedCartView{}, proj, errors.New("that delivery area is no longer available") }
+			if deliveryAreaID > 0 {
+				return ValidatedCartView{}, proj, errors.New("that delivery area is no longer available")
+			}
 			d, _ := decimal.NewFromString(proj.DefaultDeliveryFeeMinor)
 			delivFee = d.IntPart()
 		}
 		if proj.FreeDeliveryThresholdMinor != nil {
 			threshold, _ := strconv.ParseInt(*proj.FreeDeliveryThresholdMinor, 10, 64)
-			if threshold > 0 && subtotal >= threshold { delivFee = 0 }
+			if threshold > 0 && subtotal >= threshold {
+				delivFee = 0
+			}
 		}
 	}
 	return ValidatedCartView{
@@ -712,6 +804,8 @@ type PublicPaymentAttemptView struct {
 
 type GuestCheckoutInput struct {
 	ClientKey             string          `json:"-"`
+	ShopperID             int64           `json:"-"`
+	SaveDetails           bool            `json:"save_details"`
 	CartToken             string          `json:"cart_token"`
 	Lines                 []CartLineInput `json:"lines"`
 	CustomerName          string          `json:"customer_name"`
@@ -723,6 +817,10 @@ type GuestCheckoutInput struct {
 	DeliveryAreaID        int64           `json:"delivery_area_id"`
 	PickupPointID         int64           `json:"pickup_point_id"`
 	PaymentMethod         string          `json:"payment_method"`
+	PaymentProvider       string          `json:"payment_provider"`
+	RateToken             string          `json:"rate_token"`
+	CourierServiceCode    string          `json:"courier_service_code"`
+	CourierID             string          `json:"courier_id"`
 	DeliveryAddress       string          `json:"delivery_address"`
 	DeliveryLandmark      string          `json:"delivery_landmark"`
 	PreferredDeliveryTime string          `json:"preferred_delivery_time"`
@@ -762,8 +860,8 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 	}
 
 	delivMethod := strings.TrimSpace(in.DeliveryMethod)
-	if delivMethod != "pickup" && delivMethod != "merchant_delivery" && delivMethod != "customer_arranged" {
-		return GuestCheckoutConfirmation{}, errors.New("delivery method must be pickup, merchant_delivery, or customer_arranged")
+	if delivMethod != "pickup" && delivMethod != "merchant_delivery" && delivMethod != "customer_arranged" && delivMethod != "courier" {
+		return GuestCheckoutConfirmation{}, errors.New("delivery method must be pickup, merchant_delivery, customer_arranged, or courier")
 	}
 	custName := sanitizePublicText(in.CustomerName, 160)
 	custPhone := sanitizePublicText(in.CustomerPhone, 50)
@@ -772,8 +870,8 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 	if custName == "" {
 		return GuestCheckoutConfirmation{}, errors.New("customer name is required")
 	}
-	if delivMethod == "merchant_delivery" && delivAddr == "" {
-		return GuestCheckoutConfirmation{}, errors.New("delivery address is required for merchant delivery")
+	if (delivMethod == "merchant_delivery" || delivMethod == "courier") && delivAddr == "" {
+		return GuestCheckoutConfirmation{}, errors.New("delivery address is required for delivery")
 	}
 
 	// Recompute authoritative server totals & visibility
@@ -820,15 +918,22 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 			s := old.ReservationExpiresAt.Time.UTC().Format(time.RFC3339)
 			expStr = &s
 		}
+		var rawTok string
+		if old.PublicTokenEnc.Valid && old.PublicTokenEnc.String != "" {
+			if dec, dErr := crypto.Decrypt(old.PublicTokenEnc.String); dErr == nil {
+				rawTok = dec
+			}
+		}
 		return GuestCheckoutConfirmation{
 			OrderReference:     old.OrderReference,
+			StatusToken:        rawTok,
 			CommercialStatus:   old.CommercialStatus,
 			FulfilmentStatus:   old.FulfilmentStatus,
 			PaymentStatus:      old.PaymentStatus,
 			Currency:           old.Currency,
 			TotalMinor:         fmt.Sprint(old.TotalMinor),
 			ProcessingFeeMinor: old.ProcessingFeeMinor,
-			Message:            "Order request received; awaiting merchant confirmation.",
+			Message:            "Order placed; hold active.",
 			HoldType:           nullableText(old.HoldType),
 			HoldExpiresAt:      expStr,
 			VirtualAccount:     va,
@@ -845,24 +950,103 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 		WorkspaceID:  proj.internalWS,
 	})
 
-	// Determine outlet: default vs chosen pickup point
+	// Resolve active provider + payout account
+	payoutAccounts, _ := s.queries.ListMerchantPayoutAccounts(ctx, proj.internalWS)
+	chosenPayout, chosenProvider := selectPrimaryPayoutAccount(payoutAccounts, s.storefrontPaymentProviders, in.PaymentProvider)
+
+	// Determine & validate payment method
+	payMethod := strings.ToLower(strings.TrimSpace(in.PaymentMethod))
+	if payMethod == "" {
+		if chosenProvider != nil && settings.PaymentBankTransferEnabled && payments.ProviderSupportsMethod(chosenProvider, "virtual_account") {
+			payMethod = "virtual_account"
+		} else if chosenProvider != nil && settings.PaymentCardEnabled && payments.ProviderSupportsMethod(chosenProvider, "card") {
+			payMethod = "card"
+		} else if delivMethod != "courier" && settings.PaymentManualTransferEnabled {
+			payMethod = "manual_transfer"
+		} else if delivMethod != "courier" && settings.PaymentCodEnabled {
+			payMethod = "cod"
+		} else if delivMethod == "courier" {
+			return GuestCheckoutConfirmation{}, errors.New("online payment provider does not support courier checkout")
+		} else {
+			payMethod = "manual_transfer"
+		}
+	}
+	switch payMethod {
+	case "virtual_account":
+		if !settings.PaymentBankTransferEnabled && in.PaymentMethod != "" {
+			return GuestCheckoutConfirmation{}, errors.New("online bank transfer is disabled for this store")
+		}
+		if chosenProvider != nil && !payments.ProviderSupportsMethod(chosenProvider, "virtual_account") {
+			return GuestCheckoutConfirmation{}, errors.New("online bank transfer is not supported by the active payment provider")
+		}
+	case "card":
+		if !settings.PaymentCardEnabled {
+			return GuestCheckoutConfirmation{}, errors.New("card payment is disabled for this store")
+		}
+		if chosenProvider != nil && !payments.ProviderSupportsMethod(chosenProvider, "card") {
+			return GuestCheckoutConfirmation{}, errors.New("card payment is not supported by the active payment provider")
+		}
+	case "manual_transfer":
+		if delivMethod == "courier" {
+			return GuestCheckoutConfirmation{}, errors.New("courier delivery requires online payment")
+		}
+		if !settings.PaymentManualTransferEnabled && in.PaymentMethod != "" {
+			return GuestCheckoutConfirmation{}, errors.New("manual bank transfer is disabled for this store")
+		}
+	case "cod":
+		if delivMethod == "courier" {
+			return GuestCheckoutConfirmation{}, errors.New("courier delivery requires online payment")
+		}
+		if !settings.PaymentCodEnabled {
+			return GuestCheckoutConfirmation{}, errors.New("pay on delivery or pickup is disabled for this store")
+		}
+	default:
+		return GuestCheckoutConfirmation{}, errors.New("unsupported payment method")
+	}
+
+	if (payMethod == "virtual_account" || payMethod == "card") && custEmail == "" {
+		return GuestCheckoutConfirmation{}, errors.New("email address is required for online payment")
+	}
+
+	// Determine outlet: pickup point OR area outlet OR storefront default outlet
 	targetOutletID := proj.internalOutletID
+	var pPointID pgtype.Int8
 	if delivMethod == "pickup" && in.PickupPointID > 0 {
 		var validPickup bool
 		_ = s.pool.QueryRow(ctx, `
 			SELECT true FROM inventory_locations
 			WHERE workspace_id = $1 AND id = $2 AND is_active = true AND is_pickup_point = true
 		`, proj.internalWS, in.PickupPointID).Scan(&validPickup)
-		if validPickup {
-			targetOutletID = pgtype.Int8{Int64: in.PickupPointID, Valid: true}
+		if !validPickup {
+			return GuestCheckoutConfirmation{}, errors.New("selected pickup point is unavailable")
+		}
+		targetOutletID = pgtype.Int8{Int64: in.PickupPointID, Valid: true}
+		pPointID = targetOutletID
+	} else if delivMethod == "merchant_delivery" && in.DeliveryAreaID > 0 {
+		for _, area := range proj.DeliveryAreas {
+			if area.ID == in.DeliveryAreaID && area.OutletID != nil && *area.OutletID > 0 {
+				targetOutletID = pgtype.Int8{Int64: *area.OutletID, Valid: true}
+				break
+			}
 		}
 	}
 
-	// Determine hold type and countdown duration
-	payMethod := strings.TrimSpace(in.PaymentMethod)
-	if payMethod == "" {
-		payMethod = "virtual_account"
+	// Courier rate validation hook (populated when Shipbubble rate token is passed in Section 5)
+	var courierFeeMinor int64
+	var courierName, courierServiceCode, courierID, rateToken pgtype.Text
+	if delivMethod == "courier" {
+		rate, cErr := s.resolveAndValidateCourierRate(ctx, proj.internalID, in.RateToken, in.CourierServiceCode, in.CourierID)
+		if cErr != nil {
+			return GuestCheckoutConfirmation{}, cErr
+		}
+		courierFeeMinor = rate.TotalMinor
+		rateToken = optionalPgText(rate.RequestToken)
+		courierName = optionalPgText(rate.CourierName)
+		courierServiceCode = optionalPgText(rate.ServiceCode)
+		courierID = optionalPgText(rate.CourierID)
 	}
+
+	// Determine hold type (matching CHECK constraint in 000070) and countdown duration
 	holdType := "payment"
 	holdDuration := 15 * time.Minute
 	if settings.HoldPaymentMinutes > 0 {
@@ -870,16 +1054,24 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 	}
 	switch payMethod {
 	case "manual_transfer":
-		holdType = "manual_transfer"
+		holdType = "transfer_manual"
 		holdDuration = 2 * time.Hour
 		if settings.HoldManualTransferHours > 0 {
 			holdDuration = time.Duration(settings.HoldManualTransferHours) * time.Hour
 		}
 	case "cod":
-		holdType = "merchant_review"
-		holdDuration = 2 * time.Hour
-		if settings.HoldConfirmationHours > 0 {
-			holdDuration = time.Duration(settings.HoldConfirmationHours) * time.Hour
+		if delivMethod == "pickup" {
+			holdType = "pickup"
+			holdDuration = 48 * time.Hour
+			if settings.HoldPickupHours > 0 {
+				holdDuration = time.Duration(settings.HoldPickupHours) * time.Hour
+			}
+		} else {
+			holdType = "awaiting_confirmation"
+			holdDuration = 2 * time.Hour
+			if settings.HoldConfirmationHours > 0 {
+				holdDuration = time.Duration(settings.HoldConfirmationHours) * time.Hour
+			}
 		}
 	case "card", "virtual_account":
 		holdType = "payment"
@@ -889,10 +1081,14 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 	// Processing fee calculation (if customer bears fee)
 	subVal, _ := decimal.NewFromString(calc.SubtotalMinor)
 	delivVal, _ := decimal.NewFromString(calc.DeliveryFeeMinor)
-	baseTotal := subVal.IntPart() + delivVal.IntPart()
+	delivMinor := delivVal.IntPart()
+	if delivMethod == "courier" {
+		delivMinor = courierFeeMinor
+	}
+	baseTotal := subVal.IntPart() + delivMinor
 	processingFeeMinor := int64(0)
 	if settings.FeeBearer == "customer" && (payMethod == "virtual_account" || payMethod == "card") {
-		fee := int64(float64(baseTotal) * 0.015)
+		fee := decimal.NewFromInt(baseTotal).Mul(decimal.NewFromInt(15)).Div(decimal.NewFromInt(1000)).Round(0).IntPart()
 		if fee > 200000 {
 			fee = 200000
 		}
@@ -900,10 +1096,10 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 	}
 	finalTotal := baseTotal + processingFeeMinor
 
-	var pickupCode *string
+	var pickupCode pgtype.Text
 	if delivMethod == "pickup" {
 		code := generatePickupCode()
-		pickupCode = &code
+		pickupCode = pgtype.Text{String: code, Valid: true}
 	}
 
 	publicProdRows, err := s.queries.ListPublicStorefrontProducts(ctx, db.ListPublicStorefrontProductsParams{
@@ -992,7 +1188,7 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 		CurrencyExponent:       proj.CurrencyExponent,
 		SubtotalMinor:          subVal.IntPart(),
 		TaxMinor:               0,
-		DeliveryFeeMinor:       delivVal.IntPart(),
+		DeliveryFeeMinor:       delivMinor,
 		TotalMinor:             finalTotal,
 		DeliveryMethod:         delivMethod,
 		DeliveryAreaID:         pgtype.Int8{Int64: calc.DeliveryAreaID, Valid: calc.DeliveryAreaID > 0},
@@ -1013,24 +1209,44 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 		return GuestCheckoutConfirmation{}, err
 	}
 
-	var pPointID *int64
-	if delivMethod == "pickup" && in.PickupPointID > 0 {
-		pPointID = &in.PickupPointID
+	encToken, encErr := crypto.Encrypt(rawStatusToken)
+	if encErr != nil {
+		return GuestCheckoutConfirmation{}, fmt.Errorf("encrypt status token: %w", encErr)
 	}
-	if _, err := tx.Exec(ctx, `
-		UPDATE storefront_orders
-		SET hold_type = $2,
-		    reservation_expires_at = $3,
-		    processing_fee_minor = $4,
-		    pickup_code = $5,
-		    pickup_point_id = $6,
-		    commercial_status = 'confirmed',
-		    fulfilment_status = 'reserved',
-		    payment_status = 'unpaid',
-		    updated_at = now()
-		WHERE id = $1
-	`, order.ID, holdType, holdExpiresAt, processingFeeMinor, pickupCode, pPointID); err != nil {
+	var shopperParam pgtype.Int8
+	if in.ShopperID > 0 {
+		shopperParam = pgtype.Int8{Int64: in.ShopperID, Valid: true}
+	}
+	commercialStatus := "confirmed"
+	if holdType == "awaiting_confirmation" {
+		commercialStatus = "request_received"
+	}
+	if _, err := q.UpdateStorefrontOrderCheckoutMeta(ctx, db.UpdateStorefrontOrderCheckoutMetaParams{
+		WorkspaceID:          proj.internalWS,
+		ID:                   order.ID,
+		HoldType:             pgtype.Text{String: holdType, Valid: true},
+		ReservationExpiresAt: pgtype.Timestamptz{Time: holdExpiresAt, Valid: true},
+		ProcessingFeeMinor:   processingFeeMinor,
+		PickupCode:           pickupCode,
+		PickupPointID:        pPointID,
+		PublicTokenEnc:       pgtype.Text{String: encToken, Valid: encToken != ""},
+		RateToken:            rateToken,
+		CourierName:          courierName,
+		CourierServiceCode:   courierServiceCode,
+		CourierID:            courierID,
+		CommercialStatus:     commercialStatus,
+		FulfilmentStatus:     "reserved",
+		PaymentStatus:        "unpaid",
+		ShopperID:            shopperParam,
+	}); err != nil {
 		return GuestCheckoutConfirmation{}, fmt.Errorf("update storefront order hold: %w", err)
+	}
+	if err := q.UpdateStorefrontOrderPaymentArrangement(ctx, db.UpdateStorefrontOrderPaymentArrangementParams{
+		WorkspaceID:        proj.internalWS,
+		ID:                 order.ID,
+		PaymentArrangement: optionalPgText(payMethod),
+	}); err != nil {
+		return GuestCheckoutConfirmation{}, fmt.Errorf("update payment arrangement: %w", err)
 	}
 
 	if err := linkMatchingOrderCustomer(ctx, tx, proj.internalWS, order.ID, custEmail, custPhone); err != nil {
@@ -1100,7 +1316,13 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 			return GuestCheckoutConfirmation{}, err
 		}
 		if resID, has := reservationsByLine[idx]; has {
-			_, _ = tx.Exec(ctx, `UPDATE storefront_order_lines SET reservation_id = $2 WHERE id = $1`, ol.ID, resID)
+			if err := q.SetStorefrontOrderLineReservationID(ctx, db.SetStorefrontOrderLineReservationIDParams{
+				WorkspaceID:   proj.internalWS,
+				ID:            ol.ID,
+				ReservationID: pgtype.Int8{Int64: resID, Valid: true},
+			}); err != nil {
+				return GuestCheckoutConfirmation{}, err
+			}
 		}
 		createdLines = append(createdLines, ol)
 	}
@@ -1131,79 +1353,92 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 		return GuestCheckoutConfirmation{}, err
 	}
 
-	// If online payment (virtual account or card): create payment attempt
+	// If online payment (virtual account or card): decrypt merchant subaccount & create payment attempt
 	var publicVA *PublicVirtualAccountView
 	var cardCheckoutURL *string
 	if payMethod == "virtual_account" || payMethod == "card" {
+		if chosenProvider == nil || chosenPayout == nil {
+			return GuestCheckoutConfirmation{}, ErrProviderNotAvailable
+		}
+		decryptedSubRef, decErr := crypto.Decrypt(chosenPayout.SubaccountRef)
+		if decErr != nil {
+			return GuestCheckoutConfirmation{}, fmt.Errorf("merchant payout account configuration error: %w", decErr)
+		}
 		attemptRef := fmt.Sprintf("att_%s_%d", orderRef, time.Now().UnixNano()%1000000)
-		prov, pErr := s.getPaymentProvider("paystack")
-		if pErr == nil {
-			payoutAcc, _ := q.GetMerchantPayoutAccount(ctx, db.GetMerchantPayoutAccountParams{
-				WorkspaceID: proj.internalWS,
-				Provider:    prov.Key(),
+		commissionMinor := computeCommissionMinor(finalTotal, s.platformCommissionPercent)
+		if payMethod == "virtual_account" {
+			va, vaErr := chosenProvider.CreateOrderVirtualAccount(ctx, payments.OrderPaymentRequest{
+				OrderID:                   order.ID,
+				Reference:                 attemptRef,
+				AmountMinor:               finalTotal,
+				Currency:                  proj.Currency,
+				CustomerEmail:             custEmail,
+				CustomerName:              custName,
+				SubaccountRef:             decryptedSubRef,
+				FeeBearer:                 settings.FeeBearer,
+				PlatformCommissionPercent: s.platformCommissionPercent,
+				ExpiresAt:                 holdExpiresAt,
 			})
-			if payMethod == "virtual_account" {
-				va, vaErr := prov.CreateOrderVirtualAccount(ctx, payments.OrderPaymentRequest{
-					Reference:                  attemptRef,
-					AmountMinor:                finalTotal,
-					Currency:                   proj.Currency,
-					CustomerEmail:              custEmail,
-					CustomerName:               custName,
-					SubaccountRef:              payoutAcc.SubaccountRef,
-					FeeBearer:                  settings.FeeBearer,
-					PlatformCommissionPercent: s.platformCommissionPercent,
-					ExpiresAt:                  holdExpiresAt,
-				})
-				if vaErr == nil {
-					_, _ = q.CreateStorefrontPaymentAttempt(ctx, db.CreateStorefrontPaymentAttemptParams{
-						WorkspaceID:           proj.internalWS,
-						OrderID:               order.ID,
-						Provider:              prov.Key(),
-						Method:                "virtual_account",
-						Reference:             attemptRef,
-						AmountMinor:           finalTotal,
-						FeeMinor:              0,
-						CommissionMinor:       0,
-						VirtualAccountNumber: pgtype.Text{String: va.AccountNumber, Valid: true},
-						BankName:              pgtype.Text{String: va.BankName, Valid: true},
-						ExpiresAt:             pgtype.Timestamptz{Time: holdExpiresAt, Valid: true},
-						Status:                "pending",
-					})
-					expS := holdExpiresAt.Format(time.RFC3339)
-					publicVA = &PublicVirtualAccountView{
-						AccountNumber: va.AccountNumber,
-						BankName:      va.BankName,
-						AccountName:   va.AccountName,
-						ExpiresAt:     &expS,
-					}
+			if vaErr != nil {
+				if errors.Is(vaErr, payments.ErrNotSupported) {
+					return GuestCheckoutConfirmation{}, errors.New("online bank transfer is not supported by the active payment provider")
 				}
-			} else if payMethod == "card" {
-				cardRes, cErr := prov.InitializeCardCheckout(ctx, payments.OrderPaymentRequest{
-					Reference:                  attemptRef,
-					AmountMinor:                finalTotal,
-					Currency:                   proj.Currency,
-					CustomerEmail:              custEmail,
-					CustomerName:               custName,
-					SubaccountRef:              payoutAcc.SubaccountRef,
-					FeeBearer:                  settings.FeeBearer,
-					PlatformCommissionPercent: s.platformCommissionPercent,
-					CallbackURL:                fmt.Sprintf("https://%s.rekordly.com/orders/%s", proj.Slug, rawStatusToken),
-				})
-				if cErr == nil {
-					_, _ = q.CreateStorefrontPaymentAttempt(ctx, db.CreateStorefrontPaymentAttemptParams{
-						WorkspaceID:     proj.internalWS,
-						OrderID:         order.ID,
-						Provider:        prov.Key(),
-						Method:          "card",
-						Reference:       attemptRef,
-						AmountMinor:     finalTotal,
-						FeeMinor:        0,
-						CommissionMinor: 0,
-						Status:          "pending",
-					})
-					cardCheckoutURL = &cardRes.AuthorizationURL
-				}
+				return GuestCheckoutConfirmation{}, vaErr
 			}
+			if _, aErr := q.CreateStorefrontPaymentAttempt(ctx, db.CreateStorefrontPaymentAttemptParams{
+				WorkspaceID:          proj.internalWS,
+				OrderID:              order.ID,
+				Provider:             chosenProvider.Key(),
+				Method:               "virtual_account",
+				Reference:            attemptRef,
+				AmountMinor:          finalTotal,
+				FeeMinor:             0,
+				CommissionMinor:      commissionMinor,
+				VirtualAccountNumber: pgtype.Text{String: va.AccountNumber, Valid: true},
+				BankName:             pgtype.Text{String: va.BankName, Valid: true},
+				ExpiresAt:            pgtype.Timestamptz{Time: holdExpiresAt, Valid: true},
+				Status:               "pending",
+			}); aErr != nil {
+				return GuestCheckoutConfirmation{}, aErr
+			}
+			expS := holdExpiresAt.Format(time.RFC3339)
+			publicVA = &PublicVirtualAccountView{
+				AccountNumber: va.AccountNumber,
+				BankName:      va.BankName,
+				AccountName:   va.AccountName,
+				ExpiresAt:     &expS,
+			}
+		} else if payMethod == "card" {
+			cardRes, cErr := chosenProvider.InitializeCardCheckout(ctx, payments.OrderPaymentRequest{
+				OrderID:                   order.ID,
+				Reference:                 attemptRef,
+				AmountMinor:               finalTotal,
+				Currency:                  proj.Currency,
+				CustomerEmail:             custEmail,
+				CustomerName:              custName,
+				SubaccountRef:             decryptedSubRef,
+				FeeBearer:                 settings.FeeBearer,
+				PlatformCommissionPercent: s.platformCommissionPercent,
+				CallbackURL:               fmt.Sprintf("%s/orders/status/%s", s.frontendOrigin(), rawStatusToken),
+			})
+			if cErr != nil {
+				return GuestCheckoutConfirmation{}, cErr
+			}
+			if _, aErr := q.CreateStorefrontPaymentAttempt(ctx, db.CreateStorefrontPaymentAttemptParams{
+				WorkspaceID:     proj.internalWS,
+				OrderID:         order.ID,
+				Provider:        chosenProvider.Key(),
+				Method:          "card",
+				Reference:       attemptRef,
+				AmountMinor:     finalTotal,
+				FeeMinor:        0,
+				CommissionMinor: commissionMinor,
+				ExpiresAt:       pgtype.Timestamptz{Time: holdExpiresAt, Valid: true},
+				Status:          "pending",
+			}); aErr != nil {
+				return GuestCheckoutConfirmation{}, aErr
+			}
+			cardCheckoutURL = &cardRes.AuthorizationURL
 		}
 	}
 
@@ -1220,8 +1455,19 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 		StorefrontID: proj.internalID,
 		EventType:    "checkout_submitted",
 	})
+	if commercialStatus == "confirmed" {
+		_ = q.InsertStorefrontAnalyticsEvent(ctx, db.InsertStorefrontAnalyticsEventParams{
+			WorkspaceID:  proj.internalWS,
+			StorefrontID: proj.internalID,
+			EventType:    "order_confirmed",
+		})
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return GuestCheckoutConfirmation{}, err
+	}
+
+	if in.ShopperID > 0 && in.SaveDetails {
+		s.saveShopperDetails(ctx, in.ShopperID, custName, custPhone, delivAddr)
 	}
 
 	// Best-effort workspace notification outside transaction so delivery issue cannot rollback valid order
@@ -1234,21 +1480,25 @@ func (s *Service) SubmitGuestCheckout(ctx context.Context, slugOrHost string, is
 	`, proj.internalWS, fmt.Sprintf("New order %s", orderRef), fmt.Sprintf("%s placed an order totaling %s %s", custName, FormatMinorToMajorMust(fmt.Sprint(finalTotal), int(order.CurrencyExponent)), order.Currency))
 
 	expStr := holdExpiresAt.Format(time.RFC3339)
+	confirmMsg := "Order placed successfully. Please complete payment before the hold expires."
+	if commercialStatus == "request_received" {
+		confirmMsg = "Order received. Waiting for the store to confirm before the hold expires."
+	}
 	return GuestCheckoutConfirmation{
 		OrderReference:     orderRef,
 		StatusToken:        rawStatusToken,
-		CommercialStatus:   "confirmed",
+		CommercialStatus:   commercialStatus,
 		FulfilmentStatus:   "reserved",
 		PaymentStatus:      "unpaid",
 		Currency:           order.Currency,
 		TotalMinor:         fmt.Sprint(finalTotal),
 		ProcessingFeeMinor: processingFeeMinor,
-		Message:            "Order placed successfully. Please complete payment before the hold expires.",
+		Message:            confirmMsg,
 		HoldType:           &holdType,
 		HoldExpiresAt:      &expStr,
 		VirtualAccount:     publicVA,
 		CardCheckoutURL:    cardCheckoutURL,
-		PickupCode:         pickupCode,
+		PickupCode:         nullableText(pickupCode),
 	}, nil
 }
 
@@ -1273,50 +1523,100 @@ type PublicOrderEventView struct {
 }
 
 type PublicOrderStatusView struct {
-	OrderReference          string                    `json:"order_reference"`
-	StorefrontName          string                    `json:"storefront_name"`
-	StorefrontSlug          string                    `json:"storefront_slug"`
-	MerchantPhone           *string                   `json:"merchant_phone,omitempty"`
-	MerchantEmail           *string                   `json:"merchant_email,omitempty"`
-	MerchantWhatsapp        *string                   `json:"merchant_whatsapp,omitempty"`
-	CommercialStatus        string                    `json:"commercial_status"`
-	FulfilmentStatus        string                    `json:"fulfilment_status"`
-	PaymentStatus           string                    `json:"payment_status"`
-	Version                 int32                     `json:"version"`
-	Currency                string                    `json:"currency"`
-	CurrencyExponent        int32                     `json:"currency_exponent"`
-	SubtotalMinor           string                    `json:"subtotal_minor"`
-	DeliveryFeeMinor        string                    `json:"delivery_fee_minor"`
-	TotalMinor              string                    `json:"total_minor"`
-	ProcessingFeeMinor      int64                     `json:"processing_fee_minor"`
-	DeliveryMethod          string                    `json:"delivery_method"`
-	DeliveryAddress         *string                   `json:"delivery_address,omitempty"`
-	PaymentArrangement      *string                   `json:"payment_arrangement,omitempty"`
-	RequiresCustomerAck     bool                      `json:"requires_customer_ack"`
-	LatestChangeSummary     *string                   `json:"latest_change_summary,omitempty"`
-	LinkedInvoiceShareToken *string                   `json:"linked_invoice_share_token,omitempty"`
-	DeclineOrCancelReason   *string                   `json:"decline_or_cancel_reason,omitempty"`
-	HoldType                *string                   `json:"hold_type,omitempty"`
-	HoldExpiresAt           *string                   `json:"hold_expires_at,omitempty"`
-	PickupCode              *string                   `json:"pickup_code,omitempty"`
-	CourierName             *string                   `json:"courier_name,omitempty"`
-	CourierTrackingNumber   *string                   `json:"courier_tracking_number,omitempty"`
-	CourierStatus           *string                   `json:"courier_status,omitempty"`
-	LatestPaymentAttempt    *PublicPaymentAttemptView `json:"latest_payment_attempt,omitempty"`
-	Lines                   []PublicOrderLineView     `json:"lines"`
-	Events                  []PublicOrderEventView    `json:"events"`
-	CreatedAt               string                    `json:"created_at"`
+	OrderReference          string                     `json:"order_reference"`
+	StorefrontName          string                     `json:"storefront_name"`
+	StorefrontSlug          string                     `json:"storefront_slug"`
+	MerchantPhone           *string                    `json:"merchant_phone,omitempty"`
+	MerchantEmail           *string                    `json:"merchant_email,omitempty"`
+	MerchantWhatsapp        *string                    `json:"merchant_whatsapp,omitempty"`
+	CommercialStatus        string                     `json:"commercial_status"`
+	FulfilmentStatus        string                     `json:"fulfilment_status"`
+	PaymentStatus           string                     `json:"payment_status"`
+	Version                 int32                      `json:"version"`
+	Currency                string                     `json:"currency"`
+	CurrencyExponent        int32                      `json:"currency_exponent"`
+	SubtotalMinor           string                     `json:"subtotal_minor"`
+	DeliveryFeeMinor        string                     `json:"delivery_fee_minor"`
+	TotalMinor              string                     `json:"total_minor"`
+	ProcessingFeeMinor      int64                      `json:"processing_fee_minor"`
+	DeliveryMethod          string                     `json:"delivery_method"`
+	DeliveryAddress         *string                    `json:"delivery_address,omitempty"`
+	PaymentArrangement      *string                    `json:"payment_arrangement,omitempty"`
+	RequiresCustomerAck     bool                       `json:"requires_customer_ack"`
+	LatestChangeSummary     *string                    `json:"latest_change_summary,omitempty"`
+	LinkedInvoiceShareToken *string                    `json:"linked_invoice_share_token,omitempty"`
+	DeclineOrCancelReason   *string                    `json:"decline_or_cancel_reason,omitempty"`
+	HoldType                *string                    `json:"hold_type,omitempty"`
+	HoldExpiresAt           *string                    `json:"hold_expires_at,omitempty"`
+	PickupCode              *string                    `json:"pickup_code,omitempty"`
+	PickupPoint             *StorefrontPickupPointView `json:"pickup_point,omitempty"`
+	ManualBankDetails       *ManualBankDetailsView     `json:"manual_bank_details,omitempty"`
+	CustomerPhoneMasked     *string                    `json:"customer_phone_masked,omitempty"`
+	CourierName             *string                    `json:"courier_name,omitempty"`
+	CourierTrackingNumber   *string                    `json:"courier_tracking_number,omitempty"`
+	CourierStatus           *string                    `json:"courier_status,omitempty"`
+	CourierTrackingURL      *string                    `json:"courier_tracking_url,omitempty"`
+	LatestPaymentAttempt    *PublicPaymentAttemptView  `json:"latest_payment_attempt,omitempty"`
+	Lines                   []PublicOrderLineView      `json:"lines"`
+	Events                  []PublicOrderEventView     `json:"events"`
+	CreatedAt               string                     `json:"created_at"`
+}
+
+func maskPublicPhone(raw pgtype.Text) *string {
+	if !raw.Valid {
+		return nil
+	}
+	s := strings.TrimSpace(raw.String)
+	if len(s) <= 4 {
+		return nil
+	}
+	masked := strings.Repeat("•", len(s)-4) + s[len(s)-4:]
+	return &masked
+}
+
+func (s *Service) frontendOrigin() string {
+	base := strings.TrimRight(strings.TrimSuffix(strings.TrimRight(s.guestShareBaseURL, "/"), "/share"), "/")
+	if base == "" {
+		return "http://localhost:3000"
+	}
+	return base
 }
 
 func (s *Service) buildPublicOrderStatusView(ctx context.Context, o db.StorefrontOrder) (PublicOrderStatusView, error) {
 	var sfName, sfSlug string
-	var phone, email, wa pgtype.Text
+	var phone, email, wa, manBank, manAcct, manName pgtype.Text
+	var manEnabled bool
 	_ = s.pool.QueryRow(ctx, `
-		SELECT sf.name, sf.slug, st.contact_phone, st.contact_email, st.whatsapp_number
+		SELECT sf.name, sf.slug, st.contact_phone, st.contact_email, st.whatsapp_number,
+		       st.payment_manual_transfer_enabled, st.manual_bank_name, st.manual_bank_account_number, st.manual_bank_account_name
 		FROM storefronts sf
 		JOIN storefront_settings st ON st.storefront_id = sf.id
 		WHERE sf.id = $1
-	`, o.StorefrontID).Scan(&sfName, &sfSlug, &phone, &email, &wa)
+	`, o.StorefrontID).Scan(&sfName, &sfSlug, &phone, &email, &wa, &manEnabled, &manBank, &manAcct, &manName)
+
+	var pickupView *StorefrontPickupPointView
+	if o.DeliveryMethod == "pickup" && o.PickupPointID.Valid {
+		if ppLoc, pErr := s.queries.GetInventoryLocationByID(ctx, db.GetInventoryLocationByIDParams{
+			WorkspaceID: o.WorkspaceID,
+			ID:          o.PickupPointID.Int64,
+		}); pErr == nil {
+			pickupView = &StorefrontPickupPointView{
+				ID:         ppLoc.ID,
+				Name:       ppLoc.Name,
+				Address:    nullableText(ppLoc.Address),
+				Phone:      nullableText(ppLoc.Phone),
+				PickupNote: ppLoc.PickupNote,
+			}
+		}
+	}
+	var manualBank *ManualBankDetailsView
+	if manEnabled && manAcct.Valid && strings.TrimSpace(manAcct.String) != "" {
+		manualBank = &ManualBankDetailsView{
+			BankName:      manBank.String,
+			AccountNumber: manAcct.String,
+			AccountName:   manName.String,
+		}
+	}
 
 	lines, err := s.queries.ListStorefrontOrderLines(ctx, o.ID)
 	if err != nil {
@@ -1409,9 +1709,13 @@ func (s *Service) buildPublicOrderStatusView(ctx context.Context, o db.Storefron
 		HoldType:                nullableText(o.HoldType),
 		HoldExpiresAt:           holdExpStr,
 		PickupCode:              nullableText(o.PickupCode),
+		PickupPoint:             pickupView,
+		ManualBankDetails:       manualBank,
+		CustomerPhoneMasked:     maskPublicPhone(o.CustomerPhone),
 		CourierName:             nullableText(o.CourierName),
 		CourierTrackingNumber:   nullableText(o.CourierTrackingNumber),
 		CourierStatus:           nullableText(o.CourierStatus),
+		CourierTrackingURL:      nullableText(o.CourierTrackingUrl),
 		LatestPaymentAttempt:    latestAttempt,
 		Lines:                   pubLines,
 		Events:                  pubEvents,
@@ -1426,6 +1730,48 @@ func (s *Service) GetPublicOrderStatus(ctx context.Context, rawToken string) (Pu
 	}
 	if err != nil {
 		return PublicOrderStatusView{}, err
+	}
+	return s.buildPublicOrderStatusView(ctx, o)
+}
+
+func (s *Service) VerifyPublicOrderPayment(ctx context.Context, rawToken string) (PublicOrderStatusView, error) {
+	o, err := s.queries.GetStorefrontOrderByPublicTokenHash(ctx, hashOpaqueToken(rawToken))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return PublicOrderStatusView{}, ErrNotFound
+	}
+	if err != nil {
+		return PublicOrderStatusView{}, err
+	}
+	if o.PaymentStatus == "paid" {
+		return s.buildPublicOrderStatusView(ctx, o)
+	}
+	att, err := s.queries.GetPublicPaymentAttemptByOrder(ctx, o.ID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return s.buildPublicOrderStatusView(ctx, o)
+		}
+		return PublicOrderStatusView{}, err
+	}
+	if att.Status == "paid" {
+		return s.buildPublicOrderStatusView(ctx, o)
+	}
+	prov, pErr := s.getPaymentProvider(att.Provider)
+	if pErr != nil {
+		return PublicOrderStatusView{}, pErr
+	}
+	res, vErr := prov.VerifyTransaction(ctx, att.Reference)
+	if vErr != nil {
+		return s.buildPublicOrderStatusView(ctx, o)
+	}
+	if res.Status == "paid" {
+		att.FeeMinor = res.FeeMinor
+		if err := s.markStorefrontOrderPaidInternal(ctx, att, res.AmountMinor, att.Provider, ""); err != nil {
+			return PublicOrderStatusView{}, err
+		}
+		o, err = s.queries.GetStorefrontOrderByID(ctx, db.GetStorefrontOrderByIDParams{WorkspaceID: o.WorkspaceID, ID: o.ID})
+		if err != nil {
+			return PublicOrderStatusView{}, err
+		}
 	}
 	return s.buildPublicOrderStatusView(ctx, o)
 }
@@ -1454,11 +1800,10 @@ func (s *Service) AcknowledgePublicOrderChanges(ctx context.Context, rawToken st
 	}); err != nil {
 		return PublicOrderStatusView{}, errors.New("no unacknowledged order changes at this version")
 	}
-	var updated db.StorefrontOrder
-	if _, err := tx.Exec(ctx, `UPDATE storefront_orders SET commercial_status='needs_review', version=version+1, updated_at=now() WHERE id=$1`, o.ID); err != nil {
-		return PublicOrderStatusView{}, err
-	}
-	updated, err = q.GetStorefrontOrderByID(ctx, db.GetStorefrontOrderByIDParams{WorkspaceID: o.WorkspaceID, ID: o.ID})
+	updated, err := q.UpdateStorefrontOrderAckReviewed(ctx, db.UpdateStorefrontOrderAckReviewedParams{
+		WorkspaceID: o.WorkspaceID,
+		ID:          o.ID,
+	})
 	if err != nil {
 		return PublicOrderStatusView{}, err
 	}
@@ -1503,10 +1848,11 @@ func (s *Service) CancelPublicOrderBeforeConfirm(ctx context.Context, rawToken, 
 	default:
 		return PublicOrderStatusView{}, ErrOrderAlreadyHandled
 	}
-	if _, err := tx.Exec(ctx, `UPDATE storefront_orders SET commercial_status='cancelled', decline_or_cancel_reason=$2, version=version+1, updated_at=now() WHERE id=$1`, o.ID, cleanReason); err != nil {
-		return PublicOrderStatusView{}, err
-	}
-	updated, err := q.GetStorefrontOrderByID(ctx, db.GetStorefrontOrderByIDParams{WorkspaceID: o.WorkspaceID, ID: o.ID})
+	updated, err := q.CancelStorefrontOrderByCustomer(ctx, db.CancelStorefrontOrderByCustomerParams{
+		WorkspaceID:           o.WorkspaceID,
+		ID:                    o.ID,
+		DeclineOrCancelReason: optionalPgText(cleanReason),
+	})
 	if err != nil {
 		return PublicOrderStatusView{}, err
 	}
@@ -1579,6 +1925,49 @@ func (s *Service) RequestPublicOrderReturn(ctx context.Context, rawToken, reason
 	}
 	s.notifyStorefrontWorkspace(ctx, o.WorkspaceID, fmt.Sprintf("Return requested for %s", o.OrderReference), cleanReason)
 	return s.buildPublicOrderStatusView(ctx, o)
+}
+
+type validatedCourierRate struct {
+	RequestToken string
+	CourierName  string
+	ServiceCode  string
+	CourierID    string
+	TotalMinor   int64
+}
+
+func (s *Service) resolveAndValidateCourierRate(ctx context.Context, storefrontID int64, rateToken, serviceCode, courierID string) (validatedCourierRate, error) {
+	tok := strings.TrimSpace(rateToken)
+	svc := strings.TrimSpace(serviceCode)
+	cid := strings.TrimSpace(courierID)
+	if tok == "" || svc == "" {
+		return validatedCourierRate{}, errors.New("courier rate token and service code are required")
+	}
+	cached, err := s.queries.GetStorefrontShippingRateByToken(ctx, db.GetStorefrontShippingRateByTokenParams{
+		StorefrontID: storefrontID,
+		RequestToken: tok,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return validatedCourierRate{}, errors.New("delivery rate expired or unknown; please refresh courier rates")
+	}
+	if err != nil {
+		return validatedCourierRate{}, err
+	}
+	var rates []shipping.CourierRate
+	if err := json.Unmarshal(cached.RatesJson, &rates); err != nil {
+		return validatedCourierRate{}, errors.New("cached delivery rates could not be verified")
+	}
+	for _, r := range rates {
+		if strings.EqualFold(r.ServiceCode, svc) && (cid == "" || strings.EqualFold(r.CourierID, cid)) {
+			return validatedCourierRate{
+				RequestToken: cached.RequestToken,
+				CourierName:  r.CourierName,
+				ServiceCode:  r.ServiceCode,
+				CourierID:    r.CourierID,
+				TotalMinor:   r.TotalMinor,
+			}, nil
+		}
+	}
+	return validatedCourierRate{}, errors.New("selected courier rate is not valid for this quote")
 }
 
 func (s *Service) notifyStorefrontWorkspace(ctx context.Context, ws int64, title, body string) {

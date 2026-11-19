@@ -128,10 +128,65 @@ DO UPDATE SET
   last_read_message_id = GREATEST(document_message_reads.last_read_message_id, EXCLUDED.last_read_message_id),
   updated_at = now();
 
+-- name: CheckPurchaseOrderExists :one
+SELECT EXISTS(
+    SELECT 1 FROM purchase_orders WHERE workspace_id = @workspace_id AND id = @id
+);
+
+-- name: CheckGoodsReceiptExists :one
+SELECT EXISTS(
+    SELECT 1 FROM goods_receipts WHERE workspace_id = @workspace_id AND id = @id
+);
+
+-- name: CheckSupplierBillExists :one
+SELECT EXISTS(
+    SELECT 1 FROM supplier_bills WHERE workspace_id = @workspace_id AND id = @id
+);
+
+-- name: CheckPurchaseExists :one
+SELECT EXISTS(
+    SELECT 1 FROM purchases WHERE workspace_id = @workspace_id AND id = @id
+);
+
+-- name: CheckInvoiceExists :one
+SELECT EXISTS(
+    SELECT 1 FROM invoices WHERE workspace_id = @workspace_id AND id = @id
+);
+
 -- name: InsertDocumentFile :one
 INSERT INTO document_files (workspace_id, document_type, document_id, evidence_asset_id, created_by_user_id)
 VALUES (@workspace_id, @document_type, @document_id, @evidence_asset_id, @created_by_user_id)
+ON CONFLICT (workspace_id, document_type, document_id, evidence_asset_id) DO NOTHING
 RETURNING *;
+
+-- name: GetDocumentFileByEvidence :one
+SELECT
+    df.id, df.evidence_asset_id AS evidence_id, ea.original_file_name AS file_name, ea.mime_type, ea.byte_size AS size_bytes, df.created_at,
+    COALESCE(NULLIF(u.display_name, ''), 'Team')::text AS uploaded_by_name
+FROM document_files df
+JOIN evidence_assets ea ON ea.id = df.evidence_asset_id AND ea.workspace_id = df.workspace_id
+LEFT JOIN users u ON u.id = df.created_by_user_id
+WHERE df.workspace_id = @workspace_id AND df.document_type = @document_type AND df.document_id = @document_id AND df.evidence_asset_id = @evidence_asset_id;
+
+-- name: GetDocumentFileByID :one
+SELECT
+    df.id, df.evidence_asset_id AS evidence_id, ea.original_file_name AS file_name, ea.mime_type, ea.byte_size AS size_bytes, df.created_at,
+    COALESCE(NULLIF(u.display_name, ''), 'Team')::text AS uploaded_by_name
+FROM document_files df
+JOIN evidence_assets ea ON ea.id = df.evidence_asset_id AND ea.workspace_id = df.workspace_id
+LEFT JOIN users u ON u.id = df.created_by_user_id
+WHERE df.workspace_id = @workspace_id AND df.id = @id;
+
+-- name: GetIdempotencyRecordForUpdate :one
+SELECT request_digest, status, resource_id
+FROM idempotency_records
+WHERE actor_user_id = @actor_user_id AND operation = @operation AND key_digest = @key_digest
+FOR UPDATE;
+
+-- name: CompleteIdempotencyRecord :exec
+UPDATE idempotency_records
+SET status = 'completed', response_code = 201, resource_type = @resource_type, resource_id = @resource_id, updated_at = now()
+WHERE actor_user_id = @actor_user_id AND operation = @operation AND key_digest = @key_digest;
 
 -- name: DeleteDocumentFile :execrows
 DELETE FROM document_files

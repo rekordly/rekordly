@@ -17,7 +17,6 @@ func (h *Handler) registerStorefrontPaymentRoutes(g *gin.RouterGroup) {
 }
 
 func (h *Handler) RegisterStorefrontPaymentWebhookRoutes(g *gin.RouterGroup) {
-	g.POST("/webhooks/payments/paystack", h.paystackStorefrontPaymentWebhook)
 	g.POST("/webhooks/payments/squad", h.squadStorefrontPaymentWebhook)
 }
 
@@ -117,23 +116,6 @@ func (h *Handler) recordStorefrontPayout(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"status": "recorded"}})
-}
-
-func (h *Handler) paystackStorefrontPaymentWebhook(c *gin.Context) {
-	raw, err := io.ReadAll(c.Request.Body)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "unable to read body"})
-		return
-	}
-	if err := h.service.HandlePaymentWebhook(c.Request.Context(), "paystack", raw, c.Request.Header); err != nil {
-		if err == ErrInvalidWebhookSignature {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid signature"})
-			return
-		}
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"status": "received"})
 }
 
 func (h *Handler) squadStorefrontPaymentWebhook(c *gin.Context) {

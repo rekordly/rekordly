@@ -6,19 +6,21 @@ import { Bank, CheckCircle, WarningCircle } from "@phosphor-icons/react";
 import { AppButton } from "@/components/ui/app-button";
 import { AppComboBox } from "@/components/ui/app-combo-box";
 import { AppInput } from "@/components/ui/app-input";
+import { AppSelect } from "@/components/ui/app-select";
 import { AppSwitch } from "@/components/ui/app-switch";
 import { AppTextarea } from "@/components/ui/app-textarea";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { SideSheet } from "@/components/ui/side-sheet";
 import { Page, PageHeader } from "@/components/ui/page";
+import { toast } from "@heroui/react";
 import { financeApi, moneyKeys } from "@/lib/money";
 import { hasWorkspacePermission, useActiveWorkspace } from "@/stores/workspace-store";
 import { WorkspaceGate, useFinanceAction, type WorkspaceInfo } from "../finance/shared";
-import type { Storefront, StorefrontPaymentSettingsView } from "@/types/finance";
+import type { InventoryOutlet, Storefront, StorefrontPaymentSettingsView } from "@/types/finance";
 import { uploadProductImage } from "@/lib/products";
 
 type CardKey = "details" | "delivery" | "payments" | "shoppers" | "policies" | "sharing";
-type DeliveryAreaDraft = { id: number; name: string; fee: string; description: string };
+type DeliveryAreaDraft = { id: number; name: string; fee: string; description: string; state: string; estimate_text: string; outlet_id: string };
 function minorToMajor(minor: string, exponent: number) {
   const value = BigInt(minor || "0");
   if (exponent <= 0) return value.toString();
@@ -54,13 +56,23 @@ function PaymentsForm({
   const [isResolving, setIsResolving] = useState(false);
   const [resolveError, setResolveError] = useState("");
   const [isSavingPayout, setIsSavingPayout] = useState(false);
+  const [providerChoice, setProviderChoice] = useState("");
+
+  const availableProviders = paymentSettings?.available_providers?.length
+    ? paymentSettings.available_providers
+    : ["paystack"];
+  const payout = paymentSettings?.payout_account;
+  const selectedProvider = availableProviders.includes(providerChoice)
+    ? providerChoice
+    : payout?.provider && availableProviders.includes(payout.provider)
+      ? payout.provider
+      : availableProviders[0];
 
   const banksQuery = useQuery({
-    queryKey: [...moneyKeys.workspace(workspaceId), "payment-banks"],
-    queryFn: () => financeApi.listPaymentBanks(workspaceId, "paystack"),
+    queryKey: [...moneyKeys.workspace(workspaceId), "payment-banks", selectedProvider],
+    queryFn: () => financeApi.listPaymentBanks(workspaceId, selectedProvider),
   });
   const banks = banksQuery.data ?? [];
-  const payout = paymentSettings?.payout_account;
 
   const handleResolve = async (bCode: string, accNum: string) => {
     if (!bCode || accNum.length !== 10) return;
@@ -68,6 +80,7 @@ function PaymentsForm({
     setResolveError("");
     try {
       const res = await financeApi.resolveStorefrontBankAccount(workspaceId, {
+        provider: selectedProvider,
         bank_code: bCode,
         account_number: accNum,
       });
@@ -85,6 +98,7 @@ function PaymentsForm({
     setIsSavingPayout(true);
     try {
       await financeApi.saveStorefrontPayoutAccount(workspaceId, {
+        provider: selectedProvider,
         bank_code: bankCode,
         account_number: accountNumber,
         account_name: resolvedName,
@@ -133,6 +147,22 @@ function PaymentsForm({
         ) : (
           <div className="rounded-xl border border-border bg-surface-raised p-4 space-y-3">
             <p className="text-xs font-semibold text-foreground">Connect bank account</p>
+            {availableProviders.length > 1 ? (
+              <AppSelect
+                label="Payment provider"
+                selectedKey={selectedProvider}
+                onSelectionChange={(key) => {
+                  setProviderChoice(key);
+                  setBankCode("");
+                  setResolvedName("");
+                  setResolveError("");
+                }}
+                options={availableProviders.map((prov) => ({
+                  key: prov,
+                  label: prov === "squad" ? "Squad (GTCO)" : prov === "paystack" ? "Paystack" : prov,
+                }))}
+              />
+            ) : null}
             <AppComboBox
               label="Settlement bank"
               placeholder="Search or select bank..."
@@ -219,6 +249,30 @@ function PaymentsForm({
             isSelected={Boolean(draft.payment_manual_transfer_enabled)}
             onChange={(v) => set("payment_manual_transfer_enabled", v)}
           />
+          {Boolean(draft.payment_manual_transfer_enabled) && (
+            <div className="space-y-2 rounded-lg border border-border bg-surface p-3">
+              <p className="text-xs font-medium text-muted">Bank account shown to shoppers for manual transfer</p>
+              <AppInput
+                label="Bank name"
+                placeholder="e.g. Guaranty Trust Bank"
+                value={String(draft.manual_bank_name ?? "")}
+                onChange={(e) => set("manual_bank_name", e.target.value)}
+              />
+              <AppInput
+                label="Account number"
+                placeholder="0123456789"
+                maxLength={20}
+                value={String(draft.manual_bank_account_number ?? "")}
+                onChange={(e) => set("manual_bank_account_number", e.target.value)}
+              />
+              <AppInput
+                label="Account name"
+                placeholder="Your Business Name"
+                value={String(draft.manual_bank_account_name ?? "")}
+                onChange={(e) => set("manual_bank_account_name", e.target.value)}
+              />
+            </div>
+          )}
           <AppSwitch
             label="Pay on delivery / pickup"
             description="Customer pays with cash or POS upon package receipt or pickup."
@@ -342,23 +396,69 @@ function SettingsContent({ workspaceId }: WorkspaceInfo) {
     queryFn: () => financeApi.getStorefrontPayments(workspaceId),
     retry: false,
   });
+  const shipbubbleQuery = useQuery({
+    queryKey: [...moneyKeys.workspace(workspaceId), "storefront-shipbubble"],
+    queryFn: () => financeApi.getStorefrontShipbubbleSettings(workspaceId),
+    retry: false,
+  });
+  const outletsQuery = useQuery({
+    queryKey: [...moneyKeys.workspace(workspaceId), "outlets"],
+    queryFn: () => financeApi.listOutlets(workspaceId),
+    retry: false,
+  });
 
   const [active, setActive] = useState<CardKey | null>(null);
   const [draft, setDraft] = useState<Record<string, unknown>>({});
+  const [sbCouriers, setSbCouriers] = useState<Array<{ courier_id: string; service_code: string; name: string }>>([]);
+  const [sbTesting, setSbTesting] = useState(false);
+  const [sbStatus, setSbStatus] = useState("");
   const sf = query.data;
   const paySettings = paymentSettingsQuery.data;
+  const shipbubbleSettings = shipbubbleQuery.data;
+  const outlets = outletsQuery.data ?? [];
 
   const update = useFinanceAction(workspaceId, (body: unknown) => financeApi.updateStorefrontSettings(workspaceId, body), {
     success: "Store settings saved",
     onDone: () => { setActive(null); void query.refetch(); },
   });
 
+  const togglePickupPoint = async (outlet: InventoryOutlet, isPickup: boolean, note?: string) => {
+    try {
+      await financeApi.updateOutlet(workspaceId, outlet.id, {
+        is_pickup_point: isPickup,
+        pickup_note: note ?? outlet.pickup_note ?? "",
+      });
+      void outletsQuery.refetch();
+      toast.success("Pickup point updated");
+    } catch (err: unknown) {
+      toast.danger((err as Error)?.message || "Could not update pickup point");
+    }
+  };
+
   const open = (key: CardKey) => {
     if (!sf) return;
     const s = sf.settings;
     const values: Record<CardKey, Record<string, unknown>> = {
       details: { name: sf.name, slug: sf.slug, contact_phone: s.contact_phone ?? "", contact_email: s.contact_email ?? "", address: s.address ?? "", whatsapp_number: s.whatsapp_number ?? "", business_hours: s.business_hours },
-      delivery: { delivery_methods: s.delivery_methods, delivery_guidance: s.delivery_guidance ?? "", default_delivery_fee: minorToMajor(s.default_delivery_fee_minor, sf.currency_exponent), free_delivery_threshold: s.free_delivery_threshold_minor ? minorToMajor(s.free_delivery_threshold_minor, sf.currency_exponent) : "", delivery_areas: s.delivery_areas.filter((area) => area.is_active).map((area) => ({ id: area.id, name: area.name, fee: minorToMajor(area.fee_minor, sf.currency_exponent), description: area.description })) },
+      delivery: {
+        delivery_methods: s.delivery_methods,
+        delivery_guidance: s.delivery_guidance ?? "",
+        default_delivery_fee: minorToMajor(s.default_delivery_fee_minor, sf.currency_exponent),
+        free_delivery_threshold: s.free_delivery_threshold_minor ? minorToMajor(s.free_delivery_threshold_minor, sf.currency_exponent) : "",
+        delivery_areas: s.delivery_areas.filter((area) => area.is_active).map((area) => ({
+          id: area.id,
+          name: area.name,
+          fee: minorToMajor(area.fee_minor, sf.currency_exponent),
+          description: area.description,
+          state: area.state ?? "",
+          estimate_text: area.estimate_text ?? "",
+          outlet_id: area.outlet_id ? String(area.outlet_id) : "",
+        })),
+        shipbubble_api_key: "",
+        shipbubble_strategy: shipbubbleSettings?.strategy ?? "cheapest",
+        shipbubble_couriers: shipbubbleSettings?.selected_couriers ?? [],
+        default_weight_grams: shipbubbleSettings?.default_weight_grams ?? 500,
+      },
       payments: {
         checkout_require_email: s.checkout_require_email,
         checkout_require_phone: s.checkout_require_phone,
@@ -372,6 +472,9 @@ function SettingsContent({ workspaceId }: WorkspaceInfo) {
         hold_manual_transfer_hours: paySettings?.hold_manual_transfer_hours ?? 2,
         hold_confirmation_hours: paySettings?.hold_confirmation_hours ?? 2,
         hold_pickup_hours: paySettings?.hold_pickup_hours ?? 48,
+        manual_bank_name: paySettings?.manual_bank_name ?? "",
+        manual_bank_account_number: paySettings?.manual_bank_account_number ?? "",
+        manual_bank_account_name: paySettings?.manual_bank_account_name ?? "",
       },
       shoppers: { tagline: s.tagline ?? "", description: s.description ?? "", logo_url: s.logo_url ?? "", banner_url: s.banner_url ?? "", auto_show_new_products: s.auto_show_new_products, show_sold_out: s.show_sold_out, show_stock_count: s.show_stock_count, low_stock_threshold: s.low_stock_threshold },
       policies: { return_policy: s.return_policy ?? "", privacy_policy: s.privacy_policy ?? "", terms_policy: s.terms_policy ?? "", custom_policy: s.custom_policy ?? "" },
@@ -397,11 +500,48 @@ function SettingsContent({ workspaceId }: WorkspaceInfo) {
           hold_manual_transfer_hours: Number(draft.hold_manual_transfer_hours ?? 2),
           hold_confirmation_hours: Number(draft.hold_confirmation_hours ?? 2),
           hold_pickup_hours: Number(draft.hold_pickup_hours ?? 48),
+          manual_bank_name: String(draft.manual_bank_name ?? ""),
+          manual_bank_account_number: String(draft.manual_bank_account_number ?? ""),
+          manual_bank_account_name: String(draft.manual_bank_account_name ?? ""),
         });
         void paymentSettingsQuery.refetch();
-      } catch (err) {
-        console.error("Failed to update payment settings", err);
+      } catch (err: unknown) {
+        toast.danger((err as Error)?.message || "Failed to save payment settings");
+        return;
       }
+      update.mutate({
+        card: "payments",
+        checkout_require_email: Boolean(draft.checkout_require_email),
+        checkout_require_phone: Boolean(draft.checkout_require_phone),
+        reservation_ttl_hours: Number(draft.reservation_ttl_hours ?? 48),
+        idempotency_key: crypto.randomUUID(),
+      });
+      return;
+    }
+    if (active === "delivery") {
+      try {
+        await financeApi.updateStorefrontShipbubbleSettings(workspaceId, {
+          api_key: String(draft.shipbubble_api_key ?? "").trim() || undefined,
+          strategy: (draft.shipbubble_strategy as "cheapest" | "selected") || "cheapest",
+          selected_couriers: (draft.shipbubble_couriers as string[]) ?? [],
+          default_weight_grams: Math.max(1, Number(draft.default_weight_grams ?? 500) || 500),
+        });
+        void shipbubbleQuery.refetch();
+      } catch (err: unknown) {
+        toast.danger((err as Error)?.message || "Failed to save Shipbubble settings");
+        return;
+      }
+      const areasPayload = ((draft.delivery_areas as DeliveryAreaDraft[]) ?? []).map((a) => ({
+        id: a.id,
+        name: a.name,
+        fee: a.fee,
+        description: a.description,
+        state: a.state ? a.state : null,
+        estimate_text: a.estimate_text ?? "",
+        outlet_id: a.outlet_id ? Number(a.outlet_id) : null,
+      }));
+      update.mutate({ ...draft, delivery_areas: areasPayload, card: active, idempotency_key: crypto.randomUUID() });
+      return;
     }
     update.mutate({ ...draft, card: active, idempotency_key: crypto.randomUUID() });
   };
@@ -426,7 +566,169 @@ function SettingsContent({ workspaceId }: WorkspaceInfo) {
     <SideSheet isOpen={Boolean(active)} onClose={() => setActive(null)} title={active ? CARD_INFO[active].title : "Edit settings"} footer={<><AppButton variant="tertiary" label="Cancel" onPress={() => setActive(null)} /><AppButton label="Save changes" isLoading={update.isPending} onPress={save} /></>}>
       <div className="space-y-4">
         {active === "details" && <>{field("name", "Store name")}{field("slug", "Store link", "your-store")}{field("contact_phone", "Phone")}{field("contact_email", "Email")}{field("whatsapp_number", "WhatsApp number")}{field("address", "Address")}<fieldset className="space-y-2"><legend className="text-sm font-semibold">Opening hours</legend>{["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"].map((day)=><AppInput key={day} label={day} value={String((draft.business_hours as Record<string,string>)?.[day.toLowerCase()]??"")} placeholder="9:00 AM–5:00 PM or Closed" onChange={(e)=>set("business_hours",{...(draft.business_hours as Record<string,string>??{}),[day.toLowerCase()]:e.target.value})} />)}</fieldset></>}
-        {active === "delivery" && <><p className="text-sm font-medium">Delivery options</p>{(["pickup", "merchant_delivery", "customer_arranged"] as const).map((method) => <AppSwitch key={method} label={method === "pickup" ? "Pickup" : method === "merchant_delivery" ? "Store delivery" : "Customer arranges delivery"} isSelected={(draft.delivery_methods as string[] ?? []).includes(method)} onChange={(checked) => set("delivery_methods", checked ? [...(draft.delivery_methods as string[] ?? []), method] : (draft.delivery_methods as string[] ?? []).filter((x) => x !== method))} />)}{field("default_delivery_fee", `Default delivery fee (${sf.currency})`)}<p className="text-xs font-semibold">Delivery areas</p>{((draft.delivery_areas as DeliveryAreaDraft[]) ?? []).map((area,index)=><div key={area.id || `new-${index}`} className="rounded-xl border border-default p-3 space-y-2"><AppInput label="Area name" value={area.name} onChange={(e)=>set("delivery_areas",(draft.delivery_areas as DeliveryAreaDraft[]).map((item,i)=>i===index?{...item,name:e.target.value}:item))} /><AppInput label={`Delivery fee (${sf.currency})`} value={area.fee} onChange={(e)=>set("delivery_areas",(draft.delivery_areas as DeliveryAreaDraft[]).map((item,i)=>i===index?{...item,fee:e.target.value}:item))} /><AppInput label="Delivery note" value={area.description} onChange={(e)=>set("delivery_areas",(draft.delivery_areas as DeliveryAreaDraft[]).map((item,i)=>i===index?{...item,description:e.target.value}:item))} /><AppButton size="sm" variant="tertiary" label="Remove area" onPress={()=>set("delivery_areas",(draft.delivery_areas as DeliveryAreaDraft[]).filter((_,i)=>i!==index))} /></div>)}<AppButton size="sm" variant="secondary" label="Add delivery area" onPress={()=>set("delivery_areas",[...(draft.delivery_areas as DeliveryAreaDraft[] ?? []),{id:0,name:"",fee:"0",description:""}])} /><AppInput label={`Free delivery on orders over (${sf.currency})`} value={String(draft.free_delivery_threshold??"")} onChange={(e)=>set("free_delivery_threshold",e.target.value)} placeholder="Leave blank to turn off" /><AppTextarea label="Delivery guidance" value={String(draft.delivery_guidance ?? "")} onChange={(e) => set("delivery_guidance", e.target.value)} /></>}
+        {active === "delivery" && <>
+          <p className="text-sm font-medium">Delivery options</p>
+          {(["pickup", "merchant_delivery", "courier", "customer_arranged"] as const).map((method) => (
+            <AppSwitch key={method} label={method === "pickup" ? "Pickup" : method === "merchant_delivery" ? "Store delivery" : method === "courier" ? "Courier delivery (Shipbubble)" : "Customer arranges delivery"} isSelected={(draft.delivery_methods as string[] ?? []).includes(method)} onChange={(checked) => set("delivery_methods", checked ? [...(draft.delivery_methods as string[] ?? []), method] : (draft.delivery_methods as string[] ?? []).filter((x) => x !== method))} />
+          ))}
+          <div className="space-y-3 rounded-xl border border-default p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-semibold">Shipbubble courier settings</p>
+              {shipbubbleSettings?.connected ? (
+                <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                  Connected ({shipbubbleSettings.api_key_masked})
+                </span>
+              ) : null}
+            </div>
+            <AppInput
+              label="Shipbubble API key"
+              type="password"
+              value={String(draft.shipbubble_api_key ?? "")}
+              onChange={(e) => { set("shipbubble_api_key", e.target.value); setSbStatus(""); }}
+              placeholder={shipbubbleSettings?.connected ? "Leave blank to keep saved key" : "Enter your Shipbubble secret key"}
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <AppButton
+                size="sm"
+                variant="secondary"
+                label={sbTesting ? "Testing..." : "Test connection"}
+                isLoading={sbTesting}
+                onPress={async () => {
+                  setSbTesting(true);
+                  setSbStatus("");
+                  try {
+                    const list = await financeApi.testStorefrontShipbubbleConnection(workspaceId, String(draft.shipbubble_api_key ?? ""));
+                    setSbCouriers(list);
+                    setSbStatus(`Connected (${list.length} operational couriers found)`);
+                  } catch (err: unknown) {
+                    setSbStatus((err as Error)?.message || "Connection test failed");
+                  } finally {
+                    setSbTesting(false);
+                  }
+                }}
+              />
+              {sbStatus ? <span className="text-xs text-muted">{sbStatus}</span> : null}
+            </div>
+            <AppSelect
+              label="Courier selection"
+              selectedKey={String(draft.shipbubble_strategy ?? "cheapest")}
+              onSelectionChange={(key) => set("shipbubble_strategy", key)}
+              options={[
+                { key: "cheapest", label: "Cheapest available" },
+                { key: "selected", label: "Choose couriers" },
+              ]}
+            />
+            {draft.shipbubble_strategy === "selected" ? (
+              <div className="space-y-1.5">
+                <p className="text-xs text-muted">Available couriers (run Test connection to load live list):</p>
+                {(sbCouriers.length > 0 ? sbCouriers : ((draft.shipbubble_couriers as string[]) ?? []).map((code) => ({ courier_id: code, service_code: code, name: code }))).map((c) => {
+                  const chosenList = (draft.shipbubble_couriers as string[]) ?? [];
+                  const checked = chosenList.includes(c.service_code);
+                  return (
+                    <label key={c.service_code} className="flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => set("shipbubble_couriers", e.target.checked ? [...chosenList, c.service_code] : chosenList.filter((x) => x !== c.service_code))}
+                      />
+                      <span>{c.name} ({c.service_code})</span>
+                    </label>
+                  );
+                })}
+              </div>
+            ) : null}
+            <AppInput
+              label="Default item weight (grams)"
+              type="number"
+              min="1"
+              value={String(draft.default_weight_grams ?? 500)}
+              onChange={(e) => set("default_weight_grams", Number(e.target.value))}
+              description="Fallback weight when a product does not specify one."
+            />
+            {shipbubbleSettings?.connected && shipbubbleSettings.webhook_url ? (
+              <div className="space-y-1.5 rounded-lg border border-default bg-surface p-2.5">
+                <p className="text-xs font-medium">Shipbubble webhook URL</p>
+                <p className="text-xs text-muted">
+                  Paste this workspace-scoped URL into your Shipbubble dashboard to receive live delivery status updates.
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <code className="min-w-0 flex-1 break-all rounded bg-default/40 px-2 py-1 text-xs">
+                    {shipbubbleSettings.webhook_url}
+                  </code>
+                  <AppButton
+                    size="sm"
+                    variant="secondary"
+                    label="Copy webhook URL"
+                    onPress={() => {
+                      if (typeof navigator !== "undefined" && navigator.clipboard) {
+                        void navigator.clipboard.writeText(shipbubbleSettings.webhook_url ?? "");
+                        toast.success("Shipbubble webhook URL copied");
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+            ) : null}
+          </div>
+          {field("default_delivery_fee", `Default delivery fee (${sf.currency})`)}
+          <div className="space-y-2 pt-2">
+            <p className="text-xs font-semibold">Delivery areas</p>
+            {((draft.delivery_areas as DeliveryAreaDraft[]) ?? []).map((area, index) => (
+              <div key={area.id || `new-${index}`} className="rounded-xl border border-default p-3 space-y-2">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <AppInput label="Area name" value={area.name} onChange={(e) => set("delivery_areas", (draft.delivery_areas as DeliveryAreaDraft[]).map((item, i) => i === index ? { ...item, name: e.target.value } : item))} />
+                  <AppInput label="State (optional)" placeholder="e.g. Lagos" value={area.state} onChange={(e) => set("delivery_areas", (draft.delivery_areas as DeliveryAreaDraft[]).map((item, i) => i === index ? { ...item, state: e.target.value } : item))} />
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <AppInput label={`Delivery fee (${sf.currency})`} value={area.fee} onChange={(e) => set("delivery_areas", (draft.delivery_areas as DeliveryAreaDraft[]).map((item, i) => i === index ? { ...item, fee: e.target.value } : item))} />
+                  <AppInput label="Estimated delivery time" placeholder="e.g. 1–2 days" value={area.estimate_text} onChange={(e) => set("delivery_areas", (draft.delivery_areas as DeliveryAreaDraft[]).map((item, i) => i === index ? { ...item, estimate_text: e.target.value } : item))} />
+                </div>
+                {outlets.length > 0 && (
+                  <AppSelect
+                    label="Fulfilling outlet (optional)"
+                    placeholder="Default storefront outlet"
+                    options={outlets.filter((o) => o.is_active).map((o) => ({ key: String(o.id), label: o.name }))}
+                    selectedKey={area.outlet_id || undefined}
+                    onSelectionChange={(k) => set("delivery_areas", (draft.delivery_areas as DeliveryAreaDraft[]).map((item, i) => i === index ? { ...item, outlet_id: k } : item))}
+                  />
+                )}
+                <AppInput label="Delivery note" value={area.description} onChange={(e) => set("delivery_areas", (draft.delivery_areas as DeliveryAreaDraft[]).map((item, i) => i === index ? { ...item, description: e.target.value } : item))} />
+                <AppButton size="sm" variant="tertiary" label="Remove area" onPress={() => set("delivery_areas", (draft.delivery_areas as DeliveryAreaDraft[]).filter((_, i) => i !== index))} />
+              </div>
+            ))}
+            <AppButton size="sm" variant="secondary" label="Add delivery area" onPress={() => set("delivery_areas", [...(draft.delivery_areas as DeliveryAreaDraft[] ?? []), { id: 0, name: "", fee: "0", description: "", state: "", estimate_text: "", outlet_id: "" }])} />
+          </div>
+          {outlets.length > 0 && (
+            <div className="space-y-2 pt-2 border-t border-default">
+              <p className="text-xs font-semibold">Pickup points</p>
+              <p className="text-xs text-muted">Choose which active outlets shoppers can pick up orders from (stock is held at the selected outlet).</p>
+              {outlets.filter((o) => o.is_active).map((outlet) => (
+                <div key={outlet.id} className="rounded-xl border border-default p-3 space-y-2">
+                  <AppSwitch
+                    label={outlet.name}
+                    description={outlet.address || "No street address saved on outlet"}
+                    isSelected={Boolean(outlet.is_pickup_point)}
+                    onChange={(checked) => void togglePickupPoint(outlet, checked)}
+                  />
+                  {outlet.is_pickup_point ? (
+                    <AppInput
+                      label="Pickup instructions"
+                      placeholder="e.g. Call on arrival at gate"
+                      defaultValue={outlet.pickup_note ?? ""}
+                      onBlur={(e) => {
+                        if (e.target.value !== (outlet.pickup_note ?? "")) {
+                          void togglePickupPoint(outlet, true, e.target.value);
+                        }
+                      }}
+                    />
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          )}
+          <AppInput label={`Free delivery on orders over (${sf.currency})`} value={String(draft.free_delivery_threshold ?? "")} onChange={(e) => set("free_delivery_threshold", e.target.value)} placeholder="Leave blank to turn off" />
+          <AppTextarea label="Delivery guidance" value={String(draft.delivery_guidance ?? "")} onChange={(e) => set("delivery_guidance", e.target.value)} />
+        </>}
         {active === "payments" && (
           <PaymentsForm
             workspaceId={workspaceId}

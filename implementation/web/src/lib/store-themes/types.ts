@@ -115,7 +115,7 @@ export interface ThemeRendererProps {
   cartCount?: number;
   onCartClick?: () => void;
   selectCollection?: (slug: string) => void;
-  page?: "home" | "shop" | "about" | "policies" | "privacy" | "returns" | "terms" | "delivery" | "cart" | "checkout" | "collection" | "product" | "search";
+  page?: "home" | "shop" | "about" | "policies" | "privacy" | "returns" | "terms" | "delivery" | "cart" | "checkout" | "collection" | "product" | "search" | "orders";
   collectionSlug?: string;
   searchQuery?: string;
   onQuickAdd?: (productID: number) => void;

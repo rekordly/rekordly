@@ -3,56 +3,65 @@ package config
 import (
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/rekordly/rekordly-api/internal/crypto"
 	"github.com/spf13/viper"
 )
 
 type Config struct {
-	Environment            string
-	Port                   string
-	DatabaseURL            string
-	JWTSigningSecret       string
-	CORSAllowedOrigins     []string
-	DatabaseMaxConns       int32
-	DatabaseMinConns       int32
-	DatabaseConnectTimeout time.Duration
-	DatabaseHealthTimeout  time.Duration
-	SessionTTL             time.Duration
-	GoogleClientID         string
-	GoogleClientSecret     string
-	GoogleRedirectURL      string
-	GoogleAuthorizationURL string
-	GoogleTokenURL         string
-	GoogleJWKSURL          string
-	GoogleIssuer           string
-	FrontendBaseURL        string
-	CloudinaryCloudName    string
-	CloudinaryAPIKey       string
-	CloudinaryAPISecret    string
-	AIDefaultProvider      string
-	AIFallbackProvider     string
-	GeminiAPIKey           string
-	GeminiModel            string
-	DeepSeekAPIKey         string
-	DeepSeekModel          string
-	AITimeoutSeconds       int
-	AIMaxRetries           int
-	AIMaxInputChars        int
-	AIMaxOutputTokens      int
-	CommercialMode         string
-	PaystackSecretKey      string
-	PaystackWebhookSecret  string
-	PaystackBaseURL        string
-	ResendAPIKey           string
-	ResendBaseURL          string
-	EmailFrom              string
-	EmailWebhookSecret     string
-	GuestShareBaseURL      string
-	AdminOpsToken          string
-	WorkerConcurrency      int
-	WorkerLeaseSeconds     int
+	Environment               string
+	Port                      string
+	DatabaseURL               string
+	JWTSigningSecret          string
+	DataEncryptionKey         string
+	PublicAPIBaseURL          string
+	CORSAllowedOrigins        []string
+	DatabaseMaxConns          int32
+	DatabaseMinConns          int32
+	DatabaseConnectTimeout    time.Duration
+	DatabaseHealthTimeout     time.Duration
+	SessionTTL                time.Duration
+	GoogleClientID            string
+	GoogleClientSecret        string
+	GoogleRedirectURL         string
+	GoogleAuthorizationURL    string
+	GoogleTokenURL            string
+	GoogleJWKSURL             string
+	GoogleIssuer              string
+	FrontendBaseURL           string
+	CloudinaryCloudName       string
+	CloudinaryAPIKey          string
+	CloudinaryAPISecret       string
+	AIDefaultProvider         string
+	AIFallbackProvider        string
+	GeminiAPIKey              string
+	GeminiModel               string
+	DeepSeekAPIKey            string
+	DeepSeekModel             string
+	AITimeoutSeconds          int
+	AIMaxRetries              int
+	AIMaxInputChars           int
+	AIMaxOutputTokens         int
+	CommercialMode            string
+	PaystackSecretKey         string
+	PaystackWebhookSecret     string
+	PaystackBaseURL           string
+	SquadSecretKey            string
+	SquadWebhookSecret        string
+	SquadBaseURL              string
+	SquadDynamicVAEnabled     bool
+	PlatformCommissionPercent float64
+	ResendAPIKey              string
+	ResendBaseURL             string
+	EmailFrom                 string
+	EmailWebhookSecret        string
+	GuestShareBaseURL         string
+	AdminOpsToken             string
+	WorkerConcurrency         int
+	WorkerLeaseSeconds        int
 }
 
 func Load() (Config, error) {
@@ -79,6 +88,9 @@ func Load() (Config, error) {
 	v.SetDefault("AI_MAX_OUTPUT_TOKENS", 1500)
 	v.SetDefault("COMMERCIAL_MODE", "controlled_beta")
 	v.SetDefault("PAYSTACK_BASE_URL", "https://api.paystack.co")
+	v.SetDefault("SQUAD_BASE_URL", "https://api-d.squadco.com")
+	v.SetDefault("SQUAD_DYNAMIC_VA_ENABLED", false)
+	v.SetDefault("PLATFORM_COMMISSION_PERCENT", 0)
 	v.SetDefault("RESEND_BASE_URL", "https://api.resend.com")
 	v.SetDefault("EMAIL_FROM", "notifications@rekordly.com")
 	v.SetDefault("GUEST_SHARE_BASE_URL", "http://localhost:3000/share")
@@ -87,51 +99,76 @@ func Load() (Config, error) {
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 
-	cfg := Config{
-		Environment:            v.GetString("ENVIRONMENT"),
-		Port:                   v.GetString("PORT"),
-		DatabaseURL:            v.GetString("DATABASE_URL"),
-		JWTSigningSecret:       v.GetString("JWT_SIGNING_SECRET"),
-		CORSAllowedOrigins:     splitAndTrim(v.GetString("CORS_ALLOWED_ORIGINS")),
-		DatabaseMaxConns:       int32(v.GetInt("DATABASE_MAX_CONNS")),
-		DatabaseMinConns:       int32(v.GetInt("DATABASE_MIN_CONNS")),
-		DatabaseConnectTimeout: v.GetDuration("DATABASE_CONNECT_TIMEOUT"),
-		DatabaseHealthTimeout:  v.GetDuration("DATABASE_HEALTH_TIMEOUT"),
-		SessionTTL:             v.GetDuration("SESSION_TTL"),
-		GoogleClientID:         v.GetString("GOOGLE_CLIENT_ID"),
-		GoogleClientSecret:     v.GetString("GOOGLE_CLIENT_SECRET"),
-		GoogleRedirectURL:      v.GetString("GOOGLE_REDIRECT_URL"),
-		GoogleAuthorizationURL: v.GetString("GOOGLE_AUTHORIZATION_URL"),
-		GoogleTokenURL:         v.GetString("GOOGLE_TOKEN_URL"),
-		GoogleJWKSURL:          v.GetString("GOOGLE_JWKS_URL"),
-		GoogleIssuer:           v.GetString("GOOGLE_ISSUER"),
-		FrontendBaseURL:        v.GetString("FRONTEND_BASE_URL"),
-		CloudinaryCloudName:    v.GetString("CLOUDINARY_CLOUD_NAME"),
-		CloudinaryAPIKey:       v.GetString("CLOUDINARY_API_KEY"),
-		CloudinaryAPISecret:    v.GetString("CLOUDINARY_API_SECRET"),
-		AIDefaultProvider:      strings.ToLower(strings.TrimSpace(v.GetString("AI_DEFAULT_PROVIDER"))),
-		AIFallbackProvider:     strings.ToLower(strings.TrimSpace(v.GetString("AI_FALLBACK_PROVIDER"))),
-		GeminiAPIKey:           v.GetString("GEMINI_API_KEY"),
-		GeminiModel:            v.GetString("GEMINI_MODEL"),
-		DeepSeekAPIKey:         v.GetString("DEEPSEEK_API_KEY"),
-		DeepSeekModel:          v.GetString("DEEPSEEK_MODEL"),
-		AITimeoutSeconds:       v.GetInt("AI_TIMEOUT_SECONDS"),
-		AIMaxRetries:           v.GetInt("AI_MAX_RETRIES"),
-		AIMaxInputChars:        v.GetInt("AI_MAX_INPUT_CHARS"),
-		AIMaxOutputTokens:      v.GetInt("AI_MAX_OUTPUT_TOKENS"),
-		CommercialMode:         strings.ToLower(strings.TrimSpace(v.GetString("COMMERCIAL_MODE"))),
-		PaystackSecretKey:      v.GetString("PAYSTACK_SECRET_KEY"),
-		PaystackWebhookSecret:  v.GetString("PAYSTACK_WEBHOOK_SECRET"),
-		PaystackBaseURL:        strings.TrimRight(strings.TrimSpace(v.GetString("PAYSTACK_BASE_URL")), "/"),
-		ResendAPIKey:           v.GetString("RESEND_API_KEY"),
-		ResendBaseURL:          strings.TrimRight(strings.TrimSpace(v.GetString("RESEND_BASE_URL")), "/"),
-		EmailFrom:              v.GetString("EMAIL_FROM"),
-		EmailWebhookSecret:     v.GetString("EMAIL_WEBHOOK_SECRET"),
-		GuestShareBaseURL:      strings.TrimRight(strings.TrimSpace(v.GetString("GUEST_SHARE_BASE_URL")), "/"),
-		AdminOpsToken:          v.GetString("ADMIN_OPS_TOKEN"),
-		WorkerConcurrency:      v.GetInt("WORKER_CONCURRENCY"),
-		WorkerLeaseSeconds:     v.GetInt("WORKER_LEASE_SECONDS"),
+	envName := strings.TrimSpace(v.GetString("ENVIRONMENT"))
+	if !v.IsSet("ENVIRONMENT") && strings.TrimSpace(v.GetString("ENV")) != "" {
+		envName = strings.TrimSpace(v.GetString("ENV"))
 	}
+
+	cfg := Config{
+		Environment:               envName,
+		Port:                      v.GetString("PORT"),
+		DatabaseURL:               v.GetString("DATABASE_URL"),
+		JWTSigningSecret:          v.GetString("JWT_SIGNING_SECRET"),
+		DataEncryptionKey:         strings.TrimSpace(v.GetString("DATA_ENCRYPTION_KEY")),
+		PublicAPIBaseURL:          strings.TrimRight(strings.TrimSpace(v.GetString("PUBLIC_API_BASE_URL")), "/"),
+		CORSAllowedOrigins:        splitAndTrim(v.GetString("CORS_ALLOWED_ORIGINS")),
+		DatabaseMaxConns:          int32(v.GetInt("DATABASE_MAX_CONNS")),
+		DatabaseMinConns:          int32(v.GetInt("DATABASE_MIN_CONNS")),
+		DatabaseConnectTimeout:    v.GetDuration("DATABASE_CONNECT_TIMEOUT"),
+		DatabaseHealthTimeout:     v.GetDuration("DATABASE_HEALTH_TIMEOUT"),
+		SessionTTL:                v.GetDuration("SESSION_TTL"),
+		GoogleClientID:            v.GetString("GOOGLE_CLIENT_ID"),
+		GoogleClientSecret:        v.GetString("GOOGLE_CLIENT_SECRET"),
+		GoogleRedirectURL:         v.GetString("GOOGLE_REDIRECT_URL"),
+		GoogleAuthorizationURL:    v.GetString("GOOGLE_AUTHORIZATION_URL"),
+		GoogleTokenURL:            v.GetString("GOOGLE_TOKEN_URL"),
+		GoogleJWKSURL:             v.GetString("GOOGLE_JWKS_URL"),
+		GoogleIssuer:              v.GetString("GOOGLE_ISSUER"),
+		FrontendBaseURL:           v.GetString("FRONTEND_BASE_URL"),
+		CloudinaryCloudName:       v.GetString("CLOUDINARY_CLOUD_NAME"),
+		CloudinaryAPIKey:          v.GetString("CLOUDINARY_API_KEY"),
+		CloudinaryAPISecret:       v.GetString("CLOUDINARY_API_SECRET"),
+		AIDefaultProvider:         strings.ToLower(strings.TrimSpace(v.GetString("AI_DEFAULT_PROVIDER"))),
+		AIFallbackProvider:        strings.ToLower(strings.TrimSpace(v.GetString("AI_FALLBACK_PROVIDER"))),
+		GeminiAPIKey:              v.GetString("GEMINI_API_KEY"),
+		GeminiModel:               v.GetString("GEMINI_MODEL"),
+		DeepSeekAPIKey:            v.GetString("DEEPSEEK_API_KEY"),
+		DeepSeekModel:             v.GetString("DEEPSEEK_MODEL"),
+		AITimeoutSeconds:          v.GetInt("AI_TIMEOUT_SECONDS"),
+		AIMaxRetries:              v.GetInt("AI_MAX_RETRIES"),
+		AIMaxInputChars:           v.GetInt("AI_MAX_INPUT_CHARS"),
+		AIMaxOutputTokens:         v.GetInt("AI_MAX_OUTPUT_TOKENS"),
+		CommercialMode:            strings.ToLower(strings.TrimSpace(v.GetString("COMMERCIAL_MODE"))),
+		PaystackSecretKey:         v.GetString("PAYSTACK_SECRET_KEY"),
+		PaystackWebhookSecret:     v.GetString("PAYSTACK_WEBHOOK_SECRET"),
+		PaystackBaseURL:           strings.TrimRight(strings.TrimSpace(v.GetString("PAYSTACK_BASE_URL")), "/"),
+		SquadSecretKey:            v.GetString("SQUAD_SECRET_KEY"),
+		SquadWebhookSecret:        v.GetString("SQUAD_WEBHOOK_SECRET"),
+		SquadBaseURL:              strings.TrimRight(strings.TrimSpace(v.GetString("SQUAD_BASE_URL")), "/"),
+		SquadDynamicVAEnabled:     v.GetBool("SQUAD_DYNAMIC_VA_ENABLED"),
+		PlatformCommissionPercent: parseFloatOrZero(v.GetString("PLATFORM_COMMISSION_PERCENT")),
+		ResendAPIKey:              v.GetString("RESEND_API_KEY"),
+		ResendBaseURL:             strings.TrimRight(strings.TrimSpace(v.GetString("RESEND_BASE_URL")), "/"),
+		EmailFrom:                 v.GetString("EMAIL_FROM"),
+		EmailWebhookSecret:        v.GetString("EMAIL_WEBHOOK_SECRET"),
+		GuestShareBaseURL:         strings.TrimRight(strings.TrimSpace(v.GetString("GUEST_SHARE_BASE_URL")), "/"),
+		AdminOpsToken:             v.GetString("ADMIN_OPS_TOKEN"),
+		WorkerConcurrency:         v.GetInt("WORKER_CONCURRENCY"),
+		WorkerLeaseSeconds:        v.GetInt("WORKER_LEASE_SECONDS"),
+	}
+
+	if strings.TrimSpace(cfg.PaystackWebhookSecret) == "" {
+		cfg.PaystackWebhookSecret = cfg.PaystackSecretKey
+	}
+	if cfg.PublicAPIBaseURL == "" {
+		cfg.PublicAPIBaseURL = "http://localhost:" + cfg.Port
+	}
+
+	resolvedKey, err := validateAndResolveDataEncryptionKey(cfg.Environment, cfg.DataEncryptionKey, cfg.JWTSigningSecret)
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.DataEncryptionKey = resolvedKey
 
 	if cfg.DatabaseURL == "" {
 		return Config{}, fmt.Errorf("DATABASE_URL is required")
@@ -183,9 +220,37 @@ func Load() (Config, error) {
 	return cfg, nil
 }
 
+func validateAndResolveDataEncryptionKey(environment, dataEncryptionKey, jwtSigningSecret string) (string, error) {
+	env := strings.ToLower(strings.TrimSpace(environment))
+	key := strings.TrimSpace(dataEncryptionKey)
+	jwt := strings.TrimSpace(jwtSigningSecret)
+
+	if key != "" && jwt != "" && key == jwt {
+		return "", fmt.Errorf("DATA_ENCRYPTION_KEY must not reuse JWT_SIGNING_SECRET")
+	}
+
+	if env == "local" {
+		if key == "" {
+			return crypto.LocalDevDefaultKey, nil
+		}
+		if len(key) < crypto.MinKeyLength {
+			return "", fmt.Errorf("DATA_ENCRYPTION_KEY must be at least %d bytes", crypto.MinKeyLength)
+		}
+		return key, nil
+	}
+
+	if len(key) < crypto.MinKeyLength {
+		return "", fmt.Errorf("DATA_ENCRYPTION_KEY is required and must be at least %d bytes outside local", crypto.MinKeyLength)
+	}
+	return key, nil
+}
+
 func validateProductionConfig(cfg Config) error {
 	if strings.ToLower(strings.TrimSpace(cfg.Environment)) != "production" {
 		return nil
+	}
+	if _, err := validateAndResolveDataEncryptionKey(cfg.Environment, cfg.DataEncryptionKey, cfg.JWTSigningSecret); err != nil {
+		return err
 	}
 	if len(cfg.JWTSigningSecret) < 32 {
 		return fmt.Errorf("production requires JWT_SIGNING_SECRET >= 32 characters")
@@ -202,8 +267,8 @@ func validateProductionConfig(cfg Config) error {
 		return fmt.Errorf("production requires RESEND_API_KEY and EMAIL_WEBHOOK_SECRET")
 	}
 	if cfg.CommercialMode != "" && cfg.CommercialMode != "controlled_beta" {
-		if cfg.PaystackSecretKey == "" || cfg.PaystackWebhookSecret == "" {
-			return fmt.Errorf("paid commercial mode requires PAYSTACK_SECRET_KEY and PAYSTACK_WEBHOOK_SECRET")
+		if cfg.PaystackSecretKey == "" {
+			return fmt.Errorf("paid commercial mode requires PAYSTACK_SECRET_KEY")
 		}
 	}
 	return nil
@@ -230,6 +295,18 @@ func validateDatabaseEnvironment(environment, databaseURL string) error {
 		return fmt.Errorf("local/test DATABASE_URL host %q is not an approved local database host", host)
 	}
 	return nil
+}
+
+func parseFloatOrZero(raw string) float64 {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0
+	}
+	v, err := strconv.ParseFloat(raw, 64)
+	if err != nil || v < 0 {
+		return 0
+	}
+	return v
 }
 
 func splitAndTrim(value string) []string {

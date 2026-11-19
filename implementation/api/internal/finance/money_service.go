@@ -12,9 +12,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rekordly/rekordly-api/internal/ai"
 	"github.com/rekordly/rekordly-api/internal/billing"
+	"github.com/rekordly/rekordly-api/internal/crypto"
 	"github.com/rekordly/rekordly-api/internal/db"
 	"github.com/rekordly/rekordly-api/internal/notify"
 	"github.com/rekordly/rekordly-api/internal/payments"
+	"github.com/rekordly/rekordly-api/internal/shipping"
 )
 
 var (
@@ -31,20 +33,48 @@ var (
 )
 
 type Service struct {
-	pool              *pgxpool.Pool
-	queries           *db.Queries
-	planLimitChecker  PlanLimitChecker
-	evidenceUploader  EvidenceUploadAuthorizer
-	dnsLookupTXT      func(string) ([]string, error)
+	pool                       *pgxpool.Pool
+	queries                    *db.Queries
+	planLimitChecker           PlanLimitChecker
+	evidenceUploader           EvidenceUploadAuthorizer
+	dnsLookupTXT               func(string) ([]string, error)
 	aiOrchestrator             *ai.Orchestrator
 	paymentProvider            billing.PaymentProvider
 	emailProvider              notify.EmailProvider
 	guestShareBaseURL          string
 	storefrontPaymentProviders map[string]payments.Provider
+	shippingClient             shipping.Client
 	platformCommissionPercent  float64
+	beforeMarkPaidCommitHook   func(ctx context.Context, orderID int64) error
+	dataEncryptionKey          string
+	publicAPIBaseURL           string
 }
 
 type ServiceOption func(*Service)
+
+func WithDataEncryptionKey(key string) ServiceOption {
+	return func(service *Service) {
+		service.dataEncryptionKey = strings.TrimSpace(key)
+	}
+}
+
+func WithPublicAPIBaseURL(baseURL string) ServiceOption {
+	return func(service *Service) {
+		service.publicAPIBaseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	}
+}
+
+func WithBeforeMarkPaidCommitHook(fn func(ctx context.Context, orderID int64) error) ServiceOption {
+	return func(service *Service) {
+		service.beforeMarkPaidCommitHook = fn
+	}
+}
+
+func WithShippingClient(client shipping.Client) ServiceOption {
+	return func(service *Service) {
+		service.shippingClient = client
+	}
+}
 
 func WithStorefrontPaymentProvider(provider payments.Provider) ServiceOption {
 	return func(service *Service) {
@@ -94,7 +124,127 @@ func NewService(pool *pgxpool.Pool, options ...ServiceOption) *Service {
 	for _, option := range options {
 		option(service)
 	}
+	if service.dataEncryptionKey != "" {
+		_ = crypto.SetKey(service.dataEncryptionKey)
+	} else if crypto.ActiveKey() == "" {
+		_ = crypto.SetKey(crypto.LocalDevDefaultKey)
+	}
 	return service
+}
+
+// ReencryptSecrets re-encrypts any legacy unprefixed or old-key-encrypted rows in
+// merchant_payout_accounts.subaccount_ref, storefront_settings.shipbubble_api_key, and
+// storefront_orders.public_token_enc using newKey (with the v1: prefix) inside a single transaction.
+func ReencryptSecrets(ctx context.Context, pool *pgxpool.Pool, oldKey, newKey string) (int, error) {
+	if _, err := crypto.EncryptSecret("probe", newKey); err != nil {
+		return 0, fmt.Errorf("invalid new encryption key: %w", err)
+	}
+	if _, err := crypto.DecryptLegacySecret("", oldKey); err != nil {
+		return 0, fmt.Errorf("invalid old encryption key: %w", err)
+	}
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := db.New(pool).WithTx(tx)
+
+	updatedCount := 0
+	reencryptValue := func(cipherVal string) (string, bool, error) {
+		trimmed := strings.TrimSpace(cipherVal)
+		if trimmed == "" {
+			return "", false, nil
+		}
+		if strings.HasPrefix(trimmed, crypto.CiphertextVersionPrefix) {
+			if _, err := crypto.DecryptSecret(trimmed, newKey); err == nil {
+				return trimmed, false, nil // already encrypted with newKey and v1: prefix
+			}
+		}
+		plain, err := crypto.DecryptLegacySecret(trimmed, oldKey)
+		if err != nil {
+			return "", false, err
+		}
+		reenc, err := crypto.EncryptSecret(plain, newKey)
+		if err != nil {
+			return "", false, err
+		}
+		return reenc, true, nil
+	}
+
+	payouts, err := q.ListAllMerchantPayoutAccountsForReencrypt(ctx)
+	if err != nil {
+		return 0, err
+	}
+	for _, p := range payouts {
+		reenc, changed, rErr := reencryptValue(p.SubaccountRef)
+		if rErr != nil {
+			return 0, fmt.Errorf("reencrypt merchant_payout_accounts id=%d: %w", p.ID, rErr)
+		}
+		if changed {
+			if err := q.UpdateMerchantPayoutAccountSubaccountRef(ctx, db.UpdateMerchantPayoutAccountSubaccountRefParams{
+				WorkspaceID:   p.WorkspaceID,
+				ID:            p.ID,
+				SubaccountRef: reenc,
+			}); err != nil {
+				return 0, err
+			}
+			updatedCount++
+		}
+	}
+
+	settings, err := q.ListAllStorefrontSettingsShipbubbleKeysForReencrypt(ctx)
+	if err != nil {
+		return 0, err
+	}
+	for _, st := range settings {
+		if !st.ShipbubbleApiKey.Valid {
+			continue
+		}
+		reenc, changed, rErr := reencryptValue(st.ShipbubbleApiKey.String)
+		if rErr != nil {
+			return 0, fmt.Errorf("reencrypt storefront_settings storefront_id=%d: %w", st.StorefrontID, rErr)
+		}
+		if changed {
+			if err := q.UpdateStorefrontSettingsShipbubbleKeyOnly(ctx, db.UpdateStorefrontSettingsShipbubbleKeyOnlyParams{
+				WorkspaceID:      st.WorkspaceID,
+				StorefrontID:     st.StorefrontID,
+				ShipbubbleApiKey: pgtype.Text{String: reenc, Valid: true},
+			}); err != nil {
+				return 0, err
+			}
+			updatedCount++
+		}
+	}
+
+	orders, err := q.ListAllStorefrontOrdersPublicTokensForReencrypt(ctx)
+	if err != nil {
+		return 0, err
+	}
+	for _, ord := range orders {
+		if !ord.PublicTokenEnc.Valid {
+			continue
+		}
+		reenc, changed, rErr := reencryptValue(ord.PublicTokenEnc.String)
+		if rErr != nil {
+			return 0, fmt.Errorf("reencrypt storefront_orders id=%d: %w", ord.ID, rErr)
+		}
+		if changed {
+			if err := q.UpdateStorefrontOrderPublicTokenEnc(ctx, db.UpdateStorefrontOrderPublicTokenEncParams{
+				WorkspaceID:    ord.WorkspaceID,
+				ID:             ord.ID,
+				PublicTokenEnc: pgtype.Text{String: reenc, Valid: true},
+			}); err != nil {
+				return 0, err
+			}
+			updatedCount++
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return 0, err
+	}
+	return updatedCount, nil
 }
 
 // ---------------- Money Accounts ----------------

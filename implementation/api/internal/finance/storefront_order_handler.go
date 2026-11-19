@@ -15,6 +15,10 @@ func (h *Handler) RegisterStorefrontOrderRoutes(g *gin.RouterGroup) {
 	g.POST("/orders/:id/commands/request-change", h.requestOrderChange)
 	g.POST("/orders/:id/commands/confirm", h.confirmStorefrontOrder)
 	g.POST("/orders/:id/commands/pack", h.packStorefrontOrder)
+	g.POST("/orders/:id/commands/ready-for-pickup", h.readyForPickupStorefrontOrder)
+	g.POST("/orders/:id/commands/collect", h.collectStorefrontOrder)
+	g.POST("/orders/:id/commands/mark-paid", h.markStorefrontOrderPaidManual)
+	g.POST("/orders/:id/commands/resolve-payment-attention", h.resolveStorefrontOrderPaymentAttention)
 	g.POST("/orders/:id/commands/fulfil", h.fulfilStorefrontOrder)
 	g.POST("/orders/:id/commands/cancel", h.cancelStorefrontOrder)
 	g.POST("/orders/:id/commands/decline", h.declineStorefrontOrder)
@@ -22,6 +26,7 @@ func (h *Handler) RegisterStorefrontOrderRoutes(g *gin.RouterGroup) {
 	g.POST("/orders/:id/commands/create-invoice", h.convertOrderToInvoice)
 	g.POST("/orders/:id/commands/messages", h.postMerchantOrderMessage)
 	g.POST("/orders/:id/commands/return", h.returnStorefrontOrder)
+	g.POST("/orders/:id/commands/retry-courier-booking", h.retryStorefrontCourierBooking)
 	g.POST("/orders/commands/expire-reservations", h.expireStaleReservations)
 }
 
@@ -296,4 +301,89 @@ func (h *Handler) expireStaleReservations(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"expired_count": count}})
+}
+
+func (h *Handler) readyForPickupStorefrontOrder(c *gin.Context) {
+	ws, ok := businessPermission(c, "orders.fulfil")
+	if !ok {
+		return
+	}
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	var in struct {
+		ExpectedVersion int32 `json:"expected_version"`
+	}
+	if err != nil || id <= 0 || c.ShouldBindJSON(&in) != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": "Invalid pickup ready request"}})
+		return
+	}
+	order, err := h.service.ReadyForPickupStorefrontOrder(c.Request.Context(), ws.WorkspaceID, ws.UserID, id, in.ExpectedVersion)
+	if err != nil {
+		h.storefrontError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"order": order}})
+}
+
+func (h *Handler) collectStorefrontOrder(c *gin.Context) {
+	ws, ok := businessPermission(c, "orders.fulfil")
+	if !ok {
+		return
+	}
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	var in CollectStorefrontOrderInput
+	if err != nil || id <= 0 || c.ShouldBindJSON(&in) != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": "Invalid collection request"}})
+		return
+	}
+	order, err := h.service.CollectStorefrontOrder(c.Request.Context(), ws.WorkspaceID, ws.UserID, id, in)
+	if err != nil {
+		h.storefrontError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"order": order}})
+}
+
+func (h *Handler) markStorefrontOrderPaidManual(c *gin.Context) {
+	ws, ok := businessPermission(c, "orders.confirm", "orders.fulfil")
+	if !ok {
+		return
+	}
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	var in struct {
+		MoneyAccountID int64  `json:"money_account_id" binding:"required"`
+		Notes          string `json:"notes"`
+	}
+	if err != nil || id <= 0 || c.ShouldBindJSON(&in) != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": "Money account is required"}})
+		return
+	}
+	if err := h.service.MarkStorefrontOrderPaidManual(c.Request.Context(), ws.WorkspaceID, id, in.MoneyAccountID, in.Notes); err != nil {
+		h.storefrontError(c, err)
+		return
+	}
+	order, err := h.service.GetMerchantOrder(c.Request.Context(), ws.WorkspaceID, id)
+	if err != nil {
+		h.storefrontError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"order": order}})
+}
+
+func (h *Handler) resolveStorefrontOrderPaymentAttention(c *gin.Context) {
+	ws, ok := businessPermission(c, "orders.confirm", "orders.cancel", "orders.fulfil")
+	if !ok {
+		return
+	}
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	var in ResolvePaymentAttentionInput
+	if err != nil || id <= 0 || c.ShouldBindJSON(&in) != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "INVALID_REQUEST", "message": "Invalid payment resolution request"}})
+		return
+	}
+	order, err := h.service.ResolveStorefrontOrderPaymentAttention(c.Request.Context(), ws.WorkspaceID, ws.UserID, id, in)
+	if err != nil {
+		h.storefrontError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"order": order}})
 }

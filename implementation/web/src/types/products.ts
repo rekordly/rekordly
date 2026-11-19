@@ -24,6 +24,7 @@ export interface Product {
   currency_exponent: number;
   /** Decimal text, e.g. "12.0000". */
   quantity_on_hand: string;
+  weight_grams?: number | null;
   variant_count: number;
   collection_ids?: number[];
   archived_at?: string | null;
@@ -58,12 +59,13 @@ export interface ProductVariant {
   is_default: boolean; is_active: boolean; option_values?: Record<string, string>;
   archived_at?: string | null;
   quantity_on_hand: string;
+  weight_grams?: number | null;
 }
 
 export interface SaveOptionsPayload {
   options: { id?: number; name: string; values: { id?: number; value: string }[] }[];
   variants: { id?: number; option_values: string[]; selling_price: string; cost_price?: string;
-    compare_at_price?: string; sku?: string; barcode?: string; is_active: boolean }[];
+    compare_at_price?: string; sku?: string; barcode?: string; is_active: boolean; weight_grams?: number | null }[];
 }
 
 /** Shared by create, edit and import. Prices are major-unit decimal strings. */
@@ -81,6 +83,7 @@ export interface SaveProductPayload {
   selling_price: string;
   cost_price?: string;
   compare_at_price?: string;
+  weight_grams?: number | null;
   currency: string;
   outlet_ids?: number[];
   collection_ids?: number[];

@@ -89,10 +89,23 @@ SET shipbubble_api_key = $3,
     shipbubble_strategy = $4,
     shipbubble_couriers = $5,
     default_weight_grams = $6,
+    shipbubble_webhook_token = $7,
     version = version + 1,
     updated_at = now()
 WHERE workspace_id = $1 AND storefront_id = $2
 RETURNING *;
+
+-- name: SetStorefrontShipbubbleWebhookToken :one
+UPDATE storefront_settings
+SET shipbubble_webhook_token = $3,
+    updated_at = now()
+WHERE workspace_id = $1 AND storefront_id = $2
+RETURNING *;
+
+-- name: GetStorefrontSettingsByShipbubbleWebhookToken :one
+SELECT * FROM storefront_settings
+WHERE shipbubble_webhook_token = $1
+LIMIT 1;
 
 -- name: UpdateStorefrontOrderHold :one
 UPDATE storefront_orders
@@ -220,3 +233,358 @@ JOIN storefronts sf ON sf.id = o.storefront_id
 WHERE o.shopper_id = $1
   AND (sqlc.narg('storefront_slug')::text IS NULL OR lower(btrim(sf.slug)) = lower(btrim(sqlc.narg('storefront_slug')::text)))
 ORDER BY o.id DESC;
+
+-- name: UpdateStorefrontOrderCheckoutMeta :one
+UPDATE storefront_orders
+SET hold_type = $3,
+    reservation_expires_at = $4,
+    processing_fee_minor = $5,
+    pickup_code = $6,
+    pickup_point_id = $7,
+    public_token_enc = $8,
+    rate_token = $9,
+    courier_name = $10,
+    courier_service_code = $11,
+    courier_id = $12,
+    commercial_status = $13,
+    fulfilment_status = $14,
+    payment_status = $15,
+    shopper_id = COALESCE($16, shopper_id),
+    updated_at = now()
+WHERE workspace_id = $1 AND id = $2
+RETURNING *;
+
+-- name: UpdateStorefrontOrderCourierFull :one
+UPDATE storefront_orders
+SET courier_name = COALESCE($3, courier_name),
+    courier_tracking_number = $4,
+    courier_status = $5,
+    courier_booking_error = $6,
+    courier_tracking_url = $7,
+    updated_at = now()
+WHERE workspace_id = $1 AND id = $2
+RETURNING *;
+
+-- name: GetStorefrontOrderByTrackingNumber :one
+SELECT * FROM storefront_orders
+WHERE courier_tracking_number = $1
+LIMIT 1;
+
+-- name: GetStorefrontOrderByWorkspaceAndTrackingNumber :one
+SELECT * FROM storefront_orders
+WHERE workspace_id = $1 AND courier_tracking_number = $2
+LIMIT 1;
+
+-- name: UpdateStorefrontManualBankDetails :one
+UPDATE storefront_settings
+SET manual_bank_name = $3,
+    manual_bank_account_number = $4,
+    manual_bank_account_name = $5,
+    version = version + 1,
+    updated_at = now()
+WHERE workspace_id = $1 AND storefront_id = $2
+RETURNING *;
+
+-- name: GetStorefrontShippingRateCache :one
+SELECT * FROM storefront_shipping_rate_cache
+WHERE cache_key = $1 AND expires_at > now();
+
+-- name: GetStorefrontShippingRateByToken :one
+SELECT * FROM storefront_shipping_rate_cache
+WHERE storefront_id = $1 AND request_token = $2 AND expires_at > now()
+ORDER BY expires_at DESC
+LIMIT 1;
+
+-- name: UpsertStorefrontShippingRateCache :one
+INSERT INTO storefront_shipping_rate_cache (
+    cache_key, workspace_id, storefront_id, request_token, rates_json, expires_at
+) VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (cache_key) DO UPDATE
+SET request_token = EXCLUDED.request_token,
+    rates_json = EXCLUDED.rates_json,
+    expires_at = EXCLUDED.expires_at,
+    created_at = now()
+RETURNING *;
+
+-- name: DeleteExpiredShippingRateCache :exec
+DELETE FROM storefront_shipping_rate_cache
+WHERE expires_at <= now();
+
+-- name: CreateShopperLoginCodeWithLink :one
+INSERT INTO shopper_login_codes (shopper_email, code_hash, link_token_hash, expires_at, ip_hash)
+VALUES (lower(btrim($1)), $2, $3, $4, $5)
+RETURNING *;
+
+-- name: GetShopperLoginCodeByLinkHash :one
+SELECT * FROM shopper_login_codes
+WHERE link_token_hash = $1
+ORDER BY created_at DESC
+LIMIT 1;
+
+-- name: UpdateShopperDetails :one
+UPDATE shoppers
+SET name = COALESCE($2, name),
+    phone = COALESCE($3, phone),
+    saved_addresses = COALESCE($4, saved_addresses),
+    last_seen_at = now()
+WHERE id = $1
+RETURNING *;
+
+-- name: CountRecentShopperCodesByEmail :one
+SELECT count(*)::bigint FROM shopper_login_codes
+WHERE lower(btrim(shopper_email)) = lower(btrim($1))
+  AND created_at >= now() - interval '10 minutes';
+
+-- name: CountRecentShopperCodesByIP :one
+SELECT count(*)::bigint FROM shopper_login_codes
+WHERE ip_hash = $1
+  AND created_at >= now() - interval '10 minutes';
+
+-- name: UpdateProductWeightGrams :exec
+UPDATE products
+SET weight_grams = $3, updated_at = now()
+WHERE workspace_id = $1 AND id = $2;
+
+-- name: UpdateProductVariantWeightGrams :exec
+UPDATE product_variants
+SET weight_grams = $3, updated_at = now()
+WHERE workspace_id = $1 AND id = $2;
+
+-- name: ListStorefrontProductWeights :many
+SELECT sp.id AS storefront_product_id,
+       sp.product_id,
+       sp.variant_id,
+       sp.public_title,
+       sp.public_price_minor,
+       p.weight_grams AS product_weight_grams,
+       pv.weight_grams AS variant_weight_grams
+FROM storefront_products sp
+JOIN products p ON p.id = sp.product_id AND p.workspace_id = sp.workspace_id
+LEFT JOIN product_variants pv ON pv.id = sp.variant_id AND pv.workspace_id = sp.workspace_id
+WHERE sp.storefront_id = $1 AND sp.id = ANY($2::bigint[]);
+
+-- name: UpdateStorefrontOrderPackedReady :one
+UPDATE storefront_orders
+SET fulfilment_status = 'packed',
+    version = version + 1,
+    updated_at = now()
+WHERE workspace_id = $1 AND id = $2 AND version = $3
+  AND commercial_status = 'confirmed'
+  AND fulfilment_status = 'reserved'
+  AND delivery_method = 'pickup'
+RETURNING *;
+
+-- name: UpdatePaymentAttemptSettlement :one
+UPDATE storefront_payment_attempts
+SET status = $3,
+    fee_minor = COALESCE($4, fee_minor),
+    commission_minor = COALESCE($5, commission_minor),
+    received_amount_minor = COALESCE($6, received_amount_minor),
+    raw_event = COALESCE($7, raw_event),
+    paid_at = CASE WHEN $3 = 'paid' AND paid_at IS NULL THEN now() ELSE paid_at END,
+    updated_at = now()
+WHERE workspace_id = $1 AND id = $2
+RETURNING *;
+
+-- name: SetStorefrontOrderPaymentAttention :one
+UPDATE storefront_orders
+SET payment_status = 'paid_needs_attention',
+    payment_attention_reason = $3,
+    payment_attention_message = $4,
+    updated_at = now()
+WHERE workspace_id = $1 AND id = $2
+RETURNING *;
+
+-- name: FinalizeStorefrontOrderPayment :one
+UPDATE storefront_orders
+SET payment_status = 'paid',
+    linked_sale_id = COALESCE($3, linked_sale_id),
+    commercial_status = 'confirmed',
+    fulfilment_status = CASE WHEN fulfilment_status = 'unreserved' THEN 'reserved' ELSE fulfilment_status END,
+    reservation_expires_at = NULL,
+    payment_attention_reason = NULL,
+    payment_attention_message = NULL,
+    version = version + 1,
+    updated_at = now()
+WHERE workspace_id = $1 AND id = $2
+RETURNING *;
+
+-- name: ResolveStorefrontOrderCancelWithRefund :one
+UPDATE storefront_orders
+SET commercial_status = 'cancelled',
+    fulfilment_status = 'unreserved',
+    payment_status = 'refunded',
+    decline_or_cancel_reason = $3,
+    reservation_expires_at = NULL,
+    payment_attention_reason = NULL,
+    payment_attention_message = NULL,
+    version = version + 1,
+    updated_at = now()
+WHERE workspace_id = $1 AND id = $2
+RETURNING *;
+
+-- name: MakeOrderReservationsFirm :exec
+UPDATE stock_reservations
+SET expires_at = NULL, updated_at = now()
+WHERE workspace_id = $1 AND order_id = $2 AND status = 'active';
+
+-- name: UpdateSaleSource :exec
+UPDATE sales
+SET source = $3, updated_at = now()
+WHERE workspace_id = $1 AND id = $2;
+
+-- name: CreateClearingMoneyAccount :one
+INSERT INTO money_accounts (workspace_id, name, account_type, currency, currency_exponent)
+VALUES ($1, $2, 'clearing', $3, $4)
+RETURNING *;
+
+-- name: CreatePayoutMoneyTransaction :one
+INSERT INTO money_transactions (
+    workspace_id, direction, status, amount_minor, currency, currency_exponent,
+    effective_date, money_account_id, destination_account_id, purpose, notes, reference, idempotency_key, posted_at
+) VALUES (
+    $1, 'transfer', 'posted', $2, $3, $4, $5, $6, $7, 'payout', $8, $9, $10, now()
+) RETURNING *;
+
+-- name: UpdateStorefrontOrderPaymentArrangement :exec
+UPDATE storefront_orders
+SET payment_arrangement = $3, updated_at = now()
+WHERE workspace_id = $1 AND id = $2;
+
+-- name: SetStorefrontOrderLineReservationID :exec
+UPDATE storefront_order_lines
+SET reservation_id = $3
+WHERE workspace_id = $1 AND id = $2;
+
+-- name: UpdateStorefrontOrderAckReviewed :one
+UPDATE storefront_orders
+SET commercial_status = 'needs_review', version = version + 1, updated_at = now()
+WHERE workspace_id = $1 AND id = $2
+RETURNING *;
+
+-- name: CancelStorefrontOrderByCustomer :one
+UPDATE storefront_orders
+SET commercial_status = 'cancelled', decline_or_cancel_reason = $3, version = version + 1, updated_at = now()
+WHERE workspace_id = $1 AND id = $2
+RETURNING *;
+
+-- name: ConfirmStorefrontOrderRecord :one
+UPDATE storefront_orders
+SET outlet_id = $3,
+    commercial_status = 'confirmed',
+    fulfilment_status = 'reserved',
+    payment_status = $4,
+    delivery_fee_minor = $5,
+    total_minor = $6,
+    payment_arrangement = $7,
+    reservation_expires_at = $8,
+    version = version + 1,
+    updated_at = now()
+WHERE workspace_id = $1 AND id = $2
+RETURNING *;
+
+-- name: UpdateStockReservationQuantity :exec
+UPDATE stock_reservations
+SET quantity = $3, updated_at = now()
+WHERE workspace_id = $1 AND id = $2;
+
+-- name: UpdateStorefrontOrderFulfilmentResult :one
+UPDATE storefront_orders
+SET fulfilment_status = $3,
+    commercial_status = $4,
+    version = version + 1,
+    updated_at = now()
+WHERE workspace_id = $1 AND id = $2
+RETURNING *;
+
+-- name: UpdateStorefrontOrderCancelledOrDeclined :one
+UPDATE storefront_orders
+SET commercial_status = $3,
+    fulfilment_status = 'unreserved',
+    decline_or_cancel_reason = $4,
+    reservation_expires_at = NULL,
+    version = version + 1,
+    updated_at = now()
+WHERE workspace_id = $1 AND id = $2
+RETURNING *;
+
+-- name: ListExpiredStorefrontOrders :many
+SELECT workspace_id, id
+FROM storefront_orders
+WHERE commercial_status IN ('confirmed', 'request_received')
+  AND fulfilment_status IN ('reserved', 'packed')
+  AND payment_status IN ('unpaid', 'not_requested')
+  AND reservation_expires_at IS NOT NULL
+  AND reservation_expires_at < now()
+ORDER BY reservation_expires_at ASC
+LIMIT 100;
+
+-- name: ExpirePendingStorefrontPaymentAttempts :exec
+UPDATE storefront_payment_attempts
+SET status = 'expired', updated_at = now()
+WHERE workspace_id = $1 AND order_id = $2 AND status = 'pending';
+
+-- name: UpdateStorefrontOrderRevision :one
+UPDATE storefront_orders
+SET commercial_status = $3,
+    version = $4,
+    subtotal_minor = $5,
+    delivery_fee_minor = $6,
+    total_minor = $7,
+    delivery_method = $8,
+    payment_arrangement = $9,
+    updated_at = now()
+WHERE workspace_id = $1 AND id = $2
+RETURNING *;
+
+-- name: UpdateStorefrontOrderCustomerID :exec
+UPDATE storefront_orders
+SET customer_id = $3, updated_at = now()
+WHERE workspace_id = $1 AND id = $2;
+
+-- name: UpdateStorefrontOrderLinkedInvoice :exec
+UPDATE storefront_orders
+SET linked_invoice_id = $3, payment_status = $4, updated_at = now()
+WHERE workspace_id = $1 AND id = $2;
+
+-- name: GetProductKindByID :one
+SELECT kind FROM products
+WHERE workspace_id = $1 AND id = $2;
+
+-- name: DecrementStorefrontOrderLineFulfilled :exec
+UPDATE storefront_order_lines
+SET fulfilled_quantity = fulfilled_quantity - $3
+WHERE workspace_id = $1 AND id = $2;
+
+-- name: ListAllMerchantPayoutAccountsForReencrypt :many
+SELECT id, workspace_id, subaccount_ref
+FROM merchant_payout_accounts
+WHERE subaccount_ref <> ''
+ORDER BY id;
+
+-- name: UpdateMerchantPayoutAccountSubaccountRef :exec
+UPDATE merchant_payout_accounts
+SET subaccount_ref = $3, updated_at = now()
+WHERE workspace_id = $1 AND id = $2;
+
+-- name: ListAllStorefrontSettingsShipbubbleKeysForReencrypt :many
+SELECT storefront_id, workspace_id, shipbubble_api_key
+FROM storefront_settings
+WHERE shipbubble_api_key IS NOT NULL AND shipbubble_api_key <> ''
+ORDER BY storefront_id;
+
+-- name: UpdateStorefrontSettingsShipbubbleKeyOnly :exec
+UPDATE storefront_settings
+SET shipbubble_api_key = $3, updated_at = now()
+WHERE workspace_id = $1 AND storefront_id = $2;
+
+-- name: ListAllStorefrontOrdersPublicTokensForReencrypt :many
+SELECT id, workspace_id, public_token_enc
+FROM storefront_orders
+WHERE public_token_enc IS NOT NULL AND public_token_enc <> ''
+ORDER BY id;
+
+-- name: UpdateStorefrontOrderPublicTokenEnc :exec
+UPDATE storefront_orders
+SET public_token_enc = $3, updated_at = now()
+WHERE workspace_id = $1 AND id = $2;
