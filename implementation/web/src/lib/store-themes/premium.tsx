@@ -121,13 +121,15 @@ export function PremiumMedia({ src, alt, className = "" }: { src?: string | null
   </div>;
 }
 
+function listingVariant(variants: ThemeProduct[]) {
+  return variants.find((item) => item.availability_state !== "out_of_stock") ?? variants[0];
+}
+
 export function PremiumGrid({ store, products, compact, onQuickAdd }: Pick<ThemeRendererProps, "store" | "onQuickAdd"> & { products: ThemeProduct[][]; compact: boolean }) {
   return (
     <ul className={compact ? "grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4" : "grid grid-cols-2 gap-x-4 gap-y-8 sm:gap-x-7 lg:grid-cols-3"}>
       {products.map((variants) => {
-        const [first] = variants;
-        const available = variants.filter((item) => item.availability_state !== "out_of_stock");
-        const product = available[0] ?? first;
+        const product = listingVariant(variants);
         return (
           <li key={product.product_id} className={compact ? "min-w-0 rounded-xl border border-black/10 bg-white p-2.5 sm:p-3" : "min-w-0"}>
             <Link href={productPath(store, product.id)} className="group block">
@@ -135,7 +137,7 @@ export function PremiumGrid({ store, products, compact, onQuickAdd }: Pick<Theme
               <h3 className="mt-3 break-words text-sm font-semibold group-hover:underline sm:text-base">{product.title}</h3>
               <p className="mt-1 text-sm">{formatMinorAmount(product.price_minor, product.currency, product.currency_exponent)}</p>
             </Link>
-            {available.length === 0 ? <p className="mt-1 text-xs text-[var(--store-muted)]">Sold out</p>
+            {product.availability_state === "out_of_stock" ? <p className="mt-1 text-xs text-[var(--store-muted)]">Sold out</p>
               : variants.length > 1 ? <p className="mt-1 text-xs text-[var(--store-muted)]">{variants.length} options</p>
               : compact && onQuickAdd && !product.contact_only && product.availability_state !== "request_only" ? <button type="button" onClick={() => onQuickAdd(product.id)} className="mt-3 w-full rounded-md border border-black/15 px-2 py-2 text-xs font-semibold hover:bg-black/5">Add to cart</button> : null}
           </li>
@@ -148,23 +150,20 @@ export function PremiumGrid({ store, products, compact, onQuickAdd }: Pick<Theme
 export function PremiumCatalogue({ model, compact }: { model: ThemeRendererProps; compact: boolean }) {
   const { store, page, collectionSlug, searchQuery = "", onQuickAdd } = model;
   const [availability, setAvailability] = useState(false);
+  const [searchCollection, setSearchCollection] = useState("");
   const [sort, setSort] = useState("featured");
   const [limit, setLimit] = useState(24);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const collection = store.collections.find((item) => item.slug === collectionSlug);
+  const collection = store.collections.find((item) => item.slug === (page === "search" ? searchCollection : collectionSlug));
   const groups = productGroups(store.products.filter((item) => !collection || item.collection_id === collection.id))
     .filter((variants) => page !== "search" || variants.some((item) => searchable(item, searchQuery)))
     .filter((variants) => !availability || variants.some((item) => item.availability_state === "in_stock" || item.availability_state === "low_stock"));
   if (sort === "featured") groups.sort((a, b) => Number(b.some((item) => item.is_featured)) - Number(a.some((item) => item.is_featured)));
-  if (sort === "title") groups.sort(([a], [b]) => a.title.localeCompare(b.title));
+  if (sort === "title") groups.sort((a, b) => listingVariant(a).title.localeCompare(listingVariant(b).title));
   if (sort === "price-low" || sort === "price-high") {
-    const minPrice = (variants: ThemeProduct[]) => variants.reduce((minimum, variant) => {
-      const price = BigInt(variant.price_minor);
-      return price < minimum ? price : minimum;
-    }, BigInt(variants[0].price_minor));
     groups.sort((a, b) => {
-      const left = minPrice(a);
-      const right = minPrice(b);
+      const left = BigInt(listingVariant(a).price_minor);
+      const right = BigInt(listingVariant(b).price_minor);
       const ascending = left === right ? 0 : left < right ? -1 : 1;
       return sort === "price-low" ? ascending : -ascending;
     });
@@ -174,10 +173,16 @@ export function PremiumCatalogue({ model, compact }: { model: ThemeRendererProps
       <label className="flex items-center gap-2">
         <input type="checkbox" checked={availability} onChange={(event) => { setAvailability(event.target.checked); setLimit(24); }} /> In stock only
       </label>
-      <nav aria-label="Collections" className="grid gap-2">
+      {page === "search" ? <label className="grid gap-2">
+        Collection
+        <select value={searchCollection} onChange={(event) => { setSearchCollection(event.target.value); setLimit(24); }} className="w-full rounded-md border border-black/15 bg-white px-2 py-2">
+          <option value="">All collections</option>
+          {store.collections.filter((item) => item.slug).map((item) => <option key={item.id} value={item.slug}>{item.name}</option>)}
+        </select>
+      </label> : <nav aria-label="Collections" className="grid gap-2">
         <Link href={storePath(store) + "/shop"} className="font-semibold hover:underline">All products</Link>
         {store.collections.filter((item) => item.slug).map((item) => <Link key={item.id} href={collectionPath(store, item.slug!)} className="hover:underline" aria-current={item.id === collection?.id ? "page" : undefined}>{item.name}</Link>)}
-      </nav>
+      </nav>}
     </div>
   );
   return (
