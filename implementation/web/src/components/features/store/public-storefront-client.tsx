@@ -19,7 +19,7 @@ import type { GuestCheckoutConfirmation, PublicStorefrontProduct, ValidatedCart 
 import { EssentialStoreFooter, StoreServiceCards } from "./essential-store-footer";
 import { EssentialProductDetail } from "./essential-product-detail";
 import { resolveStoreBrand } from "@/lib/store-themes/brand";
-import { STORE_WRAP } from "@/lib/store-themes/layout";
+import { readableOn, STORE_WRAP } from "@/lib/store-themes/layout";
 import { SideSheet } from "@/components/ui/side-sheet";
 import { useRouter } from "next/navigation";
 
@@ -44,7 +44,7 @@ function availabilityLabel(p: PublicStorefrontProduct): { text: string; tone: "s
   return { text: "Out of stock", tone: "danger" };
 }
 
-export function PublicStorefrontClient({ slug, page = "home", collectionSlug, productID }: { slug: string; page?: "home" | "shop" | "about" | "policies" | "privacy" | "returns" | "terms" | "delivery" | "cart" | "collection" | "product"; productID?: number; collectionSlug?: string }) {
+export function PublicStorefrontClient({ slug, page = "home", collectionSlug, productID, searchQuery = "" }: { slug: string; page?: "home" | "shop" | "about" | "policies" | "privacy" | "returns" | "terms" | "delivery" | "cart" | "checkout" | "collection" | "product" | "search"; productID?: number; collectionSlug?: string; searchQuery?: string }) {
   const router = useRouter();
   const [cartOpen, setCartOpen] = useState(false);
   const [cartNavigationError, setCartNavigationError] = useState("");
@@ -221,7 +221,9 @@ export function PublicStorefrontClient({ slug, page = "home", collectionSlug, pr
 
   const sf = storeQuery.data;
 
-  const themeKey: ThemeKey = sf.theme_key === "boutique" || sf.theme_key === "editorial" ? "boutique" : "simple";
+  const themeKey: ThemeKey = sf.theme_key === "studio" || sf.theme_key === "market"
+    ? sf.theme_key
+    : sf.theme_key === "boutique" || sf.theme_key === "editorial" ? "boutique" : "simple";
   const brand: BrandSettings = sf.brand ?? {
     logo_url: sf.logo_url ?? undefined,
     palette: "custom",
@@ -267,6 +269,21 @@ export function PublicStorefrontClient({ slug, page = "home", collectionSlug, pr
     if (cart.length > 0) validateCartMutation.mutate(cart);
   };
 
+  const openCartPage = async (destination: "cart" | "checkout") => {
+    if (openingFullCart) return;
+    setOpeningFullCart(true);
+    setCartNavigationError("");
+    try {
+      if (cart.length) await syncCartMutation.mutateAsync(cart);
+      setCartOpen(false);
+      router.push("/s/" + encodeURIComponent(slug) + "/" + destination);
+    } catch (cause) {
+      setCartNavigationError(cause instanceof Error ? cause.message : "Could not open your cart.");
+    } finally {
+      setOpeningFullCart(false);
+    }
+  };
+
   const totalCount = cart.reduce((acc, i) => acc + i.quantity, 0);
 
   const productTools = (
@@ -304,12 +321,19 @@ export function PublicStorefrontClient({ slug, page = "home", collectionSlug, pr
   };
 
   return (
-    <div className="min-h-screen bg-white" style={{ "--store-primary": resolved.palette.primary, "--store-accent": resolved.palette.accent, "--store-heading-font": resolved.heading.headingFamily, "--accent": resolved.palette.primary, "--primary": resolved.palette.primary, fontFamily: resolved.body.bodyFamily, color: "#252a27" } as React.CSSProperties}>
+    <div className={themeKey === "studio" ? "min-h-screen bg-[#fcfaf6]" : "min-h-screen bg-white"} style={{ "--store-primary": resolved.palette.primary, "--store-accent": resolved.palette.accent, "--premium-surface": themeKey === "studio" ? "#f3eee7" : "#f1f3f4", "--store-heading-font": resolved.heading.headingFamily, "--accent": resolved.palette.primary, "--primary": resolved.palette.primary, "--primary-foreground": readableOn(resolved.palette.primary), fontFamily: resolved.body.bodyFamily, color: "#252a27" } as React.CSSProperties}>
       <Renderer
         store={{ name: sf.name, slug: sf.slug, tagline: sf.tagline, description: sf.description, logo_url: brand.logo_url ?? sf.logo_url, banner_url: sf.banner_url, phone: sf.contact_phone, whatsapp_number: sf.whatsapp_number, address: sf.address, business_hours: sf.business_hours, products: sf.products.map((product) => ({ ...product, is_featured: product.is_featured ?? false })), collections: sf.collections }}
         brand={resolvedBrand}
         sections={sections}
-        page={page}
+        page={page === "search" && themeKey === "simple" ? "shop" : page}
+        searchQuery={searchQuery}
+        onQuickAdd={themeKey === "market" ? (productID) => {
+          const product = sf.products.find((item) => item.id === productID);
+          if (!product || product.contact_only || product.availability_state === "out_of_stock" || product.availability_state === "request_only" || productGroups.get(product.product_id)?.length !== 1) return;
+          addToCart(product);
+          setCartOpen(true);
+        } : undefined}
         collectionSlug={collectionSlug}
         productTools={productTools}
         selectCollection={setSelectedCol}
@@ -321,18 +345,12 @@ export function PublicStorefrontClient({ slug, page = "home", collectionSlug, pr
       <SideSheet isOpen={cartOpen} onClose={() => setCartOpen(false)} title={`Your cart (${totalCount})`} footer={<div className="w-full space-y-4">
         {cart.length ? <div className="flex justify-between text-sm"><span>Subtotal</span><strong>{formatMinorAmount(cart.reduce((sum, line) => sum + BigInt(line.price_minor) * BigInt(line.quantity), BigInt(0)).toString(), sf.currency, sf.currency_exponent)}</strong></div> : null}
         {cartNavigationError ? <p role="alert" className="text-sm text-danger">{cartNavigationError}</p> : null}
-        <div className="flex justify-end gap-2"><AppButton variant="ghost" label="Continue shopping" onPress={() => setCartOpen(false)} /><AppButton label="View full cart" isLoading={openingFullCart} onPress={async () => {
-          if (openingFullCart) return;
-          setOpeningFullCart(true); setCartNavigationError("");
-          try { if (cart.length) await syncCartMutation.mutateAsync(cart); setCartOpen(false); router.push(`/s/${encodeURIComponent(slug)}/cart`); }
-          catch (cause) { setCartNavigationError(cause instanceof Error ? cause.message : "Could not open your cart."); }
-          finally { setOpeningFullCart(false); }
-        }} /></div>
+        <div className="flex justify-end gap-2"><AppButton variant="ghost" label="Continue shopping" onPress={() => setCartOpen(false)} /><AppButton label="View full cart" isLoading={openingFullCart} onPress={() => void openCartPage("cart")} /></div>
       </div>}>
         {cart.length ? <ul className="divide-y divide-border">{cart.map((line) => <li key={line.storefront_product_id} className="flex items-start justify-between gap-4 py-4"><div className="min-w-0"><p className="text-sm font-medium">{line.title}</p>{line.variant_name ? <p className="mt-1 text-xs text-muted">{line.variant_name}</p> : null}<p className="mt-2 text-xs text-muted">Quantity: {line.quantity}</p></div><span className="shrink-0 text-sm font-semibold">{formatMinorAmount((BigInt(line.price_minor) * BigInt(line.quantity)).toString(), sf.currency, sf.currency_exponent)}</span></li>)}</ul> : <div className="py-10 text-center"><ShoppingBag size={36} className="mx-auto text-muted" /><p className="mt-4 text-sm font-medium">Your cart is empty</p></div>}
       </SideSheet>
 
-      {page === "product" ? (() => { const product = sf.products.find((item) => item.id === productID); return product ? <EssentialProductDetail key={product.id} slug={slug} product={product} products={sf.products} /> : <div className="mx-auto max-w-4xl px-5 py-16"><h1 className="text-2xl">Product unavailable</h1><Link href={`/s/${slug}/shop`} className="mt-4 block text-sm underline">Back to shop</Link></div>; })() : null}
+      {page === "product" ? (() => { const product = sf.products.find((item) => item.id === productID); return product ? <EssentialProductDetail key={product.id} slug={slug} product={product} products={sf.products} contact={{ phone: sf.contact_phone, email: sf.contact_email }} layout={themeKey === "studio" || themeKey === "market" ? themeKey : "essential"} /> : <div className="mx-auto max-w-4xl px-5 py-16"><h1 className="text-2xl">Product unavailable</h1><Link href={`/s/${slug}/shop`} className="mt-4 block text-sm underline">Back to shop</Link></div>; })() : null}
 
       {(["policies", "privacy", "returns", "terms", "delivery"] as const).includes(page as "policies" | "privacy" | "returns" | "terms" | "delivery") ? <PolicyPage page={page as "policies" | "privacy" | "returns" | "terms" | "delivery"} policies={[
         { key: "delivery", title: "Delivery", body: sf.delivery_guidance || sf.delivery_methods.join(", ") },
@@ -342,8 +360,11 @@ export function PublicStorefrontClient({ slug, page = "home", collectionSlug, pr
         { key: "other", title: "More information", body: sf.custom_policy },
       ]} /> : null}
 
-      {page === "cart" ? <PublicCartPage
+      {page === "cart" || page === "checkout" ? <PublicCartPage
         storeName={sf.name}
+        onCheckout={() => void openCartPage("checkout")}
+        isOpeningCheckout={openingFullCart}
+        mode={page === "checkout" ? "checkout" : themeKey === "studio" || themeKey === "market" ? "cart" : "combined"}
         currency={sf.currency}
         currencyExponent={sf.currency_exponent}
         deliveryMethods={sf.delivery_methods}
@@ -355,7 +376,7 @@ export function PublicStorefrontClient({ slug, page = "home", collectionSlug, pr
         onQuantityChange={(id, quantity) => setCart((current) => current.map((line) => line.storefront_product_id === id ? { ...line, quantity } : line))}
         onRemove={(id) => setCart((current) => current.filter((line) => line.storefront_product_id !== id))}
         validatedCart={validatedCart}
-        checkoutError={checkoutError}
+        checkoutError={checkoutError || cartNavigationError}
         confirmedOrder={confirmedOrder}
         customerName={customerName}
         setCustomerName={setCustomerName}
@@ -433,6 +454,9 @@ export function PublicStorefrontClient({ slug, page = "home", collectionSlug, pr
 }
 
 type PublicCartPageProps = {
+  mode: "cart" | "checkout" | "combined";
+  onCheckout: () => void;
+  isOpeningCheckout: boolean;
   storeName: string;
   currency: string;
   currencyExponent: number;
@@ -482,7 +506,7 @@ function PolicyPage({ page, policies }: { page: "policies" | "privacy" | "return
 function PublicCartPage(props: PublicCartPageProps) {
   const subtotal = props.cart.reduce((total, line) => total + BigInt(line.price_minor) * BigInt(line.quantity), BigInt(0)).toString();
   return <main className={`${STORE_WRAP} py-12 sm:py-16`}>
-    <div className="mb-8"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">{props.storeName}</p><h1 className="mt-2 text-3xl font-bold">Your cart</h1><p className="mt-2 text-sm text-muted">Review your items and send an order request to the store.</p></div>
+    <div className="mb-8"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">{props.storeName}</p><h1 className="mt-2 text-3xl font-bold" style={{ fontFamily: "var(--store-heading-font)" }}>{props.mode === "checkout" ? "Checkout" : "Your cart"}</h1></div>
     {props.confirmedOrder ? <section className="max-w-2xl rounded-2xl border border-success/30 bg-success/5 p-6">
       <div className="flex items-center gap-2 font-semibold"><CheckCircle size={20} className="text-success" />Order request received</div>
       <p className="mt-3 text-sm">Reference: <strong>{props.confirmedOrder.order_reference}</strong></p>
@@ -497,12 +521,16 @@ function PublicCartPage(props: PublicCartPageProps) {
         <div className="flex items-center justify-between"><h2 className="text-lg font-semibold">Items ({props.cart.length})</h2><Link href="./shop" className="text-sm font-medium text-primary">Continue shopping</Link></div>
         {props.validatedCart?.has_changes ? <div className="flex gap-2 rounded-xl border border-warning bg-warning/10 p-3 text-sm"><Warning size={18} className="shrink-0" />Some prices or availability changed. Review the updated total before sending your request.</div> : null}
         {props.checkoutError ? <p role="alert" className="text-sm font-medium text-danger">{props.checkoutError}</p> : null}
-        <div className="divide-y divide-black/10">{props.cart.map((line) => <div key={line.storefront_product_id} className="flex items-center justify-between gap-4 py-4">
+        <div className="divide-y divide-black/10">{props.cart.map((line) => <div key={line.storefront_product_id} className="flex flex-wrap items-center justify-between gap-4 py-4">
           <div className="min-w-0"><p className="truncate font-medium">{line.title}</p>{line.variant_name ? <p className="mt-1 text-xs text-muted">{line.variant_name}</p> : null}<p className="mt-1 text-sm text-muted">{formatMinorAmount(line.price_minor, props.currency, props.currencyExponent)} each</p></div>
           <div className="flex shrink-0 items-center gap-2"><AppButton size="sm" variant="secondary" aria-label="Decrease quantity" label="−" onPress={() => props.onQuantityChange(line.storefront_product_id, Math.max(1, line.quantity - 1))} /><span className="w-6 text-center text-sm tabular-nums">{line.quantity}</span><AppButton size="sm" variant="secondary" aria-label="Increase quantity" label="+" onPress={() => props.onQuantityChange(line.storefront_product_id, Math.min(line.max_qty, line.quantity + 1))} /><AppButton size="sm" variant="ghost" isIconOnly aria-label="Remove item" startContent={<Trash />} onPress={() => props.onRemove(line.storefront_product_id)} /></div>
         </div>)}</div>
       </section>
-      <section className="space-y-5 rounded-2xl border border-black/10 bg-white p-5 sm:p-7">
+      {props.mode === "cart" ? <section className="space-y-4 rounded-2xl border border-black/10 bg-white p-5 sm:p-7">
+        <h2 className="text-lg font-semibold">Order summary</h2>
+        <div className="flex justify-between gap-3 text-sm"><span>Subtotal</span><strong>{formatMinorAmount(subtotal, props.currency, props.currencyExponent)}</strong></div>
+        <AppButton className="w-full" label="Continue to checkout" isLoading={props.isOpeningCheckout} onPress={props.onCheckout} />
+      </section> : <section className="space-y-5 rounded-2xl border border-black/10 bg-white p-5 sm:p-7">
         <h2 className="text-lg font-semibold">Contact & delivery</h2>
         <AppInput label="Your name" isRequired value={props.customerName} onChange={(event) => props.setCustomerName(event.target.value)} placeholder="Your name" />
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2"><AppInput label="Phone / WhatsApp" isRequired={props.requirePhone} value={props.customerPhone} onChange={(event) => props.setCustomerPhone(event.target.value)} placeholder="+234…" /><AppInput label="Email" isRequired={props.requireEmail} value={props.customerEmail} onChange={(event) => props.setCustomerEmail(event.target.value)} placeholder="you@example.com" /></div>
@@ -513,7 +541,7 @@ function PublicCartPage(props: PublicCartPageProps) {
         <AppInput label="Note for the store (optional)" value={props.customerNote} onChange={(event) => props.setCustomerNote(event.target.value)} placeholder="Preferred delivery or pickup time" />
         <label className="flex items-start gap-2 text-xs text-muted"><input className="mt-0.5" type="checkbox" checked={props.policyAccepted} onChange={(event) => props.setPolicyAccepted(event.target.checked)} /><span>I understand this is an order request and the store will confirm availability and payment.</span></label>
         <div className="border-t border-black/10 pt-4"><div className="flex items-center justify-between text-sm"><span>Estimated subtotal</span><strong>{formatMinorAmount(String(subtotal), props.currency, props.currencyExponent)}</strong></div>{props.validatedCart ? <div className="mt-2 flex items-center justify-between text-sm"><span>Estimated total</span><strong>{formatMinorAmount(props.validatedCart.estimated_total_minor, props.validatedCart.currency, props.validatedCart.currency_exponent)}</strong></div> : null}<AppButton className="mt-5 w-full" type="submit" isLoading={props.isSubmitting} isDisabled={!props.policyAccepted} label="Send order request" /></div>
-      </section>
+      </section>}
     </form>}
   </main>;
 }

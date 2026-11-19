@@ -1329,6 +1329,7 @@ export interface StorefrontDesign {
   draft_theme_key: import("@/lib/store-themes/types").ThemeKey;
   draft_brand: import("@/lib/store-themes/types").BrandSettings;
   draft_sections: import("@/lib/store-themes/types").StoreSection[];
+  theme_drafts?: Partial<Record<import("@/lib/store-themes/types").ThemeKey, { name?: string; brand: import("@/lib/store-themes/types").BrandSettings; sections: import("@/lib/store-themes/types").StoreSection[] }>>;
   contact: { phone?: string | null; email?: string | null; whatsapp_number?: string | null; address?: string | null; business_hours?: Record<string, string> };
   available_themes: { key: import("@/lib/store-themes/types").ThemeKey; name: string; price: string; price_minor?: string; currency?: string; plan_version_id?: number; purchasable: boolean; owned: boolean }[];
   has_unpublished_changes: boolean;

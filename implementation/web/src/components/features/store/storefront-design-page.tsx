@@ -7,7 +7,6 @@ import { ArrowLeft, ArrowRight, ImageSquare, PaintBrush, PencilSimple, UploadSim
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { useState, type MouseEvent, type ReactNode } from "react";
 
 import { useFinanceAction, WorkspaceGate } from "@/components/features/finance/shared";
@@ -18,7 +17,7 @@ import { AppSwitch } from "@/components/ui/app-switch";
 import { FormPage, FormSection, StepNav } from "@/components/ui/form-kit";
 import { Page, PageHeader, StatusPill } from "@/components/ui/page";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
-import { financeApi, moneyKeys } from "@/lib/money";
+import { financeApi, formatMinorAmount, moneyKeys } from "@/lib/money";
 import { uploadProductImage } from "@/lib/products";
 import { createDefaultSections, STORE_THEMES, type BrandSettings, type StoreSection, type ThemeStoreData } from "@/lib/store-themes";
 import type { PublicStorefrontProjection, StorefrontDesign } from "@/types/finance";
@@ -26,7 +25,10 @@ import type { PublicStorefrontProjection, StorefrontDesign } from "@/types/finan
 import { EssentialStoreFooter, StoreServiceCards } from "./essential-store-footer";
 import { StoreFaqDrawer, type StoreFaqItem } from "./store-faq-drawer";
 
-type Draft = { theme_key: "simple"; name: string; brand: BrandSettings; sections: StoreSection[] };
+export const SELECTABLE_TEMPLATES = ["simple", "studio", "market"] as const;
+export type SelectableTemplate = (typeof SELECTABLE_TEMPLATES)[number];
+
+type Draft = { theme_key: SelectableTemplate; name: string; brand: BrandSettings; sections: StoreSection[] };
 const STEPS = ["Header & banner", "Products", "Sections", "Preview"];
 const SECTION_LABELS: Record<string, string> = { announcement: "Top banner message", about: "About us", contact: "Contact & WhatsApp", faq: "Questions (FAQ)" };
 
@@ -38,24 +40,37 @@ function readFaqItems(section: StoreSection): StoreFaqItem[] {
     .map((item) => ({ ...item }));
 }
 
-function draftFrom(design: StorefrontDesign): Draft {
-  const current = (design.draft_sections ?? []).map((section) => {
+function draftFrom(design: StorefrontDesign, theme: SelectableTemplate): Draft {
+  const saved = design.theme_drafts?.[theme];
+  const activeDraft = design.draft_theme_key === theme;
+  const activePublished = design.published_theme_key === theme;
+  const source = activeDraft ? design.draft_sections : saved?.sections ?? (activePublished ? design.published_sections : []);
+  const current = (source ?? []).map((section) => {
     if (section.type !== "hero") return section;
     const content = { ...section.content };
     delete content.product_id;
     return { ...section, content };
   });
-  const defaults = createDefaultSections("simple", design.draft_name || design.name);
+  const name = (activeDraft ? design.draft_name : saved?.name) || design.name;
+  const defaults = createDefaultSections(theme, name);
   const optional: StoreSection[] = [
     { id: "announcement", type: "announcement", enabled: false, content: { text: "", link: "" } },
     { id: "faq", type: "faq", enabled: false, content: { items: [] } },
+    { id: "about", type: "about", enabled: false, content: { heading: "", body: "" } },
   ];
   const missing = (item: StoreSection) => !current.some((section) => section.type === item.type);
-  return { theme_key: "simple", name: design.draft_name || design.name, brand: design.draft_brand, sections: [...current, ...defaults.filter(missing), ...optional.filter(missing)] };
+  const brand = activeDraft ? design.draft_brand : saved?.brand ?? design.published_brand;
+  const shared = design.draft_brand;
+  return {
+    theme_key: theme,
+    name,
+    brand: { ...brand, colors: shared.colors, heading_font: shared.heading_font, body_font: shared.body_font, logo_url: shared.logo_url },
+    sections: [...current, ...defaults.filter(missing), ...optional.filter((section) => missing(section) && !defaults.some((item) => item.type === section.type))],
+  };
 }
 
 export function StorePreview({ data, draft }: { data: PublicStorefrontProjection; draft: Draft }) {
-  const [page, setPage] = useState<"shop" | "about">("shop");
+  const [page, setPage] = useState<"home" | "shop" | "about">(draft.theme_key === "simple" ? "shop" : "home");
   const store: ThemeStoreData = {
     name: draft.name,
     slug: data.slug,
@@ -71,16 +86,19 @@ export function StorePreview({ data, draft }: { data: PublicStorefrontProjection
     products: data.products,
     collections: data.collections,
   };
-  const Renderer = STORE_THEMES.simple.Renderer;
+  const Renderer = STORE_THEMES[draft.theme_key].Renderer;
   // Links inside the preview switch pages here instead of leaving the editor.
   const navigate = (event: MouseEvent<HTMLDivElement>) => {
     const link = (event.target as HTMLElement).closest("a");
     if (!link) return;
     event.preventDefault();
-    setPage((link.getAttribute("href") || "").endsWith("/about") ? "about" : "shop");
+    const href = link.getAttribute("href") || "";
+    if (href.endsWith("/about")) setPage("about");
+    else if (href === "/s/" + encodeURIComponent(store.slug)) setPage("home");
+    else setPage("shop");
   };
   return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-white" onClickCapture={navigate}>
+    <div className="overflow-hidden rounded-2xl border border-border bg-white" onClickCapture={navigate} onSubmitCapture={(event) => { event.preventDefault(); setPage("shop"); }}>
       <Renderer store={store} brand={draft.brand} sections={draft.sections} page={page} />
       {page === "shop" ? <StoreServiceCards slug={data.slug} delivery={data.delivery_guidance} returns={data.return_policy} support={data.contact_email ? `mailto:${data.contact_email}` : undefined} /> : null}
       <EssentialStoreFooter store={store} brand={draft.brand} showContact={draft.sections.find((section) => section.type === "contact")?.enabled !== false} />
@@ -117,18 +135,19 @@ function ImageField({ label, src, shape = "wide", uploading, onUpload, fallback 
   );
 }
 
-function Content({ workspaceId }: { workspaceId: number }) {
-  const customizing = usePathname().includes("/customization/");
+function Content({ workspaceId, template }: { workspaceId: number; template?: SelectableTemplate }) {
+  const theme = template ?? "simple";
+  const customizing = Boolean(template);
   const client = useQueryClient();
   const key = [...moneyKeys.workspace(workspaceId), "storefront-design"];
   const query = useQuery({ queryKey: key, queryFn: () => financeApi.getStorefrontDesign(workspaceId), retry: false });
   const preview = useQuery({ queryKey: [...key, "private-preview"], queryFn: () => financeApi.getStorefrontDesignPreview(workspaceId), enabled: Boolean(query.data), retry: false });
   const [edited, setEdited] = useState<Draft | null>(null);
   const [step, setStep] = useState(0);
-  const [uploading, setUploading] = useState<"" | "banner" | "favicon">("");
+  const [uploading, setUploading] = useState<"" | "banner" | "favicon" | "story">("");
   const [uploadError, setUploadError] = useState("");
   const [faqItems, setFaqItems] = useState<StoreFaqItem[] | null>(null);
-  const draft = edited ?? (query.data ? draftFrom(query.data) : null);
+  const draft = edited ?? (query.data ? draftFrom(query.data, theme) : null);
 
   const save = useFinanceAction(
     workspaceId,
@@ -137,7 +156,7 @@ function Content({ workspaceId }: { workspaceId: number }) {
       if (Array.from(String(draft.sections.find((section) => section.type === "about")?.content.body || "")).length > 3000) throw new Error("About us is too long. Shorten it before saving.");
       const saved = await financeApi.saveStorefrontDesignDraft(workspaceId, { ...draft, expected_version: query.data.version, idempotency_key: crypto.randomUUID() });
       client.setQueryData(key, saved);
-      setEdited(draftFrom(saved));
+      setEdited(draftFrom(saved, theme));
       await preview.refetch();
       return saved;
     },
@@ -147,25 +166,33 @@ function Content({ workspaceId }: { workspaceId: number }) {
     workspaceId,
     async () => {
       const banner = draft?.sections.find((item) => item.type === "hero");
-      if (banner?.enabled && !banner.content.image && !preview.data?.storefront.banner_url) throw new Error("Upload a banner image, or turn the banner off.");
+      if (theme === "simple" && banner?.enabled && !banner.content.image && !preview.data?.storefront.banner_url) throw new Error("Upload a banner image, or turn the banner off.");
       const saved = (await save.mutateAsync(undefined)) as StorefrontDesign;
       const published = await financeApi.publishStorefrontDesign(workspaceId, { expected_version: saved.version, idempotency_key: crypto.randomUUID() });
       client.setQueryData(key, published);
-      setEdited(draftFrom(published));
+      setEdited(draftFrom(published, theme));
       return published;
     },
     { success: "Template published" },
   );
 
+  const purchase = useFinanceAction(workspaceId, async () => {
+    await save.mutateAsync(undefined);
+    const intent = await financeApi.createStorefrontThemeCheckout(workspaceId, theme, crypto.randomUUID());
+    if (!intent.authorization_url) throw new Error("Payment checkout is unavailable.");
+    window.location.assign(intent.authorization_url);
+  }, { success: "Opening template checkout" });
+
   const update = (change: (base: Draft) => Draft) => setEdited((current) => (current ?? draft ? change((current ?? draft)!) : current));
   const patch = (type: StoreSection["type"], content: Record<string, unknown>) => update((base) => ({ ...base, sections: base.sections.map((item) => (item.type === type ? { ...item, content: { ...item.content, ...content } } : item)) }));
   const toggle = (type: StoreSection["type"], enabled: boolean) => update((base) => ({ ...base, sections: base.sections.map((item) => (item.type === type ? { ...item, enabled } : item)) }));
-  const upload = async (target: "banner" | "favicon", file: File) => {
+  const upload = async (target: "banner" | "favicon" | "story", file: File) => {
     setUploading(target);
     setUploadError("");
     try {
       const url = await uploadProductImage(workspaceId, file);
       if (target === "banner") patch("hero", { image: url });
+      else if (target === "story") patch("about", { image: url });
       else update((base) => ({ ...base, brand: { ...base.brand, favicon_url: url } }));
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : "The image could not be uploaded.");
@@ -184,59 +211,64 @@ function Content({ workspaceId }: { workspaceId: number }) {
   }
 
   if (!customizing) {
-    const active = query.data.published_theme_key === "simple";
-    return (
-      <Page>
-        <PageHeader title="Templates" description="Choose a template, then customise it." />
-        <section className="space-y-4">
-          <h2 className="text-[15px] font-semibold">My templates</h2>
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            <Link href="/store/templates/customization/simple" className="group block">
-              <div className="relative aspect-[4/3] overflow-hidden rounded-2xl border border-border bg-surface-secondary">
-                <div aria-hidden="true" inert className="pointer-events-none absolute top-0 left-0 w-[1280px] origin-top-left scale-[0.24] bg-white">
-                  {preview.data ? <StorePreview data={preview.data.storefront} draft={draft} /> : null}
-                </div>
-                <div className="absolute inset-0 grid place-items-center bg-black/25 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
-                  <span className="flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-[13px] font-semibold text-black">
-                    <PaintBrush size={16} aria-hidden="true" />
-                    Customise
-                  </span>
-                </div>
+    const design = query.data;
+    const cards = SELECTABLE_TEMPLATES.map((key) => ({ key, option: design.available_themes.find((item) => item.key === key) }));
+    const owned = cards.filter(({ key, option }) => key === "simple" || option?.owned);
+    const library = cards.filter((card) => !owned.includes(card));
+    const cardGrid = (items: typeof cards) => <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      {items.map(({ key, option }) => {
+        const manifest = STORE_THEMES[key];
+        const active = design.published_theme_key === key;
+        const price = key === "simple" ? "Free" : option?.price_minor && option.currency
+          ? formatMinorAmount(option.price_minor, option.currency, 2) + " one time" : "Premium";
+        return <article key={key} className="min-w-0">
+          <Link href={"/store/templates/customization/" + key} className="group block">
+            <div className="relative aspect-[4/3] overflow-hidden rounded-xl border border-border bg-surface-secondary">
+              {key === "simple" ? <div aria-hidden="true" inert className="pointer-events-none absolute top-0 left-0 w-[1280px] origin-top-left scale-[0.24] bg-white">
+                {preview.data ? <StorePreview data={preview.data.storefront} draft={draftFrom(design, key)} /> : null}
+              </div> : <Image src={"/storefront-demos/media/" + key + "-preview.jpg"} alt={manifest.name + " storefront screenshot"} fill sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw" className="object-cover object-top" /> }
+              <div className="absolute inset-0 grid place-items-center bg-black/25 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                <span className="flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-black"><PaintBrush size={16} aria-hidden="true" />{option?.owned || key === "simple" ? "Customise" : "Try template"}</span>
               </div>
-              <div className="mt-3 flex items-center justify-between gap-2">
-                <span className="text-[14px] font-semibold">Essential</span>
-                <StatusPill tone={active ? "success" : "neutral"}>{active ? "Active" : "Installed"}</StatusPill>
-              </div>
-              <p className="text-[12px] text-muted">Free</p>
-            </Link>
-          </div>
-        </section>
-        <section className="space-y-2 border-t border-border pt-6">
-          <h2 className="text-[15px] font-semibold">More templates</h2>
-          <p className="text-[13px] text-muted">Coming soon.</p>
-        </section>
-      </Page>
-    );
+            </div>
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold">{manifest.name}</h3>
+              {active ? <StatusPill tone="success">Active</StatusPill> : null}
+            </div>
+          </Link>
+          <p className="mt-1 text-xs text-muted">{price}</p>
+          <p className="mt-2 text-sm text-muted">{manifest.description}</p>
+          {key !== "simple" ? <Link href={"/storefront-demos/" + key} className="mt-3 inline-block text-sm font-semibold text-primary hover:underline">View live demo</Link> : null}
+        </article>;
+      })}
+    </div>;
+    return <Page>
+      <PageHeader title="Templates" description="Choose a template, then customise it." />
+      <section className="space-y-4"><h2 className="text-base font-semibold">My templates</h2>{cardGrid(owned)}</section>
+      {library.length ? <section className="space-y-4 border-t border-border pt-6"><h2 className="text-base font-semibold">Premium templates</h2>{cardGrid(library)}</section> : null}
+    </Page>;
   }
 
+  const option = query.data.available_themes.find((item) => item.key === theme);
+  const ownsTemplate = theme === "simple" || option?.owned;
   const hero = draft.sections.find((item) => item.type === "hero")!;
   const products = draft.sections.find((item) => item.type === "product_grid")!;
   const bannerSrc = String(hero.content.image || preview.data?.storefront.banner_url || "");
   const logo = draft.brand.logo_url || preview.data?.storefront.logo_url || "";
   const last = step === STEPS.length - 1;
-  const busy = save.isPending || publish.isPending || Boolean(uploading);
+  const busy = save.isPending || publish.isPending || purchase.isPending || Boolean(uploading);
 
   return (
     <FormPage
       pinActions
-      title="Customise Essential"
+      title={"Customise " + STORE_THEMES[theme].name}
       back={{ href: "/store/templates", label: "Templates" }}
       actions={
         <>
           {step > 0 ? <AppButton variant="ghost" className="mr-auto" startContent={<ArrowLeft size={15} />} label="Back" onPress={() => setStep(step - 1)} /> : <span className="mr-auto" />}
           <AppButton variant="secondary" label="Save draft" isLoading={save.isPending && !publish.isPending} isDisabled={busy} onPress={() => save.mutate(undefined)} />
           {last ? (
-            <AppButton label="Publish" isLoading={publish.isPending} isDisabled={busy} onPress={() => publish.mutate(undefined)} />
+            ownsTemplate ? <AppButton label="Publish" isLoading={publish.isPending} isDisabled={busy} onPress={() => publish.mutate(undefined)} /> : <AppButton label={option?.purchasable ? "Buy template" : "Purchase unavailable"} isLoading={purchase.isPending} isDisabled={busy || !option?.purchasable} onPress={() => purchase.mutate(undefined)} />
           ) : (
             <AppButton endContent={<ArrowRight size={15} />} label="Continue" onPress={() => setStep(step + 1)} />
           )}
@@ -257,7 +289,7 @@ function Content({ workspaceId }: { workspaceId: number }) {
           />
           {!draft.brand.favicon_url ? <p className="-mt-2 text-[12px] text-muted">Uses your logo until you upload one.</p> : null}
           <div className="flex items-center justify-between gap-3 border-t border-separator pt-5">
-            <span className="text-[14px] font-semibold">Banner</span>
+            <span className="text-[14px] font-semibold">{theme === "studio" ? "Campaign banner" : theme === "market" ? "Promotional banner" : "Banner"}</span>
             <AppSwitch aria-label="Show banner" isSelected={hero.enabled} onChange={(enabled) => toggle("hero", enabled)} />
           </div>
           {hero.enabled ? (
@@ -272,7 +304,7 @@ function Content({ workspaceId }: { workspaceId: number }) {
       ) : null}
 
       {step === 1 ? (
-        <FormSection title="Products" action={<AppSwitch aria-label="Show products" isSelected={products.enabled} onChange={(enabled) => toggle("product_grid", enabled)} />}>
+        <FormSection title={theme === "simple" ? "Products" : "Home page products"} action={<AppSwitch aria-label="Show products" isSelected={products.enabled} onChange={(enabled) => toggle("product_grid", enabled)} />}>
           {products.enabled ? (
             <>
               <AppSelect
@@ -299,8 +331,20 @@ function Content({ workspaceId }: { workspaceId: number }) {
       ) : null}
 
       {step === 2 ? (
-        <FormSection title="Sections">
+        <FormSection title={theme === "studio" ? "Collections & story" : theme === "market" ? "Categories & store information" : "Sections"}>
+          {uploadError ? <p role="alert" className="text-sm text-danger">{uploadError}</p> : null}
           <div className="divide-y divide-separator">
+            {theme !== "simple" ? (() => {
+              const category = draft.sections.find((section) => section.type === "collections");
+              const collections = preview.data?.storefront.collections ?? [];
+              const chosen = Array.isArray(category?.content.collection_ids) ? category.content.collection_ids.map(Number) : [];
+              return category ? <div className="space-y-3 pb-4">
+                <div className="flex justify-between gap-3"><p className="text-sm font-medium">{theme === "studio" ? "Curated collections" : "Category shortcuts"}</p><AppSwitch aria-label="Show home page collections" isSelected={category.enabled} onChange={(enabled) => toggle("collections", enabled)} /></div>
+                {category.enabled && collections.length ? <fieldset className="space-y-2"><legend className="mb-2 text-xs text-muted">Choose collections, or leave all unchecked to show every collection.</legend>
+                  {collections.map((item) => <label key={item.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={chosen.includes(item.id)} onChange={(event) => patch("collections", { collection_ids: event.target.checked ? [...chosen, item.id] : chosen.filter((id) => id !== item.id) })} />{item.name}</label>)}
+                </fieldset> : null}
+              </div> : null;
+            })() : null}
             {draft.sections
               .filter((section) => SECTION_LABELS[section.type])
               .map((section) => (
@@ -315,7 +359,8 @@ function Content({ workspaceId }: { workspaceId: number }) {
                   {section.enabled && section.type === "about" ? (
                     <>
                       <AppInput label="Heading" maxLength={80} value={String(section.content.heading || "About us")} onChange={(event) => patch("about", { heading: event.target.value })} />
-                      <RichTextEditor label="About your store" value={String(section.content.body || "")} onChange={(body) => patch("about", { body })} />
+                      <RichTextEditor label={theme === "studio" ? "Brand story" : "About your store"} value={String(section.content.body || "")} onChange={(body) => patch("about", { body })} />
+                      {theme === "studio" ? <ImageField label="Story image" src={String(section.content.image || "")} uploading={uploading === "story"} onUpload={(file) => void upload("story", file)} /> : null}
                     </>
                   ) : null}
                   {section.enabled && section.type === "announcement" ? <AppInput label="Message" maxLength={120} value={String(section.content.text || "")} onChange={(event) => patch("announcement", { text: event.target.value })} /> : null}
@@ -357,6 +402,6 @@ function Content({ workspaceId }: { workspaceId: number }) {
   );
 }
 
-export function StorefrontDesignPage() {
-  return <WorkspaceGate businessOnly>{({ workspaceId }) => <Content key={workspaceId} workspaceId={workspaceId} />}</WorkspaceGate>;
+export function StorefrontDesignPage({ template }: { template?: SelectableTemplate }) {
+  return <WorkspaceGate businessOnly>{({ workspaceId }) => <Content key={workspaceId + ":" + (template ?? "gallery")} workspaceId={workspaceId} template={template} />}</WorkspaceGate>;
 }

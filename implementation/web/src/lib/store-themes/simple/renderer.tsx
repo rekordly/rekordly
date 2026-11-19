@@ -55,7 +55,7 @@ export function SimpleStoreRenderer(props: ThemeRendererProps) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(props.searchQuery ?? "");
   const [availability, setAvailability] = useState("");
   const [category, setCategory] = useState("");
   const [limit, setLimit] = useState(PAGE_SIZE);

@@ -1,5 +1,7 @@
 import { SECTION_MANIFEST } from "./sections";
-import { BoldStoreRenderer, MarketStoreRenderer, StudioStoreRenderer } from "./section-renderers";
+import { BoldStoreRenderer } from "./section-renderers";
+import { MarketStoreRenderer } from "./market/renderer";
+import { StudioStoreRenderer } from "./studio/renderer";
 import type { ThemeManifest } from "./types";
 
 export const boldTheme: ThemeManifest = {
@@ -24,7 +26,7 @@ export const marketTheme: ThemeManifest = {
   palettes: ["green", "ink", "ocean", "sunset", "rose", "earth", "custom"],
   fontStyles: ["modern", "classic", "friendly"],
   sections: { announcement: SECTION_MANIFEST.announcement, hero: SECTION_MANIFEST.hero, product_grid: SECTION_MANIFEST.product_grid, collections: SECTION_MANIFEST.collections, about: SECTION_MANIFEST.about, faq: SECTION_MANIFEST.faq, contact: SECTION_MANIFEST.contact },
-  defaultSections: ["announcement", "collections", "product_grid", "about", "contact"],
+  defaultSections: ["announcement", "hero", "collections", "product_grid", "about", "contact"],
   Renderer: MarketStoreRenderer,
 };
 

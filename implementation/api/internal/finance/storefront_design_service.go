@@ -88,6 +88,7 @@ type StorefrontDesignView struct {
 	DraftThemeKey         string                        `json:"draft_theme_key"`
 	DraftBrand            json.RawMessage               `json:"draft_brand"`
 	DraftSections         json.RawMessage               `json:"draft_sections"`
+	ThemeDrafts json.RawMessage `json:"theme_drafts"`
 	Contact               map[string]any                `json:"contact"`
 	AvailableThemes       []StorefrontDesignThemeOption `json:"available_themes"`
 	HasUnpublishedChanges bool                          `json:"has_unpublished_changes"`
@@ -346,6 +347,7 @@ func (s *Service) storefrontDesignView(ctx context.Context, ws int64) (Storefron
 		Status: row.Status, Version: row.DesignVersion, PublishedThemeKey: row.PublishedThemeKey,
 		PublishedBrand: json.RawMessage(row.Brand), PublishedSections: json.RawMessage(row.Sections),
 		DraftThemeKey: row.DraftThemeKey, DraftBrand: json.RawMessage(row.DraftBrand), DraftSections: json.RawMessage(row.DraftSections),
+		ThemeDrafts:           json.RawMessage(row.ThemeDrafts),
 		Contact:               contact,
 		AvailableThemes:       themes,
 		HasUnpublishedChanges: hasChanges,

@@ -1185,7 +1185,7 @@ SET payment_bank_transfer_enabled = $3,
     version = version + 1,
     updated_at = now()
 WHERE workspace_id = $1 AND storefront_id = $2
-RETURNING storefront_id, workspace_id, tagline, description, logo_url, banner_url, primary_color, accent_color, background_color, text_color, font_family, section_order, contact_phone, contact_email, whatsapp_number, address, business_hours, social_links, delivery_methods, delivery_guidance, default_delivery_fee_minor, checkout_require_email, checkout_require_phone, return_policy, privacy_policy, terms_policy, custom_policy, seo_title, seo_description, seo_image_url, seo_indexable, canonical_domain_id, version, updated_at, brand, sections, draft_name, draft_theme_key, draft_brand, draft_sections, published_at, auto_show_new_products, show_sold_out, show_stock_count, low_stock_threshold, free_delivery_threshold_minor, meta_pixel_id, tiktok_pixel_id, google_analytics_id, payment_bank_transfer_enabled, payment_card_enabled, payment_manual_transfer_enabled, payment_cod_enabled, fee_bearer, hold_payment_minutes, hold_manual_transfer_hours, hold_confirmation_hours, hold_pickup_hours, default_weight_grams, shipbubble_api_key, shipbubble_strategy, shipbubble_couriers
+RETURNING storefront_id, workspace_id, tagline, description, logo_url, banner_url, primary_color, accent_color, background_color, text_color, font_family, section_order, contact_phone, contact_email, whatsapp_number, address, business_hours, social_links, delivery_methods, delivery_guidance, default_delivery_fee_minor, checkout_require_email, checkout_require_phone, return_policy, privacy_policy, terms_policy, custom_policy, seo_title, seo_description, seo_image_url, seo_indexable, canonical_domain_id, version, updated_at, brand, sections, draft_name, draft_theme_key, draft_brand, draft_sections, published_at, auto_show_new_products, show_sold_out, show_stock_count, low_stock_threshold, free_delivery_threshold_minor, meta_pixel_id, tiktok_pixel_id, google_analytics_id, payment_bank_transfer_enabled, payment_card_enabled, payment_manual_transfer_enabled, payment_cod_enabled, fee_bearer, hold_payment_minutes, hold_manual_transfer_hours, hold_confirmation_hours, hold_pickup_hours, default_weight_grams, shipbubble_api_key, shipbubble_strategy, shipbubble_couriers, theme_drafts
 `
 
 type UpdateStorefrontPaymentSettingsParams struct {
@@ -1280,6 +1280,7 @@ func (q *Queries) UpdateStorefrontPaymentSettings(ctx context.Context, arg Updat
 		&i.ShipbubbleApiKey,
 		&i.ShipbubbleStrategy,
 		&i.ShipbubbleCouriers,
+		&i.ThemeDrafts,
 	)
 	return i, err
 }
@@ -1293,7 +1294,7 @@ SET shipbubble_api_key = $3,
     version = version + 1,
     updated_at = now()
 WHERE workspace_id = $1 AND storefront_id = $2
-RETURNING storefront_id, workspace_id, tagline, description, logo_url, banner_url, primary_color, accent_color, background_color, text_color, font_family, section_order, contact_phone, contact_email, whatsapp_number, address, business_hours, social_links, delivery_methods, delivery_guidance, default_delivery_fee_minor, checkout_require_email, checkout_require_phone, return_policy, privacy_policy, terms_policy, custom_policy, seo_title, seo_description, seo_image_url, seo_indexable, canonical_domain_id, version, updated_at, brand, sections, draft_name, draft_theme_key, draft_brand, draft_sections, published_at, auto_show_new_products, show_sold_out, show_stock_count, low_stock_threshold, free_delivery_threshold_minor, meta_pixel_id, tiktok_pixel_id, google_analytics_id, payment_bank_transfer_enabled, payment_card_enabled, payment_manual_transfer_enabled, payment_cod_enabled, fee_bearer, hold_payment_minutes, hold_manual_transfer_hours, hold_confirmation_hours, hold_pickup_hours, default_weight_grams, shipbubble_api_key, shipbubble_strategy, shipbubble_couriers
+RETURNING storefront_id, workspace_id, tagline, description, logo_url, banner_url, primary_color, accent_color, background_color, text_color, font_family, section_order, contact_phone, contact_email, whatsapp_number, address, business_hours, social_links, delivery_methods, delivery_guidance, default_delivery_fee_minor, checkout_require_email, checkout_require_phone, return_policy, privacy_policy, terms_policy, custom_policy, seo_title, seo_description, seo_image_url, seo_indexable, canonical_domain_id, version, updated_at, brand, sections, draft_name, draft_theme_key, draft_brand, draft_sections, published_at, auto_show_new_products, show_sold_out, show_stock_count, low_stock_threshold, free_delivery_threshold_minor, meta_pixel_id, tiktok_pixel_id, google_analytics_id, payment_bank_transfer_enabled, payment_card_enabled, payment_manual_transfer_enabled, payment_cod_enabled, fee_bearer, hold_payment_minutes, hold_manual_transfer_hours, hold_confirmation_hours, hold_pickup_hours, default_weight_grams, shipbubble_api_key, shipbubble_strategy, shipbubble_couriers, theme_drafts
 `
 
 type UpdateStorefrontShipbubbleSettingsParams struct {
@@ -1378,6 +1379,7 @@ func (q *Queries) UpdateStorefrontShipbubbleSettings(ctx context.Context, arg Up
 		&i.ShipbubbleApiKey,
 		&i.ShipbubbleStrategy,
 		&i.ShipbubbleCouriers,
+		&i.ThemeDrafts,
 	)
 	return i, err
 }

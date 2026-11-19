@@ -12,7 +12,7 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   turbopack: {
-    root: "C:/Users/Emperor/Documents/Code",
+    root: process.cwd(),
   },
   output: "standalone",
   poweredByHeader: false,

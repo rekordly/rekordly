@@ -3,6 +3,8 @@ import type { ThemeKey, ThemeRendererProps } from "./types";
 import type { ComponentType, CSSProperties } from "react";
 import Image from "next/image";
 import { FONT_STYLES } from "./font-styles";
+import { MarketStoreRenderer } from "./market/renderer";
+import { StudioStoreRenderer } from "./studio/renderer";
 
 function OrderedSections({ store, sections, renderProduct, productTools, preview, onSectionClick, boutique }: ThemeRendererProps & { boutique: boolean }) {
   const firstProductsID = sections.find((section) => section.enabled && section.type === "product_grid")?.id;
@@ -89,8 +91,6 @@ function EditorialThemeRenderer(props: ThemeRendererProps & { variant: "bold" | 
 }
 
 export function BoldStoreRenderer(props: ThemeRendererProps) { return <EditorialThemeRenderer {...props} variant="bold" />; }
-export function MarketStoreRenderer(props: ThemeRendererProps) { return <EditorialThemeRenderer {...props} variant="market" />; }
-export function StudioStoreRenderer(props: ThemeRendererProps) { return <EditorialThemeRenderer {...props} variant="studio" />; }
 
 export const themeRenderers: Record<ThemeKey, ComponentType<ThemeRendererProps>> = {
   simple: SimpleStoreRenderer,

@@ -69,6 +69,9 @@ SET draft_theme_key = sf.theme_key,
     draft_name = sf.name,
     draft_brand = st.brand,
     draft_sections = st.sections,
+    theme_drafts = (st.theme_drafts - st.draft_theme_key) || jsonb_build_object(
+        sf.theme_key, jsonb_build_object('name', sf.name, 'brand', st.brand, 'sections', st.sections)
+    ),
     version = st.version + 1,
     updated_at = now()
 FROM storefronts sf
@@ -123,7 +126,7 @@ const getStorefrontDesignState = `-- name: GetStorefrontDesignState :one
 SELECT sf.id AS storefront_id, sf.workspace_id, sf.name, sf.slug, sf.status,
        sf.theme_key AS published_theme_key, sf.version AS storefront_version,
        sf.currency, sf.currency_exponent, st.brand, st.sections, st.draft_name,
-       st.draft_theme_key, st.draft_brand, st.draft_sections,
+       st.draft_theme_key, st.draft_brand, st.draft_sections, st.theme_drafts,
        st.published_at, st.version AS design_version,
        st.contact_phone, st.contact_email, st.whatsapp_number, st.address, st.business_hours
 FROM storefronts sf
@@ -147,6 +150,7 @@ type GetStorefrontDesignStateRow struct {
 	DraftThemeKey     string             `json:"draft_theme_key"`
 	DraftBrand        []byte             `json:"draft_brand"`
 	DraftSections     []byte             `json:"draft_sections"`
+	ThemeDrafts       []byte             `json:"theme_drafts"`
 	PublishedAt       pgtype.Timestamptz `json:"published_at"`
 	DesignVersion     int32              `json:"design_version"`
 	ContactPhone      pgtype.Text        `json:"contact_phone"`
@@ -176,6 +180,7 @@ func (q *Queries) GetStorefrontDesignState(ctx context.Context, workspaceID int6
 		&i.DraftThemeKey,
 		&i.DraftBrand,
 		&i.DraftSections,
+		&i.ThemeDrafts,
 		&i.PublishedAt,
 		&i.DesignVersion,
 		&i.ContactPhone,
@@ -240,7 +245,7 @@ SET brand = draft_brand,
     version = version + 1,
     updated_at = now()
 WHERE workspace_id = $1 AND storefront_id = $2
-RETURNING storefront_id, workspace_id, tagline, description, logo_url, banner_url, primary_color, accent_color, background_color, text_color, font_family, section_order, contact_phone, contact_email, whatsapp_number, address, business_hours, social_links, delivery_methods, delivery_guidance, default_delivery_fee_minor, checkout_require_email, checkout_require_phone, return_policy, privacy_policy, terms_policy, custom_policy, seo_title, seo_description, seo_image_url, seo_indexable, canonical_domain_id, version, updated_at, brand, sections, draft_name, draft_theme_key, draft_brand, draft_sections, published_at, auto_show_new_products, show_sold_out, show_stock_count, low_stock_threshold, free_delivery_threshold_minor, meta_pixel_id, tiktok_pixel_id, google_analytics_id, payment_bank_transfer_enabled, payment_card_enabled, payment_manual_transfer_enabled, payment_cod_enabled, fee_bearer, hold_payment_minutes, hold_manual_transfer_hours, hold_confirmation_hours, hold_pickup_hours, default_weight_grams, shipbubble_api_key, shipbubble_strategy, shipbubble_couriers
+RETURNING storefront_id, workspace_id, tagline, description, logo_url, banner_url, primary_color, accent_color, background_color, text_color, font_family, section_order, contact_phone, contact_email, whatsapp_number, address, business_hours, social_links, delivery_methods, delivery_guidance, default_delivery_fee_minor, checkout_require_email, checkout_require_phone, return_policy, privacy_policy, terms_policy, custom_policy, seo_title, seo_description, seo_image_url, seo_indexable, canonical_domain_id, version, updated_at, brand, sections, draft_name, draft_theme_key, draft_brand, draft_sections, published_at, auto_show_new_products, show_sold_out, show_stock_count, low_stock_threshold, free_delivery_threshold_minor, meta_pixel_id, tiktok_pixel_id, google_analytics_id, payment_bank_transfer_enabled, payment_card_enabled, payment_manual_transfer_enabled, payment_cod_enabled, fee_bearer, hold_payment_minutes, hold_manual_transfer_hours, hold_confirmation_hours, hold_pickup_hours, default_weight_grams, shipbubble_api_key, shipbubble_strategy, shipbubble_couriers, theme_drafts
 `
 
 type PublishStorefrontDesignSettingsParams struct {
@@ -314,6 +319,7 @@ func (q *Queries) PublishStorefrontDesignSettings(ctx context.Context, arg Publi
 		&i.ShipbubbleApiKey,
 		&i.ShipbubbleStrategy,
 		&i.ShipbubbleCouriers,
+		&i.ThemeDrafts,
 	)
 	return i, err
 }
@@ -324,6 +330,10 @@ SET draft_theme_key = $1::text,
     draft_name = $2::text,
     draft_brand = $3::jsonb,
     draft_sections = $4::jsonb,
+    theme_drafts = st.theme_drafts || jsonb_build_object(
+        st.draft_theme_key, jsonb_build_object('name', st.draft_name, 'brand', st.draft_brand, 'sections', st.draft_sections),
+        $1::text, jsonb_build_object('name', $2::text, 'brand', $3::jsonb, 'sections', $4::jsonb)
+    ),
     version = st.version + 1,
     updated_at = now()
 WHERE st.workspace_id = $5 AND st.storefront_id = $6 AND st.version = $7

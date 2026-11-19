@@ -74,6 +74,7 @@ export interface ThemeProduct {
   variant_name: string;
   availability_state: string;
   is_featured: boolean;
+  contact_only?: boolean;
   collection_id?: number | null;
 }
 
@@ -87,6 +88,7 @@ export interface ThemeCollection {
 export interface ThemeStoreData {
   name: string;
   slug: string;
+  path?: string;
   tagline?: string | null;
   description?: string | null;
   logo_url?: string | null;
@@ -113,7 +115,9 @@ export interface ThemeRendererProps {
   cartCount?: number;
   onCartClick?: () => void;
   selectCollection?: (slug: string) => void;
-  page?: "home" | "shop" | "about" | "policies" | "privacy" | "returns" | "terms" | "delivery" | "cart" | "collection" | "product";
+  page?: "home" | "shop" | "about" | "policies" | "privacy" | "returns" | "terms" | "delivery" | "cart" | "checkout" | "collection" | "product" | "search";
   collectionSlug?: string;
+  searchQuery?: string;
+  onQuickAdd?: (productID: number) => void;
 }
 

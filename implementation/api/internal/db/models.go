@@ -3533,6 +3533,7 @@ type StorefrontSetting struct {
 	ShipbubbleApiKey             pgtype.Text        `json:"shipbubble_api_key"`
 	ShipbubbleStrategy           string             `json:"shipbubble_strategy"`
 	ShipbubbleCouriers           []byte             `json:"shipbubble_couriers"`
+	ThemeDrafts                  []byte             `json:"theme_drafts"`
 }
 
 type StorefrontThemePurchase struct {
