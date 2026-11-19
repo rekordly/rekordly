@@ -144,9 +144,12 @@ func TestShopperIdentityTrackingSecurityAndIsolation(t *testing.T) {
 	require.True(t, strings.HasSuffix(*pubStatus.CustomerPhoneMasked, "1234"))
 
 	// 1. Unknown email gets exact same message as known email (no enumeration) & sends zero email
+	nSeed := time.Now().UnixNano()
+	testRemoteAddr := fmt.Sprintf("198.51.%d.%d:4123", (nSeed>>8)%200+10, nSeed%200+10)
 	postJSON := func(path string, payload any, cookies ...*http.Cookie) *httptest.ResponseRecorder {
 		raw, _ := json.Marshal(payload)
 		req := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(raw))
+		req.RemoteAddr = testRemoteAddr
 		req.Header.Set("Content-Type", "application/json")
 		for _, ck := range cookies {
 			req.AddCookie(ck)
