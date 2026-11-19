@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/rekordly/rekordly-api/internal/billing"
 	"github.com/rekordly/rekordly-api/internal/finance"
 	"github.com/stretchr/testify/require"
 )
@@ -77,22 +78,42 @@ func TestStorefrontPremiumThemeDraftsRemainIndependentAndPrivate(t *testing.T) {
 	})
 	require.ErrorIs(t, err, finance.ErrStorefrontThemePurchaseRequired)
 
-	subject, _, err := svc.ResolveSubjectForWorkspace(ctx, ws)
+	const billingSecret = "test-premium-theme-purchase-signature"
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/transaction/initialize" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":true,"data":{"authorization_url":"https://checkout.paystack.test/themes","access_code":"mock_theme","reference":"mock_theme"}}`))
+	}))
+	defer provider.Close()
+	billingService := finance.NewService(pool, finance.WithPaymentProvider(billing.NewPaystackProvider(billingSecret, billingSecret, provider.URL, 5*time.Second)))
+	previousMode, err := billingService.GetCommercialMode(ctx)
 	require.NoError(t, err)
-	for _, theme := range []string{"studio", "market"} {
-		var planID, transactionID int64
-		err = pool.QueryRow(ctx, `INSERT INTO plan_versions
-			(plan_code, version, display_name, subject_type, billing_interval, price_minor, is_addon, addon_type)
-			VALUES ($1, 1, $1, 'business', 'once', 10000, true, $1) RETURNING id`, "storefront_theme_"+theme).Scan(&planID)
+	_, err = billingService.SetCommercialMode(ctx, "public_paid", user)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, restoreErr := billingService.SetCommercialMode(ctx, previousMode.Mode, user)
+		require.NoError(t, restoreErr)
+	})
+	for index, theme := range []string{"studio", "market"} {
+		intent, err := billingService.CreateStorefrontThemeCheckout(ctx, ws, user, theme, "buy-"+theme)
 		require.NoError(t, err)
-		err = pool.QueryRow(ctx, `INSERT INTO billing_transactions
-			(billing_subject_id, tx_type, amount_minor, status, idempotency_key)
-			VALUES ($1, 'addon', 10000, 'succeeded', $2) RETURNING id`, subject.ID, "fixture-"+theme).Scan(&transactionID)
+		require.Equal(t, int64(1000000), intent.AmountMinor)
+		require.Equal(t, "NGN", intent.Currency)
+		require.Equal(t, "https://checkout.paystack.test/themes", intent.AuthorizationUrl)
+		payload := []byte(fmt.Sprintf(`{"event":"charge.success","data":{"id":%d,"reference":%q,"amount":1000000,"currency":"NGN"}}`, index+1, intent.Reference))
+		signature := signPaystack(billingSecret, payload)
+		outcome, err := billingService.ProcessPaystackWebhook(ctx, payload, signature)
 		require.NoError(t, err)
-		_, err = pool.Exec(ctx, `INSERT INTO storefront_theme_purchases
-			(workspace_id, storefront_id, theme_key, plan_version_id, billing_transaction_id)
-			VALUES ($1, $2, $3, $4, $5)`, ws, store.ID, theme, planID, transactionID)
+		require.Equal(t, "processed", outcome)
+		outcome, err = billingService.ProcessPaystackWebhook(ctx, payload, signature)
 		require.NoError(t, err)
+		require.Equal(t, "duplicate_ignored", outcome)
+		var count int
+		require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM storefront_theme_purchases WHERE workspace_id = $1 AND storefront_id = $2 AND theme_key = $3`, ws, store.ID, theme).Scan(&count))
+		require.Equal(t, 1, count)
 	}
 
 	_, err = svc.PublishStorefrontDesign(ctx, ws, user, finance.StorefrontDesignCommandInput{
