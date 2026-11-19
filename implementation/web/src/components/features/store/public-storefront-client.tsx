@@ -4,7 +4,7 @@ import { CheckCircle, MagnifyingGlass, ShoppingBag, Trash, Warning, Storefront, 
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { AppButton } from "@/components/ui/app-button";
 import { AppInput } from "@/components/ui/app-input";
@@ -53,6 +53,7 @@ export function PublicStorefrontClient({ slug, page = "home", collectionSlug, pr
   const [selectedCol, setSelectedCol] = useState(collectionSlug ?? "");
   const [cart, setCart] = useState<CartDraftLine[]>([]);
   const [cartToken, setCartToken] = useState("");
+  const cartGeneration = useRef(0);
   const [validatedCart, setValidatedCart] = useState<ValidatedCart | null>(null);
   const [activeProductGroup, setActiveProductGroup] = useState<PublicStorefrontProduct[] | null>(null);
   const [selectedVariantId, setSelectedVariantId] = useState<number>(0);
@@ -88,10 +89,11 @@ export function PublicStorefrontClient({ slug, page = "home", collectionSlug, pr
     const saved = typeof window !== "undefined" ? window.localStorage.getItem(storageKey) : null;
     if (!saved) return;
     let cancelled = false;
+    const generation = cartGeneration.current;
     financeApi
       .getPublicCart(slug, saved, deliveryMethod, deliveryAreaId ? Number(deliveryAreaId) : undefined)
       .then((c) => {
-        if (cancelled || !c?.lines?.length) return;
+        if (cancelled || generation !== cartGeneration.current || !c?.lines?.length) return;
         setCartToken(c.cart_token || saved);
         setValidatedCart(c);
         setCart(
@@ -106,7 +108,7 @@ export function PublicStorefrontClient({ slug, page = "home", collectionSlug, pr
         );
       })
       .catch(() => {
-        if (typeof window !== "undefined") window.localStorage.removeItem(storageKey);
+        if (!cancelled && generation === cartGeneration.current) window.localStorage.removeItem(storageKey);
       });
     return () => {
       cancelled = true;
@@ -114,7 +116,7 @@ export function PublicStorefrontClient({ slug, page = "home", collectionSlug, pr
   }, [slug, deliveryMethod, deliveryAreaId]);
 
   const syncCartMutation = useMutation({
-    mutationFn: (lines: CartDraftLine[]) =>
+    mutationFn: ({ lines }: { lines: CartDraftLine[]; generation: number }) =>
       financeApi.upsertPublicCart(slug, {
         cart_token: cartToken || undefined,
         lines: lines.map((l) => ({
@@ -125,7 +127,8 @@ export function PublicStorefrontClient({ slug, page = "home", collectionSlug, pr
         delivery_method: deliveryMethod,
         delivery_area_id: deliveryAreaId ? Number(deliveryAreaId) : undefined,
       }),
-    onSuccess: (data) => {
+    onSuccess: (data, { generation }) => {
+      if (generation !== cartGeneration.current) return;
       setValidatedCart(data);
       if (data.cart_token) {
         setCartToken(data.cart_token);
@@ -152,8 +155,10 @@ export function PublicStorefrontClient({ slug, page = "home", collectionSlug, pr
 
   useEffect(() => {
     if (cart.length === 0) return;
+    const generation = cartGeneration.current;
     const t = setTimeout(() => {
-      syncCartMutation.mutate(cart);
+      if (generation !== cartGeneration.current) return;
+      syncCartMutation.mutate({ lines: cart, generation });
     }, 350);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -186,6 +191,7 @@ export function PublicStorefrontClient({ slug, page = "home", collectionSlug, pr
     onSuccess: (res) => {
       setCheckoutError("");
       setConfirmedOrder(res);
+      cartGeneration.current += 1;
       setCart([]);
       setCartToken("");
       setValidatedCart(null);
@@ -274,7 +280,7 @@ export function PublicStorefrontClient({ slug, page = "home", collectionSlug, pr
     setOpeningFullCart(true);
     setCartNavigationError("");
     try {
-      if (cart.length) await syncCartMutation.mutateAsync(cart);
+      if (cart.length) await syncCartMutation.mutateAsync({ lines: cart, generation: cartGeneration.current });
       setCartOpen(false);
       router.push("/s/" + encodeURIComponent(slug) + "/" + destination);
     } catch (cause) {
@@ -374,7 +380,16 @@ export function PublicStorefrontClient({ slug, page = "home", collectionSlug, pr
         requireEmail={sf.checkout_require_email}
         cart={cart}
         onQuantityChange={(id, quantity) => setCart((current) => current.map((line) => line.storefront_product_id === id ? { ...line, quantity } : line))}
-        onRemove={(id) => setCart((current) => current.filter((line) => line.storefront_product_id !== id))}
+        onRemove={(id) => {
+          const remaining = cart.filter((line) => line.storefront_product_id !== id);
+          if (!remaining.length) {
+            cartGeneration.current += 1;
+            window.localStorage.removeItem("rekordly_cart:" + slug);
+            setCartToken("");
+            setValidatedCart(null);
+          }
+          setCart(remaining);
+        }}
         validatedCart={validatedCart}
         checkoutError={checkoutError || cartNavigationError}
         confirmedOrder={confirmedOrder}
