@@ -65,6 +65,121 @@ func (q *Queries) ApprovePurchaseRequest(ctx context.Context, arg ApprovePurchas
 	return i, err
 }
 
+const checkGoodsReceiptExists = `-- name: CheckGoodsReceiptExists :one
+SELECT EXISTS(
+    SELECT 1 FROM goods_receipts WHERE workspace_id = $1 AND id = $2
+)
+`
+
+type CheckGoodsReceiptExistsParams struct {
+	WorkspaceID int64 `json:"workspace_id"`
+	ID          int64 `json:"id"`
+}
+
+func (q *Queries) CheckGoodsReceiptExists(ctx context.Context, arg CheckGoodsReceiptExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, checkGoodsReceiptExists, arg.WorkspaceID, arg.ID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const checkInvoiceExists = `-- name: CheckInvoiceExists :one
+SELECT EXISTS(
+    SELECT 1 FROM invoices WHERE workspace_id = $1 AND id = $2
+)
+`
+
+type CheckInvoiceExistsParams struct {
+	WorkspaceID int64 `json:"workspace_id"`
+	ID          int64 `json:"id"`
+}
+
+func (q *Queries) CheckInvoiceExists(ctx context.Context, arg CheckInvoiceExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, checkInvoiceExists, arg.WorkspaceID, arg.ID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const checkPurchaseExists = `-- name: CheckPurchaseExists :one
+SELECT EXISTS(
+    SELECT 1 FROM purchases WHERE workspace_id = $1 AND id = $2
+)
+`
+
+type CheckPurchaseExistsParams struct {
+	WorkspaceID int64 `json:"workspace_id"`
+	ID          int64 `json:"id"`
+}
+
+func (q *Queries) CheckPurchaseExists(ctx context.Context, arg CheckPurchaseExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, checkPurchaseExists, arg.WorkspaceID, arg.ID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const checkPurchaseOrderExists = `-- name: CheckPurchaseOrderExists :one
+SELECT EXISTS(
+    SELECT 1 FROM purchase_orders WHERE workspace_id = $1 AND id = $2
+)
+`
+
+type CheckPurchaseOrderExistsParams struct {
+	WorkspaceID int64 `json:"workspace_id"`
+	ID          int64 `json:"id"`
+}
+
+func (q *Queries) CheckPurchaseOrderExists(ctx context.Context, arg CheckPurchaseOrderExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, checkPurchaseOrderExists, arg.WorkspaceID, arg.ID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const checkSupplierBillExists = `-- name: CheckSupplierBillExists :one
+SELECT EXISTS(
+    SELECT 1 FROM supplier_bills WHERE workspace_id = $1 AND id = $2
+)
+`
+
+type CheckSupplierBillExistsParams struct {
+	WorkspaceID int64 `json:"workspace_id"`
+	ID          int64 `json:"id"`
+}
+
+func (q *Queries) CheckSupplierBillExists(ctx context.Context, arg CheckSupplierBillExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, checkSupplierBillExists, arg.WorkspaceID, arg.ID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const completeIdempotencyRecord = `-- name: CompleteIdempotencyRecord :exec
+UPDATE idempotency_records
+SET status = 'completed', response_code = 201, resource_type = $1, resource_id = $2, updated_at = now()
+WHERE actor_user_id = $3 AND operation = $4 AND key_digest = $5
+`
+
+type CompleteIdempotencyRecordParams struct {
+	ResourceType pgtype.Text `json:"resource_type"`
+	ResourceID   pgtype.Text `json:"resource_id"`
+	ActorUserID  pgtype.Int8 `json:"actor_user_id"`
+	Operation    string      `json:"operation"`
+	KeyDigest    []byte      `json:"key_digest"`
+}
+
+func (q *Queries) CompleteIdempotencyRecord(ctx context.Context, arg CompleteIdempotencyRecordParams) error {
+	_, err := q.db.Exec(ctx, completeIdempotencyRecord,
+		arg.ResourceType,
+		arg.ResourceID,
+		arg.ActorUserID,
+		arg.Operation,
+		arg.KeyDigest,
+	)
+	return err
+}
+
 const countUnreadDocumentMessages = `-- name: CountUnreadDocumentMessages :one
 SELECT count(*)::bigint AS unread_count
 FROM external_messages m
@@ -296,6 +411,119 @@ func (q *Queries) DeleteDocumentFile(ctx context.Context, arg DeleteDocumentFile
 	return result.RowsAffected(), nil
 }
 
+const getDocumentFileByEvidence = `-- name: GetDocumentFileByEvidence :one
+SELECT
+    df.id, df.evidence_asset_id AS evidence_id, ea.original_file_name AS file_name, ea.mime_type, ea.byte_size AS size_bytes, df.created_at,
+    COALESCE(NULLIF(u.display_name, ''), 'Team')::text AS uploaded_by_name
+FROM document_files df
+JOIN evidence_assets ea ON ea.id = df.evidence_asset_id AND ea.workspace_id = df.workspace_id
+LEFT JOIN users u ON u.id = df.created_by_user_id
+WHERE df.workspace_id = $1 AND df.document_type = $2 AND df.document_id = $3 AND df.evidence_asset_id = $4
+`
+
+type GetDocumentFileByEvidenceParams struct {
+	WorkspaceID     int64  `json:"workspace_id"`
+	DocumentType    string `json:"document_type"`
+	DocumentID      int64  `json:"document_id"`
+	EvidenceAssetID int64  `json:"evidence_asset_id"`
+}
+
+type GetDocumentFileByEvidenceRow struct {
+	ID             int64              `json:"id"`
+	EvidenceID     int64              `json:"evidence_id"`
+	FileName       string             `json:"file_name"`
+	MimeType       string             `json:"mime_type"`
+	SizeBytes      int64              `json:"size_bytes"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UploadedByName string             `json:"uploaded_by_name"`
+}
+
+func (q *Queries) GetDocumentFileByEvidence(ctx context.Context, arg GetDocumentFileByEvidenceParams) (GetDocumentFileByEvidenceRow, error) {
+	row := q.db.QueryRow(ctx, getDocumentFileByEvidence,
+		arg.WorkspaceID,
+		arg.DocumentType,
+		arg.DocumentID,
+		arg.EvidenceAssetID,
+	)
+	var i GetDocumentFileByEvidenceRow
+	err := row.Scan(
+		&i.ID,
+		&i.EvidenceID,
+		&i.FileName,
+		&i.MimeType,
+		&i.SizeBytes,
+		&i.CreatedAt,
+		&i.UploadedByName,
+	)
+	return i, err
+}
+
+const getDocumentFileByID = `-- name: GetDocumentFileByID :one
+SELECT
+    df.id, df.evidence_asset_id AS evidence_id, ea.original_file_name AS file_name, ea.mime_type, ea.byte_size AS size_bytes, df.created_at,
+    COALESCE(NULLIF(u.display_name, ''), 'Team')::text AS uploaded_by_name
+FROM document_files df
+JOIN evidence_assets ea ON ea.id = df.evidence_asset_id AND ea.workspace_id = df.workspace_id
+LEFT JOIN users u ON u.id = df.created_by_user_id
+WHERE df.workspace_id = $1 AND df.id = $2
+`
+
+type GetDocumentFileByIDParams struct {
+	WorkspaceID int64 `json:"workspace_id"`
+	ID          int64 `json:"id"`
+}
+
+type GetDocumentFileByIDRow struct {
+	ID             int64              `json:"id"`
+	EvidenceID     int64              `json:"evidence_id"`
+	FileName       string             `json:"file_name"`
+	MimeType       string             `json:"mime_type"`
+	SizeBytes      int64              `json:"size_bytes"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UploadedByName string             `json:"uploaded_by_name"`
+}
+
+func (q *Queries) GetDocumentFileByID(ctx context.Context, arg GetDocumentFileByIDParams) (GetDocumentFileByIDRow, error) {
+	row := q.db.QueryRow(ctx, getDocumentFileByID, arg.WorkspaceID, arg.ID)
+	var i GetDocumentFileByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.EvidenceID,
+		&i.FileName,
+		&i.MimeType,
+		&i.SizeBytes,
+		&i.CreatedAt,
+		&i.UploadedByName,
+	)
+	return i, err
+}
+
+const getIdempotencyRecordForUpdate = `-- name: GetIdempotencyRecordForUpdate :one
+SELECT request_digest, status, resource_id
+FROM idempotency_records
+WHERE actor_user_id = $1 AND operation = $2 AND key_digest = $3
+FOR UPDATE
+`
+
+type GetIdempotencyRecordForUpdateParams struct {
+	ActorUserID pgtype.Int8 `json:"actor_user_id"`
+	Operation   string      `json:"operation"`
+	KeyDigest   []byte      `json:"key_digest"`
+}
+
+type GetIdempotencyRecordForUpdateRow struct {
+	RequestDigest []byte      `json:"request_digest"`
+	Status        string      `json:"status"`
+	ResourceID    pgtype.Text `json:"resource_id"`
+}
+
+func (q *Queries) GetIdempotencyRecordForUpdate(ctx context.Context, arg GetIdempotencyRecordForUpdateParams) (GetIdempotencyRecordForUpdateRow, error) {
+	row := q.db.QueryRow(ctx, getIdempotencyRecordForUpdate, arg.ActorUserID, arg.Operation, arg.KeyDigest)
+	var i GetIdempotencyRecordForUpdateRow
+	err := row.Scan(&i.RequestDigest, &i.Status, &i.ResourceID)
+	return i, err
+}
+
 const getPurchaseRequestByID = `-- name: GetPurchaseRequestByID :one
 SELECT id, workspace_id, supplier_id, status, version, needed_by, reason, reference, currency, currency_exponent, estimated_total_minor, idempotency_key, created_by_user_id, submitted_by_user_id, submitted_at, approved_by_user_id, approved_at, created_at, updated_at, priority, latest_decision_reason, outlet_id FROM purchase_requests
 WHERE id = $1 AND workspace_id = $2
@@ -502,6 +730,7 @@ func (q *Queries) GetPurchaseRequestLines(ctx context.Context, arg GetPurchaseRe
 const insertDocumentFile = `-- name: InsertDocumentFile :one
 INSERT INTO document_files (workspace_id, document_type, document_id, evidence_asset_id, created_by_user_id)
 VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (workspace_id, document_type, document_id, evidence_asset_id) DO NOTHING
 RETURNING id, workspace_id, document_type, document_id, evidence_asset_id, created_by_user_id, created_at
 `
 

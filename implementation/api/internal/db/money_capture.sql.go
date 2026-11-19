@@ -555,6 +555,41 @@ func (q *Queries) GetEvidenceAssetByID(ctx context.Context, arg GetEvidenceAsset
 	return i, err
 }
 
+const getEvidenceAssetByStorageAndAssetID = `-- name: GetEvidenceAssetByStorageAndAssetID :one
+SELECT id, workspace_id, draft_id, money_record_id, uploaded_by_user_id, storage_provider, asset_id, delivery_type, original_file_name, byte_size, mime_type, sha256_hash, status, retention_until, created_at, updated_at, purpose FROM evidence_assets
+WHERE storage_provider = $1 AND asset_id = $2 AND status <> 'deleted'
+`
+
+type GetEvidenceAssetByStorageAndAssetIDParams struct {
+	StorageProvider string `json:"storage_provider"`
+	AssetID         string `json:"asset_id"`
+}
+
+func (q *Queries) GetEvidenceAssetByStorageAndAssetID(ctx context.Context, arg GetEvidenceAssetByStorageAndAssetIDParams) (EvidenceAsset, error) {
+	row := q.db.QueryRow(ctx, getEvidenceAssetByStorageAndAssetID, arg.StorageProvider, arg.AssetID)
+	var i EvidenceAsset
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.DraftID,
+		&i.MoneyRecordID,
+		&i.UploadedByUserID,
+		&i.StorageProvider,
+		&i.AssetID,
+		&i.DeliveryType,
+		&i.OriginalFileName,
+		&i.ByteSize,
+		&i.MimeType,
+		&i.Sha256Hash,
+		&i.Status,
+		&i.RetentionUntil,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Purpose,
+	)
+	return i, err
+}
+
 const getMoneyRecordByDraftID = `-- name: GetMoneyRecordByDraftID :one
 SELECT id, workspace_id, draft_id, transaction_id, direction, scope_type, purpose, entry_method, status, amount_minor, currency, currency_exponent, effective_date, money_account_id, destination_account_id, category_id, counterparty_id, counterparty_name, description, reference, created_by_user_id, confirmed_by_user_id, confirmed_at, reversed_at, reversal_record_id, created_at, sync_version FROM money_records
 WHERE draft_id = $1 AND workspace_id = $2
